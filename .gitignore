@@ -1,0 +1,5 @@
+/.venv
+/cat-video-creator/backend/vendors/brainrot/tikyou_video_generator/__pycache__
+/cat-video-creator/backend/vendors/subtitles
+/cat-video-creator/backend/vendors/temp
+/cat-video-creator/output
