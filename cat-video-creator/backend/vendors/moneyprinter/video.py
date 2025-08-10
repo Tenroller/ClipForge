@@ -376,21 +376,73 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
     except Exception:
         pass
 
+    # Load base clip first to determine video dimensions
+    base_clip = VideoFileClip(combined_video_path)
+    
     # Generator that returns a CompositeVideoClip (background box + text)
     def generator(txt: str):
-        text_clip = TextClip(
-            text=txt,
-            font_size=100,
-            color=text_color,
-            stroke_color="black",
-            stroke_width=5,
-        )
-        pad_x = 24
-        pad_y = 12
+        # Calculate font size relative to video height (targeting ~40-50px for 1920px height)
+        try:
+            video_height = int(getattr(base_clip, 'h', 1920) or 1920)
+            # Scale font size based on video height - aim for 2.5% of video height
+            font_size = max(24, int(video_height * 0.025))
+        except Exception:
+            font_size = 48  # Fallback for ~1920px height
+            
+        # Create TextClip with reliable font choices and better error handling
+        font_choices = ["Arial-Bold", "arial.ttf", "Arial", None]  # None uses MoviePy default
+        text_clip = None
+        
+        for font_choice in font_choices:
+            try:
+                # Calculate video width for text wrapping
+                video_width = int(getattr(base_clip, 'w', 1080) or 1080)
+                max_text_width = int(video_width * 0.9)  # Use 90% of video width for text
+                
+                text_clip = TextClip(
+                    text=txt,
+                    font_size=font_size,
+                    color=text_color,
+                    stroke_color="black",
+                    stroke_width=2,
+                    font=font_choice,
+                    method='caption',  # Use caption method for better text rendering
+                    size=(max_text_width, None),  # Set max width for text wrapping
+                )
+                # Test if the clip has valid dimensions
+                if hasattr(text_clip, 'w') and hasattr(text_clip, 'h') and text_clip.w > 0 and text_clip.h > 0:
+                    print(colored(f"[debug] Successfully created TextClip with font: {font_choice or 'default'}, size: {text_clip.w}x{text_clip.h}", "green"))
+                    break
+                else:
+                    print(colored(f"[warn] TextClip with font {font_choice} has invalid dimensions", "yellow"))
+                    text_clip = None
+            except Exception as e:
+                print(colored(f"[warn] Font {font_choice} failed: {e}", "yellow"))
+                text_clip = None
+        
+        # Final fallback with minimal parameters
+        if text_clip is None:
+            try:
+                video_width = int(getattr(base_clip, 'w', 1080) or 1080)
+                max_text_width = int(video_width * 0.9)
+                
+                text_clip = TextClip(
+                    text=txt,
+                    font_size=font_size,
+                    color=text_color,
+                    size=(max_text_width, None),
+                )
+                print(colored(f"[info] Using minimal TextClip fallback, size: {getattr(text_clip, 'w', 'unknown')}x{getattr(text_clip, 'h', 'unknown')}", "cyan"))
+            except Exception as e:
+                print(colored(f"[error] All TextClip creation methods failed: {e}", "red"))
+                raise e
+        # Match frontend padding: px-3 py-2 = 12px horizontal, 8px vertical
+        pad_x = 12
+        pad_y = 8
         bg_w = int(getattr(text_clip, 'w', 0) or 0) + 2 * pad_x
         bg_h = int(getattr(text_clip, 'h', 0) or 0) + 2 * pad_y
-        # Semi-transparent background box
-        bg = ColorClip(size=(max(bg_w, 1), max(bg_h, 1)), color=(0, 0, 0)).with_opacity(0.35)
+        # Semi-transparent background box - match frontend bg-black/40
+        bg = ColorClip(size=(max(bg_w, 1), max(bg_h, 1)), color=(0, 0, 0)).with_opacity(0.4)
         composed = CompositeVideoClip([
             bg,
             text_clip.with_position((pad_x, pad_y)),
@@ -429,27 +481,74 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         pos_mode = 'grid'
         horizontal_subtitles_position, vertical_subtitles_position = 'center', 'bottom'
 
+    # Validate subtitle file before creating SubtitlesClip
+    print(colored(f"[debug] Creating SubtitlesClip from: {subtitles_path}", "blue"))
+    try:
+        from pathlib import Path as _Path
+        srt_path = _Path(subtitles_path)
+        if not srt_path.exists():
+            raise FileNotFoundError(f"Subtitle file does not exist: {subtitles_path}")
+        
+        # Read and validate SRT content
+        with srt_path.open("r", encoding="utf-8") as f:
+            srt_content = f.read().strip()
+            if not srt_content:
+                raise ValueError("Subtitle file is empty")
+            print(colored(f"[debug] SRT file size: {len(srt_content)} chars, first 200 chars: {srt_content[:200]}", "cyan"))
+    except Exception as e:
+        print(colored(f"[error] Subtitle file validation failed: {e}", "red"))
+        raise e
+
     # Burn the subtitles into the video, applying safe-area positioning via a function
     # This aligns runtime rendering with the frontend preview (10%/50%/90% horizontally; 15%/50%/85% vertically)
     try:
         subtitles = SubtitlesClip(subtitles_path, make_textclip=generator)  # type: ignore[arg-type]
+        print(colored(f"[debug] SubtitlesClip created successfully with make_textclip", "green"))
     except TypeError as e:
         # Fallback for older moviepy where positional arg is expected
         print(colored(f"[warn] SubtitlesClip(make_textclip=...) failed ({e}), retrying positional.", "yellow"))
-        subtitles = SubtitlesClip(subtitles_path, generator)
-
-    base_clip = VideoFileClip(combined_video_path)
+        try:
+            subtitles = SubtitlesClip(subtitles_path, generator)
+            print(colored(f"[debug] SubtitlesClip created successfully with positional arg", "green"))
+        except Exception as e2:
+            print(colored(f"[error] Both SubtitlesClip creation methods failed: {e2}", "red"))
+            raise e2
 
     # Position function computes px coords using base video size and current subtitle size
     def _safe_area_pos_fn(t):
         try:
             w = int(getattr(base_clip, 'w', 1080) or 1080)
             h = int(getattr(base_clip, 'h', 1920) or 1920)
-            # Current text frame size may vary; best-effort read
-            sw = int(getattr(subtitles, 'w', 0) or 0)
-            sh = int(getattr(subtitles, 'h', 0) or 0)
-        except Exception:
-            w, h, sw, sh = 1080, 1920, 0, 0
+            
+            # Try to get current subtitle frame size at time t
+            # SubtitlesClip may not expose w/h directly, so we need to be more clever
+            sw = 0
+            sh = 0
+            
+            try:
+                # Try to get the current subtitle clip at this time
+                current_clip = subtitles.get_frame(t) if hasattr(subtitles, 'get_frame') else None
+                if current_clip is not None and hasattr(current_clip, 'shape'):
+                    sh, sw = current_clip.shape[:2]  # numpy array shape is (height, width, channels)
+                else:
+                    # Fallback: try direct attribute access
+                    sw = int(getattr(subtitles, 'w', 0) or 0)
+                    sh = int(getattr(subtitles, 'h', 0) or 0)
+            except Exception:
+                # Final fallback: estimate based on video size and typical subtitle proportions
+                if sw == 0 or sh == 0:
+                    sw = int(w * 0.8)  # Assume subtitle is ~80% of video width
+                    sh = int(h * 0.08)  # Assume subtitle is ~8% of video height
+                    
+            # Debug positioning calculations
+            if sw > 0 and sh > 0:
+                print(colored(f"[debug] Video: {w}x{h}, Subtitle: {sw}x{sh}, Position: {pos_mode}", "cyan"))
+            else:
+                print(colored(f"[warn] Using fallback subtitle dimensions: {sw}x{sh}", "yellow"))
+                
+        except Exception as e:
+            print(colored(f"[warn] Error getting clip dimensions: {e}", "yellow"))
+            w, h, sw, sh = 1080, 1920, int(1080 * 0.8), int(1920 * 0.08)
 
         if pos_mode == 'pct':
             # pct anchors are CENTER of subtitle box, expressed in percentages
@@ -469,27 +568,52 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
             # Align to the same grid model used by the frontend preview
             # Grid anchors are interpreted as the CENTER of the subtitle box
             # at 10% / 50% / 90% horizontally.
-            half_sw = int((sw or 0) / 2)
-            if hpos == 'left':
-                return max(int(0.10 * w) - half_sw, 0)
-            if hpos == 'right':
-                return max(int(0.90 * w) - half_sw, 0)
-            # center
-            return max(int((w - (sw or 0)) / 2), 0)
+            if sw > 0:
+                half_sw = int(sw / 2)
+                if hpos == 'left':
+                    x = int(0.10 * w) - half_sw
+                    return max(min(x, w - sw), 0)
+                if hpos == 'right':
+                    x = int(0.90 * w) - half_sw
+                    return max(min(x, w - sw), 0)
+                # center
+                return max(int((w - sw) / 2), 0)
+            else:
+                # Fallback positioning when subtitle width unknown
+                if hpos == 'left':
+                    return int(0.05 * w)  # 5% from left edge
+                if hpos == 'right':
+                    return int(0.75 * w)  # 75% from left (assuming 20% subtitle width)
+                # center
+                return int(0.50 * w)  # Center of video
 
         def _y_from_v(vpos: str) -> int:
             # Align to the same grid model used by the frontend preview
             # Grid anchors are interpreted as the CENTER of the subtitle box
             # at 15% / 50% / 85% vertically.
-            half_sh = int((sh or 0) / 2)
-            if vpos == 'top':
-                return max(int(0.15 * h) - half_sh, 0)
-            if vpos == 'bottom':
-                return max(int(0.85 * h) - half_sh, 0)
-            # center
-            return max(int((h - (sh or 0)) / 2), 0)
+            if sh > 0:
+                half_sh = int(sh / 2)
+                if vpos == 'top':
+                    y = int(0.15 * h) - half_sh
+                    return max(min(y, h - sh), 0)
+                if vpos == 'bottom':
+                    y = int(0.85 * h) - half_sh
+                    return max(min(y, h - sh), 0)
+                # center
+                return max(int((h - sh) / 2), 0)
+            else:
+                # Fallback positioning when subtitle height unknown
+                if vpos == 'top':
+                    return int(0.10 * h)  # 10% from top
+                if vpos == 'bottom':
+                    return int(0.80 * h)  # 80% from top (assuming ~5% subtitle height)
+                # center
+                return int(0.45 * h)  # Slightly above center
 
-        return (_x_from_h(locals().get('horizontal_subtitles_position', 'center')), _y_from_v(locals().get('vertical_subtitles_position', 'bottom')))
+        final_x = _x_from_h(locals().get('horizontal_subtitles_position', 'center'))
+        final_y = _y_from_v(locals().get('vertical_subtitles_position', 'bottom'))
+        print(colored(f"[debug] Final subtitle position: ({final_x}, {final_y}) for {locals().get('horizontal_subtitles_position', 'center')},{locals().get('vertical_subtitles_position', 'bottom')}", "cyan"))
+        return (final_x, final_y)
 
     positioned_subs = subtitles.with_position(_safe_area_pos_fn)
     result: CompositeVideoClip = CompositeVideoClip([

@@ -7,7 +7,7 @@ import { Input } from "@/components/components/ui/input"
 import { Textarea } from "@/components/components/ui/textarea"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/components/ui/select"
 import { Switch } from "@/components/components/ui/switch"
-import { HelpCircle, RefreshCw } from "lucide-react"
+import { HelpCircle, RefreshCw, Sparkles } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/components/ui/tooltip"
 import { Button } from "@/components/components/ui/button"
 
@@ -46,6 +46,8 @@ export default function MoneyPrinterForm({
   const [voiceLoading, setVoiceLoading] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const subjectId = useId()
+  const [subject, setSubject] = useState("")
+  const [suggesting, setSuggesting] = useState(false)
   const modelId = useId()
   const parasId = useId()
   const threadsId = useId()
@@ -71,8 +73,48 @@ export default function MoneyPrinterForm({
             <fieldset className="grid gap-4">
               <legend className="text-sm font-medium">Content</legend>
               <div className="grid gap-2">
-                <Label htmlFor={subjectId}>Subject</Label>
-                <Input id={subjectId} name="videoSubject" placeholder="Describe the video topic (e.g., travel hacks)" required />
+                <div className="flex items-center justify-between">
+                  <Label htmlFor={subjectId}>Subject</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 gap-1"
+                    disabled={suggesting}
+                    onClick={async () => {
+                      try {
+                        setSuggesting(true)
+                        const base = apiBase || ''
+                        const res = await fetch(`${base}/api/moneyprinter/suggest-subject`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ aiModel })
+                        })
+                        const data = await res.json()
+                        if (!res.ok) throw new Error(data?.detail || 'Failed to generate subject')
+                        const s = String(data?.subject || '').trim()
+                        if (s) setSubject(s)
+                      } catch (e) {
+                        // Best-effort; keep errors silent in UI to avoid noise
+                      } finally {
+                        setSuggesting(false)
+                      }
+                    }}
+                    title="Generate with AI"
+                    aria-label="Generate subject with AI"
+                  >
+                    <Sparkles className="size-3.5" />
+                    {suggesting ? 'Generating…' : 'Generate with AI'}
+                  </Button>
+                </div>
+                <Input
+                  id={subjectId}
+                  name="videoSubject"
+                  placeholder="Describe the video topic (e.g., travel hacks)"
+                  required
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
@@ -246,6 +288,7 @@ export default function MoneyPrinterForm({
                 // reset form UI and notify parent
                 e.currentTarget.form?.reset()
                 setUseMusic(false)
+                setSubject("")
                 onChangeAiModel(aiModel)
                 onChangeVoice(voice)
                 onChangeSubtitleColor("#FFFF00")

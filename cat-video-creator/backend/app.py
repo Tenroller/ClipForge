@@ -397,6 +397,60 @@ def moneyprinter_generate(req: MoneyPrinterRequest):
     return {"status": "queued", "jobId": job_id}
 
 
+class SuggestSubjectRequest(BaseModel):
+    aiModel: str | None = None
+    examples: list[str] | None = None
+    topicHint: str | None = None
+
+
+@app.post("/api/moneyprinter/suggest-subject")
+def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
+    """Suggest a short content subject using Gemini.
+
+    Returns a JSON object: {"subject": "..."}
+    """
+    ensure_on_path(MONEYPRINTER_BACKEND)
+    with pushd(MONEYPRINTER_BACKEND):
+        try:
+            from vendors.moneyprinter.gpt import generate_response  # type: ignore
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to initialize Gemini backend: {e}")
+
+    examples = req.examples or [
+        "Good foods for cats",
+        "How to calm your dog",
+        "How to fix a broken pipe",
+    ]
+    hint = (req.topicHint or "").strip()
+
+    prompt_lines = [
+        "Suggest one short, catchy subject for a short-form video.",
+        "- 3 to 6 words.",
+        "- No quotes, no emojis, minimal punctuation.",
+        "- Return ONLY the subject text.",
+        "",
+        "Examples:",
+    ]
+    prompt_lines += [f"- {e}" for e in examples if e]
+    if hint:
+        prompt_lines += ["", f"Topic hint: {hint}"]
+    prompt = "\n".join(prompt_lines)
+
+    try:
+        model = req.aiModel or "gemini-2.0-flash"
+        raw = generate_response(prompt, model)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Gemini request failed: {e}")
+
+    text = (raw or "").strip().splitlines()[0] if raw else ""
+    # light cleanup: drop surrounding quotes and trailing punctuation
+    text = text.strip().strip('"\'').strip()
+    if text.endswith(('.', '!', '?')):
+        text = text[:-1].strip()
+    if not text:
+        raise HTTPException(status_code=502, detail="Empty subject from model")
+    return {"subject": text}
+
 @app.get("/api/models")
 def list_models() -> Dict[str, List[str]]:
     """List available Gemini models (static list; can be swapped to dynamic)."""
