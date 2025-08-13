@@ -865,7 +865,11 @@ def voice_sample(voice: str, text: Optional[str] = None):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to load TTS backend: {e}")
 
-    voices = set(kokoro_voices())
+    # Safely attempt to load available voices; if Kokoro isn't installed, return 500
+    try:
+        voices = set(kokoro_voices())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load voices: {e}")
     if voice not in voices:
         raise HTTPException(status_code=400, detail="Invalid voice")
 
