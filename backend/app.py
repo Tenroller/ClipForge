@@ -48,10 +48,17 @@ BRAINROT_ROOT = VENDOR_ROOT / "brainrot"
 # Load environment variables early so running uvicorn directly works consistently
 try:
     from dotenv import load_dotenv  # type: ignore
-    # Canonical: project root .env
-    load_dotenv((ROOT.parents[1] / ".env"))
-    # Also support backend-local .env and vendor override for MoneyPrinter
+    # Canonical: repository root .env
     load_dotenv((ROOT / ".env"))
+    # Legacy monorepo layout support: attempt parent-of-root if it contains a .env next to old layout
+    try:
+        legacy_env = (ROOT.parents[1] / ".env")
+        if legacy_env.exists():
+            load_dotenv(legacy_env)
+    except Exception:
+        pass
+    # Also support backend-local .env and vendor override for MoneyPrinter
+    load_dotenv((Path(__file__).resolve().parent / ".env"))
     load_dotenv((MONEYPRINTER_BACKEND / ".env"))
 except Exception:
     # python-dotenv is optional; env vars can be provided by shell or process manager
@@ -722,11 +729,28 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
 
     Returns a JSON object: {"subject": "..."}
     """
+    # Log start and config hints
+    try:
+        logger.info(
+            "suggest-subject: start",
+            extra={
+                "endpoint": "suggest_subject",
+                "ai_model": (req.aiModel or "gemini-2.0-flash"),
+                "examples_count": len(req.examples or []),
+                "has_hint": bool((req.topicHint or "").strip()),
+            },
+        )
+        if not (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")):
+            logger.warning("suggest-subject: Gemini API key not set (GOOGLE_API_KEY/GEMINI_API_KEY)")
+    except Exception:
+        pass
+
     ensure_on_path(MONEYPRINTER_BACKEND)
     with pushd(MONEYPRINTER_BACKEND):
         try:
             from vendors.moneyprinter.gpt import generate_response  # type: ignore
         except Exception as e:
+            log_error(logger, e, {"endpoint": "suggest_subject", "stage": "import_vendor"})
             raise HTTPException(status_code=500, detail=f"Failed to initialize Gemini backend: {e}")
 
     examples = req.examples or [
@@ -751,8 +775,10 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
 
     try:
         model = req.aiModel or "gemini-2.0-flash"
+        logger.info("suggest-subject: calling Gemini", extra={"endpoint": "suggest_subject", "stage": "call_gemini", "ai_model": model, "prompt_len": len(prompt)})
         raw = generate_response(prompt, model)
     except Exception as e:
+        log_error(logger, e, {"endpoint": "suggest_subject", "stage": "call_gemini"})
         raise HTTPException(status_code=500, detail=f"Gemini request failed: {e}")
 
     text = (raw or "").strip().splitlines()[0] if raw else ""
@@ -761,7 +787,15 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
     if text.endswith(('.', '!', '?')):
         text = text[:-1].strip()
     if not text:
+        try:
+            logger.warning("suggest-subject: empty response from model", extra={"endpoint": "suggest_subject", "stage": "empty_result"})
+        except Exception:
+            pass
         raise HTTPException(status_code=502, detail="Empty subject from model")
+    try:
+        logger.info("suggest-subject: success", extra={"endpoint": "suggest_subject", "stage": "done", "subject_len": len(text)})
+    except Exception:
+        pass
     return {"subject": text}
 
 @app.get("/api/models", tags=["Configuration"], summary="List AI Models")
@@ -846,8 +880,11 @@ def list_voices() -> Dict[str, List[str]]:
     start_ts = time.time()
     try:
         with pushd(MONEYPRINTER_BACKEND):
-            from vendors.moneyprinter.tiktokvoice import list_voices as kokoro_voices  # type: ignore
-            voices = kokoro_voices()
+            # Avoid importing heavy Kokoro runtime just to list voices.
+            # Use the static VOICES constant from the vendor module so this
+            # endpoint works even when Kokoro/torch are not installed.
+            from vendors.moneyprinter.tiktokvoice import VOICES as KOKORO_VOICES  # type: ignore
+            voices = list(KOKORO_VOICES)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load voices: {e}")
     duration = time.time() - start_ts
@@ -877,9 +914,11 @@ def voice_sample(voice: str, text: Optional[str] = None):
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to load TTS backend: {e}")
 
-    # Safely attempt to load available voices; if Kokoro isn't installed, return 500
+    # Safely attempt to load available voices using static constant to
+    # avoid forcing Kokoro runtime at import time.
     try:
-        voices = set(kokoro_voices())
+        from vendors.moneyprinter.tiktokvoice import VOICES as KOKORO_VOICES  # type: ignore
+        voices = set(KOKORO_VOICES)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load voices: {e}")
     if voice not in voices:

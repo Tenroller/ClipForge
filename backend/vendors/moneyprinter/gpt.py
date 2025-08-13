@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Tuple, List, Optional
 
 from termcolor import colored
+import logging
 from dotenv import load_dotenv
 import google.generativeai as genai  # type: ignore
 
@@ -22,6 +23,9 @@ if GOOGLE_API_KEY:
         genai.configure(api_key=GOOGLE_API_KEY)  # type: ignore[attr-defined]
     except Exception:
         pass
+
+
+logger = logging.getLogger("video_generator")
 
 
 def generate_response(prompt: str, ai_model: str) -> str:
@@ -42,6 +46,7 @@ def generate_response(prompt: str, ai_model: str) -> str:
     # Force Gemini-only; allow ai_model to be a concrete Gemini model name
     model_name = ai_model or 'gemini-2.0-flash'
     try:
+        logger.info("gemini.generate_response: start", extra={"ai_model": model_name, "prompt_len": len(prompt)})
         model = genai.GenerativeModel(model_name)  # type: ignore[attr-defined]
         response_model = model.generate_content(prompt)  # type: ignore[call-arg]
         response = getattr(response_model, 'text', None)
@@ -52,9 +57,17 @@ def generate_response(prompt: str, ai_model: str) -> str:
             except Exception:
                 response = ""
     except Exception as e:
+        try:
+            logger.error("gemini.generate_response: error", exc_info=True, extra={"ai_model": model_name})
+        except Exception:
+            pass
         print(colored(f"[-] Gemini Error: {e}", "red"))
         return ""
 
+    try:
+        logger.info("gemini.generate_response: success", extra={"ai_model": model_name, "got_text": bool(response)})
+    except Exception:
+        pass
     return response or ""
 
 def generate_script(video_subject: str, paragraph_number: int, ai_model: str, voice: str, customPrompt: str) -> Optional[str]:

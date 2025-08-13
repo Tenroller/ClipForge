@@ -35,18 +35,20 @@ A comprehensive, production-ready platform for generating short-form videos thro
 
 ```
 ai-video-generator/
-├── cat-video-creator/
-│   ├── backend/              # FastAPI server with enterprise features
-│   │   ├── vendors/          # Vendored MoneyPrinter & Brainrot backends
-│   │   ├── tests/            # Comprehensive test suite
-│   │   ├── database.py       # SQLite/PostgreSQL job persistence
-│   │   ├── caching.py        # Multi-level caching system
-│   │   ├── metrics.py        # Prometheus metrics collection
-│   │   ├── job_queue.py      # Redis-based job queue
-│   │   ├── batch_processing.py  # Bulk operation orchestration
-│   │   └── thumbnail_generator.py  # Video preview generation
-│   └── frontend/             # React + TypeScript + Tailwind UI
-├── docker-compose.yml        # Production deployment
+├── backend/                  # FastAPI server with enterprise features
+│   ├── vendors/              # Vendored MoneyPrinter & Brainrot backends
+│   ├── tests/                # Comprehensive test suite
+│   ├── database.py           # SQLite/PostgreSQL job persistence
+│   ├── caching.py            # Multi-level caching system
+│   ├── metrics.py            # Prometheus metrics collection
+│   ├── job_queue.py          # Redis-based job queue
+│   ├── batch_processing.py   # Bulk operation orchestration
+│   └── thumbnail_generator.py# Video preview generation
+├── frontend/                 # React + TypeScript + Tailwind UI
+├── docker/                   # Dockerfiles and compose
+│   ├── Dockerfile.backend
+│   ├── Dockerfile.frontend
+│   └── docker-compose.yml
 ├── .github/workflows/        # CI/CD automation
 └── requirements.txt          # Python dependencies
 ```
@@ -61,7 +63,7 @@ git clone https://github.com/your-repo/ai-video-generator.git
 cd ai-video-generator
 
 # Start all services (includes Redis for enhanced features)
-docker-compose up --build
+docker compose -f docker/docker-compose.yml up --build
 
 # Access the application
 # Frontend: http://localhost:5173
@@ -80,9 +82,31 @@ docker-compose up --build
   - Ubuntu/Debian: `sudo apt install espeak-ng`
   - Windows: Download from [espeak-ng releases](https://github.com/espeak-ng/espeak-ng/releases)
 - **Redis** (optional, for enhanced performance)
+
+#### TTS/Kokoro notes
+
+- We pin Kokoro in `requirements.txt` to `kokoro==0.7.16` to ensure wheels are available on macOS ARM and CI. This provides `KPipeline` used by the app.
+- If you prefer the newer API (e.g., `kokoro>=0.9.2` as in the example below) and your platform has wheels or you can build from source, you can bump locally:
+
+```bash
+pip install 'kokoro>=0.9.2' soundfile
+# macOS
+brew install espeak-ng
+# Ubuntu/Debian
+sudo apt-get -y install espeak-ng
+```
+
+Example usage for reference:
+
+```python
+from kokoro import KPipeline
+pipeline = KPipeline(lang_code='a')
+for i, (gs, ps, audio) in enumerate(pipeline("Hello", voice='af_heart')):
+    pass
+```
 #### Backend Setup
 ```bash
-cd cat-video-creator/backend
+cd backend
 
 # Create virtual environment
 python -m venv .venv
@@ -90,7 +114,7 @@ source .venv/bin/activate  # Linux/macOS
 # .venv\Scripts\activate   # Windows
 
 # Install dependencies
-pip install -r ../../requirements.txt
+pip install -r ../requirements.txt
 
 # Start the server
 uvicorn app:app --host 0.0.0.0 --port 8080 --reload
@@ -98,7 +122,7 @@ uvicorn app:app --host 0.0.0.0 --port 8080 --reload
 
 #### Frontend Setup
 ```bash
-cd cat-video-creator/frontend
+cd frontend
 
 # Install dependencies
 npm install
@@ -111,7 +135,7 @@ npm run dev
 
 ### Environment Variables
 
-Create a `.env` file in the project root (canonical location). The backend also supports optional overrides from `cat-video-creator/backend/.env` and `cat-video-creator/backend/vendors/moneyprinter/.env` if present.
+Create a `.env` file in the project root (canonical location). The backend also supports optional overrides from `backend/.env` and `backend/vendors/moneyprinter/.env` if present.
 
 ```bash
 # === Required for Video Generation ===
@@ -328,7 +352,7 @@ docker-compose logs redis
 
 ### Run Test Suite
 ```bash
-cd cat-video-creator/backend
+cd backend
 
 # Run all tests
 pytest

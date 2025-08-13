@@ -14,3 +14,8 @@ cat-video-creator/backend/vendors/moneyprinter/.env
 /cat-video-creator/backend/vendors/moneyprinter/cache
 cat-video-creator/backend/jobs.db
 .env
+/backend/.venv
+/backend/tests/__pycache__
+/backend/vendors/moneyprinter/__pycache__
+/backend/vendors/temp
+/backend/vendors/moneyprinter/cache

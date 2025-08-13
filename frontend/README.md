@@ -4,7 +4,7 @@ React + Vite + TypeScript + Tailwind + Shadcn UI frontend for unified workflows.
 
 Install
 ```bash
-cd cat-video-creator/frontend
+cd frontend
 npm install
 ```
 

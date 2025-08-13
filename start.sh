@@ -7,8 +7,8 @@ set -euo pipefail
 # Logs written to ./logs/
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKEND_DIR="$ROOT_DIR/cat-video-creator/backend"
-FRONTEND_DIR="$ROOT_DIR/cat-video-creator/frontend"
+BACKEND_DIR="$ROOT_DIR/backend"
+FRONTEND_DIR="$ROOT_DIR/frontend"
 LOG_DIR="$ROOT_DIR/logs"
 mkdir -p "$LOG_DIR"
 
@@ -84,7 +84,7 @@ start_backend() {
     fi
   fi
 
-  mkdir -p "$ROOT_DIR/cat-video-creator/output"
+  mkdir -p "$ROOT_DIR/output"
 
   pushd "$BACKEND_DIR" >/dev/null
   echo "- Uvicorn on http://localhost:$BACKEND_PORT (logs: $LOG_DIR/backend.log)"

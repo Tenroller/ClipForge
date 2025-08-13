@@ -49,18 +49,12 @@ class TestVoicesEndpoint:
     @patch('app.ensure_on_path')
     @patch('app.pushd')
     def test_list_voices_success(self, mock_pushd, mock_ensure_path, client):
-        # Mock the voice list function
-        with patch('vendors.moneyprinter.tiktokvoice.list_voices', return_value=["af_bella", "en_us_001"]):
-            response = client.get("/api/voices")
-            assert response.status_code == 200
-            data = response.json()
-            assert "voices" in data
-            assert isinstance(data["voices"], list)
-
-    def test_list_voices_import_error(self, client):
-        # This will naturally fail due to import issues in test env
+        # With static VOICES usage, endpoint should succeed without Kokoro
         response = client.get("/api/voices")
-        assert response.status_code == 500
+        assert response.status_code == 200
+        data = response.json()
+        assert "voices" in data
+        assert isinstance(data["voices"], list)
 
 
 class TestVoiceSampleEndpoint:
