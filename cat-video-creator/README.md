@@ -33,5 +33,7 @@ Usage
 
 Notes
 - All code is now inside `cat-video-creator/`. The original two are vendored under `backend/vendors/`.
-- For MoneyPrinter, create a `.env` in `cat-video-creator/backend/vendors/moneyprinter/` or set env vars in the parent shell.
+- Canonical env file is the repo root `.env` (at project root). The backend will auto-load it.
+- Optional overrides: `.env` in `cat-video-creator/backend/` and `cat-video-creator/backend/vendors/moneyprinter/` will also be loaded if present.
+- Required keys include `PEXELS_API_KEY` and either `GOOGLE_API_KEY` or `GEMINI_API_KEY`. See the root `README.md` for the full list.
 

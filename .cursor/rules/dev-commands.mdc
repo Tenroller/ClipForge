@@ -1,0 +1,23 @@
+---
+alwaysApply: true
+---
+### Common dev commands
+
+- **One-shot dev launcher**: [start.sh](mdc:start.sh)
+  - Creates/uses Python venv, installs deps from [requirements.txt](mdc:requirements.txt), starts backend (8080) and frontend (5173), streams logs to `logs/`.
+- **Backend only**
+  - Create venv and install (minimal): `pip install -r cat-video-creator/backend/requirements-dev.txt`
+  - Run: `uvicorn app:app --host 0.0.0.0 --port 8080 --reload` in `cat-video-creator/backend`
+  - Tests: run `pytest` in `cat-video-creator/backend`
+- **Frontend only**
+  - Install: `npm install` in `cat-video-creator/frontend`
+  - Dev: `npm run dev` (default port 5173)
+  - Build: `npm run build`
+- **Docker**
+  - Backend build/run: `docker build -f Dockerfile.backend -t ai-video-backend .` then `docker run -p 8080:8080 ai-video-backend`
+  - Frontend build/run: `docker build -f Dockerfile.frontend --build-arg VITE_API_BASE=http://localhost:8080 -t ai-video-frontend .` then `docker run -p 8080:80 ai-video-frontend`
+
+### Environment setup
+- Create MoneyPrinter `.env` at `cat-video-creator/backend/vendors/moneyprinter/.env` with required keys (`PEXELS_API_KEY`, `GOOGLE_API_KEY`/`GEMINI_API_KEY`, etc.)
+- Optional: set `API_KEY` to protect endpoints (send `X-API-Key` header)
+- macOS TTS: `brew install espeak-ng`

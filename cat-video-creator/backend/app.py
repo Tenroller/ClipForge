@@ -45,6 +45,18 @@ VENDOR_ROOT = Path(__file__).resolve().parent / "vendors"
 MONEYPRINTER_BACKEND = VENDOR_ROOT / "moneyprinter"
 BRAINROT_ROOT = VENDOR_ROOT / "brainrot"
 
+# Load environment variables early so running uvicorn directly works consistently
+try:
+    from dotenv import load_dotenv  # type: ignore
+    # Canonical: project root .env
+    load_dotenv((ROOT.parents[1] / ".env"))
+    # Also support backend-local .env and vendor override for MoneyPrinter
+    load_dotenv((ROOT / ".env"))
+    load_dotenv((MONEYPRINTER_BACKEND / ".env"))
+except Exception:
+    # python-dotenv is optional; env vars can be provided by shell or process manager
+    pass
+
 # Setup espeak-ng environment for Kokoro TTS
 # Clear potentially problematic espeakng_loader environment variables
 for key in ['ESPEAK_DATA_PATH', 'ESPEAKNG_DATA_PATH', 'PHONEMIZER_ESPEAK_DATA_PATH', 'PHONEMIZER_ESPEAK_LIBRARY']:

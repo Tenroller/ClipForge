@@ -1,0 +1,18 @@
+---
+globs: *.py
+---
+### Python backend guidelines (FastAPI)
+
+- **Entry**: [cat-video-creator/backend/app.py](mdc:cat-video-creator/backend/app.py). Prefer adding new endpoints here or in nearby modules; keep paths under `/api/*`.
+- **Auth & rate limit**: Use `require_api_key` and `make_rate_limiter(bucket)` dependencies from [app.py](mdc:cat-video-creator/backend/app.py) on protected routes.
+- **Jobs**: Long-running work should run in daemon threads with global `JOB_SEMAPHORE`; enqueue updates with `_enqueue_job_update(job_id)` to notify WebSocket clients.
+- **Persistence**: Use `get_job_store()` from [cat-video-creator/backend/database.py](mdc:cat-video-creator/backend/database.py). Avoid ad-hoc file writes except under `VIDEOHELPER_OUTPUT_DIR`.
+- **Logging**: Get the logger via `get_logger("video_generator")` and log via helpers in [cat-video-creator/backend/logging_config.py](mdc:cat-video-creator/backend/logging_config.py). Avoid `print()` for request/job logs.
+- **Validation**: Use `pydantic` models and validators; reuse helpers in [cat-video-creator/backend/validation.py](mdc:cat-video-creator/backend/validation.py).
+- **CORS/hosts**: CORS and trusted hosts are configured in `app.py`; avoid adding per-endpoint CORS.
+- **Downloads**: Gate filesystem access with `_is_allowed_path` from [app.py](mdc:cat-video-creator/backend/app.py).
+- **Errors**: Raise `HTTPException` with appropriate codes; never swallow exceptions. For job threads, update job status to `error` on failure.
+- **Typing**: Add explicit return types for public functions and endpoint handlers; avoid `Any` where possible.
+- **Dependencies**: For local dev, `start.sh` installs from [requirements.txt](mdc:requirements.txt). For backend-only minimal dev/tests, see [cat-video-creator/backend/requirements-dev.txt](mdc:cat-video-creator/backend/requirements-dev.txt).
+- **Testing**: Place tests under [cat-video-creator/backend/tests](mdc:cat-video-creator/backend/tests). Run with `pytest`.
+- **TTS/env**: Kokoro/espeak configured at startup; avoid mutating related env vars in request handlers.

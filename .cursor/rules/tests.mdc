@@ -1,0 +1,16 @@
+---
+globs: cat-video-creator/backend/tests/**/*.py
+---
+### Testing guidelines (backend)
+
+- **Location**: tests live under [cat-video-creator/backend/tests](mdc:cat-video-creator/backend/tests)
+  - Notable files: `test_api.py`, `test_endpoints.py`, `test_enhanced_features.py`, `test_models.py`
+- **Runner**: In `cat-video-creator/backend`, run `pytest`
+- **Environment**:
+  - Disable auth or pass header: set `API_KEY` empty/undefined, or send `X-API-Key` in requests
+  - Disable rate limits for tests: set `RATE_LIMIT_PER_MINUTE=0`
+  - Ensure FFmpeg available on PATH; GPU not required
+- **HTTP client**: Prefer FastAPI `TestClient`/HTTPX; keep requests to `/api/*`
+- **Jobs**: When asserting long-running behavior, poll `/api/jobs/{job_id}` or subscribe to `/ws/jobs/{job_id}`; avoid brittle sleeps
+- **Filesystem**: Only interact within `VIDEOHELPER_OUTPUT_DIR` (defaults to `cat-video-creator/output/`)
+- **Determinism**: Avoid external API calls; if needed, mock vendored modules under `vendors/*`

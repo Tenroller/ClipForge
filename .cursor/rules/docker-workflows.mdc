@@ -1,0 +1,16 @@
+---
+alwaysApply: false
+description: Docker build and run workflows for backend and frontend
+---
+### Docker workflows
+
+- **Backend image**: [Dockerfile.backend](mdc:Dockerfile.backend)
+  - Build: `docker build -f Dockerfile.backend -t ai-video-backend .`
+  - Run: `docker run --rm -p 8080:8080 -e VIDEOHELPER_OUTPUT_DIR=/app/output ai-video-backend`
+- **Frontend image**: [Dockerfile.frontend](mdc:Dockerfile.frontend)
+  - Build: `docker build -f Dockerfile.frontend --build-arg VITE_API_BASE=http://localhost:8080 -t ai-video-frontend .`
+  - Run: `docker run --rm -p 8080:80 ai-video-frontend`
+- **Compose**: See [docker-compose.yml](mdc:docker-compose.yml) if present; override API base via `VITE_API_BASE` build arg
+- **Outputs**: Videos written under `/app/output` in backend container; mount a volume if you need persistence
+- **Ports**: Backend 8080; Frontend 80 (container) → map to host as needed
+- **GPU**: Container detects codecs via MoneyPrinter logic; CUDA/torch optional; pass through devices if using GPU encoders

@@ -1,0 +1,16 @@
+---
+alwaysApply: false
+description: Logging and metrics usage for backend
+---
+### Logging and metrics
+
+- **Logger**: Use `get_logger("video_generator")` from [cat-video-creator/backend/logging_config.py](mdc:cat-video-creator/backend/logging_config.py)
+  - Prefer helpers: `log_request`, `log_job_event`, `log_error`, `log_security_event`
+  - Console uses colored formatter; files go to `logs/app.log`, errors to `logs/errors.log`
+  - To enable JSON logs, set `ENABLE_JSON_LOGGING=true`
+- **Request logging**: `LoggingMiddleware` in [app.py](mdc:cat-video-creator/backend/app.py) records method, path, status, duration; avoid duplicate logging per handler
+- **Metrics**: Use [cat-video-creator/backend/metrics.py](mdc:cat-video-creator/backend/metrics.py)
+  - Exposed endpoints: `/api/metrics` (Prometheus text), `/api/metrics/stats`
+  - Record with `record_request_metrics` and `track_job_metrics` where appropriate
+- **Performance**: Use `log_performance_metric(logger, name, value, unit?, **tags)` for notable timings
+- **Security**: Log notable events with `log_security_event(logger, event_type, user_ip?, details?)`

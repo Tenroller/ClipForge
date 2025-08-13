@@ -23,3 +23,45 @@
 2025-08-12 21:36:13 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/batch/template - 422 - 0.000s
 2025-08-12 21:37:37 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
 2025-08-12 21:37:37 - video_generator - [32mINFO[0m - app:<module>:355 - ✅ All enhanced systems initialized
+2025-08-13 11:36:03 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - app:<module>:368 - ✅ All enhanced systems initialized
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/health - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - app:<module>:368 - ✅ All enhanced systems initialized
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 401 - 0.000s
+2025-08-13 11:36:04 - video_generator - [33mWARNING[0m - logging_config:log_security_event:205 - Security event: unauthorized_access - GET /api/ping
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/health - 200 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/models - 200 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/voices - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/voices - 500 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/voice-sample - 500 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/jobs/nonexistent-job-id - 404 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/jobs/nonexistent-job-id/cancel - 404 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/jobs/test-job/cancel - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/download - 404 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/download - 403 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/download - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/list-videos - 404 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/list-videos - 403 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/list-videos - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.000s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - app:<module>:368 - ✅ All enhanced systems initialized
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/moneyprinter/generate - 200 - 0.005s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/moneyprinter/generate - 200 - 0.003s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/moneyprinter/generate - 429 - 0.000s
+2025-08-13 11:36:04 - video_generator - [33mWARNING[0m - logging_config:log_security_event:205 - Security event: rate_limit_exceeded - POST /api/moneyprinter/generate
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/moneyprinter/generate - 422 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/moneyprinter/generate - 422 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/brainrot/generate - 422 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/brainrot/generate - 422 - 0.001s
+2025-08-13 11:36:04 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/moneyprinter/generate - 200 - 0.003s
+2025-08-13 11:36:05 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/metrics - 200 - 0.002s
+2025-08-13 11:36:05 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/cache/stats - 200 - 0.001s
+2025-08-13 11:36:05 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/batch - 422 - 0.001s
+2025-08-13 11:36:05 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/batches - 200 - 0.001s
+2025-08-13 11:36:05 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/batch/template - 422 - 0.000s

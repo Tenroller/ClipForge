@@ -111,7 +111,7 @@ npm run dev
 
 ### Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (canonical location). The backend also supports optional overrides from `cat-video-creator/backend/.env` and `cat-video-creator/backend/vendors/moneyprinter/.env` if present.
 
 ```bash
 # === Required for Video Generation ===
