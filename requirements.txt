@@ -60,7 +60,7 @@ espeakng_loader==0.2.4
 # Observability & testing
 sentry-sdk==2.18.0
 pytest==8.3.3
-httpx==0.27.2
+httpx==0.28.1
 
 # Next-level enhancements
 redis==5.2.1
