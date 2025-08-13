@@ -31,6 +31,7 @@ from metrics import get_metrics, record_request_metrics, init_metrics_system, tr
 from caching import get_cache, cached
 from thumbnail_generator import get_thumbnail_generator, create_video_preview_package
 from batch_processing import get_batch_processor
+from batch_processing import create_brainrot_batch_from_playlist
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -363,6 +364,8 @@ WS_SUBSCRIBERS: Dict[str, set] = defaultdict(set)
 ASYNC_QUEUE: "asyncio.Queue[tuple[str, Dict[str, Any]]]" = asyncio.Queue()
 MAIN_LOOP: "asyncio.AbstractEventLoop | None" = None
 JOB_SEMAPHORE = threading.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2") or "2")))
+# Backwards-compat in tests that patch `app.JOBS`
+JOBS: Dict[str, Dict[str, Any]] = {}
 
 # Simple optional in-memory rate limiter (per minute)
 RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MINUTE", "0") or "0")
@@ -424,7 +427,13 @@ def require_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
 
 def make_rate_limiter(bucket: str):
     def _dep(request: Request) -> None:
-        if RATE_LIMIT_PER_MIN <= 0:
+        # Read the current limit from environment at request time to respect test overrides
+        current_limit_env = os.getenv("RATE_LIMIT_PER_MINUTE", "0") or "0"
+        try:
+            current_limit = int(current_limit_env)
+        except Exception:
+            current_limit = 0
+        if current_limit <= 0:
             return
         client_ip = (request.client.host if request.client else "unknown") or "unknown"
         key = f"{bucket}:{client_ip}"
@@ -434,7 +443,7 @@ def make_rate_limiter(bucket: str):
             dq = RATE_LIMIT_BUCKETS[key]
             while dq and dq[0] < window_start:
                 dq.popleft()
-            if len(dq) >= RATE_LIMIT_PER_MIN:
+            if len(dq) >= current_limit:
                 raise HTTPException(status_code=429, detail="Too Many Requests")
             dq.append(now)
     return _dep
@@ -822,9 +831,22 @@ def get_gpu_info() -> Dict[str, Any]:
 def list_voices() -> Dict[str, List[str]]:
     """Expose Kokoro voices used by the AI video workflow."""
     ensure_on_path(MONEYPRINTER_BACKEND)
-    with pushd(MONEYPRINTER_BACKEND):
-        from vendors.moneyprinter.tiktokvoice import list_voices as kokoro_voices  # type: ignore
-        return {"voices": kokoro_voices()}
+    start_ts = time.time()
+    try:
+        with pushd(MONEYPRINTER_BACKEND):
+            from vendors.moneyprinter.tiktokvoice import list_voices as kokoro_voices  # type: ignore
+            voices = kokoro_voices()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load voices: {e}")
+    duration = time.time() - start_ts
+    # Protect tests and API by failing fast if backend is abnormally slow
+    try:
+        max_secs = float(os.getenv("VOICES_ENDPOINT_MAX_SECS", "5"))
+    except Exception:
+        max_secs = 5.0
+    if duration > max_secs:
+        raise HTTPException(status_code=500, detail="Voice backend not responding quickly")
+    return {"voices": voices}
 
 
 @app.get("/api/voice-sample")
@@ -1119,6 +1141,45 @@ def create_template_batch(
         return {"batch_id": batch_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+class PlaylistBatchRequest(BaseModel):
+    playlistUrl: str
+    name: Optional[str] = None
+    limit: Optional[int] = None
+    sample: Optional[int] = None
+    shuffle: bool = False
+    priority: str = "normal"
+    maxConcurrent: int = 3
+    stopOnError: bool = False
+    # Brainrot common params
+    numCompilations: int = Field(default=1, ge=1, le=10)
+    minDuration: int = Field(default=60, ge=10, le=3600)
+    maxDuration: int = Field(default=110, ge=10, le=3600)
+
+
+@app.post("/api/brainrot/playlist", tags=["Batch Processing"], summary="Create Brainrot batch from YouTube playlist")
+def brainrot_playlist_batch(req: PlaylistBatchRequest, _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Expand a YouTube playlist/channel URL into videos and create a Brainrot batch.
+    Returns batch_id and total_urls, then you can POST /api/batch/{batch_id}/start.
+    """
+    try:
+        result = create_brainrot_batch_from_playlist(
+            req.playlistUrl,
+            name=req.name,
+            limit=req.limit,
+            sample=req.sample,
+            shuffle=req.shuffle,
+            priority=req.priority,
+            max_concurrent=req.maxConcurrent,
+            stop_on_error=req.stopOnError,
+            numCompilations=req.numCompilations,
+            minDuration=req.minDuration,
+            maxDuration=req.maxDuration,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to create playlist batch: {e}")
 
 
 @app.websocket("/ws/jobs/{job_id}")

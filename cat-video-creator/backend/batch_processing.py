@@ -546,3 +546,156 @@ def start_batch_job(batch_id: str) -> bool:
 def get_batch_info(batch_id: str) -> Optional[Dict[str, Any]]:
     """Get batch information."""
     return get_batch_processor().get_batch_status(batch_id)
+
+
+# ---------------------------------------------
+# Playlist helpers for Brainrot (YouTube)
+# ---------------------------------------------
+
+def _normalize_priority(priority: str) -> JobPriority:
+    mapping = {
+        "low": JobPriority.LOW,
+        "normal": JobPriority.NORMAL,
+        "high": JobPriority.HIGH,
+        "critical": JobPriority.CRITICAL,
+    }
+    return mapping.get((priority or "normal").lower(), JobPriority.NORMAL)
+
+
+def extract_playlist_video_urls(
+    playlist_url: str,
+    limit: Optional[int] = None,
+    sample: Optional[int] = None,
+    shuffle: bool = False,
+    min_duration: Optional[int] = None,
+    max_duration: Optional[int] = None,
+) -> List[str]:
+    """Resolve a YouTube playlist/channel URL into a list of video URLs without downloading.
+
+    Args:
+        playlist_url: The playlist (or channel/URL with multiple entries) to expand
+        limit: Max number of videos to keep from the top (after shuffle if enabled)
+        sample: Randomly sample N videos from the resolved set (applied after limit if both provided)
+        shuffle: Whether to shuffle the resolved entries before selecting
+        min_duration: Keep videos with duration >= min_duration (seconds) when metadata available
+        max_duration: Keep videos with duration <= max_duration (seconds) when metadata available
+
+    Returns:
+        List of normalized watch URLs.
+    """
+    try:
+        import yt_dlp  # type: ignore
+    except Exception:
+        logger.error("yt-dlp not available; cannot expand playlist")
+        return []
+
+    ydl_opts = {
+        # Do not download; just extract metadata/entries
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': True,
+        'skip_download': True,
+        'noplaylist': False,
+    }
+
+    entries: List[Dict[str, Any]] = []
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(playlist_url, download=False)
+            if not info:
+                return []
+            if 'entries' in info and isinstance(info['entries'], list):
+                entries = [e for e in info['entries'] if isinstance(e, dict)]
+            else:
+                # Single video URL case
+                entries = [info]  # type: ignore
+    except Exception as e:
+        logger.error(f"Failed to extract playlist entries: {e}")
+        return []
+
+    # Optional duration filtering (best-effort; some flat entries may lack duration)
+    filtered: List[Dict[str, Any]] = []
+    for e in entries:
+        dur = e.get('duration')
+        if isinstance(dur, (int, float)):
+            if min_duration is not None and dur < min_duration:
+                continue
+            if max_duration is not None and dur > max_duration:
+                continue
+        filtered.append(e)
+
+    if shuffle:
+        import random
+        random.shuffle(filtered)
+
+    # Apply limit then sample
+    selected = filtered
+    if isinstance(limit, int) and limit > 0:
+        selected = selected[:limit]
+    if isinstance(sample, int) and sample > 0:
+        import random
+        if sample < len(selected):
+            selected = random.sample(selected, sample)
+
+    # Normalize into watch URLs
+    urls: List[str] = []
+    for e in selected:
+        url = e.get('url') or e.get('webpage_url')
+        if isinstance(url, str) and url.startswith('http'):
+            urls.append(url)
+            continue
+        vid = e.get('id')
+        if isinstance(vid, str):
+            urls.append(f"https://www.youtube.com/watch?v={vid}")
+
+    # Deduplicate while preserving order
+    seen: set = set()
+    unique_urls: List[str] = []
+    for u in urls:
+        if u not in seen:
+            unique_urls.append(u)
+            seen.add(u)
+    return unique_urls
+
+
+def create_brainrot_batch_from_playlist(
+    playlist_url: str,
+    name: Optional[str] = None,
+    *,
+    limit: Optional[int] = None,
+    sample: Optional[int] = None,
+    shuffle: bool = False,
+    priority: str = "normal",
+    max_concurrent: int = 3,
+    stop_on_error: bool = False,
+    **common_params: Any,
+) -> Dict[str, Any]:
+    """Create a Brainrot batch from a YouTube playlist/channel URL.
+
+    Returns a dict with keys: batch_id, total_urls
+    """
+    urls = extract_playlist_video_urls(
+        playlist_url,
+        limit=limit,
+        sample=sample,
+        shuffle=shuffle,
+    )
+
+    processor = get_batch_processor()
+    batch_name = name or f"Brainrot Playlist Batch ({len(urls)} items)"
+    job_params = []
+    for u in urls:
+        params = {"youtubeUrl": u}
+        params.update(common_params)
+        job_params.append(params)
+
+    batch_id = processor.create_batch(
+        name=batch_name,
+        workflow="brainrot",
+        job_parameters=job_params,
+        priority=_normalize_priority(priority),
+        max_concurrent=max_concurrent,
+        stop_on_error=stop_on_error,
+    )
+
+    return {"batch_id": batch_id, "total_urls": len(urls)}

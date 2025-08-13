@@ -12,10 +12,30 @@ import tempfile
 import warnings
 from typing import List
 
-import soundfile as sf
-from termcolor import colored
-from kokoro import KPipeline  # type: ignore
-from moviepy import AudioFileClip  # type: ignore
+try:
+    from termcolor import colored as _colored  # type: ignore
+except Exception:
+    def _colored(text, *args, **kwargs):  # type: ignore
+        return text
+
+# Delay heavy imports to runtime to keep module importable in test envs
+def _lazy_import_soundfile():
+    import soundfile as sf  # type: ignore
+    return sf
+
+def _lazy_import_moviepy_audiofileclip():
+    from moviepy import AudioFileClip  # type: ignore
+    return AudioFileClip
+
+def _lazy_import_kokoro_pipeline():
+    from kokoro import KPipeline  # type: ignore
+    return KPipeline
+
+def colored(text: str, *args, **kwargs):  # lightweight fallback
+    try:
+        return _colored(text, *args, **kwargs)
+    except Exception:
+        return text
 import sys
 
 
@@ -50,18 +70,24 @@ def _lang_for_voice(voice: str) -> str:
     return "a"
 
 
-def _ensure_pipeline(lang_code: str = "a") -> KPipeline:
+def _ensure_pipeline(lang_code: str = "a"):
     global _PIPELINE, _CURRENT_LANG
     if _PIPELINE is None or _CURRENT_LANG != lang_code:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning, module="torch.nn.modules.rnn")
             warnings.filterwarnings("ignore", category=FutureWarning, module="torch.nn.utils.weight_norm")
+            KPipeline = _lazy_import_kokoro_pipeline()
             _PIPELINE = KPipeline(lang_code=lang_code, repo_id="hexgrad/Kokoro-82M")
             _CURRENT_LANG = lang_code
     return _PIPELINE
 
 
 def list_voices() -> List[str]:
+    # Ensure kokoro is importable; fail fast if not available
+    try:
+        _lazy_import_kokoro_pipeline()
+    except Exception as e:
+        raise ImportError(f"kokoro not available: {e}")
     return VOICES.copy()
 
 
@@ -87,9 +113,11 @@ def tts(text: str, voice: str = "af_bella", filename: str = "output.mp3", play_s
 
         # Always generate a WAV first, then convert to requested path
         tmp_wav = tempfile.mktemp(suffix=".wav")
+        sf = _lazy_import_soundfile()
         sf.write(tmp_wav, audio_data, 24000)
 
         # Convert using moviepy/ffmpeg to match requested extension
+        AudioFileClip = _lazy_import_moviepy_audiofileclip()
         clip = AudioFileClip(tmp_wav)
         # Let ffmpeg infer from extension; ensure mp3 when .mp3
         audio_codec = "libmp3lame" if filename.lower().endswith(".mp3") else None

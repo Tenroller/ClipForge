@@ -15,7 +15,8 @@ from contextlib import contextmanager
 
 # Database configuration
 DB_URL = os.getenv("DATABASE_URL", "")
-DB_PATH = Path(os.getenv("DATABASE_PATH", "jobs.db"))
+# Resolve to absolute path to avoid cwd-related discrepancies during tests
+DB_PATH = Path(os.getenv("DATABASE_PATH", "jobs.db")).resolve()
 
 
 class JobStore:
@@ -28,6 +29,11 @@ class JobStore:
     
     def _init_db(self) -> None:
         """Initialize database schema."""
+        # Ensure parent directory exists
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
         with self._get_connection() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS jobs (
