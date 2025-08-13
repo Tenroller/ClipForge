@@ -1,0 +1,25 @@
+2025-08-12 21:25:04 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:25:05 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:25:28 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:25:28 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/health - 200 - 0.000s
+2025-08-12 21:25:28 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.001s
+2025-08-12 21:25:28 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 401 - 0.000s
+2025-08-12 21:25:28 - video_generator - [33mWARNING[0m - logging_config:log_security_event:205 - Security event: unauthorized_access - GET /api/ping
+2025-08-12 21:25:28 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/ping - 200 - 0.000s
+2025-08-12 21:27:34 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:27:34 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:27:34 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/health - 200 - 0.001s
+2025-08-12 21:35:06 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:35:07 - video_generator - [32mINFO[0m - app:<module>:355 - ✅ All enhanced systems initialized
+2025-08-12 21:35:14 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:35:15 - video_generator - [32mINFO[0m - app:<module>:355 - ✅ All enhanced systems initialized
+2025-08-12 21:35:15 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/health - 200 - 0.001s
+2025-08-12 21:36:09 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:36:13 - video_generator - [32mINFO[0m - app:<module>:355 - ✅ All enhanced systems initialized
+2025-08-12 21:36:13 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/metrics - 200 - 0.001s
+2025-08-12 21:36:13 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/cache/stats - 200 - 0.001s
+2025-08-12 21:36:13 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/batch - 422 - 0.001s
+2025-08-12 21:36:13 - video_generator - [32mINFO[0m - logging_config:log_request:138 - GET /api/batches - 200 - 0.001s
+2025-08-12 21:36:13 - video_generator - [32mINFO[0m - logging_config:log_request:138 - POST /api/batch/template - 422 - 0.000s
+2025-08-12 21:37:37 - video_generator - [32mINFO[0m - logging_config:<module>:217 - Logging system initialized
+2025-08-12 21:37:37 - video_generator - [32mINFO[0m - app:<module>:355 - ✅ All enhanced systems initialized

@@ -242,8 +242,8 @@ def generate_subtitles(audio_path: str, sentences: List[str], audio_clips: List[
         str: The path to the generated subtitles.
     """
 
-    def equalize_subtitles(srt_path: str, max_chars: int = 50) -> None:
-        # Equalize subtitles - increased max_chars from 10 to 50 for better readability
+    def equalize_subtitles(srt_path: str, max_chars: int = 70) -> None:
+        # Equalize subtitles - increased max_chars from 50 to 70 for better text fitting
         srt_equalizer.equalize_srt_file(srt_path, srt_path, max_chars)
 
     # Save subtitles
@@ -397,7 +397,14 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
             try:
                 # Calculate video width for text wrapping
                 video_width = int(getattr(base_clip, 'w', 1080) or 1080)
-                max_text_width = int(video_width * 0.9)  # Use 90% of video width for text
+                max_text_width = int(video_width * 0.85)  # Use 85% of video width for better text fitting
+                
+                # Dynamically adjust font size for very long text to prevent cropping
+                text_length = len(txt)
+                if text_length > 100:  # Very long text
+                    font_size = max(20, int(video_height * 0.02))
+                elif text_length > 50:  # Moderately long text
+                    font_size = max(22, int(video_height * 0.022))
                 
                 text_clip = TextClip(
                     text=txt,
@@ -424,7 +431,14 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         if text_clip is None:
             try:
                 video_width = int(getattr(base_clip, 'w', 1080) or 1080)
-                max_text_width = int(video_width * 0.9)
+                max_text_width = int(video_width * 0.85)  # Use 85% of video width for better text fitting
+                
+                # Dynamically adjust font size for very long text to prevent cropping
+                text_length = len(txt)
+                if text_length > 100:  # Very long text
+                    font_size = max(20, int(video_height * 0.02))
+                elif text_length > 50:  # Moderately long text
+                    font_size = max(22, int(video_height * 0.022))
                 
                 text_clip = TextClip(
                     text=txt,

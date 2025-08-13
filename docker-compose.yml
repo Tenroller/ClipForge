@@ -1,0 +1,32 @@
+version: '3.9'
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    environment:
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - API_KEY=${API_KEY}
+      - CORS_ALLOW_ORIGINS=http://localhost:5173,https://localhost:5173
+      - MAX_CONCURRENT_JOBS=2
+      - VIDEOHELPER_OUTPUT_DIR=/app/output
+    volumes:
+      - ./cat-video-creator/backend/vendors:/app/vendors
+      - ./cat-video-creator/output:/app/output
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_BASE: http://localhost:8080
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+

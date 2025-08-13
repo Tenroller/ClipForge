@@ -7,9 +7,10 @@ import { Input } from "@/components/components/ui/input"
 import { Textarea } from "@/components/components/ui/textarea"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/components/ui/select"
 import { Switch } from "@/components/components/ui/switch"
-import { HelpCircle, RefreshCw, Sparkles } from "lucide-react"
+import { HelpCircle, RefreshCw, Sparkles, Cpu, Cloud, Loader2 } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/components/ui/tooltip"
 import { Button } from "@/components/components/ui/button"
+import { toast } from "sonner"
 
 export type MoneyPrinterFormProps = {
   models: string[]
@@ -43,6 +44,9 @@ export default function MoneyPrinterForm({
   onReset,
 }: MoneyPrinterFormProps) {
   const [useMusic, setUseMusic] = useState(false)
+  const [useLocalGpu, setUseLocalGpu] = useState(true)
+  const [useCloudGpu, setUseCloudGpu] = useState(false)
+  const [gpuInfoText, setGpuInfoText] = useState<string>("")
   const [voiceLoading, setVoiceLoading] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const subjectId = useId()
@@ -58,20 +62,30 @@ export default function MoneyPrinterForm({
 
   return (
     <TooltipProvider>
-      <Card className="sticky top-4">
+      <Card className="lg:sticky lg:top-6 enhanced-card">
         <form onSubmit={onSubmit}>
           <CardHeader>
-            <CardTitle className="text-base">Create videos purrely with AI</CardTitle>
+            <CardTitle className="text-base flex items-center gap-3">
+              <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                <Sparkles className="size-4 text-white" />
+              </div>
+              Create videos with AI
+            </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-5">
+          <CardContent className="grid gap-6">
             {/* Hidden fields to ensure form has values expected by backend */}
             <input type="hidden" name="aiModel" value={aiModel} />
             <input type="hidden" name="voice" value={voice} />
             <input type="hidden" name="subtitlesPosition" value={subtitlesPosition} />
             <input type="hidden" name="useMusic" value={useMusic ? "1" : ""} />
+            <input type="hidden" name="useGPU" value={useLocalGpu ? "1" : ""} />
+            <input type="hidden" name="useCloudGPU" value={useCloudGpu ? "1" : ""} />
 
-            <fieldset className="grid gap-4">
-              <legend className="text-sm font-medium">Content</legend>
+            <div className="form-section">
+              <div className="form-section-title">
+                <Sparkles className="size-4 text-blue-500" />
+                Content
+              </div>
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor={subjectId}>Subject</Label>
@@ -116,7 +130,7 @@ export default function MoneyPrinterForm({
                   onChange={(e) => setSubject(e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <div className="flex items-center gap-1">
                     <Label htmlFor={modelId}>AI Model</Label>
@@ -183,11 +197,98 @@ export default function MoneyPrinterForm({
                   />
                 </div>
               </div>
-            </fieldset>
+            </div>
 
-            <fieldset className="grid gap-4">
-              <legend className="text-sm font-medium">Audio</legend>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="form-section">
+              <div className="form-section-title">
+                <Cpu className="size-4 text-purple-500" />
+                Acceleration
+              </div>
+              <div className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Cpu className="size-4 text-muted-foreground flex-shrink-0" />
+                      <Label htmlFor="use-local-gpu" className="text-sm font-medium">Use local GPU</Label>
+                    </div>
+                    <Switch
+                      id="use-local-gpu"
+                      checked={useLocalGpu}
+                      onCheckedChange={(v) => {
+                        setUseLocalGpu(!!v)
+                        if (v) setUseCloudGpu(false)
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs flex-shrink-0"
+                      onClick={async () => {
+                        try {
+                          const base = apiBase || ''
+                          const res = await fetch(`${base}/api/gpu-info`)
+                          const data = await res.json()
+                          const local = data?.local || {}
+                          const cuda = !!local?.cudaAvailable
+                          const name = local?.gpuName || 'Unknown GPU'
+                          const mem = typeof local?.memoryGb === 'number' && local.memoryGb > 0 ? `${local.memoryGb.toFixed(1)}GB` : 'n/a'
+                          const codec = local?.preferredCodec || 'n/a'
+                          const summary = `CUDA: ${cuda ? 'yes' : 'no'} · GPU: ${name} · VRAM: ${mem} · Codec: ${codec}`
+                          setGpuInfoText(summary)
+                          toast.info(summary)
+                        } catch (e) {
+                          const msg = 'Could not detect GPU capabilities'
+                          setGpuInfoText(msg)
+                          toast.error(msg)
+                        }
+                      }}
+                    >
+                      Show detected GPU
+                    </Button>
+                  </div>
+                  {gpuInfoText ? (
+                    <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded border-l-2 border-purple-400">
+                      {gpuInfoText}
+                    </div>
+                  ) : null}
+                </div>
+                
+                <div className="space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Cloud className="size-4 text-muted-foreground flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <Label htmlFor="use-cloud-gpu" className="text-sm font-medium block">Use Cloud GPU</Label>
+                        <div className="text-xs text-muted-foreground mt-0.5">Model service</div>
+                      </div>
+                    </div>
+                    <Switch
+                      id="use-cloud-gpu"
+                      checked={useCloudGpu}
+                      onCheckedChange={(v) => {
+                        setUseCloudGpu(!!v)
+                        if (v) setUseLocalGpu(false)
+                      }}
+                    />
+                  </div>
+                  <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded border-l-2 border-blue-400">
+                    Offloads heavy processing to a cloud GPU provider. (Coming soon)
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="form-section">
+              <div className="form-section-title">
+                <div className="size-4 rounded bg-gradient-to-r from-pink-400 to-red-400 flex items-center justify-center">
+                  <span className="text-[10px] text-white font-bold">♪</span>
+                </div>
+                Audio
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="grid gap-2">
                   <Label htmlFor={voiceId}>Voice</Label>
                   <div className="flex items-center gap-2">
@@ -264,26 +365,43 @@ export default function MoneyPrinterForm({
                   </div>
                 </div>
               </div>
-            </fieldset>
+            </div>
 
-            <fieldset className="grid gap-3">
-              <legend className="text-sm font-medium">Custom Prompt (optional)</legend>
+            <div className="form-section">
+              <div className="form-section-title">
+                <HelpCircle className="size-4 text-emerald-500" />
+                Custom Prompt (optional)
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor={promptId} className="sr-only">
                   Custom prompt
                 </Label>
                 <Textarea id={promptId} name="customPrompt" placeholder="Provide additional guidance for the script..." />
               </div>
-            </fieldset>
+            </div>
           </CardContent>
-          <CardFooter className="gap-2">
-            <Button type="submit" disabled={!!busy} className="inline-flex items-center gap-2">
-              {busy ? "Running…" : "Create videos purrely with AI"}
+          <CardFooter className="gap-3 pt-6">
+            <Button 
+              type="submit" 
+              disabled={!!busy} 
+              className="btn-primary inline-flex items-center gap-2 flex-1"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="size-4" />
+                  Create Video
+                </>
+              )}
             </Button>
             <Button
               type="reset"
               variant="outline"
-              className="inline-flex items-center gap-2"
+              className="inline-flex items-center gap-2 hover:bg-muted/80"
               onClick={(e) => {
                 // reset form UI and notify parent
                 e.currentTarget.form?.reset()

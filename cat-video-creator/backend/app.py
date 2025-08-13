@@ -11,11 +11,26 @@ from typing import Optional, Dict, Any, List
 
 import asyncio
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+import time
+from collections import deque
 from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
+from validation import (
+    validate_youtube_url, validate_subject, validate_custom_prompt,
+    validate_zip_url, validate_color, validate_subtitle_position,
+    validate_ai_model, validate_voice
+)
+from logging_config import get_logger, log_request, log_job_event, log_error, log_security_event
+from metrics import get_metrics, record_request_metrics, init_metrics_system, track_job_metrics
+from caching import get_cache, cached
+from thumbnail_generator import get_thumbnail_generator, create_video_preview_package
+from batch_processing import get_batch_processor
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +43,67 @@ DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 VENDOR_ROOT = Path(__file__).resolve().parent / "vendors"
 MONEYPRINTER_BACKEND = VENDOR_ROOT / "moneyprinter"
 BRAINROT_ROOT = VENDOR_ROOT / "brainrot"
+
+# Setup espeak-ng environment for Kokoro TTS
+# Clear potentially problematic espeakng_loader environment variables
+for key in ['ESPEAK_DATA_PATH', 'ESPEAKNG_DATA_PATH', 'PHONEMIZER_ESPEAK_DATA_PATH', 'PHONEMIZER_ESPEAK_LIBRARY']:
+    if key in os.environ:
+        del os.environ[key]
+
+# Use system espeak-ng if available (recommended for macOS with Homebrew)
+system_espeak_paths = [
+    '/opt/homebrew/bin/espeak-ng',  # Homebrew ARM64
+    '/usr/local/bin/espeak-ng',    # Homebrew x86_64
+    '/usr/bin/espeak-ng'           # System package
+]
+
+system_espeak_data_paths = [
+    '/opt/homebrew/share/espeak-ng-data',  # Homebrew ARM64
+    '/usr/local/share/espeak-ng-data',    # Homebrew x86_64
+    '/usr/share/espeak-ng-data'           # System package
+]
+
+system_espeak = None
+system_data = None
+
+for espeak_path in system_espeak_paths:
+    if os.path.exists(espeak_path):
+        system_espeak = espeak_path
+        break
+
+for data_path in system_espeak_data_paths:
+    if os.path.exists(data_path):
+        system_data = data_path
+        break
+
+if system_espeak and system_data:
+    os.environ['PHONEMIZER_ESPEAK_PATH'] = system_espeak
+    os.environ['ESPEAK_DATA_PATH'] = system_data
+    print(f"✅ Configured system espeak-ng for Kokoro TTS:")
+    print(f"   ESPEAK_PATH: {system_espeak}")
+    print(f"   DATA_PATH: {system_data}")
+else:
+    # Fallback to espeakng_loader if system installation not found
+    try:
+        import espeakng_loader
+        espeak_data_path = espeakng_loader.get_data_path()
+        espeak_lib_path = espeakng_loader.get_library_path()
+        
+        if espeak_data_path and os.path.exists(espeak_data_path):
+            os.environ['ESPEAK_DATA_PATH'] = espeak_data_path
+            os.environ['PHONEMIZER_ESPEAK_DATA_PATH'] = espeak_data_path
+            
+        if espeak_lib_path and os.path.exists(espeak_lib_path):
+            os.environ['PHONEMIZER_ESPEAK_LIBRARY'] = espeak_lib_path
+            
+        print(f"⚠️  Using espeakng_loader (may have issues):")
+        print(f"   DATA_PATH: {espeak_data_path}")
+        print(f"   LIB_PATH: {espeak_lib_path}")
+    except ImportError:
+        print("❌ Neither system espeak-ng nor espeakng_loader found - Kokoro TTS may not work")
+        print("   Install espeak-ng: brew install espeak-ng (macOS) or apt install espeak-ng (Ubuntu)")
+    except Exception as e:
+        print(f"⚠️  Error setting up espeak-ng environment: {e}")
 
 
 @asynccontextmanager
@@ -69,11 +145,130 @@ async def lifespan(app: FastAPI):
             await broadcaster_task
 
 
-app = FastAPI(title="Cat Video Creator API", lifespan=lifespan)
+# Initialize logger
+logger = get_logger("video_generator")
+
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware for request/response logging and monitoring."""
+    
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        client_ip = request.client.host if request.client else "unknown"
+        
+        # Log request start
+        method = request.method
+        path = str(request.url.path)
+        
+        response = None
+        status_code = 500
+        
+        try:
+            response = await call_next(request)
+            status_code = response.status_code
+        except Exception as e:
+            log_error(logger, e, {"path": path, "method": method, "client_ip": client_ip})
+            raise
+        finally:
+            # Log request completion
+            duration = time.time() - start_time
+            log_request(logger, method, path, status_code, duration, client_ip)
+            
+            # Record metrics
+            record_request_metrics(method, path, status_code, duration)
+            
+            # Log slow requests
+            if duration > 5.0:
+                logger.warning(f"Slow request: {method} {path} took {duration:.2f}s")
+            
+            # Log security events
+            if status_code == 401:
+                log_security_event(logger, "unauthorized_access", client_ip, f"{method} {path}")
+            elif status_code == 429:
+                log_security_event(logger, "rate_limit_exceeded", client_ip, f"{method} {path}")
+        
+        return response
+
+
+app = FastAPI(
+    title="AI Video Generator API",
+    description="""
+    A comprehensive API for generating videos using AI-powered workflows.
+    
+    ## Features
+    
+    * **MoneyPrinter Workflow**: Generate videos from text prompts using AI script generation, stock footage, and TTS
+    * **Brainrot Workflow**: Create TikTok-style compilations from YouTube videos
+    * **Real-time Progress**: WebSocket support for live job updates
+    * **Job Management**: Persistent job storage with SQLite/PostgreSQL support
+    * **Security**: Optional API key authentication and rate limiting
+    * **Monitoring**: Comprehensive logging and error tracking
+    
+    ## Authentication
+    
+    If `API_KEY` environment variable is set, protected endpoints require the `X-API-Key` header:
+    
+    ```
+    X-API-Key: your-secret-api-key
+    ```
+    
+    ## Rate Limiting
+    
+    If enabled via `RATE_LIMIT_PER_MINUTE`, endpoints are rate-limited per IP address.
+    
+    ## WebSocket Support
+    
+    Connect to `/ws/jobs/{job_id}` for real-time job progress updates.
+    """,
+    version="1.0.0",
+    contact={
+        "name": "AI Video Generator",
+        "url": "https://github.com/your-repo",
+    },
+    license_info={
+        "name": "MIT",
+        "url": "https://opensource.org/licenses/MIT",
+    },
+    lifespan=lifespan
+)
+
+# Add security middleware
+trusted_hosts = os.getenv("TRUSTED_HOSTS", "*").split(",")
+if trusted_hosts != ["*"]:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=trusted_hosts)
+
+# Add logging middleware
+app.add_middleware(LoggingMiddleware)
+
+# Sentry (optional) — enable if SENTRY_DSN is set
+try:
+    import sentry_sdk  # type: ignore
+    from sentry_sdk.integrations.fastapi import FastApiIntegration  # type: ignore
+    _sentry_dsn = os.getenv("SENTRY_DSN")
+    if _sentry_dsn:
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            integrations=[FastApiIntegration()],
+            traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
+            profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0")),
+        )
+except Exception:
+    # Sentry is optional; ignore any initialization/import failure
+    pass
+
+# Configurable CORS
+_cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "*")
+if _cors_origins_env.strip() == "*":
+    _allow_origins = ["*"]
+    _allow_credentials = False
+else:
+    _allow_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    _allow_credentials = True
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_allow_origins,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -82,80 +277,112 @@ app.add_middleware(
 class MoneyPrinterRequest(BaseModel):
     videoSubject: str
     aiModel: str = "gemini-2.0-flash"
-    paragraphNumber: int = 1
-    threads: Optional[int] = None
+    paragraphNumber: int = Field(default=1, ge=1, le=10)
+    threads: Optional[int] = Field(default=None, ge=1, le=16)
     subtitlesPosition: str = "center,bottom"
     color: str = "#FFFF00"
     useMusic: bool = False
     zipUrl: Optional[str] = None
     automateYoutubeUpload: bool = False
     useGPU: bool = True
+    useCloudGPU: bool = False
     voice: str = "af_bella"
     customPrompt: Optional[str] = None
+
+    @validator('videoSubject')
+    def validate_subject_field(cls, v):
+        return validate_subject(v)
+
+    @validator('aiModel')
+    def validate_ai_model_field(cls, v):
+        return validate_ai_model(v)
+
+    @validator('voice')
+    def validate_voice_field(cls, v):
+        return validate_voice(v)
+
+    @validator('color')
+    def validate_color_field(cls, v):
+        return validate_color(v)
+
+    @validator('subtitlesPosition')
+    def validate_subtitle_position_field(cls, v):
+        return validate_subtitle_position(v)
+
+    @validator('zipUrl')
+    def validate_zip_url_field(cls, v):
+        return validate_zip_url(v)
+
+    @validator('customPrompt')
+    def validate_custom_prompt_field(cls, v):
+        return validate_custom_prompt(v)
 
 
 class BrainrotRequest(BaseModel):
     youtubeUrl: str
-    numCompilations: int = 1
-    minDuration: int = 60
-    maxDuration: int = 110
-    maxReuse: int = 3
+    numCompilations: int = Field(default=1, ge=1, le=10)
+    minDuration: int = Field(default=60, ge=10, le=3600)
+    maxDuration: int = Field(default=110, ge=10, le=3600)
+    maxReuse: int = Field(default=3, ge=1, le=10)
+
+    @validator('youtubeUrl')
+    def validate_youtube_url_field(cls, v):
+        return validate_youtube_url(v)
 
 
-JOBS: Dict[str, Dict[str, Any]] = {}
+from database import get_job_store, migrate_from_json
+
+# Legacy file-based storage for migration
 JOBS_FILE = DEFAULT_OUTPUT_DIR / "jobs.json"
-JOBS_LOCK = threading.Lock()
 JOB_CONTROLS: Dict[str, Dict[str, Any]] = {}
+
+# Initialize database and migrate existing data
+job_store = get_job_store()
+if JOBS_FILE.exists():
+    migrated = migrate_from_json(JOBS_FILE, job_store)
+    if migrated > 0:
+        print(f"✅ Migrated {migrated} jobs from JSON to database")
+        # Keep the JSON file as backup
+        backup_file = JOBS_FILE.with_suffix(".json.backup")
+        JOBS_FILE.rename(backup_file)
+        print(f"   Backed up original file to {backup_file}")
+
+# Initialize enhanced systems
+try:
+    init_metrics_system()
+    get_cache()  # Initialize cache
+    get_batch_processor()  # Initialize batch processor
+    logger.info("✅ All enhanced systems initialized")
+except Exception as e:
+    logger.error(f"Failed to initialize enhanced systems: {e}")
+
+# Remove old job loading/saving functions as they're now handled by database
 
 # WebSocket pub-sub for job updates
 WS_SUBSCRIBERS: Dict[str, set] = defaultdict(set)
 ASYNC_QUEUE: "asyncio.Queue[tuple[str, Dict[str, Any]]]" = asyncio.Queue()
 MAIN_LOOP: "asyncio.AbstractEventLoop | None" = None
+JOB_SEMAPHORE = threading.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2") or "2")))
+
+# Simple optional in-memory rate limiter (per minute)
+RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MINUTE", "0") or "0")
+RATE_LIMIT_BUCKETS: Dict[str, deque] = defaultdict(deque)  # key: f"{bucket}:{ip}"
+RATE_LIMIT_LOCK = threading.Lock()
 
 def _enqueue_job_update(job_id: str) -> None:
     """Thread-safe enqueue of a job update for websocket broadcast."""
     global MAIN_LOOP
     try:
-        payload: Dict[str, Any]
-        with JOBS_LOCK:
-            payload = dict(JOBS.get(job_id, {}))
-        if MAIN_LOOP is not None:
+        payload = job_store.get_job(job_id)
+        if payload and MAIN_LOOP is not None:
             MAIN_LOOP.call_soon_threadsafe(ASYNC_QUEUE.put_nowait, (job_id, payload))
     except Exception:
         # Best-effort only
         pass
 
 
-def _load_jobs_from_disk() -> None:
-    if JOBS_FILE.exists():
-        try:
-            data = json.loads(JOBS_FILE.read_text("utf-8"))
-            if isinstance(data, dict):
-                for k, v in data.items():
-                    if isinstance(v, dict):
-                        # Mark previously running jobs as stale after restart
-                        if v.get("status") == "running":
-                            v["status"] = "stale"
-                            v["step"] = "stale"
-                        JOBS[k] = v
-        except Exception:
-            pass
-
-
-def _save_jobs_to_disk() -> None:
-    try:
-        with JOBS_LOCK:
-            JOBS_FILE.write_text(json.dumps(JOBS, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-
-
 def _update_job(job_id: str, **fields: Any) -> None:
-    with JOBS_LOCK:
-        job = JOBS.get(job_id, {})
-        job.update(fields)
-        JOBS[job_id] = job
-    _save_jobs_to_disk()
+    job_store.update_job(job_id, **fields)
     _enqueue_job_update(job_id)
 
 
@@ -165,8 +392,7 @@ def _check_cancel(job_id: str) -> None:
         raise RuntimeError("cancelled")
 
 
-# Load persisted jobs at import time
-_load_jobs_from_disk()
+# Database handles persistence automatically
 
 
 @contextlib.contextmanager
@@ -185,7 +411,36 @@ def ensure_on_path(path: Path):
         sys.path.insert(0, path_str)
 
 
-@app.get("/api/health")
+def require_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
+    """Optional API key protection.
+
+    If environment variable API_KEY is set, require header X-API-Key to match it.
+    If not set, allow all requests.
+    """
+    expected = os.getenv("API_KEY")
+    if expected and (x_api_key or "") != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def make_rate_limiter(bucket: str):
+    def _dep(request: Request) -> None:
+        if RATE_LIMIT_PER_MIN <= 0:
+            return
+        client_ip = (request.client.host if request.client else "unknown") or "unknown"
+        key = f"{bucket}:{client_ip}"
+        now = time.time()
+        window_start = now - 60.0
+        with RATE_LIMIT_LOCK:
+            dq = RATE_LIMIT_BUCKETS[key]
+            while dq and dq[0] < window_start:
+                dq.popleft()
+            if len(dq) >= RATE_LIMIT_PER_MIN:
+                raise HTTPException(status_code=429, detail="Too Many Requests")
+            dq.append(now)
+    return _dep
+
+
+@app.get("/api/health", tags=["System"], summary="Health Check")
 def health():
     return {
         "status": "ok",
@@ -196,28 +451,61 @@ def health():
     }
 
 
-@app.post("/api/moneyprinter/generate")
-def moneyprinter_generate(req: MoneyPrinterRequest):
+@app.get(
+    "/api/ping", 
+    tags=["System"], 
+    summary="Authentication Test",
+    description="Test endpoint to verify API key authentication is working"
+)
+def ping(_: None = Depends(require_api_key)) -> Dict[str, Any]:
+    return {"ok": True}
+
+
+@app.post(
+    "/api/moneyprinter/generate",
+    tags=["Video Generation"],
+    summary="Generate AI Video",
+    description="""
+    Create a video using AI-powered script generation, stock footage, and text-to-speech.
+    
+    This endpoint starts a video generation job and returns immediately with a job ID.
+    Use the job ID to track progress via WebSocket or polling.
+    
+    **Process Overview:**
+    1. Generate script from subject using AI model
+    2. Extract search terms for stock footage  
+    3. Download relevant stock videos
+    4. Generate text-to-speech audio
+    5. Create subtitles
+    6. Compose final video with audio and subtitles
+    
+    **Required Environment Variables:**
+    - `PEXELS_API_KEY`: For stock video search
+    - `GOOGLE_API_KEY` or `GEMINI_API_KEY`: For AI script generation
+    """
+)
+def moneyprinter_generate(
+    req: MoneyPrinterRequest,
+    _: None = Depends(require_api_key),
+    __: None = Depends(make_rate_limiter("moneyprinter")),
+):
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"status": "running", "step": "init", "result": None, "error": None, "logs": []}
+    job_store.create_job(job_id, "moneyprinter", req.dict())
     JOB_CONTROLS[job_id] = {"cancel": threading.Event()}
-    _save_jobs_to_disk()
     _enqueue_job_update(job_id)
 
     def _log_job(message: str) -> None:
         try:
-            with JOBS_LOCK:
-                job = JOBS.get(job_id, {})
-                logs = job.get("logs")
+            job = job_store.get_job(job_id)
+            if job:
+                logs = job.get("logs", [])
                 if not isinstance(logs, list):
                     logs = []
                 logs.append(message)
-                job["logs"] = logs
-                JOBS[job_id] = job
-        finally:
-            # Always persist log updates
-            _save_jobs_to_disk()
-            _enqueue_job_update(job_id)
+                _update_job(job_id, logs=logs)
+        except Exception:
+            # Best-effort logging
+            pass
 
     def _run_job():
         try:
@@ -393,7 +681,11 @@ def moneyprinter_generate(req: MoneyPrinterRequest):
     # Run the long-running job in a detached daemon thread rather than Starlette BackgroundTasks.
     # This avoids noisy asyncio.CancelledError tracebacks on server shutdown (Ctrl+C)
     # when Starlette awaits background tasks during request teardown.
-    threading.Thread(target=_run_job, name=f"moneyprinter-job-{job_id}", daemon=True).start()
+    # Enforce global concurrency limit
+    def _runner_with_limit():
+        with JOB_SEMAPHORE:
+            _run_job()
+    threading.Thread(target=_runner_with_limit, name=f"moneyprinter-job-{job_id}", daemon=True).start()
     return {"status": "queued", "jobId": job_id}
 
 
@@ -451,7 +743,7 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
         raise HTTPException(status_code=502, detail="Empty subject from model")
     return {"subject": text}
 
-@app.get("/api/models")
+@app.get("/api/models", tags=["Configuration"], summary="List AI Models")
 def list_models() -> Dict[str, List[str]]:
     """List available Gemini models (static list; can be swapped to dynamic)."""
     # Use a curated list compatible with current SDK; replace with API discovery if desired
@@ -464,6 +756,66 @@ def list_models() -> Dict[str, List[str]]:
         "gemini-2.0-flash-lite",
     ]
     return {"models": models}
+
+
+@app.get("/api/gpu-info")
+def get_gpu_info() -> Dict[str, Any]:
+    """Return information about locally available GPU acceleration.
+
+    Combines CUDA (torch) detection with MoneyPrinter's ffmpeg encoder detection
+    to provide a concise summary for the UI.
+    """
+    # Try CUDA/torch detection (optional dependency in some setups)
+    cuda_available = False
+    gpu_name: str | None = None
+    gpu_memory_gb: float | None = None
+    try:
+        import torch  # type: ignore
+        if torch.cuda.is_available():
+            cuda_available = True
+            try:
+                gpu_name = torch.cuda.get_device_name(0)
+            except Exception:
+                gpu_name = None
+            try:
+                props = torch.cuda.get_device_properties(0)
+                gpu_memory_gb = float(getattr(props, "total_memory", 0) or 0) / (1024 ** 3)
+            except Exception:
+                gpu_memory_gb = None
+    except Exception:
+        # torch not installed or not functional; ignore
+        pass
+
+    # Use MoneyPrinter's codec detection if available
+    preferred_codec: str | None = None
+    ffmpeg_params: list[str] | None = None
+    try:
+        ensure_on_path(MONEYPRINTER_BACKEND)
+        with pushd(MONEYPRINTER_BACKEND):
+            from vendors.moneyprinter.video import detect_gpu_codec  # type: ignore
+            try:
+                cfg = detect_gpu_codec()
+                if isinstance(cfg, dict):
+                    preferred_codec = cfg.get("codec")  # type: ignore
+                    fp = cfg.get("ffmpeg_params")  # type: ignore
+                    if isinstance(fp, (list, tuple)):
+                        ffmpeg_params = [str(x) for x in fp]
+            except Exception:
+                # If detection fails, just leave fields as None
+                pass
+    except Exception:
+        # Vendors might not be available in some modes
+        pass
+
+    return {
+        "local": {
+            "cudaAvailable": cuda_available,
+            "gpuName": gpu_name,
+            "memoryGb": gpu_memory_gb,
+            "preferredCodec": preferred_codec,
+            "ffmpegParams": ffmpeg_params,
+        }
+    }
 
 
 @app.get("/api/voices")
@@ -516,11 +868,14 @@ def voice_sample(voice: str, text: Optional[str] = None):
 
 
 @app.post("/api/brainrot/generate")
-def brainrot_generate(req: BrainrotRequest):
+def brainrot_generate(
+    req: BrainrotRequest,
+    _: None = Depends(require_api_key),
+    __: None = Depends(make_rate_limiter("brainrot")),
+):
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"status": "running", "step": "init", "result": None, "error": None}
+    job_store.create_job(job_id, "brainrot", req.dict())
     JOB_CONTROLS[job_id] = {"cancel": threading.Event()}
-    _save_jobs_to_disk()
     _enqueue_job_update(job_id)
 
     def _run_job():
@@ -561,26 +916,209 @@ def brainrot_generate(req: BrainrotRequest):
                 _update_job(job_id, status="error", error=str(e))
 
     # Run the job in a detached daemon thread to avoid shutdown cancellation noise
-    threading.Thread(target=_run_job, name=f"brainrot-job-{job_id}", daemon=True).start()
+    def _runner_with_limit():
+        with JOB_SEMAPHORE:
+            _run_job()
+    threading.Thread(target=_runner_with_limit, name=f"brainrot-job-{job_id}", daemon=True).start()
     return {"status": "queued", "jobId": job_id}
 
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str):
-    job = JOBS.get(job_id)
+    job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
 
+@app.get("/api/jobs", tags=["Job Management"], summary="List Jobs")
+def list_jobs(
+    limit: int = 50, 
+    status: Optional[str] = None,
+    _: None = Depends(require_api_key)
+) -> Dict[str, Any]:
+    """List jobs with optional filtering."""
+    jobs = job_store.list_jobs(limit=min(limit, 100), status=status)
+    return {"jobs": jobs, "total": len(jobs)}
+
+
+@app.get("/api/jobs/stats")
+def job_stats(_: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Get job statistics."""
+    return job_store.get_stats()
+
+
 @app.post("/api/jobs/{job_id}/cancel")
-def cancel_job(job_id: str):
+def cancel_job(job_id: str, _: None = Depends(require_api_key)):
     ctrl = JOB_CONTROLS.get(job_id)
     if not ctrl:
         raise HTTPException(status_code=404, detail="Job not found")
     ctrl["cancel"].set()
     _update_job(job_id, status="cancelled")
     return {"status": "cancelled", "jobId": job_id}
+
+
+# Enhanced features endpoints
+
+@app.get("/api/metrics", tags=["Monitoring"], summary="Get Metrics")
+def get_prometheus_metrics(_: None = Depends(require_api_key)):
+    """Get Prometheus metrics in text format."""
+    metrics = get_metrics()
+    return Response(
+        content=metrics.get_metrics_text(),
+        media_type="text/plain"
+    )
+
+
+@app.get("/api/metrics/stats", tags=["Monitoring"], summary="Get Metrics Stats")
+def get_metrics_stats(_: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Get metrics statistics."""
+    return get_metrics().get_stats()
+
+
+@app.get("/api/cache/stats", tags=["System"], summary="Get Cache Stats")
+def get_cache_stats(_: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Get cache statistics."""
+    return get_cache().stats()
+
+
+@app.post("/api/cache/clear", tags=["System"], summary="Clear Cache")
+def clear_cache(levels: str = "all", _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Clear cache levels (l1, l2, l3, or all)."""
+    success = get_cache().clear(levels)
+    return {"success": success, "levels_cleared": levels}
+
+
+@app.post("/api/videos/{job_id}/thumbnails", tags=["Video Processing"], summary="Generate Thumbnails")
+def generate_thumbnails(job_id: str, _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Generate thumbnails for a completed video job."""
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.get("status") != "completed":
+        raise HTTPException(status_code=400, detail="Job not completed")
+    
+    result = job.get("result", {})
+    video_path = result.get("video_path")
+    
+    if not video_path or not Path(video_path).exists():
+        raise HTTPException(status_code=404, detail="Video file not found")
+    
+    try:
+        preview_package = create_video_preview_package(Path(video_path))
+        return {"success": True, "preview_package": preview_package}
+    except Exception as e:
+        logger.error(f"Failed to generate thumbnails: {e}")
+        raise HTTPException(status_code=500, detail=f"Thumbnail generation failed: {str(e)}")
+
+
+# Batch processing endpoints
+
+@app.post("/api/batch", tags=["Batch Processing"], summary="Create Batch")
+def create_batch(
+    name: str,
+    workflow: str,
+    job_parameters: List[Dict[str, Any]],
+    priority: str = "normal",
+    max_concurrent: int = 3,
+    stop_on_error: bool = False,
+    _: None = Depends(require_api_key)
+) -> Dict[str, str]:
+    """Create a new batch processing request."""
+    from job_queue import JobPriority
+    
+    priority_map = {
+        "low": JobPriority.LOW,
+        "normal": JobPriority.NORMAL,
+        "high": JobPriority.HIGH,
+        "critical": JobPriority.CRITICAL
+    }
+    
+    batch_priority = priority_map.get(priority.lower(), JobPriority.NORMAL)
+    
+    batch_processor = get_batch_processor()
+    batch_id = batch_processor.create_batch(
+        name=name,
+        workflow=workflow,
+        job_parameters=job_parameters,
+        priority=batch_priority,
+        max_concurrent=max_concurrent,
+        stop_on_error=stop_on_error
+    )
+    
+    return {"batch_id": batch_id}
+
+
+@app.post("/api/batch/{batch_id}/start", tags=["Batch Processing"], summary="Start Batch")
+def start_batch(batch_id: str, _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Start processing a batch."""
+    batch_processor = get_batch_processor()
+    success = batch_processor.start_batch(batch_id)
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to start batch")
+    
+    return {"success": True, "batch_id": batch_id}
+
+
+@app.get("/api/batch/{batch_id}", tags=["Batch Processing"], summary="Get Batch Status")
+def get_batch_status(batch_id: str, _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Get batch status and progress."""
+    batch_processor = get_batch_processor()
+    status = batch_processor.get_batch_status(batch_id)
+    
+    if not status:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    return status
+
+
+@app.get("/api/batch/{batch_id}/results", tags=["Batch Processing"], summary="Get Batch Results")
+def get_batch_results(batch_id: str, _: None = Depends(require_api_key)) -> List[Dict[str, Any]]:
+    """Get detailed results for a batch."""
+    batch_processor = get_batch_processor()
+    results = batch_processor.get_batch_results(batch_id)
+    
+    if results is None:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    return results
+
+
+@app.post("/api/batch/{batch_id}/cancel", tags=["Batch Processing"], summary="Cancel Batch")
+def cancel_batch(batch_id: str, _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Cancel a batch and all its jobs."""
+    batch_processor = get_batch_processor()
+    success = batch_processor.cancel_batch(batch_id)
+    
+    if not success:
+        raise HTTPException(status_code=404, detail="Batch not found")
+    
+    return {"success": True, "batch_id": batch_id}
+
+
+@app.get("/api/batches", tags=["Batch Processing"], summary="List Batches")
+def list_batches(limit: int = 50, _: None = Depends(require_api_key)) -> List[Dict[str, Any]]:
+    """List all batches."""
+    batch_processor = get_batch_processor()
+    return batch_processor.list_batches(limit=limit)
+
+
+@app.post("/api/batch/template", tags=["Batch Processing"], summary="Create Template Batch")
+def create_template_batch(
+    template_type: str,
+    count: int = 10,
+    _: None = Depends(require_api_key)
+) -> Dict[str, str]:
+    """Create a batch from a template."""
+    batch_processor = get_batch_processor()
+    
+    try:
+        batch_id = batch_processor.create_template_batch(template_type, count)
+        return {"batch_id": batch_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.websocket("/ws/jobs/{job_id}")

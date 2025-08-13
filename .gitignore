@@ -6,3 +6,8 @@
 /cat-video-creator/backend/vendors/moneyprinter/__pycache__
 /cat-video-creator/backend/__pycache__
 /cat-video-creator/backend/__pycache__
+/cat-video-creator/backend/venv
+cat-video-creator/backend/vendors/moneyprinter/.env
+/cat-video-creator/backend/.venv
+/cat-video-creator/backend/tests/__pycache__
+/cat-video-creator/backend/cache

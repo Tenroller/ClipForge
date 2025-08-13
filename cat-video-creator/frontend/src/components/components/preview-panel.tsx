@@ -156,58 +156,82 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
   }, [])
 
   return (
-    <Card>
+    <Card className="enhanced-card">
       <CardHeader className="flex-row items-center justify-between">
-        <CardTitle className="text-base">Preview</CardTitle>
-        <Badge variant="outline" className="font-normal">
+        <CardTitle className="text-base flex items-center gap-3">
+          <div className="size-8 rounded-lg bg-gradient-to-br from-orange-500 to-pink-600 flex items-center justify-center">
+            <span className="text-white text-sm font-bold">📱</span>
+          </div>
+          Preview
+        </CardTitle>
+        <Badge variant="outline" className="font-normal bg-muted/50">
           9:16
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[340px] overflow-hidden rounded-xl border bg-gradient-to-b from-neutral-900 to-neutral-800" aria-label="Video preview area">
-          {previewUrl ? (
-            <video src={previewUrl} controls className="absolute inset-0 h-full w-full object-contain" />
-          ) : (
-            <div className="pointer-events-none absolute inset-0">
-              <div className="absolute inset-0 bg-[radial-gradient(transparent,rgba(0,0,0,0.35))]" />
+        <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[340px] overflow-hidden rounded-xl border bg-gradient-to-b from-neutral-900 to-neutral-800 shadow-2xl" aria-label="Video preview area">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute inset-0 bg-[radial-gradient(transparent,rgba(0,0,0,0.35))]" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-center text-white/60 space-y-2">
+                <div className="size-12 mx-auto rounded-full bg-white/10 flex items-center justify-center">
+                  <span className="text-2xl">🎬</span>
+                </div>
+                <p className="text-sm font-medium">Subtitle position preview</p>
+              </div>
             </div>
-          )}
+          </div>
 
           {/* Draggable placement overlay (used for both grid and free modes) */}
           <div
             ref={itemRef}
-            className="absolute cursor-move px-3 py-2 rounded-md bg-black/40 border border-white/10 select-none"
-            style={{ left: leftPx, top: topPx, color, textShadow: '2px 2px 0px rgba(0,0,0,0.6), -2px -2px 0px rgba(0,0,0,0.6)' }}
+            className="absolute cursor-move px-3 py-2 rounded-md bg-black/50 backdrop-blur-sm border border-white/20 select-none transition-all hover:scale-105 hover:bg-black/60"
+            style={{ 
+              left: leftPx, 
+              top: topPx, 
+              color, 
+              textShadow: '2px 2px 4px rgba(0,0,0,0.8), -2px -2px 4px rgba(0,0,0,0.8)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+            }}
             onMouseDown={handleMouseDown}
           >
             <div className="text-center font-semibold leading-snug">Example subtitle text</div>
           </div>
 
-          <div className="absolute inset-x-2 bottom-2 text-[10px] text-muted-foreground">
-            <div className="text-right">{positionRaw || position.replace("-", ", ")}</div>
+          <div className="absolute inset-x-2 bottom-2">
+            <div className="text-right">
+              <div className="inline-flex items-center px-2 py-1 rounded bg-black/60 backdrop-blur-sm border border-white/10">
+                <span className="text-[10px] text-white/80 font-medium">
+                  {positionRaw || position.replace("-", ", ")}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
-          {positions.slice(0, 3).map((p) => (
-            <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
-              {p.label}
-            </PosChip>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
-          {positions.slice(3, 6).map((p) => (
-            <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
-              {p.label}
-            </PosChip>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 sm:grid-cols-3 gap-2">
-          {positions.slice(6, 9).map((p) => (
-            <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
-              {p.label}
-            </PosChip>
-          ))}
+        <div className="space-y-3">
+          <div className="text-xs font-medium text-muted-foreground mb-2">Subtitle Position</div>
+          <div className="grid grid-cols-3 gap-2">
+            {positions.slice(0, 3).map((p) => (
+              <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
+                {p.label}
+              </PosChip>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {positions.slice(3, 6).map((p) => (
+              <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
+                {p.label}
+              </PosChip>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {positions.slice(6, 9).map((p) => (
+              <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
+                {p.label}
+              </PosChip>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -227,7 +251,12 @@ function PosChip({
     <button
       type="button"
       onClick={onClick}
-      className={cn("h-9 rounded-md border text-xs", active ? "bg-muted" : "hover:bg-muted/60")}
+      className={cn(
+        "h-9 rounded-lg border text-xs font-medium transition-all duration-200",
+        active 
+          ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+          : "bg-background border-border hover:bg-muted/60 hover:border-border/70"
+      )}
       aria-pressed={active}
     >
       {children}

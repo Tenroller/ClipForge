@@ -22,6 +22,10 @@ requirements.txt  Python dependencies for the backend
 - Node.js 18+ and npm
 - FFmpeg installed and available on PATH (recommended)
   - MoviePy can auto-download an FFmpeg binary via imageio, but a system install is more reliable
+- **espeak-ng** for Kokoro TTS (required for voice generation)
+  - macOS: `brew install espeak-ng`
+  - Ubuntu/Debian: `sudo apt install espeak-ng`
+  - Windows: Download from [espeak-ng releases](https://github.com/espeak-ng/espeak-ng/releases)
 - Optional (GPU encoding): NVIDIA GPU + NVENC-enabled FFmpeg for `h264_nvenc`
 
 ## Quick start
@@ -44,6 +48,16 @@ npm run dev
 - Frontend dev server: http://localhost:5173
 - Backend server: http://localhost:8080
 
+### 3) Docker (optional)
+- Build and run both services:
+```bash
+docker compose up --build
+```
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8080
+
+Environment variables for Docker can be provided via a `.env` file in the project root.
+
 ## Environment variables
 MoneyPrinter flow requires:
 - `PEXELS_API_KEY`: for stock footage search and downloads
@@ -52,6 +66,12 @@ MoneyPrinter flow requires:
 Where to set them:
 - In your shell before starting the backend, or
 - Create a `.env` file adjacent to `cat-video-creator/backend/vendors/moneyprinter/` and export the vars there (the vendored code reads environment variables at runtime)
+
+Backend-specific:
+- `API_KEY` (optional): if set, all protected endpoints require header `X-API-Key` to match
+- `CORS_ALLOW_ORIGINS` (optional): comma-separated origins (default `*`)
+- `SENTRY_DSN` (optional): enable Sentry error tracking
+- `RATE_LIMIT_PER_MINUTE` (optional): enable simple in-memory rate limiting per IP
 
 Optional:
 - `VIDEOHELPER_OUTPUT_DIR`: override unified output dir (defaults to `cat-video-creator/output`)

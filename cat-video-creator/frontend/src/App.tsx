@@ -6,7 +6,7 @@ import { Button } from '@/components/components/ui/button'
 import { Input } from '@/components/components/ui/input'
 import { Label } from '@/components/components/ui/label'
 import { Textarea } from '@/components/components/ui/textarea'
-import { Loader2, BadgeCheck, AlertTriangle, Clapperboard, Brain, RefreshCw } from 'lucide-react'
+import { Loader2, BadgeCheck, AlertTriangle, Clapperboard, Brain, RefreshCw, HelpCircle } from 'lucide-react'
 import {
   Select,
   SelectContent,
@@ -27,7 +27,7 @@ type Job = {
   error?: string
 }
 
-const API = 'http://localhost:8080'
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
 export default function App() {
   const [workflow, setWorkflow] = useState<'moneyprinter' | 'brainrot'>('moneyprinter')
@@ -75,7 +75,7 @@ export default function App() {
       useMusic: !!form.get('useMusic'),
       zipUrl: String(form.get('zipUrl') || '' ) || null,
       automateYoutubeUpload: !!form.get('automateYoutubeUpload'),
-      useGPU: true,
+      useGPU: !!form.get('useGPU'),
       voice: voice || 'af_bella',
       customPrompt: String(form.get('customPrompt') || '') || null,
     }
@@ -245,14 +245,26 @@ export default function App() {
     const hasResult = !!previewUrl || !!(job as any)?.result?.output || !!(job as any)?.result?.output_dir
     if ((lastRun?.workflow || workflow) === 'brainrot') {
       const idxBase = stepOrderBrainrot.indexOf(current as any)
-      const idx = hasResult || job?.status === 'done' ? stepOrderBrainrot.length - 1 : idxBase
-      return stepOrderBrainrot.map(s => ({ key: s, label: labelForStep(s), done: idx >= stepOrderBrainrot.indexOf(s) }))
+      // Only mark steps as done if they're completed (before current step) or if job is fully done
+      const idx = hasResult || job?.status === 'done' ? stepOrderBrainrot.length - 1 : Math.max(0, idxBase - 1)
+      return stepOrderBrainrot.map(s => ({ 
+        key: s, 
+        label: labelForStep(s), 
+        done: idx >= stepOrderBrainrot.indexOf(s),
+        active: !hasResult && job?.status !== 'done' && s === current
+      }))
     }
     const includeFetchMusic = !!lastRun?.payload?.useMusic && !!lastRun?.payload?.zipUrl
     const steps: string[] = includeFetchMusic ? ([ 'validate_env', 'fetch_music', ...stepOrderMoneyPrinterBase.slice(1) ]) : ([...stepOrderMoneyPrinterBase])
     const idxBase = steps.indexOf(current)
-    const idx = hasResult || job?.status === 'done' ? steps.length - 1 : idxBase
-    return steps.map(s => ({ key: s, label: labelForStep(s), done: idx >= steps.indexOf(s) }))
+    // Only mark steps as done if they're completed (before current step) or if job is fully done
+    const idx = hasResult || job?.status === 'done' ? steps.length - 1 : Math.max(0, idxBase - 1)
+    return steps.map(s => ({ 
+      key: s, 
+      label: labelForStep(s), 
+      done: idx >= steps.indexOf(s),
+      active: !hasResult && job?.status !== 'done' && s === current
+    }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job?.step, job?.status, workflow, lastRun?.workflow, previewUrl])
 
@@ -274,17 +286,27 @@ export default function App() {
   }
 
   return (
-    <div className="container-page">
-      <header className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="section-title flex items-center gap-2">
-            <Clapperboard className="size-6" /> AI Video Creator
-          </h1>
-          <p className="section-subtitle">Create videos purrely with AI or from compilations</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-xs text-muted-foreground">API: {API.replace('http://', '')}</div>
-          <ThemeToggle />
+    <div className="container-page fade-in">
+      <header className="mb-8 rounded-2xl glass-header px-6 py-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center shadow-lg">
+              <Clapperboard className="size-6 text-white" />
+            </div>
+            <div>
+              <h1 className="section-title flex items-center gap-2 text-2xl">
+                AI Video Creator
+              </h1>
+              <p className="section-subtitle mt-1">Create stunning videos with AI or compilations</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
+              <div className="size-2 rounded-full bg-green-500 animate-pulse"></div>
+              <span className="text-xs font-medium text-muted-foreground">API: {API.replace('http://', '')}</span>
+            </div>
+            <ThemeToggle />
+          </div>
         </div>
       </header>
       <div aria-live="polite" className="sr-only">
@@ -292,38 +314,40 @@ export default function App() {
       </div>
 
       <Tabs defaultValue={workflow} onValueChange={(v) => setWorkflow(v as any)}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="moneyprinter" className="flex items-center gap-2">
-            <BadgeCheck className="size-4" /> Create videos purrely with AI
+        <TabsList className="mb-6 h-12 bg-muted/30 backdrop-blur border border-border/50">
+          <TabsTrigger value="moneyprinter" className="flex items-center gap-2 h-10 px-6 data-[state=active]:bg-background/80 data-[state=active]:shadow-sm">
+            <BadgeCheck className="size-4" /> Create videos with AI
           </TabsTrigger>
-          <TabsTrigger value="brainrot" className="flex items-center gap-2">
-            <Brain className="size-4" /> Create videos from compilations
+          <TabsTrigger value="brainrot" className="flex items-center gap-2 h-10 px-6 data-[state=active]:bg-background/80 data-[state=active]:shadow-sm">
+            <Brain className="size-4" /> Create from compilations
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="moneyprinter">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-            <MoneyPrinterForm
-              models={models}
-              aiModel={aiModel}
-              onChangeAiModel={setAiModel}
-              voices={voices}
-              voice={voice}
-              onChangeVoice={setVoice}
-              subtitleColor={subtitleColor}
-              onChangeSubtitleColor={setSubtitleColor}
-              subtitlesPosition={subtitlePosition}
-              apiBase={API}
-              busy={busy}
-              onSubmit={startMoneyPrinter}
-              onReset={() => {
-                setSubtitleColor('#FFFF00')
-                setSubtitlePosition('center,bottom')
-                setVoice('af_bella')
-              }}
-            />
+        <TabsContent value="moneyprinter" className="slide-in">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 items-start grid-layout-fix">
+            <div className="lg:col-start-1">
+              <MoneyPrinterForm
+                models={models}
+                aiModel={aiModel}
+                onChangeAiModel={setAiModel}
+                voices={voices}
+                voice={voice}
+                onChangeVoice={setVoice}
+                subtitleColor={subtitleColor}
+                onChangeSubtitleColor={setSubtitleColor}
+                subtitlesPosition={subtitlePosition}
+                apiBase={API}
+                busy={busy}
+                onSubmit={startMoneyPrinter}
+                onReset={() => {
+                  setSubtitleColor('#FFFF00')
+                  setSubtitlePosition('center,bottom')
+                  setVoice('af_bella')
+                }}
+              />
+            </div>
 
-            <div className="lg:sticky lg:top-6 self-start space-y-6" aria-label="Preview and subtitle controls">
+            <div className="lg:col-start-2 lg:sticky lg:top-6 self-start space-y-6" aria-label="Preview and subtitle controls">
               <PreviewPanel
                 position={subtitlePosition.replace(',', '-') as any}
                 onChangePosition={(p) => {
@@ -338,7 +362,7 @@ export default function App() {
               />
             </div>
 
-            <div className="lg:sticky lg:top-6 self-start lg:col-start-3">
+            <div className="lg:col-start-3 lg:sticky lg:top-6 self-start">
                <JobPanel
                 jobId={jobId}
                 status={job?.status}
@@ -347,15 +371,21 @@ export default function App() {
               />
             </div>
             {previewUrl ? (
-              <Card className="lg:sticky lg:top-6 self-start lg:col-start-4">
+              <Card className="lg:sticky lg:top-6 self-start lg:col-start-4 enhanced-card fade-in">
                 <CardHeader>
-                  <CardTitle>Result</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <div className="size-5 rounded bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center">
+                      <BadgeCheck className="size-3 text-white" />
+                    </div>
+                    Result
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    <video src={previewUrl} controls className="w-full max-h-[75vh] rounded border border-zinc-800" />
-                    <div>
-                      <a className="text-xs underline text-blue-300" href={previewUrl} download target="_blank" rel="noreferrer">Download video</a>
+                  <div className="space-y-4">
+                    <video src={previewUrl} controls className="video-frame w-full max-h-[60vh] lg:max-h-[75vh]" />
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                      <span className="text-sm text-muted-foreground">Video ready</span>
+                      <a className="muted-link font-medium" href={previewUrl} download target="_blank" rel="noreferrer">Download video</a>
                     </div>
                   </div>
                 </CardContent>
@@ -364,42 +394,80 @@ export default function App() {
           </div>
         </TabsContent>
 
-        <TabsContent value="brainrot">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-            <Card>
+        <TabsContent value="brainrot" className="slide-in">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-6 items-start">
+            <Card className="enhanced-card">
               <CardHeader>
-                <CardTitle>Create videos from compilations</CardTitle>
+                <CardTitle className="flex items-center gap-3">
+                  <div className="size-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                    <Brain className="size-4 text-white" />
+                  </div>
+                  Create from compilations
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <form className="space-y-4" onSubmit={startBrainrot} aria-describedby="br-help">
-                  <div>
-                    <Label htmlFor="youtubeUrl">YouTube URL</Label>
-                    <Input id="youtubeUrl" name="youtubeUrl" placeholder="https://youtu.be/..." required aria-required="true" />
-                    <p id="br-help" className="mt-1 text-xs text-muted-foreground">Paste a single video URL. Required.</p>
-                  </div>
-                  <div className="grid-3">
-                    <div>
-                      <Label htmlFor="numCompilations">Compilations</Label>
-                      <Input id="numCompilations" name="numCompilations" type="number" defaultValue={1} min={1} />
+                <form className="space-y-6" onSubmit={startBrainrot} aria-describedby="br-help">
+                  <div className="form-section">
+                    <div className="form-section-title">
+                      <Brain className="size-4 text-indigo-500" />
+                      Source Video
                     </div>
-                    <div>
-                      <Label htmlFor="minDuration">Min Duration</Label>
-                      <Input id="minDuration" name="minDuration" type="number" defaultValue={60} />
-                    </div>
-                    <div>
-                      <Label htmlFor="maxDuration">Max Duration</Label>
-                      <Input id="maxDuration" name="maxDuration" type="number" defaultValue={110} />
+                    <div className="space-y-2">
+                      <Label htmlFor="youtubeUrl">YouTube URL</Label>
+                      <Input id="youtubeUrl" name="youtubeUrl" placeholder="https://youtu.be/..." required aria-required="true" />
+                      <p id="br-help" className="text-xs text-muted-foreground">Paste a single video URL. Required.</p>
                     </div>
                   </div>
-                  <div>
-                    <Label htmlFor="maxReuse">Max Reuse</Label>
-                    <Input id="maxReuse" name="maxReuse" type="number" defaultValue={3} />
+                  
+                  <div className="form-section">
+                    <div className="form-section-title">
+                      <HelpCircle className="size-4 text-purple-500" />
+                      Configuration
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="numCompilations">Compilations</Label>
+                        <Input id="numCompilations" name="numCompilations" type="number" defaultValue={1} min={1} />
+                      </div>
+                      <div>
+                        <Label htmlFor="minDuration">Min Duration</Label>
+                        <Input id="minDuration" name="minDuration" type="number" defaultValue={60} />
+                      </div>
+                      <div>
+                        <Label htmlFor="maxDuration">Max Duration</Label>
+                        <Input id="maxDuration" name="maxDuration" type="number" defaultValue={110} />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor="maxReuse">Max Reuse</Label>
+                      <Input id="maxReuse" name="maxReuse" type="number" defaultValue={3} />
+                    </div>
                   </div>
-                  <CardFooter className="px-0 gap-2">
-                    <Button type="submit" disabled={busy} className="inline-flex items-center gap-2">
-                      {busy ? (<><Loader2 className="animate-spin" /> Running…</>) : 'Create videos from compilations'}
+                  
+                  <CardFooter className="px-0 gap-3 pt-6">
+                    <Button 
+                      type="submit" 
+                      disabled={busy} 
+                      className="btn-primary inline-flex items-center gap-2 flex-1"
+                    >
+                      {busy ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          <Brain className="size-4" />
+                          Create Compilation
+                        </>
+                      )}
                     </Button>
-                    <Button type="reset" variant="outline" className="inline-flex items-center gap-2" onClick={(e) => e.currentTarget.form?.reset()}>
+                    <Button 
+                      type="reset" 
+                      variant="outline" 
+                      className="inline-flex items-center gap-2 hover:bg-muted/80" 
+                      onClick={(e) => e.currentTarget.form?.reset()}
+                    >
                       <RefreshCw className="size-4" /> Reset
                     </Button>
                   </CardFooter>
@@ -409,52 +477,28 @@ export default function App() {
 
             {/* Column 2 intentionally left for preview (not used in Brainrot) */}
 
-            <Card className="lg:sticky lg:top-6 self-start lg:col-start-3">
-              <CardHeader>
-                <CardTitle>Job</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-muted-foreground">ID: {jobId || '—'}</div>
-                <div className="text-sm text-muted-foreground flex items-center gap-2">Status: {job?.status || '—'}</div>
-                <div className="text-sm text-muted-foreground">Step: {job?.step || '—'}</div>
-                <div className="mt-3">
-                  {(() => {
-                    const total = progress.length || 1
-                    const completed = progress.filter(p => p.done).length
-                    const percent = Math.round((completed / total) * 100)
-                    return (
-                      <div className="w-full h-2 rounded bg-zinc-800" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Job progress">
-                        <div className="h-full rounded bg-primary" style={{ width: `${percent}%` }} />
-                      </div>
-                    )
-                  })()}
-                </div>
-                <div className="mt-3 space-y-2">
-                  {progress.map(p => (
-                    <label key={p.key} className="flex items-center gap-2 text-sm">
-                      <input type="checkbox" checked={!!p.done} readOnly className="accent-green-500" />
-                      <span>{p.label}</span>
-                    </label>
-                  ))}
-                </div>
-                {job?.error && (
-                  <div className="mt-3 text-red-400 text-sm flex items-center gap-2"><AlertTriangle className="size-4" /> {job.error}</div>
-                )}
-                {job?.result && (
-                  <pre className="mt-3 text-xs bg-black/40 p-3 rounded border border-zinc-800 overflow-auto max-h-80">{JSON.stringify(job.result, null, 2)}</pre>
-                )}
-              </CardContent>
-            </Card>
+            <JobPanel
+              jobId={jobId}
+              status={job?.status}
+              steps={progress}
+              error={job?.error}
+            />
             {previewUrl ? (
-              <Card className="lg:sticky lg:top-6 self-start lg:col-start-4">
+              <Card className="lg:sticky lg:top-6 self-start lg:col-start-4 enhanced-card fade-in">
                 <CardHeader>
-                  <CardTitle>Result</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <div className="size-5 rounded bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center">
+                      <BadgeCheck className="size-3 text-white" />
+                    </div>
+                    Result
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2">
-                    <video src={previewUrl} controls className="w-full max-h-[75vh] rounded border border-zinc-800" />
-                    <div>
-                      <a className="text-xs underline text-blue-300" href={previewUrl} download target="_blank" rel="noreferrer">Download video</a>
+                  <div className="space-y-4">
+                    <video src={previewUrl} controls className="video-frame w-full max-h-[75vh]" />
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                      <span className="text-sm text-muted-foreground">Video ready</span>
+                      <a className="muted-link font-medium" href={previewUrl} download target="_blank" rel="noreferrer">Download video</a>
                     </div>
                   </div>
                 </CardContent>
