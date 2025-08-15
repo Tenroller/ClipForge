@@ -34,17 +34,17 @@ jobs:
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
-        cd cat-video-creator/backend
+        cd backend
         pip install -r requirements-dev.txt
         
     - name: Run backend tests
       run: |
-        cd cat-video-creator/backend
+        cd backend
         pytest -v
         
     - name: Run backend linting
       run: |
-        cd cat-video-creator/backend
+        cd backend
         pip install ruff
         ruff check . || true  # Don't fail on linting issues for now
 
@@ -59,26 +59,26 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: cat-video-creator/frontend/package-lock.json
+        cache-dependency-path: frontend/package-lock.json
         
     - name: Install frontend dependencies
       run: |
-        cd cat-video-creator/frontend
+        cd frontend
         npm ci
         
     - name: Run frontend tests
       run: |
-        cd cat-video-creator/frontend
+        cd frontend
         npm test -- --run 2>/dev/null || echo "No frontend tests configured yet"
         
     - name: Build frontend
       run: |
-        cd cat-video-creator/frontend
+        cd frontend
         npm run build
         
     - name: Run frontend linting
       run: |
-        cd cat-video-creator/frontend
+        cd frontend
         npm run lint 2>/dev/null || echo "No linting configured yet"
 
   build-docker:

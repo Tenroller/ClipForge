@@ -28,3 +28,6 @@ backend/logs/app.log
 backend/logs/errors.log
 logs/backend.log
 backend/vendors/moneyprinter/moneyprinter_6859e14a-8dd2-4def-8a68-d7912cb2dbd1TEMP_MPY_wvf_snd.mp3
+/backend/vendors/moneyprinter/cat-video-creator/output
+logs/frontend.log
+backend/jobs.db
