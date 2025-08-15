@@ -311,6 +311,11 @@ class MetricsCollector:
             start_http_server(self.metrics_server_port)
             self.metrics_server_started = True
             logger.info(f"✅ Metrics server started on port {self.metrics_server_port}")
+        except OSError as e:
+            if "Address already in use" in str(e):
+                logger.warning(f"⚠️ Metrics server port {self.metrics_server_port} already in use (likely due to uvicorn reload). Skipping metrics server startup.")
+            else:
+                logger.error(f"Failed to start metrics server: {e}")
         except Exception as e:
             logger.error(f"Failed to start metrics server: {e}")
     

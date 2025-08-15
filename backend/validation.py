@@ -184,6 +184,49 @@ def validate_subtitle_position(position: str) -> str:
     return "center,bottom"
 
 
+def validate_subtitle_font(font: str) -> str:
+    """Validate subtitle font family."""
+    if not font or not isinstance(font, str):
+        return "Arial-Bold"
+    
+    font = font.strip()
+    
+    # List of common, reliable fonts
+    valid_fonts = [
+        "Arial", "Arial-Bold", "Arial-Black",
+        "Helvetica", "Helvetica-Bold", "Helvetica-Light",
+        "Times-Roman", "Times-Bold", "Times-Italic",
+        "Courier", "Courier-Bold",
+        "Impact", "Verdana", "Tahoma",
+        "Georgia", "Comic-Sans-MS",
+        # Allow user-specified fonts but sanitize
+    ]
+    
+    # Basic sanitization
+    font = re.sub(r'[^\w\-\s]', '', font)
+    font = font.replace(' ', '-')
+    
+    if not font:
+        return "Arial-Bold"
+    
+    # If it's a known safe font, use it
+    if font in valid_fonts:
+        return font
+    
+    # Otherwise, allow it but log a warning
+    # This allows custom fonts while maintaining basic safety
+    return font
+
+
+def validate_subtitle_opacity(opacity: float) -> float:
+    """Validate subtitle background opacity."""
+    if not isinstance(opacity, (int, float)):
+        return 0.6
+    
+    # Clamp to valid range
+    return max(0.0, min(1.0, float(opacity)))
+
+
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename for safe file operations."""
     if not filename or not isinstance(filename, str):

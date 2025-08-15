@@ -11,7 +11,7 @@ from typing import Optional, Dict, Any, List
 
 import asyncio
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request, Cookie
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -20,7 +20,7 @@ from collections import deque
 from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from validation import (
     validate_youtube_url, validate_subject, validate_custom_prompt,
     validate_zip_url, validate_color, validate_subtitle_position,
@@ -279,8 +279,14 @@ except Exception:
 # Configurable CORS
 _cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "*")
 if _cors_origins_env.strip() == "*":
-    _allow_origins = ["*"]
-    _allow_credentials = False
+    # Default dev-friendly origins so we can enable credentials for cookies
+    _allow_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ]
+    _allow_credentials = True
 else:
     _allow_origins = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
     _allow_credentials = True
@@ -308,34 +314,71 @@ class MoneyPrinterRequest(BaseModel):
     useCloudGPU: bool = False
     voice: str = "af_bella"
     customPrompt: Optional[str] = None
+    
+    # Enhanced subtitle options
+    useTikTokSubtitles: bool = False
+    subtitleFont: str = "Arial-Bold"
+    subtitleFontSize: int = Field(default=48, ge=20, le=100)
+    subtitleDefaultColor: str = "#FFFFFF"
+    subtitleHighlightColor: str = "#FFFF00"
+    subtitleStrokeColor: str = "#000000"
+    subtitleBackgroundColor: str = "#000000"
+    subtitleStrokeWidth: int = Field(default=2, ge=0, le=10)
+    subtitleBackgroundOpacity: float = Field(default=0.6, ge=0.0, le=1.0)
+    subtitlePaddingX: int = Field(default=16, ge=0, le=50)
+    subtitlePaddingY: int = Field(default=12, ge=0, le=50)
 
-    @validator('videoSubject')
+    @field_validator('videoSubject')
+    @classmethod
     def validate_subject_field(cls, v):
         return validate_subject(v)
 
-    @validator('aiModel')
+    @field_validator('aiModel')
+    @classmethod
     def validate_ai_model_field(cls, v):
         return validate_ai_model(v)
 
-    @validator('voice')
+    @field_validator('voice')
+    @classmethod
     def validate_voice_field(cls, v):
         return validate_voice(v)
 
-    @validator('color')
+    @field_validator('color')
+    @classmethod
     def validate_color_field(cls, v):
         return validate_color(v)
 
-    @validator('subtitlesPosition')
+    @field_validator('subtitlesPosition')
+    @classmethod
     def validate_subtitle_position_field(cls, v):
         return validate_subtitle_position(v)
 
-    @validator('zipUrl')
+    @field_validator('zipUrl')
+    @classmethod
     def validate_zip_url_field(cls, v):
         return validate_zip_url(v)
 
-    @validator('customPrompt')
+    @field_validator('customPrompt')
+    @classmethod
     def validate_custom_prompt_field(cls, v):
         return validate_custom_prompt(v)
+    
+    @field_validator('subtitleFont')
+    @classmethod
+    def validate_subtitle_font_field(cls, v):
+        from validation import validate_subtitle_font
+        return validate_subtitle_font(v)
+    
+    @field_validator('subtitleDefaultColor', 'subtitleHighlightColor', 'subtitleStrokeColor', 'subtitleBackgroundColor')
+    @classmethod
+    def validate_subtitle_color_fields(cls, v):
+        return validate_color(v)
+    
+    @field_validator('subtitleBackgroundOpacity')
+    @classmethod
+    def validate_subtitle_opacity_field(cls, v):
+        from validation import validate_subtitle_opacity
+        return validate_subtitle_opacity(v)
 
 
 class BrainrotRequest(BaseModel):
@@ -345,7 +388,8 @@ class BrainrotRequest(BaseModel):
     maxDuration: int = Field(default=110, ge=10, le=3600)
     maxReuse: int = Field(default=3, ge=1, le=10)
 
-    @validator('youtubeUrl')
+    @field_validator('youtubeUrl')
+    @classmethod
     def validate_youtube_url_field(cls, v):
         return validate_youtube_url(v)
 
@@ -443,6 +487,31 @@ def require_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
     if expected and (x_api_key or "") != expected:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+# Lightweight signed-cookie sessions (no DB)
+import hmac, hashlib
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-secret-change")
+
+def _sign(val: str) -> str:
+    return hmac.new(SESSION_SECRET.encode(), val.encode(), hashlib.sha256).hexdigest()
+
+def create_session_cookie(user_id: str) -> str:
+    sig = _sign(user_id)
+    return f"{user_id}.{sig}"
+
+def verify_session_cookie(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    parts = raw.split('.')
+    if len(parts) != 2:
+        return None
+    uid, sig = parts
+    if hmac.compare_digest(sig, _sign(uid)):
+        return uid
+    return None
+
+def get_current_user_id(session: Optional[str] = Cookie(default=None, alias="session")) -> Optional[str]:
+    return verify_session_cookie(session)
+
 
 def make_rate_limiter(bucket: str):
     def _dep(request: Request) -> None:
@@ -516,9 +585,15 @@ def moneyprinter_generate(
     req: MoneyPrinterRequest,
     _: None = Depends(require_api_key),
     __: None = Depends(make_rate_limiter("moneyprinter")),
+    user_id: Optional[str] = Depends(get_current_user_id),
 ):
     job_id = str(uuid.uuid4())
-    job_store.create_job(job_id, "moneyprinter", req.dict())
+    
+    # Debug: Log the request parameters
+    print(f"[DEBUG] Request useTikTokSubtitles: {req.useTikTokSubtitles} (type: {type(req.useTikTokSubtitles)})")
+    print(f"[DEBUG] Request subtitleFont: {req.subtitleFont}")
+    
+    job_store.create_job(job_id, "moneyprinter", req.dict(), user_id=user_id)
     JOB_CONTROLS[job_id] = {"cancel": threading.Event()}
     _enqueue_job_update(job_id)
 
@@ -615,7 +690,37 @@ def moneyprinter_generate(
 
                 _check_cancel(job_id)
                 _update_job(job_id, step="subtitles")
-                subtitles_path = generate_subtitles(audio_path=tts_path, sentences=sentences, audio_clips=audio_clips, voice=voice_prefix)
+                
+                # Choose subtitle generation method based on request
+                if req.useTikTokSubtitles:
+                    # Use enhanced TikTok-style subtitles
+                    from vendors.moneyprinter.enhanced_subtitles import generate_enhanced_subtitles, SubtitleConfig
+                    
+                    subtitle_config = SubtitleConfig(
+                    font_family=req.subtitleFont,
+                    font_size=req.subtitleFontSize,
+                    default_color=req.subtitleDefaultColor,
+                    highlight_color=req.subtitleHighlightColor,
+                    stroke_color=req.subtitleStrokeColor,
+                    background_color=req.subtitleBackgroundColor,
+                    stroke_width=req.subtitleStrokeWidth,
+                    background_opacity=req.subtitleBackgroundOpacity,
+                    padding_x=req.subtitlePaddingX,
+                    padding_y=req.subtitlePaddingY,
+                    position="center,bottom"  # Force center-bottom for now
+                )
+                    
+                    subtitles_path = generate_enhanced_subtitles(
+                        sentences=sentences,
+                        audio_clips=audio_clips,
+                        config=subtitle_config,
+                        video_size=(1080, 1920)  # Default video size, will be adjusted in video generation
+                    )
+                    _log_job(f"subtitles: using TikTok-style enhanced subtitles -> {subtitles_path}")
+                else:
+                    # Use traditional subtitle generation
+                    subtitles_path = generate_subtitles(audio_path=tts_path, sentences=sentences, audio_clips=audio_clips, voice=voice_prefix)
+                    _log_job(f"subtitles: using traditional subtitles -> {subtitles_path}")
                 try:
                     sp = Path(subtitles_path)
                     head = ""
@@ -653,6 +758,15 @@ def moneyprinter_generate(
                     _log_job(f"env: failed to get version info ({e})")
 
                 try:
+                    # Debug: Check subtitle file type before video generation
+                    from vendors.moneyprinter.enhanced_subtitles import is_enhanced_subtitle_file
+                    
+                    if subtitles_path:
+                        is_enhanced = is_enhanced_subtitle_file(subtitles_path)
+                        _log_job(f"compose_video: subtitle_type={'enhanced' if is_enhanced else 'traditional'} path={subtitles_path}")
+                    else:
+                        _log_job(f"compose_video: no_subtitles_path")
+                    
                     final_video_path = generate_video(
                         combined_video_path,
                         tts_path,
@@ -949,9 +1063,10 @@ def brainrot_generate(
     req: BrainrotRequest,
     _: None = Depends(require_api_key),
     __: None = Depends(make_rate_limiter("brainrot")),
+    user_id: Optional[str] = Depends(get_current_user_id),
 ):
     job_id = str(uuid.uuid4())
-    job_store.create_job(job_id, "brainrot", req.dict())
+    job_store.create_job(job_id, "brainrot", req.dict(), user_id=user_id)
     JOB_CONTROLS[job_id] = {"cancel": threading.Event()}
     _enqueue_job_update(job_id)
 
@@ -1012,10 +1127,11 @@ def job_status(job_id: str):
 def list_jobs(
     limit: int = 50, 
     status: Optional[str] = None,
-    _: None = Depends(require_api_key)
+    _: None = Depends(require_api_key),
+    user_id: Optional[str] = Depends(get_current_user_id)
 ) -> Dict[str, Any]:
-    """List jobs with optional filtering."""
-    jobs = job_store.list_jobs(limit=min(limit, 100), status=status)
+    """List jobs with optional filtering. If a user session is present, only return that user's jobs."""
+    jobs = job_store.list_jobs(limit=min(limit, 100), status=status, user_id=user_id)
     return {"jobs": jobs, "total": len(jobs)}
 
 
@@ -1212,6 +1328,57 @@ class PlaylistBatchRequest(BaseModel):
     minDuration: int = Field(default=60, ge=10, le=3600)
     maxDuration: int = Field(default=110, ge=10, le=3600)
 
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+def _hash_password(password: str, salt: str) -> str:
+    import hashlib
+    return hashlib.sha256((salt + password).encode()).hexdigest()
+
+@app.post("/api/auth/register")
+def register(req: RegisterRequest):
+    from uuid import uuid4
+    user = job_store.get_user_by_email(req.email)
+    if user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    salt = uuid4().hex
+    pwd_hash = _hash_password(req.password, salt)
+    user_id = uuid4().hex
+    job_store.create_user(user_id, req.email, pwd_hash, salt)
+    # Issue session cookie
+    cookie_val = create_session_cookie(user_id)
+    return Response(content=json.dumps({"ok": True, "userId": user_id}), media_type="application/json", headers={"Set-Cookie": f"session={cookie_val}; Path=/; HttpOnly; SameSite=Lax"})
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest):
+    user = job_store.get_user_by_email(req.email)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    salt = user.get("password_salt")
+    expected = user.get("password_hash")
+    if _hash_password(req.password, salt) != expected:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    cookie_val = create_session_cookie(user["id"])
+    return Response(content=json.dumps({"ok": True, "userId": user["id"]}), media_type="application/json", headers={"Set-Cookie": f"session={cookie_val}; Path=/; HttpOnly; SameSite=Lax"})
+
+@app.post("/api/auth/logout")
+def logout():
+    # Expire cookie
+    return Response(content=json.dumps({"ok": True}), media_type="application/json", headers={"Set-Cookie": "session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"})
+
+@app.get("/api/auth/me")
+def auth_me(session: Optional[str] = Cookie(default=None, alias="session")) -> Dict[str, Any]:
+    user_id = verify_session_cookie(session)
+    if not user_id:
+        return {"authenticated": False}
+    user = job_store.get_user_by_id(user_id)
+    return {"authenticated": True, "userId": user_id, "email": (user or {}).get("email")}
 
 @app.post("/api/brainrot/playlist", tags=["Batch Processing"], summary="Create Brainrot batch from YouTube playlist")
 def brainrot_playlist_batch(req: PlaylistBatchRequest, _: None = Depends(require_api_key)) -> Dict[str, Any]:

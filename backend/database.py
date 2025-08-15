@@ -41,6 +41,7 @@ class JobStore:
                     status TEXT NOT NULL,
                     step TEXT,
                     workflow TEXT,
+                    user_id TEXT,
                     request_data TEXT,
                     result_data TEXT,
                     error_message TEXT,
@@ -57,6 +58,21 @@ class JobStore:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at)
             """)
+            # Users table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id TEXT PRIMARY KEY,
+                    email TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    password_salt TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            # Best-effort add user_id to jobs if missing (older DBs)
+            try:
+                conn.execute("ALTER TABLE jobs ADD COLUMN user_id TEXT")
+            except Exception:
+                pass
             
             conn.commit()
     
@@ -70,18 +86,19 @@ class JobStore:
         finally:
             conn.close()
     
-    def create_job(self, job_id: str, workflow: str, request_data: Dict[str, Any]) -> None:
+    def create_job(self, job_id: str, workflow: str, request_data: Dict[str, Any], user_id: Optional[str] = None) -> None:
         """Create a new job record."""
         with self.lock:
             with self._get_connection() as conn:
                 conn.execute("""
-                    INSERT INTO jobs (id, status, step, workflow, request_data, logs)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO jobs (id, status, step, workflow, user_id, request_data, logs)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, (
                     job_id,
                     "running",
                     "init",
                     workflow,
+                    user_id,
                     json.dumps(request_data),
                     json.dumps([])
                 ))
@@ -166,15 +183,21 @@ class JobStore:
             
             return job
     
-    def list_jobs(self, limit: int = 100, status: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_jobs(self, limit: int = 100, status: Optional[str] = None, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List jobs with optional filtering."""
         with self._get_connection() as conn:
+            params: list[Any] = []
+            where = []
             if status:
-                query = "SELECT * FROM jobs WHERE status = ? ORDER BY created_at DESC LIMIT ?"
-                rows = conn.execute(query, (status, limit)).fetchall()
-            else:
-                query = "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?"
-                rows = conn.execute(query, (limit,)).fetchall()
+                where.append("status = ?")
+                params.append(status)
+            if user_id:
+                where.append("user_id = ?")
+                params.append(user_id)
+            where_clause = (" WHERE " + " AND ".join(where)) if where else ""
+            query = f"SELECT * FROM jobs{where_clause} ORDER BY created_at DESC LIMIT ?"
+            params.append(limit)
+            rows = conn.execute(query, tuple(params)).fetchall()
             
             jobs = []
             for row in rows:
@@ -198,6 +221,26 @@ class JobStore:
                 jobs.append(job)
             
             return jobs
+
+    # User management
+    def create_user(self, user_id: str, email: str, password_hash: str, password_salt: str) -> None:
+        with self.lock:
+            with self._get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO users (id, email, password_hash, password_salt) VALUES (?, ?, ?, ?)",
+                    (user_id, email, password_hash, password_salt)
+                )
+                conn.commit()
+
+    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+            return dict(row) if row else None
+
+    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            return dict(row) if row else None
     
     def delete_old_jobs(self, days: int = 30) -> int:
         """Delete jobs older than specified days."""

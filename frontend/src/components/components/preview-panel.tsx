@@ -87,29 +87,9 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
     const iw = item.clientWidth
     const ih = item.clientHeight
 
-    // Defaults map from grid position for initial placement
-    const mapGridToCenterPercent = (p: Position): { x: number; y: number } => {
-      const [h, v] = p.split("-") as ["left" | "center" | "right", "top" | "middle" | "bottom"]
-      const x = h === "left" ? 10 : h === "right" ? 90 : 50
-      const y = v === "top" ? 15 : v === "bottom" ? 85 : 50
-      return { x, y }
-    }
-
-    const raw = String(positionRaw || "").trim().toLowerCase()
-    let cxPct = 50, cyPct = 85
-    if (raw.startsWith("pct:")) {
-      const m = raw.match(/^pct:\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*([0-9]+(?:\.[0-9]+)?)$/)
-      if (m) { cxPct = Math.max(0, Math.min(100, parseFloat(m[1]))); cyPct = Math.max(0, Math.min(100, parseFloat(m[2]))) }
-    } else if (raw.includes(",") && !raw.includes(":")) {
-      // "left,top" style from legacy
-      const grid = mapGridToCenterPercent(position)
-      cxPct = grid.x
-      cyPct = grid.y
-    } else {
-      const grid = mapGridToCenterPercent(position)
-      cxPct = grid.x
-      cyPct = grid.y
-    }
+    // Always pin example overlay to center-bottom (50%, 85%)
+    const cxPct = 50
+    const cyPct = 85
 
     const cx = (cxPct / 100) * cw
     const cy = (cyPct / 100) * ch
@@ -169,7 +149,7 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[340px] overflow-hidden rounded-xl border bg-gradient-to-b from-neutral-900 to-neutral-800 shadow-2xl" aria-label="Video preview area">
+          <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[300px] overflow-hidden rounded-xl border bg-gradient-to-b from-neutral-900 to-neutral-800 shadow-2xl" aria-label="Video preview area">
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute inset-0 bg-[radial-gradient(transparent,rgba(0,0,0,0.35))]" />
             <div className="absolute inset-0 flex items-center justify-center">
@@ -185,7 +165,7 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
           {/* Draggable placement overlay (used for both grid and free modes) */}
           <div
             ref={itemRef}
-            className="absolute cursor-move px-3 py-2 rounded-md bg-black/50 backdrop-blur-sm border border-white/20 select-none transition-all hover:scale-105 hover:bg-black/60"
+            className="absolute px-3 py-2 rounded-md bg-black/50 backdrop-blur-sm border border-white/20 select-none transition-all"
             style={{ 
               left: leftPx, 
               top: topPx, 
@@ -193,7 +173,6 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
               textShadow: '2px 2px 4px rgba(0,0,0,0.8), -2px -2px 4px rgba(0,0,0,0.8)',
               boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
             }}
-            onMouseDown={handleMouseDown}
           >
             <div className="text-center font-semibold leading-snug">Example subtitle text</div>
           </div>

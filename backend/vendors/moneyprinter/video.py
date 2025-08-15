@@ -378,6 +378,13 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
 
     # Load base clip first to determine video dimensions
     base_clip = VideoFileClip(combined_video_path)
+    video_size = (base_clip.w, base_clip.h)
+    
+    # Check if this is an enhanced subtitle file
+    from enhanced_subtitles import is_enhanced_subtitle_file, create_enhanced_subtitle_clip
+    
+    is_enhanced = is_enhanced_subtitle_file(subtitles_path) if subtitles_path else False
+    print(colored(f"[debug] Enhanced subtitles detected: {is_enhanced}", "cyan"))
     
     # Generator that returns a CompositeVideoClip (background box + text)
     def generator(txt: str):
@@ -495,38 +502,58 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         pos_mode = 'grid'
         horizontal_subtitles_position, vertical_subtitles_position = 'center', 'bottom'
 
-    # Validate subtitle file before creating SubtitlesClip
-    print(colored(f"[debug] Creating SubtitlesClip from: {subtitles_path}", "blue"))
-    try:
-        from pathlib import Path as _Path
-        srt_path = _Path(subtitles_path)
-        if not srt_path.exists():
-            raise FileNotFoundError(f"Subtitle file does not exist: {subtitles_path}")
-        
-        # Read and validate SRT content
-        with srt_path.open("r", encoding="utf-8") as f:
-            srt_content = f.read().strip()
-            if not srt_content:
-                raise ValueError("Subtitle file is empty")
-            print(colored(f"[debug] SRT file size: {len(srt_content)} chars, first 200 chars: {srt_content[:200]}", "cyan"))
-    except Exception as e:
-        print(colored(f"[error] Subtitle file validation failed: {e}", "red"))
-        raise e
-
-    # Burn the subtitles into the video, applying safe-area positioning via a function
-    # This aligns runtime rendering with the frontend preview (10%/50%/90% horizontally; 15%/50%/85% vertically)
-    try:
-        subtitles = SubtitlesClip(subtitles_path, make_textclip=generator)  # type: ignore[arg-type]
-        print(colored(f"[debug] SubtitlesClip created successfully with make_textclip", "green"))
-    except TypeError as e:
-        # Fallback for older moviepy where positional arg is expected
-        print(colored(f"[warn] SubtitlesClip(make_textclip=...) failed ({e}), retrying positional.", "yellow"))
+    # Handle different subtitle formats
+    if is_enhanced:
+        # Use enhanced TikTok-style subtitles
+        print(colored(f"[debug] Creating enhanced subtitle clip from: {subtitles_path}", "blue"))
         try:
-            subtitles = SubtitlesClip(subtitles_path, generator)
-            print(colored(f"[debug] SubtitlesClip created successfully with positional arg", "green"))
-        except Exception as e2:
-            print(colored(f"[error] Both SubtitlesClip creation methods failed: {e2}", "red"))
-            raise e2
+            subtitles = create_enhanced_subtitle_clip(subtitles_path, video_size)
+            print(colored(f"[debug] Enhanced subtitle clip created successfully", "green"))
+            print(colored(f"[debug] Enhanced clip type: {type(subtitles)}", "cyan"))
+            if hasattr(subtitles, 'clips'):
+                print(colored(f"[debug] Enhanced clip contains {len(subtitles.clips)} sub-clips", "cyan"))
+        except Exception as e:
+            print(colored(f"[error] Enhanced subtitle creation failed: {e}", "red"))
+            print(colored(f"[error] Falling back to traditional subtitles", "yellow"))
+            import traceback
+            print(colored(f"[error] Traceback: {traceback.format_exc()}", "red"))
+            # Fall back to traditional subtitles instead of raising
+            is_enhanced = False
+    else:
+        # Use traditional SRT subtitles
+        print(colored(f"[debug] Creating traditional SubtitlesClip from: {subtitles_path}", "blue"))
+        
+        # Validate subtitle file before creating SubtitlesClip
+        try:
+            from pathlib import Path as _Path
+            srt_path = _Path(subtitles_path)
+            if not srt_path.exists():
+                raise FileNotFoundError(f"Subtitle file does not exist: {subtitles_path}")
+            
+            # Read and validate SRT content
+            with srt_path.open("r", encoding="utf-8") as f:
+                srt_content = f.read().strip()
+                if not srt_content:
+                    raise ValueError("Subtitle file is empty")
+                print(colored(f"[debug] SRT file size: {len(srt_content)} chars, first 200 chars: {srt_content[:200]}", "cyan"))
+        except Exception as e:
+            print(colored(f"[error] Subtitle file validation failed: {e}", "red"))
+            raise e
+
+        # Burn the subtitles into the video, applying safe-area positioning via a function
+        # This aligns runtime rendering with the frontend preview (10%/50%/90% horizontally; 15%/50%/85% vertically)
+        try:
+            subtitles = SubtitlesClip(subtitles_path, make_textclip=generator)  # type: ignore[arg-type]
+            print(colored(f"[debug] SubtitlesClip created successfully with make_textclip", "green"))
+        except TypeError as e:
+            # Fallback for older moviepy where positional arg is expected
+            print(colored(f"[warn] SubtitlesClip(make_textclip=...) failed ({e}), retrying positional.", "yellow"))
+            try:
+                subtitles = SubtitlesClip(subtitles_path, generator)
+                print(colored(f"[debug] SubtitlesClip created successfully with positional arg", "green"))
+            except Exception as e2:
+                print(colored(f"[error] Both SubtitlesClip creation methods failed: {e2}", "red"))
+                raise e2
 
     # Position function computes px coords using base video size and current subtitle size
     def _safe_area_pos_fn(t):
@@ -629,7 +656,16 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         print(colored(f"[debug] Final subtitle position: ({final_x}, {final_y}) for {locals().get('horizontal_subtitles_position', 'center')},{locals().get('vertical_subtitles_position', 'bottom')}", "cyan"))
         return (final_x, final_y)
 
-    positioned_subs = subtitles.with_position(_safe_area_pos_fn)
+    # Handle positioning based on subtitle type
+    if is_enhanced:
+        # Enhanced subtitles handle their own positioning
+        positioned_subs = subtitles
+        print(colored(f"[debug] Using enhanced subtitle positioning", "cyan"))
+    else:
+        # Traditional subtitles need manual positioning
+        positioned_subs = subtitles.with_position(_safe_area_pos_fn)
+        print(colored(f"[debug] Using traditional subtitle positioning", "cyan"))
+    
     result: CompositeVideoClip = CompositeVideoClip([
         base_clip,
         positioned_subs,

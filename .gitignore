@@ -19,3 +19,12 @@ cat-video-creator/backend/jobs.db
 /backend/vendors/moneyprinter/__pycache__
 /backend/vendors/temp
 /backend/vendors/moneyprinter/cache
+/backend/__pycache__
+/backend/vendors/subtitles
+/output
+/subtitles
+/venv
+backend/logs/app.log
+backend/logs/errors.log
+logs/backend.log
+backend/vendors/moneyprinter/moneyprinter_6859e14a-8dd2-4def-8a68-d7912cb2dbd1TEMP_MPY_wvf_snd.mp3
