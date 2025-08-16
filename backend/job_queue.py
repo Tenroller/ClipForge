@@ -16,7 +16,7 @@ from enum import Enum
 try:
     import redis
     import rq
-    from rq import Queue, Worker, Connection
+    from rq import Queue, Worker
     from rq.job import Job as RQJob
     REDIS_AVAILABLE = True
 except ImportError:
@@ -24,7 +24,6 @@ except ImportError:
     rq = None
     Queue = None
     Worker = None
-    Connection = None
     RQJob = None
     REDIS_AVAILABLE = False
 
@@ -304,8 +303,7 @@ class RedisJobQueue:
             
             # Start worker in a separate thread
             def run_worker():
-                with Connection(self.redis_client):
-                    worker.work()
+                worker.work()
             
             worker_thread = threading.Thread(target=run_worker, daemon=True)
             worker_thread.start()

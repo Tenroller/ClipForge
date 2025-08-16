@@ -350,6 +350,8 @@ def generate():
         
         # Get GPU-optimized codec settings for final export
         codec_settings = get_video_codec_settings(use_gpu)
+        # Remove 'logger' from codec_settings to avoid parameter conflict
+        write_settings = {k: v for k, v in codec_settings.items() if k != 'logger'}
         
         if use_music:
             # Select a random song
@@ -368,9 +370,9 @@ def generate():
             video_clip = video_clip.with_audio(comp_audio)
             video_clip = video_clip.with_fps(30)
             video_clip = video_clip.with_duration(original_duration)
-            video_clip.write_videofile(f"../{final_video_path}", threads=n_threads or 1, **codec_settings)
+            video_clip.write_videofile(f"../{final_video_path}", threads=n_threads or 1, logger=None, **write_settings)
         else:
-            video_clip.write_videofile(f"../{final_video_path}", threads=n_threads or 1, **codec_settings)
+            video_clip.write_videofile(f"../{final_video_path}", threads=n_threads or 1, logger=None, **write_settings)
 
 
         # Let user know

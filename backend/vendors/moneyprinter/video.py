@@ -6,6 +6,15 @@ import requests
 import srt_equalizer
 import assemblyai as aai
 
+# Apply MoviePy patches early to prevent AttributeError issues
+try:
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+    from moviepy_patch import apply_moviepy_patches
+    apply_moviepy_patches()
+except ImportError:
+    pass  # Patch not available
+
 from typing import List, Dict, Optional, Union, Any, cast
 from moviepy import (
     VideoFileClip,
@@ -229,6 +238,81 @@ def __generate_subtitles_locally(sentences: List[str], audio_clips: List[AudioFi
     return "\n".join(subtitles)
 
 
+def convert_enhanced_to_srt_fallback(enhanced_subtitle_path: str) -> str | None:
+    """
+    Convert enhanced subtitle JSON format to SRT format for fallback processing.
+    
+    Args:
+        enhanced_subtitle_path: Path to the enhanced subtitle JSON file
+        
+    Returns:
+        str: Path to the generated SRT file, or None if conversion fails
+    """
+    try:
+        import json
+        from pathlib import Path
+        
+        # Load enhanced subtitle data
+        with open(enhanced_subtitle_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Extract sentences and timing data
+        sentences = data.get('sentences', [])
+        word_timings = data.get('word_timings', [])
+        
+        if not sentences or not word_timings:
+            print("No sentence or timing data found in enhanced subtitle file")
+            return None
+        
+        # Group word timings by sentence
+        sentence_timings = {}
+        for word_timing in word_timings:
+            sentence_idx = word_timing.get('sentence_index', 0)
+            if sentence_idx not in sentence_timings:
+                sentence_timings[sentence_idx] = []
+            sentence_timings[sentence_idx].append(word_timing)
+        
+        # Convert to SRT format
+        def convert_to_srt_time_format(total_seconds):
+            if total_seconds == 0:
+                return "00:00:00,000"
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            seconds = int(total_seconds % 60)
+            milliseconds = int((total_seconds % 1) * 1000)
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
+        
+        srt_entries = []
+        for i, sentence in enumerate(sentences):
+            if i in sentence_timings and sentence_timings[i]:
+                # Get timing from word timings
+                words = sentence_timings[i]
+                start_time = min(word['start_time'] for word in words)
+                end_time = max(word['end_time'] for word in words)
+            else:
+                # Fallback: estimate timing based on sentence index
+                start_time = i * 2.0  # 2 seconds per sentence
+                end_time = (i + 1) * 2.0
+            
+            # Create SRT entry
+            srt_entry = f"{i + 1}\n{convert_to_srt_time_format(start_time)} --> {convert_to_srt_time_format(end_time)}\n{sentence}\n"
+            srt_entries.append(srt_entry)
+        
+        # Generate SRT file path
+        enhanced_path = Path(enhanced_subtitle_path)
+        srt_path = enhanced_path.with_suffix('.srt')
+        
+        # Write SRT file
+        with open(srt_path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(srt_entries))
+        
+        return str(srt_path)
+        
+    except Exception as e:
+        print(f"Error converting enhanced subtitles to SRT: {e}")
+        return None
+
+
 def generate_subtitles(audio_path: str, sentences: List[str], audio_clips: List[AudioFileClip], voice: str) -> str:
     """
     Generates subtitles from a given audio file and returns the path to the subtitles.
@@ -301,48 +385,126 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
     # Add downloaded clips over and over until the duration of the audio (max_duration) has been reached
     while tot_dur < max_duration:
         for video_path in video_paths:
-            clip = VideoFileClip(video_path)
-            clip = clip.without_audio()
-            # Check if clip is longer than the remaining audio
-            if (max_duration - tot_dur) < clip.duration:
-                clip = clip.subclipped(0, (max_duration - tot_dur))
-            # Only shorten clips if the calculated clip length (req_dur) is shorter than the actual clip to prevent still image
-            elif req_dur < clip.duration:
-                clip = clip.subclipped(0, req_dur)
-            clip = clip.with_fps(30)
+            try:
+                clip = VideoFileClip(video_path)
+                clip = clip.without_audio()
+                
+                # Check if clip is longer than the remaining audio
+                if (max_duration - tot_dur) < clip.duration:
+                    clip = clip.subclipped(0, (max_duration - tot_dur))
+                # Only shorten clips if the calculated clip length (req_dur) is shorter than the actual clip to prevent still image
+                elif req_dur < clip.duration:
+                    clip = clip.subclipped(0, req_dur)
+                    
+                # Ensure consistent fps
+                clip = clip.with_fps(30)
 
-            # Not all videos are same size,
-            # so we need to resize them
-            if round((clip.w/clip.h), 4) < 0.5625:
-                clip = clip.with_effects([vfx.Crop(width=clip.w, height=round(clip.w/0.5625),  # type: ignore[attr-defined]
-                            x_center=clip.w / 2, 
-                            y_center=clip.h / 2)])
-            else:
-                clip = clip.with_effects([vfx.Crop(width=round(0.5625*clip.h), height=clip.h,  # type: ignore[attr-defined]
-                            x_center=clip.w / 2, 
-                            y_center=clip.h / 2)])
-            clip = clip.with_effects([vfx.Resize(width=1080, height=1920)])
+                # Handle different aspect ratios and sizes more robustly
+                # Target aspect ratio is 9:16 (0.5625)
+                current_aspect = clip.w / clip.h
+                target_aspect = 9 / 16  # 0.5625
+                
+                print(f"Processing clip: {clip.w}x{clip.h}, aspect: {current_aspect:.4f}, target: {target_aspect:.4f}")
+                
+                if abs(current_aspect - target_aspect) > 0.01:  # Need aspect ratio adjustment
+                    if current_aspect < target_aspect:
+                        # Clip is too tall, crop height
+                        new_height = round(clip.w / target_aspect)
+                        if new_height < clip.h:
+                            clip = clip.with_effects([vfx.Crop(
+                                width=clip.w, 
+                                height=new_height,
+                                x_center=clip.w / 2, 
+                                y_center=clip.h / 2
+                            )])
+                    else:
+                        # Clip is too wide, crop width  
+                        new_width = round(clip.h * target_aspect)
+                        if new_width < clip.w:
+                            clip = clip.with_effects([vfx.Crop(
+                                width=new_width,
+                                height=clip.h,
+                                x_center=clip.w / 2, 
+                                y_center=clip.h / 2
+                            )])
+                
+                # Resize to target dimensions (1080x1920)
+                clip = clip.with_effects([vfx.Resize(width=1080, height=1920)])
 
-            if clip.duration > max_clip_duration:
-                clip = clip.subclipped(0, max_clip_duration)
+                # Limit clip duration if needed
+                if clip.duration > max_clip_duration:
+                    clip = clip.subclipped(0, max_clip_duration)
 
-            clips.append(clip)
-            tot_dur += clip.duration
+                clips.append(clip)
+                tot_dur += clip.duration
+                
+                print(f"Added clip: duration={clip.duration:.2f}s, total_duration={tot_dur:.2f}s")
+                
+            except Exception as e:
+                print(f"Error processing video {video_path}: {e}")
+                continue
 
-    final_clip = concatenate_videoclips(clips)
+    if not clips:
+        raise ValueError("No valid clips could be processed")
+        
+    print(f"Concatenating {len(clips)} clips with total duration {tot_dur:.2f}s...")
+    final_clip = concatenate_videoclips(clips, method="compose")
     final_clip = final_clip.with_fps(30)
     
     # Get GPU-optimized codec settings
     codec_settings = get_video_codec_settings(use_gpu)
+    # Remove 'logger' from codec_settings to avoid parameter conflict
+    write_settings = {k: v for k, v in codec_settings.items() if k != 'logger'}
     
-    final_clip_typed: CompositeVideoClip = cast(CompositeVideoClip, final_clip)
-    final_clip_typed.write_videofile(
-        combined_video_path, 
-        threads=threads,
-        **codec_settings
-    )
+    try:
+        final_clip_typed: CompositeVideoClip = cast(CompositeVideoClip, final_clip)
+        final_clip_typed.write_videofile(
+            combined_video_path, 
+            threads=threads,
+            logger=None,    # Disable default logger
+            **write_settings
+        )
+        
+        # Clean up clips to free memory
+        for clip in clips:
+            try:
+                clip.close()
+            except:
+                pass
+                
+        try:
+            final_clip.close()
+        except:
+            pass
+            
+    except Exception as e:
+        # Clean up on error
+        for clip in clips:
+            try:
+                clip.close()
+            except:
+                pass
+        try:
+            final_clip.close()  
+        except:
+            pass
+        raise Exception(f"Video write failed: {e}")
 
     return combined_video_path
+
+
+def create_empty_subtitle_clip(video_size):
+    """
+    Create an empty, transparent subtitle clip that won't cause MoviePy errors.
+    
+    Args:
+        video_size: (width, height) of the video
+        
+    Returns:
+        A transparent clip that can be used as a subtitle placeholder
+    """
+    from moviepy import ColorClip
+    return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
 
 
 def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str, threads: int, subtitles_position: str, text_color: str, use_gpu: bool = True) -> str:
@@ -383,8 +545,90 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
     # Check if this is an enhanced subtitle file
     from enhanced_subtitles import is_enhanced_subtitle_file, create_enhanced_subtitle_clip
     
-    is_enhanced = is_enhanced_subtitle_file(subtitles_path) if subtitles_path else False
-    print(colored(f"[debug] Enhanced subtitles detected: {is_enhanced}", "cyan"))
+    # Initialize variables
+    is_enhanced = False
+    subtitles = None
+    
+    # NEW: Try optimized subtitle pipeline first
+    try:
+        from .optimized_subtitle_integration import (
+            create_optimized_enhanced_subtitles,
+            is_optimized_subtitle_available,
+            get_recommended_settings
+        )
+        
+        # Check if we can use the optimized pipeline
+        availability = is_optimized_subtitle_available()
+        use_optimized_pipeline = (
+            subtitles_path and 
+            Path(subtitles_path).suffix == '.json' and
+            availability['optimized_renderer']
+        )
+        
+        if use_optimized_pipeline:
+            print(colored("[info] Using optimized subtitle pipeline with pre-rendered frames", "green"))
+            
+            # Get video properties
+            fps = getattr(base_clip, 'fps', 30.0) or 30.0
+            duration = getattr(base_clip, 'duration', 0.0) or 0.0
+            
+            # Try to find the original audio file for better ASR
+            audio_path = None
+            if hasattr(base_clip, 'audio') and base_clip.audio:
+                # Extract audio temporarily for processing
+                temp_audio_path = f"/tmp/temp_audio_{uuid.uuid4().hex[:8]}.wav"
+                try:
+                    base_clip.audio.write_audiofile(temp_audio_path, verbose=False, logger=None)
+                    audio_path = temp_audio_path
+                    print(colored(f"[debug] Extracted audio for enhanced ASR: {audio_path}", "cyan"))
+                except Exception as e:
+                    print(colored(f"[warn] Could not extract audio: {e}", "yellow"))
+            
+            # Create optimized enhanced subtitles
+            try:
+                optimized_subtitles, subtitle_data_path = create_optimized_enhanced_subtitles(
+                    sentences=[],  # Not used with audio_path
+                    audio_clips=[],  # Not used with audio_path
+                    audio_path=audio_path,
+                    video_size=video_size,
+                    fps=fps,
+                    duration=duration,
+                    use_stable_ts=availability['stable_ts'],
+                    use_optimized_renderer=True,
+                    whisper_model=get_recommended_settings()['whisper_model'],
+                    use_gpu=availability['cuda']
+                )
+                
+                # Clean up temporary audio file
+                if audio_path and os.path.exists(audio_path):
+                    try:
+                        os.remove(audio_path)
+                    except Exception:
+                        pass
+                
+                print(colored("[success] Optimized subtitle pipeline completed successfully!", "green"))
+                subtitles = optimized_subtitles
+                is_enhanced = True  # Mark as enhanced to skip traditional processing
+                
+            except Exception as opt_error:
+                print(colored(f"[error] Optimized pipeline failed: {opt_error}", "red"))
+                print(colored("[info] Falling back to traditional subtitle processing", "yellow"))
+                
+                # Clean up temporary audio file on error
+                if audio_path and os.path.exists(audio_path):
+                    try:
+                        os.remove(audio_path)
+                    except Exception:
+                        pass
+        
+    except ImportError as ie:
+        print(colored(f"[warn] Optimized subtitle pipeline not available: {ie}", "yellow"))
+        print(colored("[info] Using traditional subtitle processing", "blue"))
+
+    # Traditional enhanced subtitle check (only if optimized pipeline didn't succeed)
+    if subtitles is None:
+        is_enhanced = is_enhanced_subtitle_file(subtitles_path) if subtitles_path else False
+        print(colored(f"[debug] Enhanced subtitles detected: {is_enhanced}", "cyan"))
     
     # Generator that returns a CompositeVideoClip (background box + text)
     def generator(txt: str):
@@ -394,6 +638,7 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
             # Scale font size based on video height - aim for 2.5% of video height
             font_size = max(24, int(video_height * 0.025))
         except Exception:
+            video_height = 1920  # Fallback height
             font_size = 48  # Fallback for ~1920px height
             
         # Create TextClip with reliable font choices and better error handling
@@ -502,6 +747,9 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         pos_mode = 'grid'
         horizontal_subtitles_position, vertical_subtitles_position = 'center', 'bottom'
 
+    # Initialize subtitles variable to None to prevent UnboundLocalError
+    subtitles = None
+
     # Handle different subtitle formats
     if is_enhanced:
         # Use enhanced TikTok-style subtitles
@@ -519,7 +767,17 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
             print(colored(f"[error] Traceback: {traceback.format_exc()}", "red"))
             # Fall back to traditional subtitles instead of raising
             is_enhanced = False
-    else:
+            
+            # Convert enhanced subtitle data to SRT format for fallback
+            try:
+                srt_path = convert_enhanced_to_srt_fallback(subtitles_path)
+                if srt_path:
+                    subtitles_path = srt_path
+                    print(colored(f"[debug] Converted enhanced subtitles to SRT format: {srt_path}", "green"))
+            except Exception as conv_error:
+                print(colored(f"[warn] Failed to convert enhanced subtitles to SRT: {conv_error}", "yellow"))
+
+    if not is_enhanced:
         # Use traditional SRT subtitles
         print(colored(f"[debug] Creating traditional SubtitlesClip from: {subtitles_path}", "blue"))
         
@@ -530,30 +788,51 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
             if not srt_path.exists():
                 raise FileNotFoundError(f"Subtitle file does not exist: {subtitles_path}")
             
-            # Read and validate SRT content
+            # Read and validate subtitle content
             with srt_path.open("r", encoding="utf-8") as f:
-                srt_content = f.read().strip()
-                if not srt_content:
+                subtitle_content = f.read().strip()
+                if not subtitle_content:
                     raise ValueError("Subtitle file is empty")
-                print(colored(f"[debug] SRT file size: {len(srt_content)} chars, first 200 chars: {srt_content[:200]}", "cyan"))
+                print(colored(f"[debug] Subtitle file size: {len(subtitle_content)} chars, first 200 chars: {subtitle_content[:200]}", "cyan"))
+                
+                # Additional check for SRT format vs JSON format
+                if subtitle_content.startswith('{') and '"type"' in subtitle_content:
+                    print(colored(f"[warn] Detected JSON format in subtitle file, but expected SRT format", "yellow"))
+                    # This might be an enhanced subtitle file that wasn't converted properly
+                    # Try to convert it
+                    if '"tiktok_enhanced"' in subtitle_content:
+                        converted_srt = convert_enhanced_to_srt_fallback(str(srt_path))
+                        if converted_srt and _Path(converted_srt).exists():
+                            subtitles_path = converted_srt
+                            print(colored(f"[debug] Converted enhanced subtitle to SRT: {converted_srt}", "green"))
+                        else:
+                            raise ValueError("Failed to convert enhanced subtitle to SRT format")
+                            
         except Exception as e:
             print(colored(f"[error] Subtitle file validation failed: {e}", "red"))
-            raise e
-
-        # Burn the subtitles into the video, applying safe-area positioning via a function
-        # This aligns runtime rendering with the frontend preview (10%/50%/90% horizontally; 15%/50%/85% vertically)
-        try:
-            subtitles = SubtitlesClip(subtitles_path, make_textclip=generator)  # type: ignore[arg-type]
-            print(colored(f"[debug] SubtitlesClip created successfully with make_textclip", "green"))
-        except TypeError as e:
-            # Fallback for older moviepy where positional arg is expected
-            print(colored(f"[warn] SubtitlesClip(make_textclip=...) failed ({e}), retrying positional.", "yellow"))
+            # Last resort: create an empty subtitle to prevent crash
+            print(colored(f"[warn] Creating empty subtitle clip to prevent crash", "yellow"))
+            subtitles = create_empty_subtitle_clip(video_size)
+            print(colored(f"[debug] Created empty subtitle clip as fallback", "yellow"))
+        
+        # Only try to create SubtitlesClip if subtitles is not already set (i.e., validation failed)
+        if 'subtitles' not in locals():
+            # Burn the subtitles into the video, applying safe-area positioning via a function
+            # This aligns runtime rendering with the frontend preview (10%/50%/90% horizontally; 15%/50%/85% vertically)
             try:
-                subtitles = SubtitlesClip(subtitles_path, generator)
-                print(colored(f"[debug] SubtitlesClip created successfully with positional arg", "green"))
-            except Exception as e2:
-                print(colored(f"[error] Both SubtitlesClip creation methods failed: {e2}", "red"))
-                raise e2
+                subtitles = SubtitlesClip(subtitles_path, make_textclip=generator)  # type: ignore[arg-type]
+                print(colored(f"[debug] SubtitlesClip created successfully with make_textclip", "green"))
+            except TypeError as e:
+                # Fallback for older moviepy where positional arg is expected
+                print(colored(f"[warn] SubtitlesClip(make_textclip=...) failed ({e}), retrying positional.", "yellow"))
+                try:
+                    subtitles = SubtitlesClip(subtitles_path, generator)
+                    print(colored(f"[debug] SubtitlesClip created successfully with positional arg", "green"))
+                except Exception as e2:
+                    print(colored(f"[error] Both SubtitlesClip creation methods failed: {e2}", "red"))
+                    # Create empty subtitle clip as last resort
+                    subtitles = create_empty_subtitle_clip(video_size)
+                    print(colored(f"[debug] Created empty subtitle clip as final fallback", "yellow"))
 
     # Position function computes px coords using base video size and current subtitle size
     def _safe_area_pos_fn(t):
@@ -568,13 +847,17 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
             
             try:
                 # Try to get the current subtitle clip at this time
-                current_clip = subtitles.get_frame(t) if hasattr(subtitles, 'get_frame') else None
+                current_clip = None
+                if subtitles is not None and hasattr(subtitles, 'get_frame'):
+                    current_clip = subtitles.get_frame(t)
+                
                 if current_clip is not None and hasattr(current_clip, 'shape'):
                     sh, sw = current_clip.shape[:2]  # numpy array shape is (height, width, channels)
                 else:
                     # Fallback: try direct attribute access
-                    sw = int(getattr(subtitles, 'w', 0) or 0)
-                    sh = int(getattr(subtitles, 'h', 0) or 0)
+                    if subtitles is not None:
+                        sw = int(getattr(subtitles, 'w', 0) or 0)
+                        sh = int(getattr(subtitles, 'h', 0) or 0)
             except Exception:
                 # Final fallback: estimate based on video size and typical subtitle proportions
                 if sw == 0 or sh == 0:
@@ -638,7 +921,8 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
                     y = int(0.15 * h) - half_sh
                     return max(min(y, h - sh), 0)
                 if vpos == 'bottom':
-                    y = int(0.85 * h) - half_sh
+                    # Changed to align subtitle bottom with 85% line instead of centering
+                    y = int(0.85 * h) - sh
                     return max(min(y, h - sh), 0)
                 # center
                 return max(int((h - sh) / 2), 0)
@@ -657,7 +941,11 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         return (final_x, final_y)
 
     # Handle positioning based on subtitle type
-    if is_enhanced:
+    if subtitles is None:
+        # No subtitles available, create empty clip with video dimensions
+        positioned_subs = create_empty_subtitle_clip(video_size)
+        print(colored(f"[warn] No subtitles available, using transparent empty clip", "yellow"))
+    elif is_enhanced:
         # Enhanced subtitles handle their own positioning
         positioned_subs = subtitles
         print(colored(f"[debug] Using enhanced subtitle positioning", "cyan"))
@@ -695,11 +983,15 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
     output_filename = f"moneyprinter_{uuid.uuid4()}.mp4"
     final_output_path = output_dir_path / output_filename
 
+    # Remove 'logger' from codec_settings to avoid parameter conflict
+    write_settings = {k: v for k, v in codec_settings.items() if k != 'logger'}
+    
     # Write the final video
     result_any.write_videofile(
         str(final_output_path),
         threads=threads or 2,
-        **codec_settings,
+        logger=None,  # Explicitly set logger to avoid conflicts
+        **write_settings,
     )
 
     # Return absolute path if unified dir is set; otherwise return relative to vendors root as before

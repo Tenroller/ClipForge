@@ -266,12 +266,12 @@ class TikTokVideoCreator:
             BACKGROUND_COLOR = (255, 255, 255)
 
             video_clip = VideoFileClip(video_path, audio=True)
-            video_clip = video_clip.resize(width=W)
+            video_clip = video_clip.resized(width=W)
             background = ColorClip(size=(W, H), color=BACKGROUND_COLOR, duration=video_clip.duration)
             
             # Position video in the middle area of the frame
             video_y_position = 650
-            video_clip = video_clip.set_position(('center', video_y_position))
+            video_clip = video_clip.with_position(('center', video_y_position))
 
             final_clip = CompositeVideoClip([background, video_clip], size=(W, H))
             final_clip.duration = video_clip.duration
@@ -367,14 +367,14 @@ class TikTokVideoCreator:
                         clip = VideoFileClip(video_path)
                         # Ensure it's the right size for TikTok (1080x1920)
                         if clip.h != 1920 or clip.w != 1080:
-                            clip = clip.resize(height=1920)
+                            clip = clip.resized(height=1920)
                             if clip.w > 1080:
                                 # If width is still too wide, center crop it
                                 x1 = (clip.w - 1080) // 2
                                 clip = clip.cropped(x1=x1, width=1080)
                             elif clip.w < 1080:
                                 # If width is too narrow, resize by width
-                                clip = clip.resize(width=1080)
+                                clip = clip.resized(width=1080)
                     
                     elif orientation == 'square':
                         # Convert square to vertical by adding padding or using template
@@ -413,7 +413,7 @@ class TikTokVideoCreator:
             final_video = concatenate_videoclips(clips, method="compose")
             
             # Ensure final video is exactly 1080x1920
-            final_video = final_video.resize(width=1080, height=1920)
+            final_video = final_video.resized(width=1080, height=1920)
             
             # Write the final video
             print(f"Writing final compilation to: {output_path}")

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Routes, Route, useNavigate } from 'react-router-dom'
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/components/ui/button'
 import { Clapperboard, Menu } from 'lucide-react'
 import ThemeToggle from './components/ThemeToggle'
@@ -7,21 +7,40 @@ import CreatorPage from './pages/CreatorPage'
 import CompilationsPage from './pages/CompilationsPage'
 import ActivityPage from './pages/ActivityPage'
 import DownloadsPage from './pages/DownloadsPage'
-import LandingPage from './components/LandingPage'
+import NewLandingPage from './components/NewLandingPage'
 import SidebarRouter from './components/SidebarRouter'
 import AuthDialog from './components/AuthDialog'
 import AuthStatus from './components/AuthStatus'
+import { useJobManager } from './hooks/useJobManager'
 
 const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
 export default function App() {
 	const navigate = useNavigate()
+	const location = useLocation()
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
 	const [showMobileSidebar, setShowMobileSidebar] = useState(false)
 	const [showAuth, setShowAuth] = useState(false)
+	
+	// Get active job count for the sidebar
+	const jobManager = useJobManager()
+	const activeJobCount = jobManager.getActiveJobs().length
 
 	const onGetStarted = () => {
 		navigate('/creator')
+	}
+
+	// Check if we're on the landing page
+	const isLandingPage = location.pathname === '/'
+
+	// If on landing page, render it without sidebar/header
+	if (isLandingPage) {
+		return (
+			<>
+				<NewLandingPage onGetStarted={onGetStarted} />
+				<AuthDialog open={showAuth} onOpenChange={setShowAuth} onAuth={() => window.location.reload()} />
+			</>
+		)
 	}
 
 	return (
@@ -30,7 +49,7 @@ export default function App() {
 			<SidebarRouter
 				isCollapsed={sidebarCollapsed}
 				onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-				activeJobs={0}
+				activeJobs={activeJobCount}
 				className="hidden lg:flex"
 			/>
 
@@ -40,7 +59,7 @@ export default function App() {
 					<SidebarRouter
 						isCollapsed={false}
 						onToggleCollapse={() => setShowMobileSidebar(false)}
-						activeJobs={0}
+						activeJobs={activeJobCount}
 						className="w-64"
 					/>
 				</div>
@@ -68,12 +87,6 @@ export default function App() {
 								</div>
 								<div>
 									<Routes>
-										<Route path="/" element={
-											<>
-												<h1 className="section-title text-lg">Welcome</h1>
-												<p className="section-subtitle text-[11px]">Landing</p>
-											</>
-										} />
 										<Route path="/creator" element={
 											<>
 												<h1 className="section-title text-lg">AI Video Creator</h1>
@@ -84,6 +97,18 @@ export default function App() {
 											<>
 												<h1 className="section-title text-lg">Compilation Generator</h1>
 												<p className="section-subtitle text-[11px]">Create from existing videos</p>
+											</>
+										} />
+										<Route path="/activity" element={
+											<>
+												<h1 className="section-title text-lg">Recent Activity</h1>
+												<p className="section-subtitle text-[11px]">View job history</p>
+											</>
+										} />
+										<Route path="/downloads" element={
+											<>
+												<h1 className="section-title text-lg">Downloads</h1>
+												<p className="section-subtitle text-[11px]">Download completed videos</p>
 											</>
 										} />
 									</Routes>
@@ -107,7 +132,6 @@ export default function App() {
 					<div className="container-page fade-in max-w-[1760px]">
 						<div aria-live="polite" className="sr-only">App content</div>
 						<Routes>
-							<Route path="/" element={<LandingPage onGetStarted={onGetStarted} />} />
 							<Route path="/creator" element={<CreatorPage />} />
 							<Route path="/compilations" element={<CompilationsPage />} />
 							<Route path="/activity" element={<ActivityPage />} />

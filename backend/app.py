@@ -8,6 +8,14 @@ from contextlib import asynccontextmanager
 import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from datetime import datetime, timezone
+
+# Apply MoviePy patches early to prevent AttributeError issues
+try:
+    from moviepy_patch import apply_moviepy_patches
+    apply_moviepy_patches()
+except ImportError:
+    pass  # Patch not available
 
 import asyncio
 from collections import defaultdict
@@ -32,6 +40,7 @@ from caching import get_cache, cached
 from thumbnail_generator import get_thumbnail_generator, create_video_preview_package
 from batch_processing import get_batch_processor
 from batch_processing import create_brainrot_batch_from_playlist
+from resume_manager import get_resume_manager, save_step_completion, can_resume_job, get_resume_state
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -317,10 +326,12 @@ class MoneyPrinterRequest(BaseModel):
     
     # Enhanced subtitle options
     useTikTokSubtitles: bool = False
+    useWhisperEnhanced: bool = False  # Use Whisper for precise word timing
+    whisperModel: str = "base"  # Whisper model size: tiny, base, small, medium, large
     subtitleFont: str = "Arial-Bold"
     subtitleFontSize: int = Field(default=48, ge=20, le=100)
     subtitleDefaultColor: str = "#FFFFFF"
-    subtitleHighlightColor: str = "#FFFF00"
+    subtitleHighlightColor: str = "#FF0000"  # Changed default to red for better visibility
     subtitleStrokeColor: str = "#000000"
     subtitleBackgroundColor: str = "#000000"
     subtitleStrokeWidth: int = Field(default=2, ge=0, le=10)
@@ -611,7 +622,15 @@ def moneyprinter_generate(
             pass
 
     def _run_job():
+        start_time = time.time()
+        
         try:
+            # Record when job actually started processing
+            _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
+            
+            # Ensure output directory environment variable is set for the job thread
+            os.environ["VIDEOHELPER_OUTPUT_DIR"] = str(DEFAULT_OUTPUT_DIR)
+            
             ensure_on_path(MONEYPRINTER_BACKEND)
             with pushd(MONEYPRINTER_BACKEND):
                 # Lazy imports from vendored MoneyPrinter project
@@ -627,6 +646,8 @@ def moneyprinter_generate(
                 _log_job("validate_env: checking MoneyPrinter environment variables")
                 try:
                     check_env_vars()
+                    # Save step completion for resume
+                    save_step_completion(job_id, "validate_env", {"validated": True})
                 except SystemExit:
                     raise RuntimeError("Missing required MoneyPrinter environment variables")
 
@@ -635,6 +656,7 @@ def moneyprinter_generate(
                     _update_job(job_id, step="fetch_music")
                     _log_job(f"fetch_music: downloading songs from zipUrl={req.zipUrl}")
                     fetch_songs(req.zipUrl)
+                    save_step_completion(job_id, "fetch_music", {"zip_url": req.zipUrl})
 
                 _check_cancel(job_id)
                 _update_job(job_id, step="script_generation")
@@ -642,11 +664,25 @@ def moneyprinter_generate(
                 script = generate_script(req.videoSubject, req.paragraphNumber, req.aiModel, req.voice, req.customPrompt or "")
                 if not script:
                     raise RuntimeError("Script generation failed")
+                
+                # Save script for resume
+                save_step_completion(job_id, "script_generation", {
+                    "script": script,
+                    "subject": req.videoSubject,
+                    "model": req.aiModel,
+                    "voice": req.voice
+                })
 
                 _check_cancel(job_id)
                 _update_job(job_id, step="search_terms")
                 terms = get_search_terms(req.videoSubject, 10, script, req.aiModel)
                 _log_job(f"search_terms: {len(terms)} terms -> {terms[:5]}{'...' if len(terms) > 5 else ''}")
+                
+                # Save terms for resume
+                save_step_completion(job_id, "search_terms", {
+                    "terms": terms,
+                    "subject": req.videoSubject
+                })
 
                 _check_cancel(job_id)
                 _update_job(job_id, step="stock_download")
@@ -667,6 +703,12 @@ def moneyprinter_generate(
                     raise RuntimeError("No stock videos downloaded")
                 else:
                     _log_job(f"stock_download: downloaded {len(video_paths)} clips")
+                    
+                # Save video paths for resume
+                save_step_completion(job_id, "stock_download", {
+                    "video_paths": video_paths,
+                    "terms_used": terms
+                }, video_paths)
 
                 _check_cancel(job_id)
                 _update_job(job_id, step="tts")
@@ -675,52 +717,102 @@ def moneyprinter_generate(
                 audio_clips = []
                 temp_dir = Path("../temp")
                 temp_dir.mkdir(exist_ok=True)
+                
+                temp_audio_files = []
                 for s in sentences:
                     _check_cancel(job_id)
                     current_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
                     tts(s, req.voice, filename=str(current_tts_path))
                     audio_clips.append(AudioFileClip(str(current_tts_path)))
+                    temp_audio_files.append(str(current_tts_path))
 
                 if not audio_clips:
                     raise RuntimeError("No audio clips generated")
 
                 tts_path = str(temp_dir / f"{uuid.uuid4()}.mp3")
                 concatenate_audioclips(audio_clips).write_audiofile(tts_path)
+                temp_audio_files.append(tts_path)
                 _log_job(f"tts: concatenated audio -> {tts_path}")
+                
+                # Save TTS for resume
+                save_step_completion(job_id, "tts", {
+                    "tts_path": tts_path,
+                    "sentences": sentences,
+                    "voice": req.voice
+                }, temp_audio_files)
 
                 _check_cancel(job_id)
                 _update_job(job_id, step="subtitles")
                 
                 # Choose subtitle generation method based on request
                 if req.useTikTokSubtitles:
-                    # Use enhanced TikTok-style subtitles
-                    from vendors.moneyprinter.enhanced_subtitles import generate_enhanced_subtitles, SubtitleConfig
-                    
-                    subtitle_config = SubtitleConfig(
-                    font_family=req.subtitleFont,
-                    font_size=req.subtitleFontSize,
-                    default_color=req.subtitleDefaultColor,
-                    highlight_color=req.subtitleHighlightColor,
-                    stroke_color=req.subtitleStrokeColor,
-                    background_color=req.subtitleBackgroundColor,
-                    stroke_width=req.subtitleStrokeWidth,
-                    background_opacity=req.subtitleBackgroundOpacity,
-                    padding_x=req.subtitlePaddingX,
-                    padding_y=req.subtitlePaddingY,
-                    position="center,bottom"  # Force center-bottom for now
-                )
-                    
-                    subtitles_path = generate_enhanced_subtitles(
-                        sentences=sentences,
-                        audio_clips=audio_clips,
-                        config=subtitle_config,
-                        video_size=(1080, 1920)  # Default video size, will be adjusted in video generation
-                    )
-                    _log_job(f"subtitles: using TikTok-style enhanced subtitles -> {subtitles_path}")
+                    # Use enhanced TikTok-style subtitles with optional Whisper timing
+                    if req.useWhisperEnhanced:
+                        # Use Whisper-enhanced subtitles for precise word timing
+                        from vendors.moneyprinter.whisper_enhanced_subtitles import generate_enhanced_subtitles_with_optional_whisper
+                        
+                        subtitle_config = {
+                            'font_family': req.subtitleFont,
+                            'font_size': req.subtitleFontSize,
+                            'default_color': req.subtitleDefaultColor,
+                            'highlight_color': req.subtitleHighlightColor,
+                            'stroke_color': req.subtitleStrokeColor,
+                            'background_color': req.subtitleBackgroundColor,
+                            'stroke_width': req.subtitleStrokeWidth,
+                            'background_opacity': req.subtitleBackgroundOpacity,
+                            'padding_x': req.subtitlePaddingX,
+                            'padding_y': req.subtitlePaddingY,
+                            'position': req.subtitlesPosition
+                        }
+                        
+                        subtitles_path = generate_enhanced_subtitles_with_optional_whisper(
+                            sentences=sentences,
+                            audio_clips=audio_clips,
+                            audio_path=str(tts_path) if tts_path else None,
+                            use_whisper=True,
+                            whisper_model=req.whisperModel,
+                            config=subtitle_config,
+                            video_size=(1080, 1920)
+                        )
+                        _log_job(f"subtitles: using Whisper-enhanced TikTok-style subtitles -> {subtitles_path}")
+                    else:
+                        # Use enhanced TikTok-style subtitles with estimation timing
+                        from vendors.moneyprinter.enhanced_subtitles import generate_enhanced_subtitles, SubtitleConfig
+                        
+                        subtitle_config = SubtitleConfig(
+                            font_family=req.subtitleFont,
+                            font_size=req.subtitleFontSize,
+                            default_color=req.subtitleDefaultColor,
+                            highlight_color=req.subtitleHighlightColor,
+                            stroke_color=req.subtitleStrokeColor,
+                            background_color=req.subtitleBackgroundColor,
+                            stroke_width=req.subtitleStrokeWidth,
+                            background_opacity=req.subtitleBackgroundOpacity,
+                            padding_x=req.subtitlePaddingX,
+                            padding_y=req.subtitlePaddingY,
+                            position=req.subtitlesPosition
+                        )
+                        
+                        subtitles_path = generate_enhanced_subtitles(
+                            sentences=sentences,
+                            audio_clips=audio_clips,
+                            config=subtitle_config,
+                            video_size=(1080, 1920)
+                        )
+                        _log_job(f"subtitles: using TikTok-style enhanced subtitles -> {subtitles_path}")
                 else:
                     # Use traditional subtitle generation
-                    subtitles_path = generate_subtitles(audio_path=tts_path, sentences=sentences, audio_clips=audio_clips, voice=voice_prefix)
+                    if not tts_path:
+                        raise RuntimeError("TTS path is required for subtitle generation")
+                    subtitles_path = generate_subtitles(audio_path=str(tts_path), sentences=sentences, audio_clips=audio_clips, voice=voice_prefix)
                     _log_job(f"subtitles: using traditional subtitles -> {subtitles_path}")
+                    
+                # Save subtitles for resume
+                save_step_completion(job_id, "subtitles", {
+                    "subtitles_path": subtitles_path,
+                    "subtitle_type": "enhanced" if req.useTikTokSubtitles else "traditional"
+                }, [subtitles_path] if subtitles_path else [])
+                
                 try:
                     sp = Path(subtitles_path)
                     head = ""
@@ -806,11 +898,15 @@ def moneyprinter_generate(
                     video_clip.write_videofile(str(video_clip_path), threads=req.threads or 1, **codec_settings)
 
                 if not JOB_CONTROLS[job_id]["cancel"].is_set():
-                    _log_job(f"done: final video -> {final_video_path}")
-                    _update_job(job_id, status="done", result={"output": str(final_video_path), "subtitles": subtitles_path})
+                    duration_seconds = int(time.time() - start_time)
+                    _log_job(f"done: final video -> {final_video_path} (took {duration_seconds}s)")
+                    _update_job(job_id, status="done", result={"output": str(final_video_path), "subtitles": subtitles_path}, duration_seconds=duration_seconds)
+                    # Clean up resume state on successful completion
+                    get_resume_manager().cleanup_resume_state(job_id)
         except Exception as e:
+            duration_seconds = int(time.time() - start_time)
             if str(e) == "cancelled":
-                _update_job(job_id, status="cancelled", error="cancelled")
+                _update_job(job_id, status="cancelled", error="cancelled", duration_seconds=duration_seconds)
             else:
                 # Preserve the last known step in the error and include a hint if it's a font/TextClip issue
                 hint = ""
@@ -818,7 +914,7 @@ def moneyprinter_generate(
                 if any(k in msg.lower() for k in ["font", "pillow", "textclip"]):
                     hint = " (possible font/Pillow/TextClip configuration issue)"
                 _log_job(f"error: {msg}{hint}")
-                _update_job(job_id, status="error", error=msg)
+                _update_job(job_id, status="error", error=msg, duration_seconds=duration_seconds)
 
     # Run the long-running job in a detached daemon thread rather than Starlette BackgroundTasks.
     # This avoids noisy asyncio.CancelledError tracebacks on server shutdown (Ctrl+C)
@@ -1071,7 +1167,12 @@ def brainrot_generate(
     _enqueue_job_update(job_id)
 
     def _run_job():
+        start_time = time.time()
+        
         try:
+            # Record when job actually started processing
+            _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
+            
             ensure_on_path(BRAINROT_ROOT)
             with pushd(BRAINROT_ROOT):
                 from tikyou_video_generator.generator import TikYouGenerator  # type: ignore
@@ -1100,12 +1201,14 @@ def brainrot_generate(
                 )
 
                 if not JOB_CONTROLS[job_id]["cancel"].is_set():
-                    _update_job(job_id, status="done", result={"output_dir": output_dir})
+                    duration_seconds = int(time.time() - start_time)
+                    _update_job(job_id, status="done", result={"output_dir": output_dir}, duration_seconds=duration_seconds)
         except Exception as e:
+            duration_seconds = int(time.time() - start_time)
             if str(e) == "cancelled":
-                _update_job(job_id, status="cancelled", error="cancelled")
+                _update_job(job_id, status="cancelled", error="cancelled", duration_seconds=duration_seconds)
             else:
-                _update_job(job_id, status="error", error=str(e))
+                _update_job(job_id, status="error", error=str(e), duration_seconds=duration_seconds)
 
     # Run the job in a detached daemon thread to avoid shutdown cancellation noise
     def _runner_with_limit():
@@ -1113,6 +1216,38 @@ def brainrot_generate(
             _run_job()
     threading.Thread(target=_runner_with_limit, name=f"brainrot-job-{job_id}", daemon=True).start()
     return {"status": "queued", "jobId": job_id}
+
+
+@app.get("/api/jobs/resumable", tags=["Job Management"], summary="List resumable jobs")
+def list_resumable_jobs(
+    _: None = Depends(require_api_key),
+    user_id: Optional[str] = Depends(get_current_user_id)
+) -> Dict[str, Any]:
+    """List all jobs that can be resumed."""
+    logger.info(f"list_resumable_jobs called with user_id: {user_id}")
+    resume_manager = get_resume_manager()
+    
+    # Get resumable jobs from database
+    resumable_jobs = job_store.get_resumable_jobs(user_id=user_id)
+    logger.info(f"Found {len(resumable_jobs)} resumable jobs from database")
+    
+    # Filter and validate each job
+    validated_jobs = []
+    for job in resumable_jobs:
+        if resume_manager.can_resume_job(job['id']):
+            # Add resume state info
+            state = resume_manager.get_resume_state(job['id'])
+            if state:
+                job['last_completed_step'] = state.last_completed_step
+                job['completed_steps'] = len(state.completed_steps)
+                job['next_step'] = resume_manager.get_next_step_to_execute(job['id'])
+            validated_jobs.append(job)
+    
+    logger.info(f"Returning {len(validated_jobs)} validated resumable jobs")
+    return {
+        "resumable_jobs": validated_jobs,
+        "total": len(validated_jobs)
+    }
 
 
 @app.get("/api/jobs/{job_id}")
@@ -1135,10 +1270,479 @@ def list_jobs(
     return {"jobs": jobs, "total": len(jobs)}
 
 
-@app.get("/api/jobs/stats")
-def job_stats(_: None = Depends(require_api_key)) -> Dict[str, Any]:
-    """Get job statistics."""
-    return job_store.get_stats()
+@app.get("/api/jobs/{job_id}/resumable", tags=["Job Management"], summary="Check if job can be resumed")
+def check_job_resumable(job_id: str, _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Check if a specific job can be resumed."""
+    resume_manager = get_resume_manager()
+    can_resume = resume_manager.can_resume_job(job_id)
+    
+    result = {
+        "job_id": job_id,
+        "can_resume": can_resume
+    }
+    
+    if can_resume:
+        state = resume_manager.get_resume_state(job_id)
+        if state:
+            result.update({
+                "last_completed_step": state.last_completed_step,
+                "completed_steps": len(state.completed_steps),
+                "next_step": resume_manager.get_next_step_to_execute(job_id)
+            })
+    
+    return result
+
+
+@app.post("/api/jobs/{job_id}/resume", tags=["Job Management"], summary="Resume a failed job")
+def resume_job(job_id: str, _: None = Depends(require_api_key)) -> Dict[str, Any]:
+    """Resume a failed or cancelled job from the last completed step."""
+    resume_manager = get_resume_manager()
+    
+    # Check if job can be resumed
+    if not resume_manager.can_resume_job(job_id):
+        raise HTTPException(status_code=400, detail="Job cannot be resumed")
+    
+    # Get job details
+    job = job_store.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Validate job is in resumable state
+    if job.get('status') not in ['error', 'cancelled']:
+        raise HTTPException(status_code=400, detail="Job is not in a resumable state")
+    
+    # Mark job as resumed and reset status
+    job_store.mark_job_resumed(job_id)
+    JOB_CONTROLS[job_id] = {"cancel": threading.Event()}
+    _enqueue_job_update(job_id)
+    
+    # Start resume execution
+    def _run_resume_job():
+        try:
+            # Get original request data
+            request_data = job.get('request_data', {})
+            workflow = job.get('workflow')
+            
+            if workflow == 'moneyprinter':
+                # Reconstruct MoneyPrinterRequest from saved data
+                req = MoneyPrinterRequest(**request_data)
+                _run_moneyprinter_job_with_resume(job_id, req, resume=True)
+            elif workflow == 'brainrot':
+                # Future: implement brainrot resume
+                raise RuntimeError("Brainrot resume not yet implemented")
+            else:
+                raise RuntimeError(f"Unknown workflow: {workflow}")
+                
+        except Exception as e:
+            if str(e) == "cancelled":
+                _update_job(job_id, status="cancelled", error="cancelled")
+            else:
+                _update_job(job_id, status="error", error=str(e))
+    
+    def _runner_with_limit():
+        with JOB_SEMAPHORE:
+            _run_resume_job()
+    
+    threading.Thread(target=_runner_with_limit, name=f"resume-job-{job_id}", daemon=True).start()
+    
+    return {
+        "status": "resumed",
+        "job_id": job_id,
+        "message": "Job resumed from last completed step"
+    }
+
+
+def _run_moneyprinter_job_with_resume(job_id: str, req: MoneyPrinterRequest, resume: bool = False):
+    """Run MoneyPrinter job with resume support"""
+    start_time = time.time()
+    resume_manager = get_resume_manager()
+    
+    def _log_job(message: str) -> None:
+        try:
+            job = job_store.get_job(job_id)
+            if job:
+                logs = job.get("logs", [])
+                if not isinstance(logs, list):
+                    logs = []
+                logs.append(message)
+                _update_job(job_id, logs=logs)
+        except Exception:
+            pass
+    
+    # Check if we're resuming
+    next_step = "validate_env"
+    if resume:
+        resume_state = get_resume_state(job_id)
+        if not resume_state:
+            raise RuntimeError("Cannot resume: no resume state found")
+        
+        # Get next step to execute
+        next_step = resume_manager.get_next_step_to_execute(job_id)
+        if not next_step:
+            # Job was already complete, just mark as done
+            _update_job(job_id, status="done")
+            return
+        
+        _log_job(f"Resuming from step: {next_step}")
+
+    try:
+        # Record when job started (including resumed jobs)
+        if not resume:
+            _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
+        
+        # Ensure output directory environment variable is set
+        os.environ["VIDEOHELPER_OUTPUT_DIR"] = str(DEFAULT_OUTPUT_DIR)
+        
+        ensure_on_path(MONEYPRINTER_BACKEND)
+        with pushd(MONEYPRINTER_BACKEND):
+            # Import MoneyPrinter modules
+            from vendors.moneyprinter.utils import fetch_songs, check_env_vars
+            from vendors.moneyprinter.gpt import generate_script, get_search_terms
+            from vendors.moneyprinter.search import search_for_stock_videos
+            from vendors.moneyprinter.tiktokvoice import tts
+            from vendors.moneyprinter.video import generate_subtitles, combine_videos, generate_video
+            from vendors.moneyprinter.video import save_video as mp_save_video
+            from moviepy import AudioFileClip, CompositeAudioClip, VideoFileClip, concatenate_audioclips
+
+            # Initialize variables
+            script = None
+            terms = None
+            video_paths = []
+            tts_path = None
+            subtitles_path = None
+            sentences = []
+
+            # Execute steps based on where we need to resume from
+            if next_step == "validate_env":
+                _check_cancel(job_id)
+                _update_job(job_id, step="validate_env")
+                _log_job("validate_env: checking MoneyPrinter environment variables")
+                try:
+                    check_env_vars()
+                    save_step_completion(job_id, "validate_env", {"validated": True})
+                    next_step = "fetch_music" if (req.useMusic and req.zipUrl) else "script_generation"
+                except SystemExit:
+                    raise RuntimeError("Missing required MoneyPrinter environment variables")
+
+            if next_step == "fetch_music" and req.useMusic and req.zipUrl:
+                _check_cancel(job_id)
+                _update_job(job_id, step="fetch_music")
+                _log_job(f"fetch_music: downloading songs from zipUrl={req.zipUrl}")
+                fetch_songs(req.zipUrl)
+                save_step_completion(job_id, "fetch_music", {"zip_url": req.zipUrl})
+                next_step = "script_generation"
+
+            if next_step == "script_generation":
+                # Check if we can resume from saved script
+                if resume:
+                    script_outputs = resume_manager.get_step_outputs(job_id, "script_generation")
+                    if script_outputs:
+                        script = script_outputs.get("script")
+                        if script:
+                            _log_job("script_generation: using saved script from resume")
+                            next_step = "search_terms"
+
+                if not script:
+                    _check_cancel(job_id)
+                    _update_job(job_id, step="script_generation")
+                    _log_job(f"script_generation: model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
+                    script = generate_script(req.videoSubject, req.paragraphNumber, req.aiModel, req.voice, req.customPrompt or "")
+                    if not script:
+                        raise RuntimeError("Script generation failed")
+                    
+                    save_step_completion(job_id, "script_generation", {
+                        "script": script,
+                        "subject": req.videoSubject,
+                        "model": req.aiModel,
+                        "voice": req.voice
+                    })
+                    next_step = "search_terms"
+
+            if next_step == "search_terms":
+                # Check if we can resume from saved terms
+                if resume and script:
+                    terms_outputs = resume_manager.get_step_outputs(job_id, "search_terms")
+                    if terms_outputs:
+                        terms = terms_outputs.get("terms")
+                        if terms:
+                            _log_job("search_terms: using saved terms from resume")
+                            next_step = "stock_download"
+
+                if not terms and script:
+                    _check_cancel(job_id)
+                    _update_job(job_id, step="search_terms")
+                    terms = get_search_terms(req.videoSubject, 10, script, req.aiModel)
+                    _log_job(f"search_terms: {len(terms)} terms -> {terms[:5]}{'...' if len(terms) > 5 else ''}")
+                    
+                    save_step_completion(job_id, "search_terms", {
+                        "terms": terms,
+                        "subject": req.videoSubject
+                    })
+                    next_step = "stock_download"
+
+            # Continue with other steps...
+            if next_step == "stock_download":
+                if resume:
+                    stock_outputs = resume_manager.get_step_outputs(job_id, "stock_download")
+                    if stock_outputs:
+                        saved_paths = stock_outputs.get("video_paths", [])
+                        video_paths = [p for p in saved_paths if Path(p).exists()]
+                        if video_paths:
+                            _log_job(f"stock_download: using {len(video_paths)} saved videos from resume")
+                            next_step = "tts"
+
+                if not video_paths and terms:
+                    _check_cancel(job_id)
+                    _update_job(job_id, step="stock_download")
+                    
+                    for term in terms:
+                        urls = search_for_stock_videos(term, os.getenv("PEXELS_API_KEY", ""), 5, 4)
+                        for url in urls[:2]:
+                            _check_cancel(job_id)
+                            try:
+                                local_path = mp_save_video(url, directory="../temp")
+                                video_paths.append(local_path)
+                            except Exception:
+                                continue
+                                
+                    if not video_paths:
+                        raise RuntimeError("No stock videos downloaded")
+                    
+                    _log_job(f"stock_download: downloaded {len(video_paths)} clips")
+                    save_step_completion(job_id, "stock_download", {
+                        "video_paths": video_paths,
+                        "terms_used": terms
+                    }, video_paths)
+                    next_step = "tts"
+
+            if next_step == "tts":
+                if resume:
+                    tts_outputs = resume_manager.get_step_outputs(job_id, "tts")
+                    if tts_outputs:
+                        tts_path = tts_outputs.get("tts_path")
+                        sentences = tts_outputs.get("sentences", [])
+                        if tts_path and Path(tts_path).exists():
+                            _log_job("tts: using saved TTS from resume")
+                            next_step = "subtitles"
+
+                if not tts_path and script:
+                    _check_cancel(job_id)
+                    _update_job(job_id, step="tts")
+                    sentences = [s for s in script.split(". ") if s]
+                    _log_job(f"tts: generating {len(sentences)} audio segments using voice={req.voice}")
+                    
+                    audio_clips = []
+                    temp_dir = Path("../temp")
+                    temp_dir.mkdir(exist_ok=True)
+                    
+                    temp_audio_files = []
+                    for s in sentences:
+                        _check_cancel(job_id)
+                        current_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
+                        tts(s, req.voice, filename=str(current_tts_path))
+                        audio_clips.append(AudioFileClip(str(current_tts_path)))
+                        temp_audio_files.append(str(current_tts_path))
+
+                    if not audio_clips:
+                        raise RuntimeError("No audio clips generated")
+
+                    tts_path = str(temp_dir / f"{uuid.uuid4()}.mp3")
+                    concatenate_audioclips(audio_clips).write_audiofile(tts_path)
+                    temp_audio_files.append(tts_path)
+                    
+                    _log_job(f"tts: concatenated audio -> {tts_path}")
+                    save_step_completion(job_id, "tts", {
+                        "tts_path": tts_path,
+                        "sentences": sentences,
+                        "voice": req.voice
+                    }, temp_audio_files)
+                    next_step = "subtitles"
+
+            if next_step == "subtitles":
+                if resume:
+                    sub_outputs = resume_manager.get_step_outputs(job_id, "subtitles")
+                    if sub_outputs:
+                        subtitles_path = sub_outputs.get("subtitles_path")
+                        if subtitles_path and Path(subtitles_path).exists():
+                            _log_job("subtitles: using saved subtitles from resume")
+                            next_step = "compose_video"
+
+                if not subtitles_path:
+                    _check_cancel(job_id)
+                    _update_job(job_id, step="subtitles")
+                    
+                    # Ensure we have sentences
+                    if not sentences and script:
+                        sentences = [s for s in script.split(". ") if s]
+                    
+                    # Generate subtitles based on request
+                    if req.useTikTokSubtitles:
+                        # Use enhanced TikTok-style subtitles with optional Whisper timing
+                        if req.useWhisperEnhanced:
+                            from vendors.moneyprinter.whisper_enhanced_subtitles import generate_enhanced_subtitles_with_optional_whisper
+                            
+                            subtitle_config = {
+                                'font_family': req.subtitleFont,
+                                'font_size': req.subtitleFontSize,
+                                'default_color': req.subtitleDefaultColor,
+                                'highlight_color': req.subtitleHighlightColor,
+                                'stroke_color': req.subtitleStrokeColor,
+                                'background_color': req.subtitleBackgroundColor,
+                                'stroke_width': req.subtitleStrokeWidth,
+                                'background_opacity': req.subtitleBackgroundOpacity,
+                                'padding_x': req.subtitlePaddingX,
+                                'padding_y': req.subtitlePaddingY,
+                                'position': req.subtitlesPosition
+                            }
+                            
+                            # Generate audio clips for Whisper processing
+                            audio_clips = []
+                            temp_dir = Path("../temp")
+                            temp_audio_files = []
+                            for s in sentences:
+                                current_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
+                                tts(s, req.voice, filename=str(current_tts_path))
+                                audio_clips.append(AudioFileClip(str(current_tts_path)))
+                                temp_audio_files.append(str(current_tts_path))
+                            
+                            # Create concatenated audio file for Whisper
+                            tts_path = str(temp_dir / f"{uuid.uuid4()}.mp3")
+                            concatenate_audioclips(audio_clips).write_audiofile(tts_path)
+                            temp_audio_files.append(tts_path)
+                            
+                            subtitles_path = generate_enhanced_subtitles_with_optional_whisper(
+                                sentences=sentences,
+                                audio_clips=audio_clips,
+                                audio_path=tts_path,
+                                use_whisper=True,
+                                whisper_model=req.whisperModel,
+                                config=subtitle_config,
+                                video_size=(1080, 1920)
+                            )
+                            _log_job(f"subtitles: using Whisper-enhanced TikTok-style subtitles -> {subtitles_path}")
+                        else:
+                            from vendors.moneyprinter.enhanced_subtitles import generate_enhanced_subtitles, SubtitleConfig
+                            
+                            subtitle_config = SubtitleConfig(
+                                font_family=req.subtitleFont,
+                                font_size=req.subtitleFontSize,
+                                default_color=req.subtitleDefaultColor,
+                                highlight_color=req.subtitleHighlightColor,
+                                stroke_color=req.subtitleStrokeColor,
+                                background_color=req.subtitleBackgroundColor,
+                                stroke_width=req.subtitleStrokeWidth,
+                                background_opacity=req.subtitleBackgroundOpacity,
+                                padding_x=req.subtitlePaddingX,
+                                padding_y=req.subtitlePaddingY,
+                                position=req.subtitlesPosition
+                            )
+                            
+                            # Generate audio clips for enhanced subtitles
+                            audio_clips = []
+                            temp_dir = Path("../temp")
+                            for s in sentences:
+                                current_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
+                                tts(s, req.voice, filename=str(current_tts_path))
+                                audio_clips.append(AudioFileClip(str(current_tts_path)))
+                            
+                            subtitles_path = generate_enhanced_subtitles(
+                                sentences=sentences,
+                                audio_clips=audio_clips,
+                                config=subtitle_config,
+                                video_size=(1080, 1920)
+                            )
+                            _log_job(f"subtitles: using TikTok-style enhanced subtitles -> {subtitles_path}")
+                    else:
+                        # Create audio clips for traditional subtitles
+                        audio_clips = []
+                        temp_dir = Path("../temp")
+                        for s in sentences:
+                            current_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
+                            tts(s, req.voice, filename=str(current_tts_path))
+                            audio_clips.append(AudioFileClip(str(current_tts_path)))
+                        
+                        # Ensure tts_path is not None before calling generate_subtitles
+                        if not tts_path:
+                            raise RuntimeError("TTS path is required for subtitle generation")
+                        subtitles_path = generate_subtitles(audio_path=str(tts_path), sentences=sentences, audio_clips=audio_clips, voice=req.voice)
+                        _log_job(f"subtitles: using traditional subtitles -> {subtitles_path}")
+                    
+                    save_step_completion(job_id, "subtitles", {
+                        "subtitles_path": subtitles_path,
+                        "subtitle_type": "enhanced" if req.useTikTokSubtitles else "traditional"
+                    }, [subtitles_path] if subtitles_path else [])
+                    next_step = "compose_video"
+
+            if next_step == "compose_video":
+                _check_cancel(job_id)
+                _update_job(job_id, step="compose_video")
+                _log_job(f"compose_video: threads={req.threads or 2} useGPU={req.useGPU}")
+                
+                if tts_path and video_paths:
+                    temp_audio = AudioFileClip(tts_path)
+                    combined_video_path = combine_videos(video_paths, int(temp_audio.duration), 5, req.threads or 2, req.useGPU)
+                    _log_job(f"compose_video: combined video -> {combined_video_path}")
+
+                    try:
+                        final_video_path = generate_video(
+                            combined_video_path,
+                            tts_path,
+                            subtitles_path or "",
+                            req.threads or 2,
+                            req.subtitlesPosition,
+                            req.color or "#FFFF00",
+                            req.useGPU,
+                        )
+                        
+                        # Optional background music
+                        if req.useMusic:
+                            from vendors.moneyprinter.utils import choose_random_song
+                            song_path = choose_random_song()
+                            codec_settings = {"codec": "h264_nvenc" if req.useGPU else "libx264", "audio_codec": "aac"}
+                            video_clip_path = Path(str(final_video_path))
+                            if not video_clip_path.is_absolute():
+                                video_clip_path = Path("..") / str(final_video_path)
+                            video_clip = VideoFileClip(str(video_clip_path))
+                            original_duration = video_clip.duration
+                            original_audio = video_clip.audio
+                            song_clip = AudioFileClip(song_path).with_fps(44100).with_volume_scaled(0.1)
+                            comp_audio = CompositeAudioClip([original_audio, song_clip])
+                            video_clip = (
+                                video_clip
+                                .with_audio(comp_audio)
+                                .with_fps(30)
+                                .with_duration(original_duration)
+                            )
+                            video_clip.write_videofile(str(video_clip_path), threads=req.threads or 1, **codec_settings)
+
+                        if not JOB_CONTROLS[job_id]["cancel"].is_set():
+                            duration_seconds = int(time.time() - start_time)
+                            _log_job(f"done: final video -> {final_video_path} (took {duration_seconds}s)")
+                            _update_job(job_id, status="done", result={"output": str(final_video_path), "subtitles": subtitles_path}, duration_seconds=duration_seconds)
+                            # Clean up resume state on successful completion
+                            resume_manager.cleanup_resume_state(job_id)
+                            
+                    except Exception as ge:
+                        import traceback
+                        tb = traceback.format_exc()
+                        _log_job(f"compose_video: generate_video failed: {ge}")
+                        _log_job(f"traceback: {tb}")
+                        raise
+                else:
+                    raise RuntimeError("Missing required files for video composition")
+
+    except Exception as e:
+        duration_seconds = int(time.time() - start_time)
+        if str(e) == "cancelled":
+            _update_job(job_id, status="cancelled", error="cancelled", duration_seconds=duration_seconds)
+        else:
+            # Save error info but preserve resume state for retry
+            hint = ""
+            msg = str(e)
+            if any(k in msg.lower() for k in ["font", "pillow", "textclip"]):
+                hint = " (possible font/Pillow/TextClip configuration issue)"
+            _log_job(f"error: {msg}{hint}")
+            _update_job(job_id, status="error", error=msg, duration_seconds=duration_seconds)
 
 
 @app.post("/api/jobs/{job_id}/cancel")
@@ -1362,6 +1966,8 @@ def login(req: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     salt = user.get("password_salt")
     expected = user.get("password_hash")
+    if not salt or not expected:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
     if _hash_password(req.password, salt) != expected:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     cookie_val = create_session_cookie(user["id"])
@@ -1438,7 +2044,12 @@ async def websocket_job_updates(websocket: WebSocket, job_id: str):
 
 def _is_allowed_path(p: Path) -> bool:
     p_resolved = p.resolve()
-    allowed_roots = [DEFAULT_OUTPUT_DIR.resolve(), (ROOT / "brainrot_output").resolve()]
+    allowed_roots = [
+        DEFAULT_OUTPUT_DIR.resolve(), 
+        (ROOT / "brainrot_output").resolve(),
+        # Include old moneyprinter temp directory for backwards compatibility
+        (VENDOR_ROOT / "moneyprinter" / "cat-video-creator" / "output").resolve()
+    ]
     for root in allowed_roots:
         try:
             if p_resolved.is_relative_to(root):
@@ -1453,10 +2064,50 @@ def _is_allowed_path(p: Path) -> bool:
 @app.get("/api/download")
 def download_file(path: str):
     file_path = Path(path)
+    
+    # If the path doesn't exist as-is, try to resolve it relative to allowed directories
     if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
+        # Try to find the file in allowed directories
+        allowed_roots = [DEFAULT_OUTPUT_DIR.resolve(), (ROOT / "brainrot_output").resolve()]
+        
+        # Also check the old moneyprinter temp directory for backwards compatibility
+        moneyprinter_temp = VENDOR_ROOT / "moneyprinter" / "cat-video-creator" / "output"
+        if moneyprinter_temp.exists():
+            allowed_roots.append(moneyprinter_temp.resolve())
+        
+        found_path = None
+        for root in allowed_roots:
+            # Try absolute path from root
+            candidate = root / Path(path).name
+            if candidate.exists() and candidate.is_file():
+                found_path = candidate
+                break
+            
+            # Try relative path from root
+            try:
+                candidate = root / path
+                if candidate.exists() and candidate.is_file():
+                    found_path = candidate
+                    break
+            except Exception:
+                continue
+            
+            # Handle paths like "cat-video-creator/output/file.mp4"
+            if "output" in path:
+                filename = Path(path).name
+                candidate = root / filename
+                if candidate.exists() and candidate.is_file():
+                    found_path = candidate
+                    break
+        
+        if found_path:
+            file_path = found_path
+        else:
+            raise HTTPException(status_code=404, detail="File not found")
+    
     if not _is_allowed_path(file_path):
         raise HTTPException(status_code=403, detail="Access denied")
+    
     media_type = "application/octet-stream"
     if file_path.suffix.lower() == ".mp4":
         media_type = "video/mp4"
@@ -1492,6 +2143,48 @@ def list_videos(dir: str):
         raise HTTPException(status_code=500, detail=f"Failed to list videos: {e}")
 
     return {"files": files}
+
+
+@app.delete("/api/debug/jobs")
+def clear_all_jobs():
+    """Debug endpoint to clear all jobs from the database."""
+    try:
+        job_store = get_job_store()
+        # Get count before clearing
+        stats = job_store.get_stats()
+        total_jobs = stats.get("total_jobs", 0)
+        
+        # Clear all jobs (this is a destructive operation)
+        with job_store._get_connection() as conn:
+            conn.execute("DELETE FROM jobs")
+            conn.commit()
+        
+        # Also clear the in-memory job cache
+        JOBS.clear()
+        
+        return {
+            "message": f"Cleared {total_jobs} jobs from database",
+            "cleared_jobs": total_jobs
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear jobs: {e}")
+
+
+@app.get("/api/debug/jobs")  
+def get_all_jobs_debug():
+    """Debug endpoint to see all jobs in the database."""
+    try:
+        job_store = get_job_store()
+        jobs = job_store.list_jobs(limit=1000)  # Get more jobs for debugging
+        stats = job_store.get_stats()
+        
+        return {
+            "jobs": jobs,
+            "stats": stats,
+            "database_path": str(job_store.db_path)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get jobs: {e}")
 
 
 if __name__ == "__main__":

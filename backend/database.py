@@ -15,8 +15,10 @@ from contextlib import contextmanager
 
 # Database configuration
 DB_URL = os.getenv("DATABASE_URL", "")
-# Resolve to absolute path to avoid cwd-related discrepancies during tests
-DB_PATH = Path(os.getenv("DATABASE_PATH", "jobs.db")).resolve()
+# Always resolve database path relative to the project root to avoid cwd-related discrepancies
+PROJECT_ROOT = Path(__file__).resolve().parents[1]  # Go up from backend/ to project root
+DEFAULT_DB_PATH = PROJECT_ROOT / "jobs.db"
+DB_PATH = Path(os.getenv("DATABASE_PATH", str(DEFAULT_DB_PATH))).resolve()
 
 
 class JobStore:
@@ -46,8 +48,11 @@ class JobStore:
                     result_data TEXT,
                     error_message TEXT,
                     logs TEXT,
+                    resume_data TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    started_at TIMESTAMP,
+                    duration_seconds INTEGER
                 )
             """)
             
@@ -58,6 +63,11 @@ class JobStore:
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at)
             """)
+            
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_jobs_workflow ON jobs(workflow)
+            """)
+            
             # Users table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -68,9 +78,25 @@ class JobStore:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            # Best-effort add user_id to jobs if missing (older DBs)
+            
+            # Best-effort add columns if missing (older DBs)
             try:
                 conn.execute("ALTER TABLE jobs ADD COLUMN user_id TEXT")
+            except Exception:
+                pass
+                
+            try:
+                conn.execute("ALTER TABLE jobs ADD COLUMN resume_data TEXT")
+            except Exception:
+                pass
+                
+            try:
+                conn.execute("ALTER TABLE jobs ADD COLUMN started_at TIMESTAMP")
+            except Exception:
+                pass
+                
+            try:
+                conn.execute("ALTER TABLE jobs ADD COLUMN duration_seconds INTEGER")
             except Exception:
                 pass
             
@@ -126,12 +152,18 @@ class JobStore:
                         set_clauses.append("error_message = ?")
                         values.append(str(value) if value else None)
                         continue
+                    elif field == "resume_data" and isinstance(value, dict):
+                        set_clauses.append("resume_data = ?")
+                        values.append(json.dumps(value))
+                        continue
                     
                     # Map field names to column names
                     column_map = {
                         "status": "status",
                         "step": "step",
-                        "logs": "logs"
+                        "logs": "logs",
+                        "started_at": "started_at",
+                        "duration_seconds": "duration_seconds"
                     }
                     
                     if field in column_map:
@@ -173,6 +205,11 @@ class JobStore:
                 job["request_data"] = json.loads(job["request_data"]) if job["request_data"] else {}
             except (json.JSONDecodeError, TypeError):
                 job["request_data"] = {}
+                
+            try:
+                job["resume_data"] = json.loads(job["resume_data"]) if job["resume_data"] else None
+            except (json.JSONDecodeError, TypeError):
+                job["resume_data"] = None
             
             # Rename fields to match API format
             job["error"] = job["error_message"]
@@ -237,6 +274,62 @@ class JobStore:
             row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
             return dict(row) if row else None
 
+    def get_resumable_jobs(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get jobs that can be resumed (failed/cancelled with resume data)."""
+        with self._get_connection() as conn:
+            params: list[Any] = []
+            where = ["status IN ('error', 'cancelled')", "resume_data IS NOT NULL"]
+            
+            if user_id:
+                where.append("user_id = ?")
+                params.append(user_id)
+                
+            where_clause = " WHERE " + " AND ".join(where)
+            query = f"SELECT * FROM jobs{where_clause} ORDER BY updated_at DESC"
+            
+            rows = conn.execute(query, tuple(params)).fetchall()
+            
+            jobs = []
+            for row in rows:
+                job = dict(row)
+                try:
+                    job["logs"] = json.loads(job["logs"]) if job["logs"] else []
+                except (json.JSONDecodeError, TypeError):
+                    job["logs"] = []
+                
+                try:
+                    job["result"] = json.loads(job["result_data"]) if job["result_data"] else None
+                except (json.JSONDecodeError, TypeError):
+                    job["result"] = None
+                    
+                try:
+                    job["resume_data"] = json.loads(job["resume_data"]) if job["resume_data"] else None
+                except (json.JSONDecodeError, TypeError):
+                    job["resume_data"] = None
+                
+                job["error"] = job["error_message"]
+                
+                # Clean up internal fields but keep resume_data
+                for field in ["result_data", "error_message", "request_data"]:
+                    job.pop(field, None)
+                
+                jobs.append(job)
+            
+            return jobs
+
+    def mark_job_resumed(self, job_id: str) -> None:
+        """Mark a job as resumed (clear error state, set to running)."""
+        with self.lock:
+            with self._get_connection() as conn:
+                conn.execute("""
+                    UPDATE jobs 
+                    SET status = 'running', 
+                        error_message = NULL,
+                        updated_at = CURRENT_TIMESTAMP 
+                    WHERE id = ?
+                """, (job_id,))
+                conn.commit()
+    
     def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
         with self._get_connection() as conn:
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()

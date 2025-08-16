@@ -1,26 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/components/ui/card'
-import { Badge } from '@/components/components/ui/badge'
-import { Loader2, BadgeCheck } from 'lucide-react'
 import MoneyPrinterForm from '@/components/components/moneyprinter-form'
 import PreviewPanel from '@/components/components/preview-panel'
-import JobPanel from '@/components/components/job-panel'
-
-type Job = {
-  status: string
-  step?: string
-  result?: any
-  error?: string
-}
+import { MultiJobPanel } from '@/components/MultiJobPanel'
+import ResultPanel from '@/components/ResultPanel'
+import { useJobManager } from '@/hooks/useJobManager'
+import { type ManagedJob } from '@/lib/jobManager'
 
 const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
 export default function CreatorPage() {
   const [busy, setBusy] = useState(false)
-  const [jobId, setJobId] = useState<string | null>(null)
-  const [job, setJob] = useState<Job | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
   const [aiModel, setAiModel] = useState<string>('gemini-2.0-flash')
   const [models, setModels] = useState<string[]>([])
   const [voices, setVoices] = useState<string[]>([])
@@ -28,23 +19,28 @@ export default function CreatorPage() {
   const [subtitleColor, setSubtitleColor] = useState<string>('#FFFF00')
   const [subtitlePosition, setSubtitlePosition] = useState<string>('center,bottom')
   const [subtitlePositionRaw, setSubtitlePositionRaw] = useState<string>('center,bottom')
-  const wsRef = useRef<WebSocket | null>(null)
-  const pollRef = useRef<any>(null)
-  const [lastRun, setLastRun] = useState<{ workflow: 'moneyprinter'; payload: any } | null>(null)
 
-  // Persistence helpers
-  function saveLastJob(partial: Partial<{ jobId: string; status: string; startedAt: number; payload: any }>) {
-    try {
-      const prev = JSON.parse(localStorage.getItem('creator:lastJob') || '{}')
-      const next = { ...prev, ...partial, workflow: 'moneyprinter' }
-      localStorage.setItem('creator:lastJob', JSON.stringify(next))
-    } catch {}
-  }
-  function saveLastResult(result: any) {
-    try {
-      localStorage.setItem('creator:lastResult', JSON.stringify(result || {}))
-    } catch {}
-  }
+  const jobManager = useJobManager()
+
+  // Clean up any legacy job data on component mount
+  useEffect(() => {
+    const cleanupLegacy = async () => {
+      try {
+        // Clean up legacy localStorage entries
+        await jobManager.cleanupLegacyJobs()
+        
+        // Validate all current jobs to remove any 404s
+        const removedCount = await jobManager.validateAllJobs()
+        if (removedCount > 0) {
+          console.log(`CreatorPage: Cleaned up ${removedCount} non-existent jobs`)
+        }
+      } catch (e) {
+        console.warn('Failed to cleanup legacy jobs:', e)
+      }
+    }
+    
+    cleanupLegacy()
+  }, [])
 
   useEffect(() => {
     (async () => {
@@ -58,26 +54,6 @@ export default function CreatorPage() {
       } catch {
         // ignore
       }
-      // Try restore previous session
-      try {
-        const lastJob = JSON.parse(localStorage.getItem('creator:lastJob') || 'null') as any
-        const lastResult = JSON.parse(localStorage.getItem('creator:lastResult') || 'null') as any
-        if (lastResult?.output) {
-          const dl = `${API}/api/download?path=${encodeURIComponent(lastResult.output)}`
-          setPreviewUrl(dl)
-        } else if (lastResult?.output_dir) {
-          // will be resolved by handlePreviewForJob when job finishes; best-effort here
-        }
-        if (lastJob?.jobId) {
-          setJobId(lastJob.jobId)
-          // Reconnect if not terminal
-          const s = String(lastJob.status || '').toLowerCase()
-          const isTerminal = ['done', 'error', 'cancelled'].includes(s)
-          if (!isTerminal) {
-            connectJobUpdates(lastJob.jobId)
-          }
-        }
-      } catch {}
     })()
   }, [])
 
@@ -109,7 +85,12 @@ export default function CreatorPage() {
       subtitlePaddingX: Number(form.get('subtitlePaddingX') || 16),
       subtitlePaddingY: Number(form.get('subtitlePaddingY') || 12),
     }
-    if (!payload.videoSubject) return toast.error('Subject is required')
+    
+    if (!payload.videoSubject) {
+      toast.error('Subject is required')
+      return
+    }
+
     setBusy(true)
     try {
       const res = await fetch(`${API}/api/moneyprinter/generate`, {
@@ -119,11 +100,11 @@ export default function CreatorPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail || 'Request failed')
-      setJobId(data.jobId)
-      toast.success('Job started')
-      connectJobUpdates(data.jobId)
-      setLastRun({ workflow: 'moneyprinter', payload })
-      saveLastJob({ jobId: data.jobId, status: 'started', startedAt: Date.now(), payload })
+      
+      // Add job to the manager
+      console.log('CreatorPage: Adding job to manager', data.jobId, payload);
+      jobManager.addJob(data.jobId, 'moneyprinter', payload)
+      toast.success('Job started successfully')
     } catch (e: any) {
       toast.error(e.message)
     } finally {
@@ -131,220 +112,98 @@ export default function CreatorPage() {
     }
   }
 
-  async function handlePreviewForJob(data: Job) {
-    try {
-      if (!data?.result) return
-      if (typeof (data as any).result.output === 'string') {
-        const path = (data as any).result.output
-        const dl = `${API}/api/download?path=${encodeURIComponent(path)}`
-        setPreviewUrl(dl)
-      } else if (typeof (data as any).result.output_dir === 'string') {
-        const dir = (data as any).result.output_dir
-        const listRes = await fetch(`${API}/api/list-videos?dir=${encodeURIComponent(dir)}`)
-        const listJson = await listRes.json()
-        const files: Array<{ path: string; mtime: number }> = Array.isArray(listJson?.files) ? listJson.files : []
-        files.sort((a, b) => b.mtime - a.mtime)
-        if (files[0]?.path) {
-          const dl = `${API}/api/download?path=${encodeURIComponent(files[0].path)}`
-          setPreviewUrl(dl)
-        }
-      }
-    } catch {
-      // ignore
-    }
+  const handleViewResult = (job: ManagedJob) => {
+    setSelectedResult(job)
   }
 
-  function connectJobUpdates(id: string) {
-    try { if (wsRef.current) { wsRef.current.close() } } catch {}
-    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-    setJob(null)
-    setPreviewUrl(null)
-
-    const wsUrl = `${API.replace('http', 'ws')}/ws/jobs/${id}`
-    try {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
-      ws.onmessage = async (event) => {
-        try {
-          const data = JSON.parse(event.data) as Job
-          setJob(data)
-          if (data.status === 'done') {
-            await handlePreviewForJob(data)
-          }
-          // persist status
-          saveLastJob({ jobId: id, status: data.status })
-          // persist result when available
-          if ((data as any)?.result) {
-            saveLastResult((data as any).result)
-          }
-        } catch {}
-        try { ws.send('ack') } catch {}
-      }
-      ws.onopen = () => {
-        try { ws.send('hello') } catch {}
-      }
-      ws.onerror = () => {
-        startPollingFallback(id)
-      }
-      ws.onclose = () => {
-        if (!job || (job.status !== 'done' && job.status !== 'error' && job.status !== 'cancelled')) {
-          startPollingFallback(id)
-        }
-      }
-    } catch {
-      startPollingFallback(id)
-    }
-  }
-
-  function startPollingFallback(id: string) {
-    if (pollRef.current) return
-    pollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`${API}/api/jobs/${id}`)
-        const data = (await res.json()) as Job
-        setJob(data)
-        if (data.status === 'done') {
-          await handlePreviewForJob(data)
-        }
-        saveLastJob({ jobId: id, status: data.status })
-        if ((data as any)?.result) {
-          saveLastResult((data as any).result)
-        }
-        if (data.status === 'done' || data.status === 'error' || data.status === 'cancelled') {
-          clearInterval(pollRef.current)
-          pollRef.current = null
-        }
-      } catch {
-        clearInterval(pollRef.current)
-        pollRef.current = null
-      }
-    }, 1500)
-  }
-
-  useEffect(() => {
-    return () => {
-      try { if (wsRef.current) wsRef.current.close() } catch {}
-      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
-    }
-  }, [])
-
-  const stepOrderMoneyPrinterBase = [
-    'validate_env',
-    'script_generation',
-    'search_terms',
-    'stock_download',
-    'tts',
-    'subtitles',
-    'compose_video',
-    'done',
-  ] as const
-
-  const progress = useMemo(() => {
-    const current = (job?.step || (job?.status === 'done' ? 'done' : 'init')) as string
-    const hasResult = !!previewUrl || !!(job as any)?.result?.output || !!(job as any)?.result?.output_dir
-    const includeFetchMusic = !!lastRun?.payload?.useMusic && !!lastRun?.payload?.zipUrl
-    const steps: string[] = includeFetchMusic ? ([ 'validate_env', 'fetch_music', ...stepOrderMoneyPrinterBase.slice(1) ]) : ([...stepOrderMoneyPrinterBase])
-    const idxBase = steps.indexOf(current)
-    const idx = hasResult || job?.status === 'done' ? steps.length - 1 : Math.max(0, idxBase - 1)
-    return steps.map(s => ({ 
-      key: s, 
-      label: labelForStep(s), 
-      done: idx >= steps.indexOf(s),
-      active: !hasResult && job?.status !== 'done' && s === current
-    }))
-  }, [job?.step, job?.status, previewUrl, lastRun?.payload])
-
-  function labelForStep(step: string) {
-    switch (step) {
-      case 'validate_env': return 'Validate Env'
-      case 'fetch_music': return 'Fetch Music'
-      case 'script_generation': return 'Script Generation'
-      case 'search_terms': return 'Search Terms'
-      case 'stock_download': return 'Stock Download'
-      case 'tts': return 'TTS'
-      case 'subtitles': return 'Subtitles'
-      case 'compose_video': return 'Compose Video'
-      case 'done': return 'Done'
-      default: return step
-    }
+  const handleCloseResult = () => {
+    setSelectedResult(null)
   }
 
   return (
-    <div className="container-page fade-in max-w-[1760px]">
+    <div className="container-page-wide fade-in">
       <div aria-live="polite" className="sr-only">
-        {job ? `Job ${jobId || ''} status ${job.status}${job.step ? `, step ${job.step}` : ''}` : 'No active job'}
+        {jobManager.hasActiveJobs() 
+          ? `${jobManager.getActiveJobs().length} active jobs running`
+          : 'No active jobs'
+        }
       </div>
 
-      <div className="slide-in">
-        <div className="grid grid-cols-12 gap-4 lg:gap-5 xl:gap-6 items-start grid-layout-fix">
-          <div className="col-span-12 lg:col-span-4 xl:col-span-4 2xl:col-span-4">
-            <MoneyPrinterForm
-              models={models}
-              aiModel={aiModel}
-              onChangeAiModel={setAiModel}
-              voices={voices}
-              voice={voice}
-              onChangeVoice={setVoice}
-              subtitleColor={subtitleColor}
-              onChangeSubtitleColor={setSubtitleColor}
-              subtitlesPosition={subtitlePosition}
-              apiBase={API}
-              busy={busy}
-              onSubmit={startMoneyPrinter}
-              formId="moneyprinter-form"
-              onReset={() => {
-                setSubtitleColor('#FFFF00')
-                setSubtitlePosition('center,bottom')
-                setVoice('af_bella')
-              }}
-            />
-          </div>
+      {/* Page Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+          AI Video Generator
+        </h1>
+        <p className="text-muted-foreground mt-2">
+          Create engaging videos with AI-generated content and customizable subtitles
+        </p>
+      </div>
 
-          <div className="col-span-12 lg:col-span-3 xl:col-span-3 2xl:col-span-3 lg:sticky lg:top-6 self-start space-y-4" aria-label="Preview and subtitle controls">
-            <PreviewPanel
-              position={subtitlePosition.replace(',', '-') as any}
-              onChangePosition={(p) => {
-                const grid = String(p).replace('-', ',')
-                setSubtitlePosition(grid)
-                setSubtitlePositionRaw(grid)
-              }}
-              previewUrl={previewUrl}
-              color={subtitleColor}
-              positionRaw={subtitlePositionRaw}
-              onChangePositionRaw={(raw) => setSubtitlePositionRaw(raw)}
-            />
-          </div>
+      <div className="slide-in space-y-8">
+        {/* Job Queue - Show only when there are jobs */}
+        {jobManager.jobs.length > 0 && (
+          <MultiJobPanel
+            jobs={jobManager.jobs}
+            onViewResult={handleViewResult}
+            onRemoveJob={jobManager.removeJob}
+            onClearCompleted={jobManager.clearCompletedJobs}
+          />
+        )}
 
-          <div className="col-span-12 lg:col-span-5 xl:col-span-4 2xl:col-span-4 lg:sticky lg:top-6 self-start">
-            <JobPanel
-              jobId={jobId}
-              status={job?.status}
-              steps={progress}
-              error={job?.error}
-            />
+        {/* Result Panel - Show when a result is selected */}
+        {selectedResult && (
+          <ResultPanel
+            job={selectedResult}
+            onClose={handleCloseResult}
+          />
+        )}
+
+        {/* Main Content Grid - Hide when showing results */}
+        {!selectedResult && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+            {/* Form Section - Left Side */}
+            <div className="lg:col-span-4 xl:col-span-4 space-y-6">
+              <MoneyPrinterForm
+                models={models}
+                aiModel={aiModel}
+                onChangeAiModel={setAiModel}
+                voices={voices}
+                voice={voice}
+                onChangeVoice={setVoice}
+                subtitleColor={subtitleColor}
+                onChangeSubtitleColor={setSubtitleColor}
+                subtitlesPosition={subtitlePosition}
+                apiBase={API}
+                busy={busy}
+                onSubmit={startMoneyPrinter}
+                formId="moneyprinter-form"
+                onReset={() => {
+                  setSubtitleColor('#FFFF00')
+                  setSubtitlePosition('center,bottom')
+                  setVoice('af_bella')
+                }}
+              />
+            </div>
+
+            {/* Right Side - Preview */}
+            <div className="lg:col-span-8 xl:col-span-8 space-y-6">
+              <div className="space-y-4" aria-label="Preview and subtitle controls">
+                <PreviewPanel
+                  position={subtitlePosition.replace(',', '-') as any}
+                  onChangePosition={(p) => {
+                    const grid = String(p).replace('-', ',')
+                    setSubtitlePosition(grid)
+                    setSubtitlePositionRaw(grid)
+                  }}
+                  previewUrl={undefined} // We'll handle preview in the result panel now
+                  color={subtitleColor}
+                  positionRaw={subtitlePositionRaw}
+                  onChangePositionRaw={(raw) => setSubtitlePositionRaw(raw)}
+                />
+              </div>
+            </div>
           </div>
-          {previewUrl ? (
-            <Card className="col-span-12 lg:col-span-4 xl:col-span-3 lg:sticky lg:top-6 self-start enhanced-card fade-in">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <div className="size-5 rounded bg-gradient-to-r from-green-400 to-blue-500 flex items-center justify-center">
-                    <BadgeCheck className="size-3 text-white" />
-                  </div>
-                  Result
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <video src={previewUrl} controls className="video-frame w-full max-h-[60vh] lg:max-h-[75vh]" />
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-muted-foreground">Video ready</span>
-                    <a className="muted-link font-medium" href={previewUrl} download target="_blank" rel="noreferrer">Download video</a>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
+        )}
       </div>
     </div>
   )

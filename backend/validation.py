@@ -195,10 +195,14 @@ def validate_subtitle_font(font: str) -> str:
     valid_fonts = [
         "Arial", "Arial-Bold", "Arial-Black",
         "Helvetica", "Helvetica-Bold", "Helvetica-Light",
-        "Times-Roman", "Times-Bold", "Times-Italic",
-        "Courier", "Courier-Bold",
+        "Times", "Times-Roman", "Times-Bold", "Times-Italic",
+        "Courier", "Courier-Bold", "Courier-New",
         "Impact", "Verdana", "Tahoma",
-        "Georgia", "Comic-Sans-MS",
+        "Georgia", "Comic-Sans-MS", "Comic Sans MS",
+        "Montserrat", "Roboto", "Open Sans", "Open-Sans",
+        "Poppins", "Nunito", "Source Sans Pro", "Source-Sans-Pro",
+        "System", "SF Pro Display", "SF-Pro-Display",
+        "Segoe UI", "Segoe-UI",
         # Allow user-specified fonts but sanitize
     ]
     

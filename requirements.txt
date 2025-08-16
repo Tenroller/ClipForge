@@ -8,7 +8,7 @@ fastapi==0.115.14
 starlette==0.41.3
 
 # Video processing
-moviepy==2.2.1
+moviepy==2.1.2
 imageio==2.37.0
 imageio-ffmpeg==0.6.0
 opencv-python==4.11.0.86
@@ -24,7 +24,7 @@ python-dotenv==1.1.1
 termcolor==2.4.0
 tqdm==4.67.1
 psutil==7.0.0
-Pillow==11.3.0
+Pillow>=10.4.0,<11.0
 colorama==0.4.6
 
 # AI/LLM optional
@@ -34,6 +34,10 @@ google-api-python-client
 oauth2client
 # Google GenAI (newer SDK used by some modules)
 google-genai==1.24.0
+
+# Enhanced ASR for better word-level timestamps
+stable-ts==2.17.5
+faster-whisper==1.1.0
 
 # Brainrot deps
 yt-dlp==2025.6.30

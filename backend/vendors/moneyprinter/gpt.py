@@ -96,7 +96,13 @@ def generate_script(video_subject: str, paragraph_number: int, ai_model: str, vo
     # Build prompt
     
     if customPrompt:
-        prompt = customPrompt
+        # Ensure English output even with custom prompts
+        prompt = f"""
+        {customPrompt}
+        
+        IMPORTANT: You must write the script in English only, regardless of any language mentioned in the above prompt or subject.
+        Generate exactly {paragraph_number} paragraphs for the subject: {video_subject}
+        """
     else:
         prompt = """
             Generate a script for a video, depending on the subject of the video.
@@ -113,7 +119,7 @@ def generate_script(video_subject: str, paragraph_number: int, ai_model: str, vo
             Obviously, the script should be related to the subject of the video.
 
             YOU MUST NOT INCLUDE ANY TYPE OF MARKDOWN OR FORMATTING IN THE SCRIPT, NEVER USE A TITLE.
-            YOU MUST WRITE THE SCRIPT IN ENGLISH REGARDLESS OF THE LANGUAGE SPECIFIED IN [LANGUAGE].
+            YOU MUST ALWAYS WRITE THE SCRIPT IN ENGLISH, NO EXCEPTIONS.
             ONLY RETURN THE RAW CONTENT OF THE SCRIPT. DO NOT INCLUDE "VOICEOVER", "NARRATOR" OR SIMILAR INDICATORS OF WHAT SHOULD BE SPOKEN AT THE BEGINNING OF EACH PARAGRAPH OR LINE. YOU MUST NOT MENTION THE PROMPT, OR ANYTHING ABOUT THE SCRIPT ITSELF. ALSO, NEVER TALK ABOUT THE AMOUNT OF PARAGRAPHS OR LINES. JUST WRITE THE SCRIPT.
 
         """
@@ -122,7 +128,7 @@ def generate_script(video_subject: str, paragraph_number: int, ai_model: str, vo
     
     Subject: {video_subject}
     Number of paragraphs: {paragraph_number}
-    Language: {voice}
+    Language: English
 
     """
 

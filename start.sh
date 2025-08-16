@@ -38,11 +38,8 @@ start_backend() {
     exit 1
   fi
 
-  # Prefer .venv, otherwise use existing venv, otherwise create .venv
-  VENV_DIR="$BACKEND_DIR/.venv"
-  if [[ -d "$BACKEND_DIR/venv" && ! -d "$VENV_DIR" ]]; then
-    VENV_DIR="$BACKEND_DIR/venv"
-  fi
+  # Use the root virtual environment
+  VENV_DIR="$ROOT_DIR/.venv"
   if [[ ! -d "$VENV_DIR" ]]; then
     echo "- Creating Python venv at $VENV_DIR"
     python3 -m venv "$VENV_DIR"
@@ -60,6 +57,9 @@ start_backend() {
     echo "- Loading env from $BACKEND_DIR/vendors/moneyprinter/.env"
     set -a; source "$BACKEND_DIR/vendors/moneyprinter/.env"; set +a
   fi
+
+  # Ensure database is always created in the root directory
+  export DATABASE_PATH="$ROOT_DIR/jobs.db"
 
   # Install Python deps if key packages are missing
   if ! python -c "import fastapi, moviepy" >/dev/null 2>&1; then

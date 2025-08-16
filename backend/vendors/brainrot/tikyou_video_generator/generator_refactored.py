@@ -168,7 +168,7 @@ class ClipProcessor:
         if w > clip_max_w or h > clip_max_h:
             ratio = min(clip_max_w/w, clip_max_h/h)
             self.logger.video_processing(f"Resizing clip by ratio: {ratio:.3f}")
-            return clip.with_effects([vfx.resize(ratio)])
+            return clip.with_effects([vfx.Resize(ratio)])
         else:
             self.logger.video_processing("No resize needed, clip fits within bounds")
             return clip
@@ -190,16 +190,16 @@ class ClipProcessor:
                 return self._resize_and_crop_tall_clip(clip, target_resolution)
         else:
             self.logger.video_processing("Aspect ratios match, simple resize...")
-            return clip.with_effects([vfx.resize(width=target_w, height=target_h)])
+            return clip.with_effects([vfx.Resize(width=target_w, height=target_h)])
     
     def _resize_and_crop_wide_clip(self, clip: VideoFileClip, target_resolution: Tuple[int, int]) -> VideoFileClip:
         """Resize and crop a wide clip"""
         target_w, target_h = target_resolution
         self.logger.video_processing("Clip is wider than target, resizing and cropping...")
         
-        resized_clip = clip.with_effects([vfx.resize(height=target_h)])
+        resized_clip = clip.with_effects([vfx.Resize(height=target_h)])
         return resized_clip.with_effects([
-            vfx.crop(x_center=resized_clip.w / 2, y_center=resized_clip.h / 2, 
+            vfx.Crop(x_center=resized_clip.w / 2, y_center=resized_clip.h / 2, 
                   width=target_w, height=target_h)
         ])
     
@@ -208,9 +208,9 @@ class ClipProcessor:
         target_w, target_h = target_resolution
         self.logger.video_processing("Clip is taller than target, resizing and cropping...")
         
-        resized_clip = clip.with_effects([vfx.resize(width=target_w)])
+        resized_clip = clip.with_effects([vfx.Resize(width=target_w)])
         return resized_clip.with_effects([
-            vfx.crop(x_center=resized_clip.w / 2, y_center=resized_clip.h / 2, 
+            vfx.Crop(x_center=resized_clip.w / 2, y_center=resized_clip.h / 2, 
                   width=target_w, height=target_h)
         ])
     

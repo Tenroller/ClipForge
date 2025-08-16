@@ -87,16 +87,59 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
     const iw = item.clientWidth
     const ih = item.clientHeight
 
-    // Always pin example overlay to center-bottom (50%, 85%)
-    const cxPct = 50
-    const cyPct = 85
+    // If we have a raw position string, try to parse it
+    if (positionRaw && positionRaw.startsWith('pct:')) {
+      const [x, y] = positionRaw.replace('pct:', '').split(',').map(Number)
+      if (!isNaN(x) && !isNaN(y)) {
+        const cx = (x / 100) * cw
+        const cy = (y / 100) * ch
+        const left = Math.max(Math.min(cx - iw / 2, cw - iw), 0)
+        const top = Math.max(Math.min(cy - ih / 2, ch - ih), 0)
+        return { leftPx: left, topPx: top }
+      }
+    }
+
+    // Default positioning based on position prop
+    let cxPct = 50, cyPct = 85 // Default to center-bottom
+
+    switch (position) {
+      case "left-top":
+        cxPct = 15; cyPct = 15
+        break
+      case "center-top":
+        cxPct = 50; cyPct = 15
+        break
+      case "right-top":
+        cxPct = 85; cyPct = 15
+        break
+      case "left-middle":
+        cxPct = 15; cyPct = 50
+        break
+      case "center-middle":
+        cxPct = 50; cyPct = 50
+        break
+      case "right-middle":
+        cxPct = 85; cyPct = 50
+        break
+      case "left-bottom":
+        cxPct = 15; cyPct = 85
+        break
+      case "center-bottom":
+        cxPct = 50; cyPct = 85
+        break
+      case "right-bottom":
+        cxPct = 85; cyPct = 85
+        break
+      default:
+        cxPct = 50; cyPct = 85 // fallback to center-bottom
+    }
 
     const cx = (cxPct / 100) * cw
     const cy = (cyPct / 100) * ch
     const left = Math.max(Math.min(cx - iw / 2, cw - iw), 0)
     const top = Math.max(Math.min(cy - ih / 2, ch - ih), 0)
     return { leftPx: left, topPx: top }
-  }, [positionRaw, position])
+  }, [positionRaw, position, containerRef.current?.clientWidth, containerRef.current?.clientHeight])
 
   // Drag handling to produce pct:x,y value
   useEffect(() => {
@@ -134,6 +177,34 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
       originY: itemRect.top - contRect.top,
     })
   }, [])
+
+  // Effect to recalculate position when container resizes or position changes
+  useEffect(() => {
+    const handleResize = () => {
+      // Force re-calculation of position
+      if (containerRef.current && itemRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        // Trigger re-render by updating a dummy state or just wait for next render
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  // Effect to ensure initial position is set correctly
+  useEffect(() => {
+    if (containerRef.current && itemRef.current && !positionRaw?.startsWith('pct:')) {
+      // Only update if we don't already have a custom position
+      const timer = setTimeout(() => {
+        if (containerRef.current && itemRef.current) {
+          // Trigger position recalculation
+          containerRef.current.dispatchEvent(new Event('resize'))
+        }
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [position, positionRaw])
 
   return (
     <Card className="enhanced-card">

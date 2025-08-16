@@ -39,7 +39,7 @@ class SubtitleConfig:
     
     # Visual effects
     stroke_width: int = 3
-    background_opacity: float = 0.6
+    background_opacity: float = 0.0
     padding_x: int = 16
     padding_y: int = 12
     
@@ -68,10 +68,11 @@ def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
     if len(hex_color) != 6:
         return (255, 255, 255)  # Default to white
     try:
-        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        return (r, g, b)
     except ValueError:
         return (255, 255, 255)
-
+ 
 
 def estimate_word_timings(sentences: List[str], audio_clips: List[Any]) -> List[Dict[str, Any]]:
     """
@@ -85,6 +86,7 @@ def estimate_word_timings(sentences: List[str], audio_clips: List[Any]) -> List[
     
     for sentence_idx, (sentence, audio_clip) in enumerate(zip(sentences, audio_clips)):
         sentence_duration = audio_clip.duration
+        print(f"[DEBUG] Sentence {sentence_idx}: '{sentence[:50]}...' duration: {sentence_duration:.2f}s")
         
         # Extract words and punctuation
         words = re.findall(r'\b\w+\b|\S', sentence)
@@ -94,19 +96,34 @@ def estimate_word_timings(sentences: List[str], audio_clips: List[Any]) -> List[
             current_time += sentence_duration
             continue
         
-        # Estimate timing based on word length and position
-        total_chars = sum(len(word) for word in text_words)
+        # More realistic timing based on typical speech rates (150-160 words per minute)
+        # Average word duration is about 0.4 seconds, but varies by word length
         
         word_start_time = current_time
+        total_words = len(text_words)
+        
+        # Add small pauses between words (more realistic)
+        available_time = sentence_duration * 0.95  # 95% for words, 5% for pauses
+        pause_time_per_gap = (sentence_duration * 0.05) / max(1, total_words - 1)
         
         for word_idx, word in enumerate(text_words):
-            # More sophisticated timing estimation
-            word_weight = len(word) / total_chars if total_chars > 0 else 1.0 / len(text_words)
-            base_duration = sentence_duration * word_weight
+            # Base duration proportional to word length but with minimum and maximum
+            chars_in_word = len(word)
             
-            # Adjust for word position (beginning words slightly faster)
-            position_factor = 0.9 if word_idx < len(text_words) * 0.3 else 1.0
-            word_duration = base_duration * position_factor
+            # Minimum 0.2s per word, maximum 1.0s per word
+            # Longer words get proportionally more time
+            base_duration = max(0.2, min(1.0, 0.15 + (chars_in_word * 0.05)))
+            
+            # Scale to fit within available time
+            if total_words > 0:
+                time_per_word = available_time / total_words
+                word_duration = min(base_duration, time_per_word)
+            else:
+                word_duration = base_duration
+            
+            # Adjust for sentence position - first and last words slightly longer
+            if word_idx == 0 or word_idx == total_words - 1:
+                word_duration *= 1.1
             
             word_end_time = word_start_time + word_duration
             
@@ -119,7 +136,10 @@ def estimate_word_timings(sentences: List[str], audio_clips: List[Any]) -> List[
                 'sentence': sentence
             })
             
-            word_start_time = word_end_time
+            print(f"[DEBUG] Word '{word}' ({word_idx}): {word_start_time:.2f}s - {word_end_time:.2f}s ({word_duration:.2f}s)")
+            
+            # Move to next word start time (include small pause)
+            word_start_time = word_end_time + pause_time_per_gap
         
         current_time += sentence_duration
     
@@ -209,14 +229,22 @@ def create_sentence_highlight_clip(
             size=(max_width, None)
         )
     
-    # Create background
-    bg_width = base_text_clip.w + 2 * config.padding_x
-    bg_height = base_text_clip.h + 2 * config.padding_y
-    
-    background = ColorClip(
-        size=(bg_width, bg_height),
-        color=hex_to_rgb(config.background_color)
-    ).with_opacity(config.background_opacity).with_duration(sentence_duration)
+    # Create background only if opacity > 0
+    if config.background_opacity > 0:
+        bg_width = base_text_clip.w + 2 * config.padding_x
+        bg_height = base_text_clip.h + 2 * config.padding_y
+        
+        background = ColorClip(
+            size=(bg_width, bg_height),
+            color=hex_to_rgb(config.background_color)
+        ).with_opacity(config.background_opacity).with_duration(sentence_duration)
+        
+        text_padding_x = config.padding_x
+        text_padding_y = config.padding_y
+    else:
+        background = None
+        text_padding_x = 0
+        text_padding_y = 0
     
     # Create the dynamic text clip with highlighting
     def make_text_frame(t):
@@ -248,7 +276,7 @@ def create_sentence_highlight_clip(
     text_clips = []
     
     # Base text (always visible with default color)
-    base_positioned = base_text_clip.with_position((config.padding_x, config.padding_y)).with_duration(sentence_duration)
+    base_positioned = base_text_clip.with_position((text_padding_x, text_padding_y)).with_duration(sentence_duration)
     text_clips.append(base_positioned)
     
     # Create highlight clips for each word
@@ -268,7 +296,7 @@ def create_sentence_highlight_clip(
                     stroke_width=config.stroke_width,
                     method='caption',
                     size=(max_width, None)
-                ).with_position((config.padding_x, config.padding_y)).with_duration(word_duration).with_start(word_start_rel)
+                ).with_position((text_padding_x, text_padding_y)).with_duration(word_duration).with_start(word_start_rel)
                 
                 # TODO: Implement actual word-level masking
                 # For now, this will highlight the entire sentence during each word
@@ -281,7 +309,10 @@ def create_sentence_highlight_clip(
                 continue
     
     # Combine all elements
-    all_clips = [background] + text_clips
+    if background is not None:
+        all_clips = [background] + text_clips
+    else:
+        all_clips = text_clips
     
     try:
         sentence_clip = CompositeVideoClip(all_clips).with_start(sentence_start)
@@ -336,33 +367,36 @@ def position_subtitle_clip(clip: CompositeVideoClip, position: str, video_size: 
                 return clip.with_position((left, top))
         
         else:
-            # Grid positioning
+            # Grid positioning - use consistent coordinate system
             parts = [p.strip() for p in raw_pos.split(',')]
             horizontal = parts[0] if parts and parts[0] in ('left', 'center', 'right') else 'center'
             vertical = parts[1] if len(parts) > 1 and parts[1] in ('top', 'center', 'bottom') else 'bottom'
             
-            # Convert to MoviePy positioning
-            h_pos = {'left': 'left', 'center': 'center', 'right': 'right'}[horizontal]
-            v_pos = {'top': 'top', 'center': 'center', 'bottom': 'bottom'}[vertical]
+            # Get clip dimensions
+            clip_w = getattr(clip, 'w', 0) or 0
+            clip_h = getattr(clip, 'h', 0) or 0
             
-            if horizontal == 'center' and vertical == 'bottom':
-                return clip.with_position(('center', 'bottom'))
-            elif horizontal == 'center' and vertical == 'center':
-                return clip.with_position(('center', 'center'))
-            elif horizontal == 'center' and vertical == 'top':
-                return clip.with_position(('center', 'top'))
-            else:
-                # For other combinations, use relative positioning
-                clip_w = getattr(clip, 'w', 0) or 0
-                clip_h = getattr(clip, 'h', 0) or 0
-                
-                x_positions = {'left': 50, 'center': video_width // 2, 'right': video_width - 50}
-                y_positions = {'top': 50, 'center': video_height // 2, 'bottom': video_height - 50}
-                
-                x = x_positions[horizontal] - (clip_w // 2 if horizontal == 'center' else 0)
-                y = y_positions[vertical] - (clip_h // 2 if vertical == 'center' else 0)
-                
-                return clip.with_position((max(0, x), max(0, y)))
+            # Calculate position based on grid - align with frontend preview
+            # Use the same positioning logic as in video.py for consistency
+            if horizontal == 'left':
+                x = int(0.10 * video_width) - (clip_w // 2)  # 10% from left, centered on subtitle
+            elif horizontal == 'right':
+                x = int(0.90 * video_width) - (clip_w // 2)  # 90% from left, centered on subtitle
+            else:  # center
+                x = (video_width - clip_w) // 2  # Center horizontally
+            
+            if vertical == 'top':
+                y = int(0.15 * video_height) - (clip_h // 2)  # 15% from top, centered on subtitle
+            elif vertical == 'center':
+                y = (video_height - clip_h) // 2  # Center vertically
+            else:  # bottom
+                y = int(0.85 * video_height) - clip_h  # 85% from top, subtitle bottom aligns with this line
+            
+            # Ensure position is within bounds with proper margin for bottom positioning
+            x = max(0, min(x, video_width - clip_w))
+            y = max(0, min(y, video_height - clip_h))
+            
+            return clip.with_position((x, y))
     
     except Exception as e:
         print(f"Error positioning clip: {e}")
@@ -424,8 +458,11 @@ def generate_enhanced_subtitles(
         }
     }
     
-    # Save to file
-    subtitle_path = f"../subtitles/{uuid.uuid4()}_enhanced.json"
+    # Save to file - use absolute path
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    subtitles_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), 'subtitles')
+    subtitle_path = os.path.join(subtitles_dir, f"{uuid.uuid4()}_enhanced.json")
     Path(subtitle_path).parent.mkdir(parents=True, exist_ok=True)
     
     with open(subtitle_path, 'w', encoding='utf-8') as f:
@@ -451,15 +488,17 @@ def create_enhanced_subtitle_clip(
     """
     try:
         # Use the new word highlighting implementation
-        from word_highlight_subtitles import create_word_highlight_subtitles_from_file
-        return create_word_highlight_subtitles_from_file(subtitle_path, video_size)
+        import word_highlight_subtitles
+        return word_highlight_subtitles.create_word_highlight_subtitles_from_file(subtitle_path, video_size)
     except ImportError:
         print("Warning: word_highlight_subtitles module not found, using fallback")
         # Fallback to basic implementation
         return create_enhanced_subtitle_clip_fallback(subtitle_path, video_size)
     except Exception as e:
         print(f"Error creating enhanced subtitle clip: {e}")
-        return CompositeVideoClip([])
+        # Create a transparent empty clip instead of empty composite
+        from moviepy import ColorClip
+        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
 
 
 def create_enhanced_subtitle_clip_fallback(
@@ -481,13 +520,15 @@ def create_enhanced_subtitle_clip_fallback(
     word_timings = subtitle_data.get('word_timings', [])
     
     if not word_timings:
-        return CompositeVideoClip([])
+        from moviepy import ColorClip
+        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
     
     # Create word clips
     clips = create_word_clips(word_timings, config, video_size)
     
     if not clips:
-        return CompositeVideoClip([])
+        from moviepy import ColorClip
+        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
     
     # Combine all clips
     try:
@@ -495,7 +536,8 @@ def create_enhanced_subtitle_clip_fallback(
         return final_clip
     except Exception as e:
         print(f"Error creating final subtitle clip: {e}")
-        return CompositeVideoClip([])
+        from moviepy import ColorClip
+        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
 
 
 # Utility functions for integration

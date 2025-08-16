@@ -75,9 +75,6 @@ class TextToImageRenderer:
         self.page.set_content(html_content)
         self.page.wait_for_load_state("networkidle")
         
-        # Take a screenshot
-        self.page.screenshot(path=output_path)
-        
         return output_path
 
 def get_next_video_number(output_dir):
@@ -118,12 +115,12 @@ def create_video(video_path, text, output_path=None, title=None):
 
     # Load the input video
     video_clip = VideoFileClip(video_path, audio=True)
-    video_clip = video_clip.resize(width=W)
+    video_clip = video_clip.resized(width=W)
 
     # Create the text layout using HTML + CSS - smaller height for more compact layout
     renderer = TextToImageRenderer()
     text_image_path = renderer.render_text_to_image(text, "temp_text.png", width=W, height=200)
-    text_clip = ImageClip(text_image_path).set_duration(video_clip.duration)
+    text_clip = ImageClip(text_image_path).with_duration(video_clip.duration)
 
     # Create title overlay if provided
     title_clip = None
@@ -131,7 +128,7 @@ def create_video(video_path, text, output_path=None, title=None):
         title_image_path = renderer.render_text_to_image(title, "temp_title.png", width=W, height=150, 
                                                        font_size=48, font_color="#FF6B35", 
                                                        background_color="rgba(0,0,0,0.7)")
-        title_clip = ImageClip(title_image_path).set_duration(video_clip.duration)
+        title_clip = ImageClip(title_image_path).with_duration(video_clip.duration)
 
     # Create a white background clip
     background = ColorClip(size=(W, H), color=BACKGROUND_COLOR, duration=video_clip.duration)
@@ -142,13 +139,13 @@ def create_video(video_path, text, output_path=None, title=None):
     video_y_position = 650  # Position video in the middle area of the frame
     
     # Set positions for the clips
-    text_clip = text_clip.set_position(('center', text_y_position))
-    video_clip = video_clip.set_position(('center', video_y_position))
+    text_clip = text_clip.with_position(('center', text_y_position))
+    video_clip = video_clip.with_position(('center', video_y_position))
     
     # Add title at the very top if provided
     clips_to_composite = [background, text_clip, video_clip]
     if title_clip:
-        title_clip = title_clip.set_position(('center', 100))  # Position title at the top
+        title_clip = title_clip.with_position(('center', 100))  # Position title at the top
         clips_to_composite.insert(1, title_clip)  # Insert after background but before text
     
     # Composite all the clips together
