@@ -298,10 +298,10 @@ def generate_enhanced_subtitles_with_optional_whisper(
             print("Falling back to estimation method...")
     
     # Fall back to the original estimation method
-    from enhanced_subtitles import generate_enhanced_subtitles, SubtitleConfig
-    
+    from enhanced_subtitles import generate_enhanced_subtitles, create_subtitle_config_from_legacy
+
     if config:
-        subtitle_config = SubtitleConfig(**config)
+        subtitle_config = create_subtitle_config_from_legacy(config)
     else:
         subtitle_config = None
     

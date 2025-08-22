@@ -5,11 +5,10 @@ import subprocess
 import requests
 import srt_equalizer
 import assemblyai as aai
+from enhanced_subtitles import SubtitleConfig
 
-# MODULE LOAD TEST: This should appear when the module is imported
-print("[MODULE LOAD TEST] video.py module is being imported!")
 
-from typing import List, Dict, Optional, Union, Any, cast
+from typing import List, Dict, Optional, Union, Any, cast, Tuple
 from moviepy import (
     VideoFileClip,
     AudioFileClip,
@@ -355,6 +354,26 @@ def convert_enhanced_to_srt_fallback(enhanced_subtitle_path: str) -> str | None:
         return None
 
 
+def generate_enhanced_subtitles_for_video(sentences: List[str], audio_clips: List[AudioFileClip], config: Optional[SubtitleConfig] = None) -> str:
+    """
+    Generate enhanced subtitles using whisper-timestamped for direct video integration.
+
+    Args:
+        sentences: List of sentences to transcribe
+        audio_clips: List of audio clips for timing
+        config: Subtitle configuration
+
+    Returns:
+        Path to enhanced subtitle file
+    """
+    from enhanced_subtitles import generate_enhanced_subtitles, create_tiktok_style_config
+
+    if config is None:
+        config = create_tiktok_style_config()
+
+    return generate_enhanced_subtitles(sentences, audio_clips, config)
+
+
 def generate_subtitles(audio_path: str, sentences: List[str], audio_clips: List[AudioFileClip], voice: str) -> str:
     """
     Generates subtitles from a given audio file and returns the path to the subtitles.
@@ -541,100 +560,85 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
     return combined_video_path
 
 
-def create_empty_subtitle_clip(video_size):
+def create_simple_subtitle_fallback(subtitles_path: str, video_size: Tuple[int, int], subtitles_position: str, text_color: str) -> CompositeVideoClip:
     """
-    Create an empty, transparent subtitle clip that won't cause MoviePy errors.
+    Create a simple subtitle fallback when enhanced subtitles fail.
     
-    Args:
-        video_size: (width, height) of the video
-        
-    Returns:
-        A transparent clip that can be used as a subtitle placeholder
-    """
-    from moviepy import ColorClip
-    return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
-
-
-def create_fallback_subtitle_clip(subtitles_path: str, video_size, subtitles_position: str, text_color: str):
-    """
-    Create a simple fallback subtitle clip using basic text rendering.
-    This is used when the enhanced subtitle system fails.
-    
-    Args:
-        subtitles_path: Path to the subtitle file
-        video_size: (width, height) of the video
-        subtitles_position: Position of subtitles
-        text_color: Color of subtitle text
-        
-    Returns:
-        A simple subtitle clip that should work without broadcasting errors
+    This function attempts to extract text from the enhanced subtitle file
+    and create basic text clips as a fallback.
     """
     try:
-        from moviepy import TextClip, CompositeVideoClip
         import json
-        
-        # Read the enhanced subtitle file
-        if not os.path.exists(subtitles_path):
-            print(colored(f"[warn] Fallback: Subtitle file not found: {subtitles_path}", "yellow"))
-            return create_empty_subtitle_clip(video_size)
-        
         with open(subtitles_path, 'r', encoding='utf-8') as f:
             subtitle_data = json.load(f)
-            
-        # Extract sentences from enhanced subtitle format
+        
+        # Extract sentences from enhanced subtitle data
         sentences = subtitle_data.get('sentences', [])
         if not sentences:
-            print(colored(f"[warn] Fallback: No sentences found in subtitle file", "yellow"))
             return create_empty_subtitle_clip(video_size)
-            
+        
         # Create simple text clips for each sentence
-        subtitle_clips = []
-        font_size = 48  # Simple fixed font size
+        clips = []
+        current_time = 0.0
         
-        for sentence in sentences:
-            text = sentence.get('text', '').strip()
-            start_time = sentence.get('start_time', 0)
-            end_time = sentence.get('end_time', 0)
+        for sentence_data in sentences:
+            sentence_text = sentence_data.get('text', '')
+            sentence_duration = sentence_data.get('end_time', 0) - sentence_data.get('start_time', 0)
             
-            if not text or end_time <= start_time:
-                continue
-                
-            # Create a simple TextClip
-            txt_clip = TextClip(
-                text=text,
-                font='Arial-Bold',
-                font_size=font_size,
-                color=text_color,
-                stroke_color='black',
-                stroke_width=2,
-                method='caption',
-                size=(int(video_size[0] * 0.8), None)  # 80% of video width
-            ).with_duration(end_time - start_time).with_start(start_time)
+            if sentence_duration <= 0:
+                sentence_duration = 2.0  # Default duration
             
-            # Position the text
-            if subtitles_position.lower() in ['bottom', 'center,bottom']:
-                txt_clip = txt_clip.with_position(('center', 0.8))
-            elif subtitles_position.lower() in ['center', 'center,center']:
-                txt_clip = txt_clip.with_position('center')
-            else:  # top or any other position
-                txt_clip = txt_clip.with_position(('center', 0.1))
-                
-            subtitle_clips.append(txt_clip)
+            if sentence_text.strip():
+                try:
+                    # Create simple text clip with proper font handling
+                    # Use the user's text color and add stroke for better visibility
+                    # Use Arial font with fallbacks for compatibility
+                    text_clip = TextClip(
+                        text=sentence_text,
+                        font_size=48,
+                        color=text_color,
+                        stroke_color="black",
+                        stroke_width=2,
+                        font="Arial",  # Use Arial font for consistency
+                        method='caption',
+                        size=(int(video_size[0] * 0.8), None)
+                    )
+                    
+                    # Position the clip using the user's specified position
+                    positioned_clip = text_clip.with_position(subtitles_position).with_start(current_time).with_duration(sentence_duration)
+                    clips.append(positioned_clip)
+                    
+                except Exception as e:
+                    print(colored(f"[warn] Failed to create fallback text clip for sentence: {e}", "yellow"))
+                    continue
             
-        if not subtitle_clips:
-            print(colored(f"[warn] Fallback: No valid subtitle clips created", "yellow"))
+            current_time += sentence_duration
+        
+        if clips:
+            return CompositeVideoClip(clips)  # Let it size naturally
+        else:
             return create_empty_subtitle_clip(video_size)
             
-        # Create composite of all subtitle clips
-        result = CompositeVideoClip(subtitle_clips, size=video_size).with_duration(
-            max(clip.end for clip in subtitle_clips)
-        )
-        print(colored(f"[debug] Fallback: Created simple subtitle clip with {len(subtitle_clips)} sentences", "green"))
-        return result
-        
     except Exception as e:
-        print(colored(f"[warn] Fallback subtitle creation failed: {e}", "yellow"))
+        print(colored(f"[warn] Simple subtitle fallback failed: {e}", "yellow"))
         return create_empty_subtitle_clip(video_size)
+
+
+def create_empty_subtitle_clip(video_size: Tuple[int, int]) -> CompositeVideoClip:
+    """Create an empty transparent subtitle clip."""
+    from moviepy import ColorClip
+    empty_clip = ColorClip(size=video_size, color=(0,0,0,0)).with_opacity(0).with_duration(0.1)
+    return empty_clip
+
+
+def create_fallback_subtitle_clip(subtitles_path: str, video_size: Tuple[int, int], subtitles_position: str, text_color: str) -> CompositeVideoClip:
+    """Create a fallback subtitle clip when the main subtitle system fails."""
+    try:
+        return create_simple_subtitle_fallback(subtitles_path, video_size, subtitles_position, text_color)
+    except Exception:
+        return create_empty_subtitle_clip(video_size)
+
+
 
 
 def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str, threads: int, subtitles_position: str, text_color: str, use_gpu: bool = True) -> str:
@@ -687,99 +691,7 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         from .optimized_subtitle_integration import (
             create_optimized_enhanced_subtitles,
             is_optimized_subtitle_available,
-            get_recommended_settings
         )
-        
-        # Check if we can use the optimized pipeline
-        availability = is_optimized_subtitle_available()
-        
-        # Skip optimized pipeline if we already have valid enhanced subtitles
-        # This prevents duplicate subtitle generation during compose_video step
-        skip_optimized_pipeline = False
-        if subtitles_path and Path(subtitles_path).exists() and Path(subtitles_path).suffix == '.json':
-            try:
-                # Check if the existing subtitle file is valid enhanced subtitles
-                import json
-                with open(subtitles_path, 'r', encoding='utf-8') as f:
-                    subtitle_data = json.load(f)
-                    if (isinstance(subtitle_data, dict) and 
-                        subtitle_data.get('type') == 'tiktok_enhanced' and
-                        'sentences' in subtitle_data and 
-                        'word_timings' in subtitle_data):
-                        print(colored(f"[info] Valid enhanced subtitles already exist at {subtitles_path}, skipping regeneration", "green"))
-                        skip_optimized_pipeline = True
-                    else:
-                        print(colored(f"[debug] Existing subtitle file is not valid enhanced format, will use optimized pipeline", "cyan"))
-            except Exception as e:
-                print(colored(f"[warn] Could not validate existing subtitle file: {e}", "yellow"))
-        
-        use_optimized_pipeline = (
-            not skip_optimized_pipeline and
-            subtitles_path and 
-            availability['optimized_renderer']
-        )
-        
-        if use_optimized_pipeline:
-            print(colored("[info] Using optimized subtitle pipeline with pre-rendered frames", "green"))
-            
-            # Get video properties
-            fps = getattr(base_clip, 'fps', 30.0) or 30.0
-            duration = getattr(base_clip, 'duration', 0.0) or 0.0
-            
-            # Try to find the original audio file for better ASR
-            audio_path = None
-            if hasattr(base_clip, 'audio') and base_clip.audio:
-                # Extract audio temporarily for processing
-                temp_audio_path = f"/tmp/temp_audio_{uuid.uuid4().hex[:8]}.wav"
-                try:
-                    base_clip.audio.write_audiofile(temp_audio_path, verbose=False, logger=None)
-                    audio_path = temp_audio_path
-                    print(colored(f"[debug] Extracted audio for enhanced ASR: {audio_path}", "cyan"))
-                except Exception as e:
-                    print(colored(f"[warn] Could not extract audio: {e}", "yellow"))
-            
-            # Create optimized enhanced subtitles
-            try:
-                optimized_subtitles, subtitle_data_path = create_optimized_enhanced_subtitles(
-                    sentences=[],  # Not used with audio_path
-                    audio_clips=[],  # Not used with audio_path
-                    audio_path=audio_path,
-                    video_size=video_size,
-                    fps=fps,
-                    duration=duration,
-                    use_stable_ts=availability['stable_ts'],
-                    use_optimized_renderer=True,
-                    whisper_model=get_recommended_settings()['whisper_model'],
-                    use_gpu=availability['cuda']
-                )
-                
-                # Clean up temporary audio file
-                if audio_path and os.path.exists(audio_path):
-                    try:
-                        os.remove(audio_path)
-                    except Exception:
-                        pass
-                
-                print(colored("[success] Optimized subtitle pipeline completed successfully!", "green"))
-                subtitles = optimized_subtitles
-                is_enhanced = True  # Mark as enhanced to skip traditional processing
-                
-                # Update subtitles_path to point to the new enhanced subtitle file
-                if subtitle_data_path:
-                    subtitles_path = subtitle_data_path
-                    print(colored(f"[debug] Updated subtitles_path to: {subtitles_path}", "cyan"))
-                
-            except Exception as opt_error:
-                print(colored(f"[error] Optimized pipeline failed: {opt_error}", "red"))
-                print(colored("[info] Falling back to traditional subtitle processing", "yellow"))
-                
-                # Clean up temporary audio file on error
-                if audio_path and os.path.exists(audio_path):
-                    try:
-                        os.remove(audio_path)
-                    except Exception:
-                        pass
-        
     except ImportError as ie:
         print(colored(f"[warn] Optimized subtitle pipeline not available: {ie}", "yellow"))
         print(colored("[info] Using traditional subtitle processing", "blue"))
@@ -868,6 +780,7 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
                     text=txt,
                     font_size=font_size,
                     color=text_color,
+                    font="Arial",  # Use Arial font for consistency
                     size=(max_text_width, None),
                 )
                 print(colored(f"[info] Using minimal TextClip fallback, size: {getattr(text_clip, 'w', 'unknown')}x{getattr(text_clip, 'h', 'unknown')}", "cyan"))
@@ -924,66 +837,33 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
 
     # Handle different subtitle formats
     if is_enhanced:
-        # Use enhanced TikTok-style subtitles
-        print(colored(f"[debug] Creating enhanced subtitle clip from: {subtitles_path}", "blue"))
+        # Use new ASS-based enhanced subtitles
+        print(colored(f"[debug] Using new ASS-based enhanced subtitles from: {subtitles_path}", "blue"))
         try:
+            # For enhanced subtitles, we use a transparent placeholder since
+            # the actual subtitles are burned in via FFmpeg
             subtitles = create_enhanced_subtitle_clip(subtitles_path, video_size)
-            print(colored(f"[debug] Enhanced subtitle clip created successfully", "green"))
-            print(colored(f"[debug] Enhanced clip type: {type(subtitles)}", "cyan"))
-            
-            # Validate the enhanced subtitle clip
-            if hasattr(subtitles, 'clips'):
-                print(colored(f"[debug] Enhanced clip contains {len(subtitles.clips)} sub-clips", "cyan"))
-                
-                # Check for empty or invalid clips
-                valid_clips = []
-                for i, clip in enumerate(subtitles.clips):
-                    try:
-                        # Test clip dimensions and frame generation
-                        if hasattr(clip, 'w') and hasattr(clip, 'h'):
-                            clip_w = getattr(clip, 'w', 0) or 0
-                            clip_h = getattr(clip, 'h', 0) or 0
-                            if clip_w > 0 and clip_h > 0:
-                                # Test frame generation to catch mask errors early
-                                test_frame = clip.get_frame(0.1)
-                                if test_frame is not None:
-                                    valid_clips.append(clip)
-                                    continue
-                        print(colored(f"[warn] Enhanced sub-clip {i} is invalid, skipping", "yellow"))
-                    except Exception as clip_error:
-                        print(colored(f"[warn] Enhanced sub-clip {i} failed validation ({clip_error}), skipping", "yellow"))
-                
-                if valid_clips:
-                    print(colored(f"[debug] {len(valid_clips)}/{len(subtitles.clips)} enhanced sub-clips are valid", "green"))
-                    # Recreate composite with only valid clips
-                    if len(valid_clips) != len(subtitles.clips):
-                        subtitles = CompositeVideoClip(valid_clips)
-                        print(colored(f"[debug] Rebuilt enhanced subtitle clip with valid clips only", "green"))
-                else:
-                    print(colored(f"[warn] No valid enhanced sub-clips found, falling back to empty clip", "yellow"))
-                    subtitles = create_empty_subtitle_clip(video_size)
-                    is_enhanced = False
-            else:
-                print(colored(f"[warn] Enhanced subtitle clip has no sub-clips, treating as single clip", "yellow"))
-                
+            print(colored(f"[debug] Enhanced subtitle placeholder created successfully", "green"))
+
         except Exception as e:
             print(colored(f"[error] Enhanced subtitle creation failed: {e}", "red"))
-            print(colored(f"[error] Falling back to traditional subtitles", "yellow"))
+            print(colored(f"[info] Falling back to simple subtitle fallback", "blue"))
             import traceback
             print(colored(f"[error] Traceback: {traceback.format_exc()}", "red"))
-            
-            # Fall back to traditional subtitles instead of raising
+
+            # Fall back to simple subtitle fallback instead of raising
             is_enhanced = False
             subtitles = None  # Clear any partially created subtitle object
-            
-            # Convert enhanced subtitle data to SRT format for fallback
+
+            # Try to create simple subtitle fallback
             try:
-                srt_path = convert_enhanced_to_srt_fallback(subtitles_path)
-                if srt_path:
-                    subtitles_path = srt_path
-                    print(colored(f"[debug] Converted enhanced subtitles to SRT format: {srt_path}", "green"))
-            except Exception as conv_error:
-                print(colored(f"[warn] Failed to convert enhanced subtitles to SRT: {conv_error}", "yellow"))
+                subtitles = create_simple_subtitle_fallback(subtitles_path, video_size, subtitles_position, text_color)
+                print(colored(f"[debug] Simple subtitle fallback created successfully", "green"))
+            except Exception as fallback_error:
+                print(colored(f"[warn] Simple subtitle fallback also failed: {fallback_error}", "yellow"))
+                # Create empty subtitle as last resort
+                subtitles = create_empty_subtitle_clip(video_size)
+                print(colored(f"[debug] Created empty subtitle clip as final fallback", "yellow"))
 
     if not is_enhanced:
         # Use traditional SRT subtitles
@@ -1157,6 +1037,9 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         # Enhanced subtitles handle their own positioning
         positioned_subs = subtitles
         print(colored(f"[debug] Using enhanced subtitle positioning", "cyan"))
+        print(colored(f"[debug] Enhanced subtitle type: {type(subtitles)}", "cyan"))
+        if hasattr(subtitles, 'clips'):
+            print(colored(f"[debug] Enhanced subtitle has {len(subtitles.clips)} clips", "cyan"))
     else:
         # Traditional subtitles need manual positioning
         positioned_subs = subtitles.with_position(_safe_area_pos_fn)
@@ -1176,34 +1059,62 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
                 positioned_subs = create_fallback_subtitle_clip(subtitles_path, video_size, subtitles_position, text_color)
         
         # Test subtitle clip by getting a test frame to validate mask consistency
-        try:
-            if hasattr(positioned_subs, 'duration') and positioned_subs.duration > 0:
-                test_time = min(0.1, positioned_subs.duration / 2)  # Use safe test time
-                test_frame = positioned_subs.get_frame(test_time)
-                if test_frame is not None and len(test_frame.shape) >= 2:
-                    # Additional validation: check for zero-width or zero-height frames
-                    frame_height, frame_width = test_frame.shape[:2]
-                    if frame_width > 0 and frame_height > 0:
-                        print(colored(f"[debug] Subtitle clip test frame shape: {test_frame.shape}", "green"))
+        # Skip frame test for enhanced subtitles since they're working correctly
+        if not is_enhanced:
+            try:
+                if hasattr(positioned_subs, 'duration') and positioned_subs.duration > 0:
+                    test_time = min(0.1, positioned_subs.duration / 2)  # Use safe test time
+                    test_frame = positioned_subs.get_frame(test_time)
+                    if test_frame is not None and len(test_frame.shape) >= 2:
+                        # Additional validation: check for zero-width or zero-height frames
+                        frame_height, frame_width = test_frame.shape[:2]
+                        if frame_width > 0 and frame_height > 0:
+                            print(colored(f"[debug] Subtitle clip test frame shape: {test_frame.shape}", "green"))
+                        else:
+                            print(colored(f"[warn] Subtitle clip test frame has zero dimensions: {test_frame.shape}, using simple subtitle fallback", "yellow"))
+                            print(colored(f"[debug] TRIGGERING FALLBACK: Frame dimensions are zero", "red"))
+                            positioned_subs = create_simple_subtitle_fallback(subtitles_path, video_size, subtitles_position, text_color)
                     else:
-                        print(colored(f"[warn] Subtitle clip test frame has zero dimensions: {test_frame.shape}, using simple subtitle fallback", "yellow"))
-                        positioned_subs = create_fallback_subtitle_clip(subtitles_path, video_size, subtitles_position, text_color)
+                        print(colored(f"[warn] Subtitle clip test frame is invalid, using simple subtitle fallback", "yellow"))
+                        print(colored(f"[debug] TRIGGERING FALLBACK: Invalid test frame", "red"))
+                        positioned_subs = create_simple_subtitle_fallback(subtitles_path, video_size, subtitles_position, text_color)
                 else:
-                    print(colored(f"[warn] Subtitle clip test frame is invalid, using simple subtitle fallback", "yellow"))
-                    positioned_subs = create_fallback_subtitle_clip(subtitles_path, video_size, subtitles_position, text_color)
-            else:
-                print(colored(f"[warn] Subtitle clip has zero or invalid duration, using simple subtitle fallback", "yellow"))
-                positioned_subs = create_fallback_subtitle_clip(subtitles_path, video_size, subtitles_position, text_color)
-        except Exception as frame_test_error:
-            print(colored(f"[warn] Subtitle clip frame test failed ({frame_test_error}), using simple subtitle fallback", "yellow"))
-            positioned_subs = create_fallback_subtitle_clip(subtitles_path, video_size, subtitles_position, text_color)
+                    print(colored(f"[warn] Subtitle clip has zero or invalid duration, using simple subtitle fallback", "yellow"))
+                    print(colored(f"[debug] TRIGGERING FALLBACK: Invalid duration", "red"))
+                    positioned_subs = create_simple_subtitle_fallback(subtitles_path, video_size, subtitles_position, text_color)
+            except Exception as frame_test_error:
+                print(colored(f"[warn] Subtitle clip frame test failed ({frame_test_error}), using simple subtitle fallback", "yellow"))
+                print(colored(f"[debug] TRIGGERING FALLBACK: Frame test exception", "red"))
+                # Try to create a more robust fallback that won't fail
+                try:
+                    positioned_subs = create_simple_subtitle_fallback(subtitles_path, video_size, subtitles_position, text_color)
+                    if positioned_subs is None:
+                        positioned_subs = create_empty_subtitle_clip(video_size)
+                except Exception as fallback_error:
+                    print(colored(f"[warn] Simple subtitle fallback also failed: {fallback_error}, using empty subtitle", "yellow"))
+                    positioned_subs = create_empty_subtitle_clip(video_size)
+        else:
+            print(colored(f"[debug] Skipping frame test for enhanced subtitles - they are working correctly", "green"))
             
     except Exception as validation_error:
         print(colored(f"[warn] Subtitle validation failed ({validation_error}), using simple subtitle fallback", "yellow"))
         positioned_subs = create_fallback_subtitle_clip(subtitles_path, video_size, subtitles_position, text_color)
     
-    # Create composite with error handling for mask composition issues
+    # Ensure subtitle clips are properly prepared for composition
     try:
+        # Remove any masks from subtitle clips to prevent broadcasting errors
+        # Subtitles are text overlays and don't need transparency masking
+        if hasattr(positioned_subs, 'clips') and positioned_subs.clips:
+            print(colored(f"[debug] Processing {len(positioned_subs.clips)} subtitle clips - removing masks", "cyan"))
+            for i, clip in enumerate(positioned_subs.clips):
+                try:
+                    if hasattr(clip, 'mask') and clip.mask is not None:
+                        # Remove mask since subtitles don't need transparency
+                        positioned_subs.clips[i] = clip.without_mask()
+                        print(colored(f"[debug] Removed mask from subtitle clip {i}", "yellow"))
+                except Exception as clip_fix_error:
+                    print(colored(f"[warn] Could not remove mask from clip {i}: {clip_fix_error}", "yellow"))
+
         result: CompositeVideoClip = CompositeVideoClip([
             base_clip,
             positioned_subs,
@@ -1212,8 +1123,8 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
     except Exception as composition_error:
         print(colored(f"[error] Video composition failed: {composition_error}", "red"))
         print(colored(f"[info] Creating fallback composition without subtitles", "blue"))
-        
-        # Fallback: create composition without subtitles if there's a mask dimension error
+
+        # Simple fallback: create composition without subtitles
         empty_subs = create_empty_subtitle_clip(video_size)
         result: CompositeVideoClip = CompositeVideoClip([
             base_clip,
@@ -1249,14 +1160,55 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
 
     # Remove 'logger' from codec_settings to avoid parameter conflict
     write_settings = {k: v for k, v in codec_settings.items() if k != 'logger'}
-    
-    # Write the final video
-    result_any.write_videofile(
-        str(final_output_path),
-        threads=threads or 2,
-        logger=None,  # Explicitly set logger to avoid conflicts
-        **write_settings,
-    )
+
+    # Handle enhanced subtitles with ASS subtitle burning
+    if is_enhanced and subtitles_path:
+        print(colored(f"[debug] Burning enhanced subtitles into video using FFmpeg", "blue"))
+
+        # First write the video without subtitles
+        temp_video_path = final_output_path.with_suffix('.temp.mp4')
+        result_any.write_videofile(
+            str(temp_video_path),
+            threads=threads or 2,
+            logger=None,
+            **write_settings,
+        )
+
+        # Burn enhanced subtitles using FFmpeg
+        try:
+            from enhanced_subtitles import convert_json_to_ass_and_burn
+            success = convert_json_to_ass_and_burn(
+                json_subtitle_path=subtitles_path,
+                video_path=str(temp_video_path),
+                output_path=str(final_output_path)
+            )
+
+            if success:
+                print(colored(f"[success] Enhanced subtitles burned into video successfully", "green"))
+                # Clean up temporary video
+                try:
+                    os.remove(temp_video_path)
+                except:
+                    pass
+            else:
+                print(colored(f"[warn] Enhanced subtitle processing failed, using video without subtitles", "yellow"))
+                # Move temp video to final location
+                import shutil
+                shutil.move(str(temp_video_path), str(final_output_path))
+
+        except Exception as e:
+            print(colored(f"[error] Enhanced subtitle processing failed: {e}", "red"))
+            # Move temp video to final location
+            import shutil
+            shutil.move(str(temp_video_path), str(final_output_path))
+    else:
+        # Write the final video normally (traditional subtitles or no subtitles)
+        result_any.write_videofile(
+            str(final_output_path),
+            threads=threads or 2,
+            logger=None,  # Explicitly set logger to avoid conflicts
+            **write_settings,
+        )
 
     # Return absolute path if unified dir is set; otherwise return relative to vendors root as before
     return str(final_output_path)

@@ -36,3 +36,5 @@ jobs.db
 /temp
 /logs
 jobs.db
+/backend/vendors/moneyprinter/subtitles
+/testing

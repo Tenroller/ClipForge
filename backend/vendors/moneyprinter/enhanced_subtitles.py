@@ -1,81 +1,361 @@
 """
 Enhanced subtitle system with TikTok-style word highlighting.
 
-This implementation provides:
-- Word-by-word highlighting with smooth transitions
-- Multiple subtitle clips for different word states
-- Customizable fonts, colors, sizes, and effects
-- Support for different animation styles
+This implementation uses whisper-timestamped for accurate word-level timestamps
+and creates ASS subtitle files for smooth word-by-word highlighting.
 """
 
 import os
 import re
 import uuid
 import json
+import argparse
+import ffmpeg
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any, Union
 from dataclasses import dataclass, asdict
-from moviepy import (
-    VideoFileClip, TextClip, CompositeVideoClip, ColorClip,
-    concatenate_videoclips
-)
-import numpy as np
+import pysubs2
+import whisper_timestamped as whisper
+from moviepy import VideoFileClip
 
 
 @dataclass
 class SubtitleConfig:
-    """Enhanced configuration for subtitle styling and behavior."""
-    
+    """Configuration for ASS subtitle styling."""
+
     # Font settings
-    font_family: str = "Arial-Bold"
-    font_size: int = 48
-    font_bold: bool = True
-    letter_spacing: float = 1.5         # Letter spacing for better readability
+    font_family: str = "Arial"
+    font_size: int = 28
+
+    # Colors (ASS format &HAABBGGRR)
+    primary_color: str = "&H00FFFFFF"      # White text
+    border_color: str = "&H00000000"       # Black border
+    highlight_color: str = "&H0000FFFF"    # Yellow highlight
     
-    # Colors (hex format)
-    default_color: str = "#FFFFFF"      # White for unspoken words
-    highlight_color: str = "#FFFFFF"    # White for currently spoken word (changed from yellow)
-    stroke_color: str = "#000000"       # Black outline (kept for fallback)
-    background_color: str = "#000000"   # Black background
-    
-    # 3D Blue Shadow Effects (Multiple Layers)
-    shadow_enabled: bool = True
-    shadow_layers_count: int = 4            # Number of shadow layers (2, 3, or 4)
-    shadow_layer_1_color: str = "#4A90E2"    # Light blue (closest to text)
-    shadow_layer_1_offset_x: int = 2
-    shadow_layer_1_offset_y: int = 2
-    shadow_layer_2_color: str = "#357ABD"    # Medium blue
-    shadow_layer_2_offset_x: int = 4
-    shadow_layer_2_offset_y: int = 4
-    shadow_layer_3_color: str = "#2E5F8A"    # Dark blue
-    shadow_layer_3_offset_x: int = 6
-    shadow_layer_3_offset_y: int = 6
-    shadow_layer_4_color: str = "#1E3F5A"    # Darkest blue (furthest from text)
-    shadow_layer_4_offset_x: int = 8
-    shadow_layer_4_offset_y: int = 8
-    
-    # Visual effects
-    stroke_width: int = 0               # Disabled stroke for cleaner look
-    background_opacity: float = 0.0     # No background for modern look
-    padding_x: int = 20                 # Increased padding for better spacing
-    padding_y: int = 16
-    
-    # Animation settings
-    highlight_transition: float = 0.1   # Smooth transition time
-    word_appear_delay: float = 0.05     # Delay between word appearances
-    
-    # Layout settings
-    position: str = "center,bottom"     # Position on screen
-    max_width_percent: float = 0.85     # Max width as % of video width
-    line_spacing: float = 1.4           # Increased line spacing for better readability
-    
-    # Legacy shadow (kept for backward compatibility)
-    shadow_color: str = "#4A90E2"       # Now uses blue instead of black
-    shadow_offset_x: int = 2
-    shadow_offset_y: int = 2
-    glow_enabled: bool = False
-    glow_color: str = "#FFFFFF"
-    glow_intensity: float = 0.3
+    # Additional color fields for compatibility
+    default_color: str = "&H00FFFFFF"      # Default text color (alias for primary_color)
+    stroke_color: str = "&H00000000"       # Stroke/outline color (alias for border_color)
+    background_color: str = "&H00000000"   # Background color
+
+    # Styling
+    stroke_width: int = 2                  # Stroke/outline width
+    background_opacity: float = 0.0        # Background opacity (0.0 to 1.0)
+    padding_x: int = 16                    # Horizontal padding
+    padding_y: int = 12                    # Vertical padding
+
+    # Position
+    position: str = "center,bottom"
+
+    # Shadow settings
+    shadow_layers_count: int = 0           # Number of shadow layers
+    shadow_layer_1_color: str = "&H00000000"  # Shadow layer 1 color
+    shadow_layer_2_color: str = "&H00000000"  # Shadow layer 2 color
+    shadow_layer_3_color: str = "&H00000000"  # Shadow layer 3 color
+    shadow_layer_4_color: str = "&H00000000"  # Shadow layer 4 color
+
+    # Whisper model settings
+    whisper_model: str = "base"  # tiny, base, small, medium, large
+
+
+def extract_audio(video_path: str) -> str | None:
+    """
+    Extracts audio from a video file and saves it as a temporary WAV file.
+
+    Args:
+        video_path: The path to the input video file.
+
+    Returns:
+        The path to the extracted audio file, or None if an error occurred.
+    """
+    print("Extracting audio from video...")
+    try:
+        # Create a temporary path for the audio file
+        temp_audio_path = "temp_audio.wav"
+
+        # Load the video clip using moviepy
+        video_clip = VideoFileClip(video_path)
+
+        # Write the audio from the video clip to the temporary file
+        video_clip.audio.write_audiofile(temp_audio_path, codec='pcm_s16le')
+        video_clip.close()
+
+        print(f"Successfully extracted audio to {temp_audio_path}")
+        return temp_audio_path
+    except Exception as e:
+        print(f"Error during audio extraction: {e}")
+        return None
+
+
+def transcribe_audio_with_word_timestamps(audio_path: str, model_size: str) -> dict:
+    """
+    Transcribes an audio file using whisper-timestamped to get word-level timestamps.
+
+    Args:
+        audio_path: The path to the audio file.
+        model_size: The size of the Whisper model to use (e.g., "tiny", "base", "small").
+
+    Returns:
+        A dictionary containing the transcription result with word-level timestamps.
+    """
+    print(f"Loading Whisper model '{model_size}' for transcription...")
+    try:
+        # Load the audio file
+        audio = whisper.load_audio(audio_path)
+
+        # Load the specified Whisper model
+        model = whisper.load_model(model_size, device="cpu")
+
+        # Transcribe the audio to get segments and word-level timestamps
+        result = whisper.transcribe(model, audio, language="en", beam_size=5, best_of=5, temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0))
+
+        print("Transcription complete.")
+        return result
+    except Exception as e:
+        print(f"Error during transcription: {e}")
+        return {}
+
+
+def create_ass_file(word_level_data: dict, ass_path: str, config: SubtitleConfig):
+    """
+    Generates an Advanced SubStation Alpha (.ass) subtitle file with a karaoke effect.
+
+    Args:
+        word_level_data: The transcription result from whisper-timestamped.
+        ass_path: The path to save the output .ass file.
+        config: Subtitle configuration
+    """
+    print("Creating .ass subtitle file with karaoke effect...")
+
+    try:
+        subs = pysubs2.SSAFile()
+
+        # Convert hex color to RGB
+        def hex_to_rgb(hex_color: str) -> tuple:
+            """Convert hex color format #RRGGBB to RGB tuple."""
+            if not hex_color.startswith('#'):
+                return (255, 255, 255)  # Default to white
+            try:
+                # Extract RR, GG, BB from #RRGGBB
+                color_part = hex_color[1:]  # Remove #
+                if len(color_part) >= 6:
+                    rr = int(color_part[0:2], 16)  # First 2 chars
+                    gg = int(color_part[2:4], 16)  # Next 2 chars
+                    bb = int(color_part[4:6], 16)  # Last 2 chars
+                    return (rr, gg, bb)
+            except (ValueError, IndexError):
+                pass
+            return (255, 255, 255)  # Default to white
+
+        # Text wrapping function
+        def wrap_text(text: str, max_chars_per_line: int = 25) -> List[str]:
+            """Wrap text into multiple lines based on character count."""
+            words = text.split()
+            lines = []
+            current_line = ""
+            
+            for word in words:
+                # Check if adding this word would exceed the limit
+                if len(current_line) + len(word) + 1 <= max_chars_per_line:
+                    if current_line:
+                        current_line += " " + word
+                    else:
+                        current_line = word
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
+            
+            # Add the last line if it has content
+            if current_line:
+                lines.append(current_line)
+            
+            return lines
+
+        # Dynamic font sizing based on text length
+        def get_optimal_font_size(base_font_size: int, text_length: int) -> int:
+            """Reduce font size for very long text to keep it readable."""
+            if text_length > 100:
+                return max(base_font_size - 8, 20)  # Reduce by 8, minimum 20
+            elif text_length > 80:
+                return max(base_font_size - 6, 22)  # Reduce by 6, minimum 22
+            elif text_length > 60:
+                return max(base_font_size - 4, 24)  # Reduce by 4, minimum 24
+            elif text_length > 40:
+                return max(base_font_size - 2, 26)  # Reduce by 2, minimum 26
+            else:
+                return base_font_size
+
+        # Get colors from config, converting hex to RGB
+        primary_rgb = hex_to_rgb(config.primary_color if config.primary_color.startswith('#') else config.primary_color)
+        highlight_rgb = hex_to_rgb(config.highlight_color if config.highlight_color.startswith('#') else config.highlight_color)
+        border_rgb = hex_to_rgb(config.stroke_color if config.stroke_color.startswith('#') else config.stroke_color)
+        background_rgb = hex_to_rgb(config.background_color if config.background_color.startswith('#') else config.background_color)
+
+        # Parse position from config
+        position = config.position.lower() if config.position else "center,bottom"
+        horizontal_pos, vertical_pos = "center", "bottom"
+        if "," in position:
+            parts = position.split(",")
+            horizontal_pos = parts[0].strip() if len(parts) > 0 else "center"
+            vertical_pos = parts[1].strip() if len(parts) > 1 else "bottom"
+
+        # Convert position to pysubs2 alignment
+        alignment_map = {
+            ("left", "top"): pysubs2.Alignment.TOP_LEFT,
+            ("center", "top"): pysubs2.Alignment.TOP_CENTER,
+            ("right", "top"): pysubs2.Alignment.TOP_RIGHT,
+            ("left", "center"): pysubs2.Alignment.MIDDLE_LEFT,
+            ("center", "center"): pysubs2.Alignment.MIDDLE_CENTER,
+            ("right", "center"): pysubs2.Alignment.MIDDLE_RIGHT,
+            ("left", "bottom"): pysubs2.Alignment.BOTTOM_LEFT,
+            ("center", "bottom"): pysubs2.Alignment.BOTTOM_CENTER,
+            ("right", "bottom"): pysubs2.Alignment.BOTTOM_RIGHT,
+        }
+        alignment = alignment_map.get((horizontal_pos, vertical_pos), pysubs2.Alignment.BOTTOM_CENTER)
+
+        # Calculate margin based on position
+        marginv = 30  # Default margin
+        if vertical_pos == "top":
+            marginv = 30 + config.padding_y
+        elif vertical_pos == "center":
+            marginv = 0  # Center positioning
+        elif vertical_pos == "bottom":
+            marginv = 30 + config.padding_y
+
+        # Define the main style for the subtitles
+        default_style = pysubs2.SSAStyle(
+            fontname=config.font_family,
+            fontsize=config.font_size,
+            primarycolor=pysubs2.Color(r=primary_rgb[0], g=primary_rgb[1], b=primary_rgb[2], a=0),
+            secondarycolor=pysubs2.Color(r=highlight_rgb[0], g=highlight_rgb[1], b=highlight_rgb[2], a=0),
+            outlinecolor=pysubs2.Color(r=border_rgb[0], g=border_rgb[1], b=border_rgb[2], a=0),
+            backcolor=pysubs2.Color(r=background_rgb[0], g=background_rgb[1], b=background_rgb[2], a=int(255 * config.background_opacity)),
+            borderstyle=1,
+            outline=config.stroke_width,
+            shadow=1 if config.shadow_layers_count > 0 else 0,
+            alignment=alignment,
+            marginv=marginv
+        )
+        subs.styles["Default"] = default_style
+
+        # Iterate through each segment (line) of the transcription
+        for segment in word_level_data.get("segments", []):
+            if not segment.get("words"):
+                continue
+
+            # Create individual subtitle events for each word timing
+            for i, word in enumerate(segment["words"]):
+                word_start_ms = int(word["start"] * 1000)
+                word_end_ms = int(word["end"] * 1000)
+
+                # Build sentence with only current word highlighted
+                sentence_text = ""
+                for j, word_info in enumerate(segment["words"]):
+                    if j == i:
+                        # Current word gets highlighted (highlight_color)
+                        # Convert highlight color to ASS format
+                        highlight_ass = f"&H00{highlight_rgb[2]:02X}{highlight_rgb[1]:02X}{highlight_rgb[0]:02X}"
+                        sentence_text += f"{{\\c{highlight_ass}}}{word_info['text']}{{\\c&H00FFFFFF}}"
+                    else:
+                        # Other words use default color (primary_color)
+                        sentence_text += word_info['text']
+
+                    # Add space if not the last word
+                    if j < len(segment["words"]) - 1:
+                        sentence_text += " "
+
+                # Get the original text length for font sizing (without ASS formatting)
+                original_text = " ".join([w["text"] for w in segment["words"]])
+                text_length = len(original_text)
+                
+                # Calculate optimal font size for this text
+                optimal_font_size = get_optimal_font_size(config.font_size, text_length)
+                
+                # Wrap the sentence text into multiple lines with aggressive wrapping
+                max_chars = 20 if text_length > 60 else 25  # More aggressive for long text
+                wrapped_lines = wrap_text(sentence_text, max_chars_per_line=max_chars)
+                
+                # Join lines with \N (ASS line break)
+                wrapped_text = "\\N".join(wrapped_lines)
+
+                # Create subtitle event for this word's duration with custom font size
+                event = pysubs2.SSAEvent(
+                    start=word_start_ms,
+                    end=word_end_ms,
+                    text=wrapped_text,
+                    style="Default"
+                )
+                
+                # Create a custom style for this event with the optimal font size
+                if optimal_font_size != config.font_size:
+                    style_name = f"Style_{optimal_font_size}"
+                    if style_name not in subs.styles:
+                        custom_style = pysubs2.SSAStyle(
+                            fontname=config.font_family,
+                            fontsize=optimal_font_size,
+                            primarycolor=pysubs2.Color(r=primary_rgb[0], g=primary_rgb[1], b=primary_rgb[2], a=0),
+                            secondarycolor=pysubs2.Color(r=highlight_rgb[0], g=highlight_rgb[1], b=highlight_rgb[2], a=0),
+                            outlinecolor=pysubs2.Color(r=border_rgb[0], g=border_rgb[1], b=border_rgb[2], a=0),
+                            backcolor=pysubs2.Color(r=background_rgb[0], g=background_rgb[1], b=background_rgb[2], a=int(255 * config.background_opacity)),
+                            borderstyle=1,
+                            outline=config.stroke_width,
+                            shadow=1 if config.shadow_layers_count > 0 else 0,
+                            alignment=alignment,
+                            marginv=marginv
+                        )
+                        subs.styles[style_name] = custom_style
+                    
+                    # Use the custom style for this event
+                    event.style = style_name
+                
+                subs.append(event)
+
+        # Save the complete .ass file
+        subs.save(ass_path, encoding="utf-8")
+        print(f"Successfully created .ass file at: {ass_path}")
+        return True
+
+    except Exception as e:
+        print(f"Error creating .ass file: {e}")
+        return False
+
+
+def burn_subtitles_to_video(video_path: str, ass_path: str, output_path: str):
+    """
+    Burns the .ass subtitles into the video file using FFmpeg.
+
+    Args:
+        video_path: The path to the original input video.
+        ass_path: The path to the generated .ass subtitle file.
+        output_path: The path for the final output video.
+    """
+    print("Burning subtitles into video... This may take some time.")
+    try:
+        # Define the input video stream
+        input_video = ffmpeg.input(video_path)
+        # The audio is taken from the original video file directly
+        input_audio = input_video.audio
+
+        # Apply the 'subtitles' video filter
+        stream = ffmpeg.filter(input_video, 'subtitles', ass_path)
+
+        # Combine the video stream (with subtitles) and the original audio stream
+        stream = ffmpeg.output(stream, input_audio, output_path, vcodec='libx264', acodec='copy', preset='medium', crf=23)
+
+        # Run the FFmpeg command, overwriting the output file if it exists
+        ffmpeg.run(stream, overwrite_output=True, quiet=False)
+
+        print(f"Successfully burned subtitles into video at: {output_path}")
+        return True
+    except ffmpeg.Error as e:
+        if e.stderr:
+            print("FFmpeg Error:", e.stderr.decode())
+        else:
+            print("FFmpeg Error occurred but no stderr output available")
+        return False
+    except Exception as e:
+        print(f"An error occurred during video composition: {e}")
+        return False
 
 
 def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
@@ -88,511 +368,268 @@ def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
         return (r, g, b)
     except ValueError:
         return (255, 255, 255)
- 
-
-def estimate_word_timings(sentences: List[str], audio_clips: List[Any]) -> List[Dict[str, Any]]:
-    """
-    Estimate word-level timing based on sentence duration and word distribution.
-    
-    This provides a reasonable approximation for word timing. For production use,
-    consider integrating with speech recognition APIs that provide word-level timestamps.
-    """
-    word_timings = []
-    current_time = 0.0
-    
-    for sentence_idx, (sentence, audio_clip) in enumerate(zip(sentences, audio_clips)):
-        sentence_duration = audio_clip.duration
-        print(f"[DEBUG] Sentence {sentence_idx}: '{sentence[:50]}...' duration: {sentence_duration:.2f}s")
-        
-        # Extract words and punctuation
-        words = re.findall(r'\b\w+\b|\S', sentence)
-        text_words = [w for w in words if re.match(r'\b\w+\b', w)]
-        
-        if not text_words:
-            current_time += sentence_duration
-            continue
-        
-        # More realistic timing based on typical speech rates (150-160 words per minute)
-        # Average word duration is about 0.4 seconds, but varies by word length
-        
-        word_start_time = current_time
-        total_words = len(text_words)
-        
-        # Add small pauses between words (more realistic)
-        available_time = sentence_duration * 0.95  # 95% for words, 5% for pauses
-        pause_time_per_gap = (sentence_duration * 0.05) / max(1, total_words - 1)
-        
-        for word_idx, word in enumerate(text_words):
-            # Base duration proportional to word length but with minimum and maximum
-            chars_in_word = len(word)
-            
-            # Minimum 0.2s per word, maximum 1.0s per word
-            # Longer words get proportionally more time
-            base_duration = max(0.2, min(1.0, 0.15 + (chars_in_word * 0.05)))
-            
-            # Scale to fit within available time
-            if total_words > 0:
-                time_per_word = available_time / total_words
-                word_duration = min(base_duration, time_per_word)
-            else:
-                word_duration = base_duration
-            
-            # Adjust for sentence position - first and last words slightly longer
-            if word_idx == 0 or word_idx == total_words - 1:
-                word_duration *= 1.1
-            
-            word_end_time = word_start_time + word_duration
-            
-            word_timings.append({
-                'word': word,
-                'start_time': word_start_time,
-                'end_time': word_end_time,
-                'sentence_index': sentence_idx,
-                'word_index': word_idx,
-                'sentence': sentence
-            })
-            
-            print(f"[DEBUG] Word '{word}' ({word_idx}): {word_start_time:.2f}s - {word_end_time:.2f}s ({word_duration:.2f}s)")
-            
-            # Move to next word start time (include small pause)
-            word_start_time = word_end_time + pause_time_per_gap
-        
-        current_time += sentence_duration
-    
-    return word_timings
 
 
-def create_word_clips(
-    word_timings: List[Dict[str, Any]], 
-    config: SubtitleConfig,
-    video_size: Tuple[int, int]
-) -> List[CompositeVideoClip]:
+def process_video_with_enhanced_subtitles(
+    video_path: str,
+    output_path: str,
+    config: Optional[SubtitleConfig] = None
+) -> bool:
     """
-    Create individual clips for each word with highlighting effects.
-    """
-    video_width, video_height = video_size
-    clips = []
-    
-    # Group words by sentence for better layout
-    sentences = {}
-    for word_data in word_timings:
-        sentence_idx = word_data['sentence_index']
-        if sentence_idx not in sentences:
-            sentences[sentence_idx] = {
-                'words': [],
-                'text': word_data['sentence'],
-                'start_time': float('inf'),
-                'end_time': 0
-            }
-        sentences[sentence_idx]['words'].append(word_data)
-        sentences[sentence_idx]['start_time'] = min(sentences[sentence_idx]['start_time'], word_data['start_time'])
-        sentences[sentence_idx]['end_time'] = max(sentences[sentence_idx]['end_time'], word_data['end_time'])
-    
-    # Create clips for each sentence
-    for sentence_idx, sentence_data in sentences.items():
-        sentence_clip = create_sentence_highlight_clip(
-            sentence_data=sentence_data,
-            config=config,
-            video_size=video_size
-        )
-        if sentence_clip:
-            clips.append(sentence_clip)
-    
-    return clips
+    Process a video to add enhanced word-highlighting subtitles.
 
+    Args:
+        video_path: Path to the input video
+        output_path: Path for the output video with subtitles
+        config: Subtitle configuration
 
-def create_3d_shadow_text_clip(
-    text: str,
-    font_size: int,
-    font_family: str,
-    config: SubtitleConfig,
-    max_width: int,
-    duration: float
-) -> CompositeVideoClip:
+    Returns:
+        True if successful, False otherwise
     """
-    Create a text clip with 3D blue shadow effect using multiple layers.
-    """
-    clips = []
-    
-    # Create shadow layers (from back to front) based on config
-    if config.shadow_enabled and config.shadow_layers_count >= 2:
-        # Define all available shadow layers
-        all_shadow_layers = [
-            (config.shadow_layer_4_color, config.shadow_layer_4_offset_x, config.shadow_layer_4_offset_y),  # Furthest
-            (config.shadow_layer_3_color, config.shadow_layer_3_offset_x, config.shadow_layer_3_offset_y),
-            (config.shadow_layer_2_color, config.shadow_layer_2_offset_x, config.shadow_layer_2_offset_y),
-            (config.shadow_layer_1_color, config.shadow_layer_1_offset_x, config.shadow_layer_1_offset_y)   # Closest
-        ]
-        
-        # Only use the requested number of layers, starting from the furthest
-        # For 2 layers: use layer 4 and 1 (furthest and closest)
-        # For 3 layers: use layer 4, 3, and 1 (skip layer 2)
-        # For 4 layers: use all layers
-        if config.shadow_layers_count == 2:
-            shadow_layers = [all_shadow_layers[0], all_shadow_layers[3]]  # Layer 4 and 1
-        elif config.shadow_layers_count == 3:
-            shadow_layers = [all_shadow_layers[0], all_shadow_layers[1], all_shadow_layers[3]]  # Layer 4, 3, and 1
-        else:  # 4 layers
-            shadow_layers = all_shadow_layers
-        
-        for shadow_color, offset_x, offset_y in shadow_layers:
-            try:
-                shadow_clip = TextClip(
-                    text=text,
-                    font_size=font_size,
-                    color=shadow_color,
-                    font=font_family,
-                    method='caption',
-                    size=(max_width, None),
-                    interline=int(font_size * 0.1)  # Letter spacing effect
-                ).with_position((offset_x, offset_y)).with_duration(duration)
-                clips.append(shadow_clip)
-            except Exception as e:
-                print(f"Error creating shadow layer with color {shadow_color}: {e}")
-    
-    # Create main text (white, on top)
+    if config is None:
+        config = SubtitleConfig()
+
+    # Step 1: Extract audio
+    audio_path = extract_audio(video_path)
+    if not audio_path:
+        return False
+
     try:
-        main_text = TextClip(
-            text=text,
-            font_size=font_size,
-            color=config.default_color,
-            font=font_family,
-            method='caption',
-            size=(max_width, None),
-            interline=int(font_size * 0.1)  # Letter spacing effect
-        ).with_position((0, 0)).with_duration(duration)
-        clips.append(main_text)
+        # Step 2: Transcribe with word timestamps
+        transcription_data = transcribe_audio_with_word_timestamps(audio_path, config.whisper_model)
+        if not transcription_data:
+            return False
+
+        # Step 3: Create ASS subtitle file
+        ass_path = "temp_subtitles.ass"
+        if not create_ass_file(transcription_data, ass_path, config):
+            return False
+
+        # Step 4: Burn subtitles into video
+        success = burn_subtitles_to_video(video_path, ass_path, output_path)
+
+        # Cleanup
+        try:
+            os.remove(audio_path)
+            if os.path.exists(ass_path):
+                os.remove(ass_path)
+        except OSError as e:
+            print(f"Warning: Could not cleanup temporary files: {e}")
+
+        return success
+
     except Exception as e:
-        print(f"Error creating main text clip: {e}")
-        # Fallback to basic text
-        main_text = TextClip(
-            text=text,
-            font_size=font_size,
-            color=config.default_color,
-            size=(max_width, None)
-        ).with_position((0, 0)).with_duration(duration)
-        clips.append(main_text)
-    
-    if not clips:
-        # Emergency fallback
-        return TextClip(
-            text=text,
-            font_size=font_size,
-            color="#FFFFFF",
-            size=(max_width, None)
-        ).with_duration(duration)
-    
-    return CompositeVideoClip(clips)
-
-
-def create_sentence_highlight_clip(
-    sentence_data: Dict[str, Any],
-    config: SubtitleConfig,
-    video_size: Tuple[int, int]
-) -> Optional[CompositeVideoClip]:
-    """
-    Create a clip for a single sentence with word-by-word highlighting.
-    """
-    video_width, video_height = video_size
-    words = sentence_data['words']
-    sentence_text = sentence_data['text']
-    sentence_start = sentence_data['start_time']
-    sentence_end = sentence_data['end_time']
-    sentence_duration = sentence_end - sentence_start
-    
-    if sentence_duration <= 0:
-        return None
-    
-    # Calculate font size based on video size
-    font_size = max(20, int(video_height * (config.font_size / 1000)))
-    max_width = int(video_width * config.max_width_percent)
-    
-    # Create the 3D shadow text clip with new styling
-    base_text_clip = create_3d_shadow_text_clip(
-        text=sentence_text,
-        font_size=font_size,
-        font_family=config.font_family,
-        config=config,
-        max_width=max_width,
-        duration=sentence_duration
-    )
-    
-    # Create background only if opacity > 0 (disabled by default in new style)
-    if config.background_opacity > 0:
-        bg_width = base_text_clip.w + 2 * config.padding_x
-        bg_height = base_text_clip.h + 2 * config.padding_y
-        
-        background = ColorClip(
-            size=(bg_width, bg_height),
-            color=hex_to_rgb(config.background_color)
-        ).with_opacity(config.background_opacity).with_duration(sentence_duration)
-        
-        text_padding_x = config.padding_x
-        text_padding_y = config.padding_y
-    else:
-        background = None
-        text_padding_x = 0
-        text_padding_y = 0
-    
-    # Since we're using white text for both default and highlight, we can simplify
-    # Position the text clip
-    positioned_text = base_text_clip.with_position((text_padding_x, text_padding_y))
-    
-    # Combine all elements
-    if background is not None:
-        all_clips = [background, positioned_text]
-    else:
-        all_clips = [positioned_text]
-    
-    try:
-        sentence_clip = CompositeVideoClip(all_clips).with_start(sentence_start)
-        
-        # Position the entire sentence clip
-        positioned_clip = position_subtitle_clip(sentence_clip, config.position, video_size)
-        return positioned_clip
-        
-    except Exception as e:
-        print(f"Error creating sentence clip: {e}")
-        return None
-
-
-def position_subtitle_clip(clip: CompositeVideoClip, position: str, video_size: Tuple[int, int]) -> CompositeVideoClip:
-    """Position subtitle clip based on position string."""
-    video_width, video_height = video_size
-    
-    try:
-        raw_pos = position.strip().lower()
-        
-        if raw_pos.startswith('pct:'):
-            # Percentage positioning
-            match = re.match(r"pct:\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*([0-9]+(?:\.[0-9]+)?)", raw_pos)
-            if match:
-                x_pct = float(match.group(1))
-                y_pct = float(match.group(2))
-                
-                clip_w = getattr(clip, 'w', 0) or 0
-                clip_h = getattr(clip, 'h', 0) or 0
-                
-                center_x = int((x_pct / 100.0) * video_width)
-                center_y = int((y_pct / 100.0) * video_height)
-                
-                left = max(0, min(center_x - clip_w // 2, video_width - clip_w))
-                top = max(0, min(center_y - clip_h // 2, video_height - clip_h))
-                
-                return clip.with_position((left, top))
-        
-        elif raw_pos.startswith('px:'):
-            # Pixel positioning
-            match = re.match(r"px:\s*([0-9]+)\s*,\s*([0-9]+)", raw_pos)
-            if match:
-                x_px = int(match.group(1))
-                y_px = int(match.group(2))
-                
-                clip_w = getattr(clip, 'w', 0) or 0
-                clip_h = getattr(clip, 'h', 0) or 0
-                
-                left = max(0, min(x_px, video_width - clip_w))
-                top = max(0, min(y_px, video_height - clip_h))
-                
-                return clip.with_position((left, top))
-        
-        else:
-            # Grid positioning - use consistent coordinate system
-            parts = [p.strip() for p in raw_pos.split(',')]
-            horizontal = parts[0] if parts and parts[0] in ('left', 'center', 'right') else 'center'
-            vertical = parts[1] if len(parts) > 1 and parts[1] in ('top', 'center', 'bottom') else 'bottom'
-            
-            # Get clip dimensions
-            clip_w = getattr(clip, 'w', 0) or 0
-            clip_h = getattr(clip, 'h', 0) or 0
-            
-            # Calculate position based on grid - align with frontend preview
-            # Use the same positioning logic as in video.py for consistency
-            if horizontal == 'left':
-                x = int(0.10 * video_width) - (clip_w // 2)  # 10% from left, centered on subtitle
-            elif horizontal == 'right':
-                x = int(0.90 * video_width) - (clip_w // 2)  # 90% from left, centered on subtitle
-            else:  # center
-                x = (video_width - clip_w) // 2  # Center horizontally
-            
-            if vertical == 'top':
-                y = int(0.15 * video_height) - (clip_h // 2)  # 15% from top, centered on subtitle
-            elif vertical == 'center':
-                y = (video_height - clip_h) // 2  # Center vertically
-            else:  # bottom
-                y = int(0.85 * video_height) - clip_h  # 85% from top, subtitle bottom aligns with this line
-            
-            # Ensure position is within bounds with proper margin for bottom positioning
-            x = max(0, min(x, video_width - clip_w))
-            y = max(0, min(y, video_height - clip_h))
-            
-            return clip.with_position((x, y))
-    
-    except Exception as e:
-        print(f"Error positioning clip: {e}")
-        # Default to center-bottom
-        return clip.with_position(('center', 'bottom'))
-    
-    return clip.with_position(('center', 'bottom'))
+        print(f"Error processing video with enhanced subtitles: {e}")
+        # Cleanup on error
+        try:
+            if audio_path and os.path.exists(audio_path):
+                os.remove(audio_path)
+        except:
+            pass
+        return False
 
 
 def generate_enhanced_subtitles(
     sentences: List[str],
     audio_clips: List[Any],
     config: Optional[SubtitleConfig] = None,
-    video_size: Tuple[int, int] = (1080, 1920),
-    output_path: Optional[str] = None
+    output_path: Optional[str] = None,
+    video_size: Optional[Tuple[int, int]] = None
 ) -> str:
     """
-    Generate enhanced subtitle data with TikTok-style configuration.
-    
+    Generate enhanced subtitle data using whisper transcription.
+
+    Args:
+        sentences: List of sentences to transcribe
+        audio_clips: List of audio clips (for timing estimation as fallback)
+        config: Subtitle configuration
+        output_path: Path to save the enhanced subtitle file
+        video_size: Optional video dimensions for positioning/styling
+
     Returns:
-        Path to JSON file containing subtitle data and configuration
+        Path to the enhanced subtitle JSON file
     """
     if config is None:
         config = SubtitleConfig()
-    
-    # Generate word timings
-    word_timings = estimate_word_timings(sentences, audio_clips)
-    
-    # Create subtitle data structure with properly formatted sentences
-    sentence_data = []
-    for idx, sentence in enumerate(sentences):
-        sentence_words = [wt for wt in word_timings if wt['sentence_index'] == idx]
-        if sentence_words:
-            sentence_data.append({
-                "text": sentence,
-                "index": idx,
-                "start_time": min(wt['start_time'] for wt in sentence_words),
-                "end_time": max(wt['end_time'] for wt in sentence_words)
-            })
+
+    # Create temporary audio file from audio clips
+    import tempfile
+    from moviepy import concatenate_audioclips
+
+    try:
+        # Combine all audio clips
+        combined_audio = concatenate_audioclips(audio_clips)
+
+        # Save to temporary file
+        temp_audio_path = tempfile.mktemp(suffix='.wav')
+        combined_audio.write_audiofile(temp_audio_path, codec='pcm_s16le')
+
+        # Transcribe with word timestamps
+        transcription_data = transcribe_audio_with_word_timestamps(temp_audio_path, config.whisper_model)
+
+        # Create subtitle data structure
+        if transcription_data:
+            # Transform Whisper transcription data to expected format
+            sentences = []
+            word_timings = []
+            
+            for segment in transcription_data.get('segments', []):
+                # Create sentence entry
+                sentence = {
+                    'text': segment.get('text', '').strip(),
+                    'start_time': segment.get('start', 0),
+                    'end_time': segment.get('end', 0),
+                    'confidence': segment.get('confidence', 0)
+                }
+                sentences.append(sentence)
+                
+                # Create word timing entries
+                for word in segment.get('words', []):
+                    word_timing = {
+                        'word': word.get('text', ''),
+                        'start_time': word.get('start', 0),
+                        'end_time': word.get('end', 0),
+                        'confidence': word.get('confidence', 0),
+                        'sentence_index': len(sentences) - 1,
+                        'sentence': sentence['text']
+                    }
+                    word_timings.append(word_timing)
+            
+            subtitle_data = {
+                'version': '1.0',
+                'type': 'enhanced_ass',
+                'config': asdict(config),
+                'sentences': sentences,
+                'word_timings': word_timings,
+                'transcription': transcription_data,  # Keep original for compatibility
+                'metadata': {
+                    'total_segments': len(transcription_data.get('segments', [])),
+                    'total_duration': transcription_data.get('duration', 0),
+                    'total_sentences': len(sentences),
+                    'total_words': len(word_timings)
+                }
+            }
         else:
-            # Handle case where no words found for sentence
-            sentence_data.append({
-                "text": sentence,
-                "index": idx,
-                "start_time": 0.0,
-                "end_time": 1.0
-            })
-    
-    subtitle_data = {
-        'version': '1.0',
-        'type': 'tiktok_enhanced',
-        'config': asdict(config),
-        'video_size': video_size,
-        'sentences': sentence_data,
-        'word_timings': word_timings,
-        'metadata': {
-            'total_words': len(word_timings),
-            'total_sentences': len(sentences),
-            'total_duration': max([wt['end_time'] for wt in word_timings]) if word_timings else 0
-        }
-    }
-    
-    # Save to file - use absolute path
-    import os
-    if output_path is not None:
-        subtitle_path = output_path
-    else:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        subtitles_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), 'subtitles')
-        subtitle_path = os.path.join(subtitles_dir, f"{uuid.uuid4()}_enhanced.json")
-    Path(subtitle_path).parent.mkdir(parents=True, exist_ok=True)
+            # Fallback to basic structure
+            subtitle_data = {
+                'version': '1.0',
+                'type': 'enhanced_ass',
+                'config': asdict(config),
+                'sentences': [],
+                'word_timings': [],
+                'transcription': {},
+                'metadata': {'total_segments': 0, 'total_duration': 0, 'total_sentences': 0, 'total_words': 0}
+            }
 
-    with open(subtitle_path, 'w', encoding='utf-8') as f:
-        json.dump(subtitle_data, f, indent=2, ensure_ascii=False)
+        # Save to file
+        if output_path is None:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            subtitles_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), 'subtitles')
+            output_path = os.path.join(subtitles_dir, f"{uuid.uuid4()}_enhanced.json")
 
-    print(f"Enhanced subtitle data saved to: {subtitle_path}")
-    return subtitle_path
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(subtitle_data, f, indent=2, ensure_ascii=False)
+
+        print(f"Enhanced subtitle data saved to: {output_path}")
+        return output_path
+
+    except Exception as e:
+        print(f"Error generating enhanced subtitles: {e}")
+        # Return empty structure
+        if output_path:
+            subtitle_data = {
+                'version': '1.0',
+                'type': 'enhanced_ass',
+                'config': asdict(config) if config else {},
+                'sentences': [],
+                'word_timings': [],
+                'transcription': {},
+                'metadata': {'total_segments': 0, 'total_duration': 0, 'total_sentences': 0, 'total_words': 0}
+            }
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(subtitle_data, f, indent=2, ensure_ascii=False)
+            return output_path
+        return ""
+
+
+def convert_json_to_ass_and_burn(
+    json_subtitle_path: str,
+    video_path: str,
+    output_path: str,
+    config: Optional[SubtitleConfig] = None
+) -> bool:
+    """
+    Convert JSON subtitle data to ASS format and burn it into the video.
+    
+    Args:
+        json_subtitle_path: Path to the JSON subtitle file
+        video_path: Path to the input video
+        output_path: Path for the output video with burned subtitles
+        config: Subtitle configuration (optional, will be loaded from JSON if not provided)
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Load JSON subtitle data
+        with open(json_subtitle_path, 'r', encoding='utf-8') as f:
+            subtitle_data = json.load(f)
+        
+        # Load config from JSON if not provided
+        if config is None and 'config' in subtitle_data:
+            config_dict = subtitle_data['config']
+            config = SubtitleConfig(**config_dict)
+        elif config is None:
+            config = SubtitleConfig()
+        
+        # Create temporary ASS file
+        import tempfile
+        ass_path = tempfile.mktemp(suffix='.ass')
+        
+        # Convert transcription data to ASS format
+        transcription_data = subtitle_data.get('transcription', {})
+        if not transcription_data:
+            print("No transcription data found in JSON subtitle file")
+            return False
+        
+        # Create ASS file
+        if not create_ass_file(transcription_data, ass_path, config):
+            print("Failed to create ASS file")
+            return False
+        
+        # Burn subtitles into video
+        success = burn_subtitles_to_video(video_path, ass_path, output_path)
+        
+        # Cleanup temporary ASS file
+        try:
+            if os.path.exists(ass_path):
+                os.remove(ass_path)
+        except OSError as e:
+            print(f"Warning: Could not cleanup temporary ASS file: {e}")
+        
+        return success
+        
+    except Exception as e:
+        print(f"Error converting JSON to ASS and burning subtitles: {e}")
+        return False
 
 
 def create_enhanced_subtitle_clip(
     subtitle_path: str,
     video_size: Tuple[int, int]
-) -> CompositeVideoClip:
+) -> Optional[Any]:
     """
     Create enhanced subtitle clip from saved data.
-    
-    Args:
-        subtitle_path: Path to the enhanced subtitle JSON file
-        video_size: Video dimensions (width, height)
-        
-    Returns:
-        CompositeVideoClip with enhanced subtitles
+
+    For the new ASS-based approach, this function creates a simple placeholder
+    since the actual subtitle burning is done via FFmpeg.
     """
-    try:
-        # Use the new word highlighting implementation
-        import word_highlight_subtitles
-        return word_highlight_subtitles.create_word_highlight_subtitles_from_file(subtitle_path, video_size)
-    except ImportError:
-        print("Warning: word_highlight_subtitles module not found, using fallback")
-        # Fallback to basic implementation
-        return create_enhanced_subtitle_clip_fallback(subtitle_path, video_size)
-    except Exception as e:
-        print(f"Error creating enhanced subtitle clip: {e}")
-        # Create a transparent empty clip instead of empty composite
-        from moviepy import ColorClip
-        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
+    from moviepy import ColorClip
 
-
-def create_enhanced_subtitle_clip_fallback(
-    subtitle_path: str,
-    video_size: Tuple[int, int]
-) -> CompositeVideoClip:
-    """
-    Fallback implementation for enhanced subtitle clip creation.
-    """
-    # Load subtitle data
-    with open(subtitle_path, 'r', encoding='utf-8') as f:
-        subtitle_data = json.load(f)
-    
-    # Reconstruct config
-    config_data = subtitle_data.get('config', {})
-    config = SubtitleConfig(**config_data)
-    
-    # Get word timings
-    word_timings = subtitle_data.get('word_timings', [])
-    
-    if not word_timings:
-        from moviepy import ColorClip
-        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
-    
-    # Create word clips
-    clips = create_word_clips(word_timings, config, video_size)
-    
-    if not clips:
-        from moviepy import ColorClip
-        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
-    
-    # Combine all clips
-    try:
-        final_clip = CompositeVideoClip(clips)
-        return final_clip
-    except Exception as e:
-        print(f"Error creating final subtitle clip: {e}")
-        from moviepy import ColorClip
-        return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
-
-
-# Utility functions for integration
-
-def create_tiktok_style_config(
-    font_family: str = "Arial-Bold",
-    font_size: int = 48,
-    default_color: str = "#FFFFFF",
-    highlight_color: str = "#FFFFFF",  # Changed to white for new style
-    position: str = "center,bottom",
-    **kwargs
-) -> SubtitleConfig:
-    """Create a TikTok-style subtitle configuration with custom parameters."""
-    return SubtitleConfig(
-        font_family=font_family,
-        font_size=font_size,
-        default_color=default_color,
-        highlight_color=highlight_color,
-        position=position,
-        **kwargs
-    )
+    # Return a transparent clip - the actual subtitles are burned in via FFmpeg
+    return ColorClip(size=video_size, color=(0,0,0,0), duration=0.1).with_opacity(0)
 
 
 def is_enhanced_subtitle_file(subtitle_path: str) -> bool:
@@ -600,6 +637,69 @@ def is_enhanced_subtitle_file(subtitle_path: str) -> bool:
     try:
         with open(subtitle_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            return data.get('type') == 'tiktok_enhanced'
+            return data.get('type') in ['enhanced_ass', 'tiktok_enhanced']
     except (json.JSONDecodeError, FileNotFoundError, KeyError):
         return False
+
+
+def create_tiktok_style_config(
+    font_family: str = "Arial",
+    font_size: int = 28,
+    primary_color: str = "&H00FFFFFF",
+    highlight_color: str = "&H0000FFFF",
+    position: str = "center,bottom",
+    **kwargs
+) -> SubtitleConfig:
+    """Create a TikTok-style subtitle configuration."""
+    return SubtitleConfig(
+        font_family=font_family,
+        font_size=font_size,
+        primary_color=primary_color,
+        default_color=primary_color,  # Set default_color to match primary_color
+        border_color=kwargs.get('border_color', '&H00000000'),
+        stroke_color=kwargs.get('stroke_color', '&H00000000'),
+        highlight_color=highlight_color,
+        background_color=kwargs.get('background_color', '&H00000000'),
+        stroke_width=kwargs.get('stroke_width', 2),
+        background_opacity=kwargs.get('background_opacity', 0.0),
+        padding_x=kwargs.get('padding_x', 16),
+        padding_y=kwargs.get('padding_y', 12),
+        position=position,
+        shadow_layers_count=kwargs.get('shadow_layers_count', 0),
+        shadow_layer_1_color=kwargs.get('shadow_layer_1_color', '&H00000000'),
+        shadow_layer_2_color=kwargs.get('shadow_layer_2_color', '&H00000000'),
+        shadow_layer_3_color=kwargs.get('shadow_layer_3_color', '&H00000000'),
+        shadow_layer_4_color=kwargs.get('shadow_layer_4_color', '&H00000000'),
+        whisper_model=kwargs.get('whisper_model', 'base')
+    )
+
+
+def create_subtitle_config_from_legacy(config: Dict[str, Any]) -> SubtitleConfig:
+    """Convert legacy subtitle config format to new format."""
+    # Handle color mapping: use primary_color if available, otherwise default_color, otherwise white
+    primary_color = config.get('primary_color') or config.get('default_color') or '&H00FFFFFF'
+
+    return SubtitleConfig(
+        font_family=config.get('font_family', 'Arial'),
+        font_size=config.get('font_size', 28),
+        primary_color=primary_color,
+        default_color=primary_color,  # Set default_color to match primary_color
+        border_color=config.get('border_color', config.get('stroke_color', '&H00000000')),
+        stroke_color=config.get('stroke_color', config.get('border_color', '&H00000000')),
+        highlight_color=config.get('highlight_color', '&H0000FFFF'),
+        background_color=config.get('background_color', '&H00000000'),
+        stroke_width=config.get('stroke_width', 2),
+        background_opacity=config.get('background_opacity', 0.0),
+        padding_x=config.get('padding_x', 16),
+        padding_y=config.get('padding_y', 12),
+        position=config.get('position', 'center,bottom'),
+        shadow_layers_count=config.get('shadow_layers_count', 0),
+        shadow_layer_1_color=config.get('shadow_layer_1_color', '&H00000000'),
+        shadow_layer_2_color=config.get('shadow_layer_2_color', '&H00000000'),
+        shadow_layer_3_color=config.get('shadow_layer_3_color', '&H00000000'),
+        shadow_layer_4_color=config.get('shadow_layer_4_color', '&H00000000'),
+        whisper_model=config.get('whisper_model', 'base')
+    )
+
+
+# End of enhanced_subtitles.py

@@ -38,6 +38,9 @@ google-genai==1.24.0
 # Enhanced ASR for better word-level timestamps
 stable-ts==2.17.5
 faster-whisper==1.1.0
+whisper-timestamped==1.15.4
+pysubs2==1.7.3
+ffmpeg-python==0.2.0
 
 # Brainrot deps
 yt-dlp==2025.6.30
