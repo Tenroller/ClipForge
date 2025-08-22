@@ -67,9 +67,9 @@ class ColoredConsoleFormatter(logging.Formatter):
 
 def setup_logging() -> logging.Logger:
     """Setup application logging with console and file handlers."""
-    
-    # Create logs directory
-    log_dir = Path("logs")
+    # Always use the root logs directory
+    root_dir = Path(__file__).resolve().parents[1]
+    log_dir = root_dir / "logs"
     log_dir.mkdir(exist_ok=True)
     
     # Get root logger
@@ -166,9 +166,8 @@ def log_job_event(logger: logging.Logger, job_id: str, workflow: str,
     )
 
 
-def log_error(logger: logging.Logger, error: Exception, context: Dict[str, Any] = None) -> None:
+def log_error(logger: logging.Logger, error: Exception, context: Dict[str, Any] = {}) -> None:
     """Log errors with context."""
-    context = context or {}
     logger.error(
         f"Error: {str(error)}",
         exc_info=True,

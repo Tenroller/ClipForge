@@ -60,9 +60,6 @@ change_settings({"IMAGEMAGICK_BINARY": os.getenv("IMAGEMAGICK_BINARY")})
 app = Flask(__name__)
 CORS(app)
 
-# Constants
-HOST = "0.0.0.0"
-PORT = 8080
 AMOUNT_OF_STOCK_VIDEOS = 5
 GENERATING = False
 
@@ -415,12 +412,6 @@ def cancel():
     GENERATING = False
 
     return jsonify({"status": "success", "message": "Cancelled video generation."})
-
-
-if __name__ == "__main__":
-
-    # Run Flask App
-    app.run(debug=True, host=HOST, port=PORT)
 
 
 # ------------------------------

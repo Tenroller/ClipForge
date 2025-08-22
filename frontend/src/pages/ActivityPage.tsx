@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/components/ui/card'
 import { Badge } from '@/components/components/ui/badge'
 import { Button } from '@/components/components/ui/button'
-import { Eye } from 'lucide-react'
-import { listJobs, type JobRecord } from '@/lib/api'
+import { Eye, RefreshCw, Loader2 } from 'lucide-react'
+import { listJobs, remakeJob, type JobRecord } from '@/lib/api'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
 import ResultPanel from '@/components/ResultPanel'
@@ -12,6 +12,7 @@ import ResumableJobsPanel from '@/components/ResumableJobsPanel'
 export default function ActivityPage() {
   const [serverJobs, setServerJobs] = useState<JobRecord[]>([])
   const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
+  const [remakingJobs, setRemakingJobs] = useState<Set<string>>(new Set())
   const jobManager = useJobManager()
 
   useEffect(() => {
@@ -30,6 +31,35 @@ export default function ActivityPage() {
 
   const handleCloseResult = () => {
     setSelectedResult(null)
+  }
+
+  const handleRemakeJob = async (jobId: string) => {
+    try {
+      setRemakingJobs(prev => new Set(prev.add(jobId)))
+      const result = await remakeJob(jobId)
+      
+      // Refresh the jobs list to show the new job
+      const updatedJobs = await listJobs(50)
+      setServerJobs(updatedJobs)
+      
+      // Show success message (you could add a toast notification here)
+      console.log(`Job remade successfully: ${result.job_id}`)
+      
+    } catch (error) {
+      console.error('Failed to remake job:', error)
+      alert(`Failed to remake job: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setRemakingJobs(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(jobId)
+        return newSet
+      })
+    }
+  }
+
+  const canRemakeJob = (job: JobRecord) => {
+    // Can remake jobs that are done, error, or cancelled and have request_data
+    return ['done', 'error', 'cancelled'].includes(job.status) && job.request_data
   }
 
   // If showing results, render the result panel
@@ -67,7 +97,26 @@ export default function ActivityPage() {
                       <Badge variant="outline" className="text-[10px] uppercase">{j.workflow}</Badge>
                       <div className="text-sm font-medium">{j.id}</div>
                     </div>
-                    <Badge variant={j.status === 'done' ? 'default' : j.status === 'error' ? 'destructive' : 'secondary'}>{j.status}</Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={j.status === 'done' ? 'default' : j.status === 'error' ? 'destructive' : 'secondary'}>{j.status}</Badge>
+                      {canRemakeJob(j) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRemakeJob(j.id)}
+                          disabled={remakingJobs.has(j.id)}
+                          className="h-7 px-2 text-xs"
+                          title="Remake with same parameters"
+                        >
+                          {remakingJobs.has(j.id) ? (
+                            <Loader2 className="size-3 mr-1 animate-spin" />
+                          ) : (
+                            <RefreshCw className="size-3 mr-1" />
+                          )}
+                          Remake
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

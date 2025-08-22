@@ -25,9 +25,23 @@ def search_for_stock_videos(query: str, api_key: str, it: int, min_dur: int) -> 
 
     # Send the request
     r = requests.get(qurl, headers=headers)
+    
+    # Check for API errors first
+    if r.status_code == 401:
+        print(colored("[-] Pexels API Error: Unauthorized. Check your PEXELS_API_KEY environment variable.", "red"))
+        return []
+    elif r.status_code != 200:
+        print(colored(f"[-] Pexels API Error: HTTP {r.status_code}", "red"))
+        return []
 
     # Parse the response
     response = r.json()
+    
+    # Check if we have the expected structure
+    if "videos" not in response:
+        print(colored("[-] Pexels API Error: Unexpected response format", "red"))
+        print(colored(f"Response: {response}", "red"))
+        return []
 
     # Parse each video
     raw_urls = []
@@ -36,6 +50,10 @@ def search_for_stock_videos(query: str, api_key: str, it: int, min_dur: int) -> 
     try:
         # loop through each video in the result
         for i in range(it):
+            # Make sure we have enough videos in the response
+            if i >= len(response["videos"]):
+                break
+            
             #check if video has desired minimum duration
             if response["videos"][i]["duration"] < min_dur:
                 continue

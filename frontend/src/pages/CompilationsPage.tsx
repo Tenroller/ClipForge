@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/component
 import { Input } from '@/components/components/ui/input'
 import { Label } from '@/components/components/ui/label'
 import { Button } from '@/components/components/ui/button'
-import { Loader2, Brain, HelpCircle } from 'lucide-react'
+import { Switch } from '@/components/components/ui/switch'
+import { Loader2, Brain, HelpCircle, Cpu } from 'lucide-react'    
 import { MultiJobPanel } from '@/components/MultiJobPanel'
 import ResultPanel from '@/components/ResultPanel'
 import { useJobManager } from '@/hooks/useJobManager'
@@ -15,6 +16,7 @@ const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 export default function CompilationsPage() {
   const [busy, setBusy] = useState(false)
   const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
+  const [useGpu, setUseGpu] = useState(true)
 
   const jobManager = useJobManager()
 
@@ -41,6 +43,7 @@ export default function CompilationsPage() {
   async function startBrainrot(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = new FormData(e.currentTarget)
+    
     const payload = {
       youtubeUrl: String(form.get('youtubeUrl') || ''),
       numCompilations: Number(form.get('numCompilations') || 1),
@@ -213,6 +216,33 @@ export default function CompilationsPage() {
                         className="transition-all duration-200"
                       />
                     </div>
+                  </div>
+
+                  {/* Local GPU Toggle */}
+                  <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
+                    <div className="flex items-center gap-3">
+                      {useGpu ? (
+                        <Cpu className="size-5 text-green-500" />
+                      ) : (
+                        <Cpu className="size-5 text-gray-500" />
+                      )}
+                      <div>
+                        <Label htmlFor="use-gpu-brainrot" className="font-medium">
+                          {useGpu ? 'GPU Acceleration' : 'CPU Processing'}
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          {useGpu 
+                            ? 'Using local GPU for faster video processing'
+                            : 'Using CPU for video processing (slower)'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <Switch
+                      id="use-gpu-brainrot"
+                      checked={useGpu}
+                      onCheckedChange={setUseGpu}
+                    />
                   </div>
 
                   <Button

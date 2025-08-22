@@ -96,7 +96,6 @@ def choose_random_song() -> str:
         logger.error(colored(f"Error occurred while choosing random song: {str(e)}", "red"))
         raise
 
-
 def check_env_vars() -> None:
     """
     Checks if the necessary environment variables are set.

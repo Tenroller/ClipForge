@@ -6,10 +6,11 @@ import httplib2
 
 from termcolor import colored
 from oauth2client.file import Storage
-from apiclient.discovery import build
-from apiclient.errors import HttpError
-from apiclient.http import MediaFileUpload
-from oauth2client.tools import argparser, run_flow
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaFileUpload
+from oauth2client.tools import run_flow
+import argparse
 from oauth2client.client import flow_from_clientsecrets
 
 # Explicitly tell the underlying HTTP transport library not to retry, since
@@ -73,15 +74,17 @@ def get_authenticated_service():
 
     storage = Storage(f"{sys.argv[0]}-oauth2.json")
     credentials = storage.get()
-
     if credentials is None or credentials.invalid:
-        flags = argparser.parse_args()
+        flags = argparse.ArgumentParser(parents=[]).parse_args([])
+        credentials = run_flow(flow, storage, flags)
         credentials = run_flow(flow, storage, flags)
 
     return build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
                  http=credentials.authorize(httplib2.Http()))
 
-def initialize_upload(youtube: any, options: dict):
+from typing import Any
+
+def initialize_upload(youtube: Any, options: dict):
     """
     This method uploads a video to YouTube.
 
@@ -120,13 +123,15 @@ def initialize_upload(youtube: any, options: dict):
 
     return resumable_upload(insert_request)
 
-def resumable_upload(insert_request: MediaFileUpload):
+from googleapiclient.http import HttpRequest
+
+def resumable_upload(insert_request: HttpRequest):
     """
     This method implements an exponential backoff strategy to resume a  
     failed upload.
 
     Args:
-        insert_request (MediaFileUpload): The request to insert the video.
+        insert_request (HttpRequest): The request to insert the video.
 
     Returns:
         response: The response from the upload process.
@@ -138,7 +143,7 @@ def resumable_upload(insert_request: MediaFileUpload):
         try:
             print(colored(" => Uploading file...", "magenta"))
             status, response = insert_request.next_chunk()
-            if 'id' in response:
+            if response is not None and 'id' in response:
                 print(f"Video id '{response['id']}' was successfully uploaded.")
                 return response
         except HttpError as e:

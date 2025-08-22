@@ -40,9 +40,27 @@ export type PreviewPanelProps = {
   //   - "px:x,y"  (absolute pixels for top-left of box)
   positionRaw?: string
   onChangePositionRaw?: (raw: string) => void
+  // 3D Shadow colors for enhanced subtitles
+  shadowLayersCount?: number
+  shadowLayer1Color?: string
+  shadowLayer2Color?: string
+  shadowLayer3Color?: string
+  shadowLayer4Color?: string
 }
 
-export default function PreviewPanel({ position, onChangePosition, previewUrl, color = "#FFFF00", positionRaw, onChangePositionRaw }: PreviewPanelProps) {
+export default function PreviewPanel({ 
+  position, 
+  onChangePosition, 
+  previewUrl, 
+  color = "#FFFF00", 
+  positionRaw, 
+  onChangePositionRaw,
+  shadowLayersCount = 4,
+  shadowLayer1Color = '#4A90E2',
+  shadowLayer2Color = '#357ABD',
+  shadowLayer3Color = '#2E5F8A',
+  shadowLayer4Color = '#1E3F5A'
+}: PreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const itemRef = useRef<HTMLDivElement | null>(null)
   const [{ dragging, startX, startY, originX, originY }, setDrag] = useState({
@@ -206,6 +224,25 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
     }
   }, [position, positionRaw])
 
+  // Create 3D blue shadow effect based on selected layer count
+  const textShadowStyle = (() => {
+    const allLayers = [
+      `8px 8px 0px ${shadowLayer4Color}`,  // Furthest
+      `6px 6px 0px ${shadowLayer3Color}`,
+      `4px 4px 0px ${shadowLayer2Color}`,
+      `2px 2px 0px ${shadowLayer1Color}`   // Closest
+    ];
+    
+    // Select layers based on count (same logic as backend)
+    if (shadowLayersCount === 2) {
+      return [allLayers[0], allLayers[3]].join(', '); // Layer 4 and 1
+    } else if (shadowLayersCount === 3) {
+      return [allLayers[0], allLayers[1], allLayers[3]].join(', '); // Layer 4, 3, and 1
+    } else { // 4 layers
+      return allLayers.join(', ');
+    }
+  })()
+
   return (
     <Card className="enhanced-card">
       <CardHeader className="flex-row items-center justify-between">
@@ -236,16 +273,17 @@ export default function PreviewPanel({ position, onChangePosition, previewUrl, c
           {/* Draggable placement overlay (used for both grid and free modes) */}
           <div
             ref={itemRef}
-            className="absolute px-3 py-2 rounded-md bg-black/50 backdrop-blur-sm border border-white/20 select-none transition-all"
+            className="absolute px-3 py-2 select-none transition-all"
             style={{ 
               left: leftPx, 
               top: topPx, 
               color, 
-              textShadow: '2px 2px 4px rgba(0,0,0,0.8), -2px -2px 4px rgba(0,0,0,0.8)',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+              textShadow: textShadowStyle,
+              letterSpacing: '1.5px',
+              fontWeight: 'bold'
             }}
           >
-            <div className="text-center font-semibold leading-snug">Example subtitle text</div>
+            <div className="text-center font-black leading-snug">Example subtitle text</div>
           </div>
 
           <div className="absolute inset-x-2 bottom-2">

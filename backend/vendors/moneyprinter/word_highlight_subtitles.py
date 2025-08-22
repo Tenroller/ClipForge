@@ -52,7 +52,7 @@ def create_word_highlight_subtitle_clip(
         font_family=config_data.get('font_family', 'Arial-Bold'),
         font_size=config_data.get('font_size', 48),
         default_color=config_data.get('default_color', '#FFFFFF'),
-        highlight_color=config_data.get('highlight_color', '#FF0000'),  # Changed to red for better visibility
+        highlight_color='#FF0000',  # Always use red for highlighted words for visibility
         stroke_color=config_data.get('stroke_color', '#000000'),
         background_color=config_data.get('background_color', '#000000'),
         stroke_width=config_data.get('stroke_width', 2),
@@ -227,6 +227,12 @@ def create_3_word_window_clip(
     video_width, video_height = video_size
     duration = end_time - start_time
     
+    # Debug logging to confirm function is called
+    debug_msg = f"DEBUG: create_3_word_window_clip called with {len(window_words)} words: {[w['word'] for w in window_words]}"
+    print(debug_msg)
+    with open('/tmp/subtitle_validation.log', 'a') as f:
+        f.write(f"{debug_msg}\n")
+    
     if duration <= 0.05:  # Skip very short durations
         return None
     
@@ -247,8 +253,29 @@ def create_3_word_window_clip(
     
     for idx, word_data in enumerate(window_words):
         word = word_data['word']
+        
+        # Skip empty or whitespace words BEFORE creating TextClip
+        if not word or word.strip() == '':
+            error_msg = f"VALIDATION: Skipping empty or whitespace word at index {idx}: '{word}'"
+            print(error_msg)
+            # Also log to file for debugging
+            with open('/tmp/subtitle_validation.log', 'a') as f:
+                f.write(f"{error_msg}\n")
+            continue
+            
+        # Skip words that are just single problematic characters
+        if len(word.strip()) == 1 and word.strip() in ['s', 't', 'a', 'I', 'o', 'e', 'n', 'r', 'h', 'l', 'd', 'u']:
+            error_msg = f"VALIDATION: Skipping problematic single character word at index {idx}: '{word}'"
+            print(error_msg)
+            # Also log to file for debugging
+            with open('/tmp/subtitle_validation.log', 'a') as f:
+                f.write(f"{error_msg}\n")
+            continue
+        
         is_highlighted = (idx == highlighted_word_idx)
         word_color = config.highlight_color if is_highlighted else config.default_color
+        
+        print(f"DEBUG: Creating TextClip for word {idx}: '{word}' (highlighted: {is_highlighted})")
         
         # Create word clip
         word_clip = None
@@ -277,9 +304,35 @@ def create_3_word_window_clip(
                 print(f"Failed to create word clip for '{word}': {e}")
                 continue
         
+        # If word is empty or whitespace only, skip it
+        if not word or word.strip() == '':
+            print(f"Skipping empty or whitespace word: '{word}'")
+            continue
+        
+        # Validate clip dimensions to prevent broadcasting errors
+        if word_clip is None or not hasattr(word_clip, 'w') or not hasattr(word_clip, 'h'):
+            print(f"VALIDATION ERROR: Skipping invalid word clip for '{word}': clip has no dimensions")
+            continue
+            
+        clip_width = getattr(word_clip, 'w', 0)
+        clip_height = getattr(word_clip, 'h', 0)
+        
+        if clip_width <= 0 or clip_height <= 0:
+            print(f"VALIDATION ERROR: Skipping zero-dimension word clip for '{word}': w={clip_width}, h={clip_height}")
+            continue
+            
+        # Additional safeguard: ensure minimum dimensions (at least 10 pixels each)
+        # This prevents broadcasting errors in MoviePy composite operations
+        if hasattr(word_clip, 'w') and hasattr(word_clip, 'h'):
+            if word_clip.w < 10 or word_clip.h < 10:
+                print(f"VALIDATION ERROR: Word clip for '{word}' has insufficient dimensions (w={word_clip.w}, h={word_clip.h}), skipping")
+                continue
+                
+        print(f"DEBUG: Successfully created word clip for '{word}': w={word_clip.w}, h={word_clip.h}")
+        
         individual_word_clips.append(word_clip)
-        total_text_width += word_clip.w
-        max_text_height = max(max_text_height, word_clip.h)
+        total_text_width += clip_width
+        max_text_height = max(max_text_height, clip_height)
         
         # Add spacing except for last word
         if idx < len(window_words) - 1:
@@ -326,8 +379,32 @@ def create_3_word_window_clip(
         # Only text clips, no background
         all_elements = positioned_word_clips
     
+    # Final validation: check all clips have valid dimensions before creating composite
+    valid_elements = []
+    for i, element in enumerate(all_elements):
+        if hasattr(element, 'w') and hasattr(element, 'h'):
+            if element.w > 0 and element.h > 0:
+                valid_elements.append(element)
+            else:
+                error_msg = f"FINAL VALIDATION: Dropping element {i} with zero dimensions: w={element.w}, h={element.h}"
+                print(error_msg)
+                with open('/tmp/subtitle_validation.log', 'a') as f:
+                    f.write(f"{error_msg}\n")
+        else:
+            error_msg = f"FINAL VALIDATION: Dropping element {i} without dimension attributes"
+            print(error_msg)
+            with open('/tmp/subtitle_validation.log', 'a') as f:
+                f.write(f"{error_msg}\n")
+    
+    if not valid_elements:
+        error_msg = "FINAL VALIDATION: No valid elements remain, returning None"
+        print(error_msg)
+        with open('/tmp/subtitle_validation.log', 'a') as f:
+            f.write(f"{error_msg}\n")
+        return None
+    
     try:
-        window_clip = CompositeVideoClip(all_elements).with_start(start_time)
+        window_clip = CompositeVideoClip(valid_elements).with_start(start_time)
         
         # Position the entire window on screen
         positioned_window = position_subtitle_clip(window_clip, config.position, video_size)

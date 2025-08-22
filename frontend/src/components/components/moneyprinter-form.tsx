@@ -7,7 +7,7 @@ import { Input } from "@/components/components/ui/input"
 import { Textarea } from "@/components/components/ui/textarea"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/components/ui/select"
 import { Switch } from "@/components/components/ui/switch"
-import { HelpCircle, RefreshCw, Sparkles, Cpu, Cloud, Loader2, Type, ChevronDown, ChevronUp } from "lucide-react"
+import { HelpCircle, RefreshCw, Sparkles, Cpu, Loader2, Type, ChevronDown, ChevronUp } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/components/ui/tooltip"
 import { Button } from "@/components/components/ui/button"
 import { toast } from "sonner"
@@ -47,7 +47,6 @@ export default function MoneyPrinterForm({
 }: MoneyPrinterFormProps) {
   const [useMusic, setUseMusic] = useState(false)
   const [useLocalGpu, setUseLocalGpu] = useState(true)
-  const [useCloudGpu, setUseCloudGpu] = useState(false)
   const [gpuInfoText, setGpuInfoText] = useState<string>("")
   const [voiceLoading, setVoiceLoading] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -58,13 +57,20 @@ export default function MoneyPrinterForm({
   const [subtitleFont, setSubtitleFont] = useState("Arial")
   const [subtitleFontSize, setSubtitleFontSize] = useState(48)
   const [subtitleDefaultColor, setSubtitleDefaultColor] = useState("#FFFFFF")
-  const [subtitleHighlightColor, setSubtitleHighlightColor] = useState("#FFFF00")
+  const [subtitleHighlightColor, setSubtitleHighlightColor] = useState("#FFFFFF")  // Changed to white
   const [subtitleStrokeColor, setSubtitleStrokeColor] = useState("#000000")
   const [subtitleBackgroundColor, setSubtitleBackgroundColor] = useState("#000000")
-  const [subtitleStrokeWidth, setSubtitleStrokeWidth] = useState(2)
-  const [subtitleBackgroundOpacity, setSubtitleBackgroundOpacity] = useState(0.6)
-  const [subtitlePaddingX, setSubtitlePaddingX] = useState(16)
-  const [subtitlePaddingY, setSubtitlePaddingY] = useState(12)
+  const [subtitleStrokeWidth, setSubtitleStrokeWidth] = useState(0)  // Disabled for new style
+  const [subtitleBackgroundOpacity, setSubtitleBackgroundOpacity] = useState(0.0)  // Disabled for new style
+  const [subtitlePaddingX, setSubtitlePaddingX] = useState(20)  // Increased padding
+  const [subtitlePaddingY, setSubtitlePaddingY] = useState(16)
+  
+  // 3D Blue Shadow Colors for Enhanced Subtitles
+  const [shadowLayersCount, setShadowLayersCount] = useState(4)  // Number of shadow layers (2, 3, or 4)
+  const [shadowLayer1Color, setShadowLayer1Color] = useState("#4A90E2")  // Light blue
+  const [shadowLayer2Color, setShadowLayer2Color] = useState("#357ABD")  // Medium blue
+  const [shadowLayer3Color, setShadowLayer3Color] = useState("#2E5F8A")  // Dark blue
+  const [shadowLayer4Color, setShadowLayer4Color] = useState("#1E3F5A")  // Darkest blue
   
   // Whisper-enhanced subtitle options
   const [useWhisperEnhanced, setUseWhisperEnhanced] = useState(false)
@@ -109,11 +115,15 @@ export default function MoneyPrinterForm({
             <input type="hidden" name="subtitleBackgroundOpacity" value={subtitleBackgroundOpacity.toString()} />
             <input type="hidden" name="subtitlePaddingX" value={subtitlePaddingX.toString()} />
             <input type="hidden" name="subtitlePaddingY" value={subtitlePaddingY.toString()} />
+            <input type="hidden" name="shadowLayersCount" value={shadowLayersCount.toString()} />
+            <input type="hidden" name="shadowLayer1Color" value={shadowLayer1Color} />
+            <input type="hidden" name="shadowLayer2Color" value={shadowLayer2Color} />
+            <input type="hidden" name="shadowLayer3Color" value={shadowLayer3Color} />
+            <input type="hidden" name="shadowLayer4Color" value={shadowLayer4Color} />
             <input type="hidden" name="useWhisperEnhanced" value={useWhisperEnhanced.toString()} />
             <input type="hidden" name="whisperModel" value={whisperModel} />
             <input type="hidden" name="useMusic" value={useMusic ? "1" : ""} />
             <input type="hidden" name="useGPU" value={useLocalGpu ? "1" : ""} />
-            <input type="hidden" name="useCloudGPU" value={useCloudGpu ? "1" : ""} />
 
             {/* Basic Settings */}
             <div className="space-y-4">
@@ -405,9 +415,51 @@ export default function MoneyPrinterForm({
                         </div>
                       </div>
                       
+                      <div className="space-y-3">
+                        <Label>Shadow Layers</Label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShadowLayersCount(2)}
+                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${
+                              shadowLayersCount === 2 
+                                ? 'bg-primary text-primary-foreground border-primary' 
+                                : 'bg-background border-border hover:bg-muted/60'
+                            }`}
+                          >
+                            Soft (2)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShadowLayersCount(3)}
+                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${
+                              shadowLayersCount === 3 
+                                ? 'bg-primary text-primary-foreground border-primary' 
+                                : 'bg-background border-border hover:bg-muted/60'
+                            }`}
+                          >
+                            Standard (3)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShadowLayersCount(4)}
+                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${
+                              shadowLayersCount === 4 
+                                ? 'bg-primary text-primary-foreground border-primary' 
+                                : 'bg-background border-border hover:bg-muted/60'
+                            }`}
+                          >
+                            Professional (4)
+                          </button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          More layers = deeper 3D effect, but longer processing time
+                        </p>
+                      </div>
+                      
                       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                         <div className="space-y-2">
-                          <Label>Default Text</Label>
+                          <Label>Text Color</Label>
                           <input
                             type="color"
                             value={subtitleDefaultColor}
@@ -416,22 +468,66 @@ export default function MoneyPrinterForm({
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Highlight</Label>
+                          <Label>Shadow Layer 1</Label>
+                          <input
+                            type="color"
+                            value={shadowLayer1Color}
+                            onChange={(e) => setShadowLayer1Color(e.target.value)}
+                            className="h-10 w-full rounded-md border bg-background p-1"
+                          />
+                        </div>
+                        {shadowLayersCount >= 3 && (
+                          <div className="space-y-2">
+                            <Label>Shadow Layer 2</Label>
+                            <input
+                              type="color"
+                              value={shadowLayer2Color}
+                              onChange={(e) => setShadowLayer2Color(e.target.value)}
+                              className="h-10 w-full rounded-md border bg-background p-1"
+                            />
+                          </div>
+                        )}
+                        <div className="space-y-2">
+                          <Label>Shadow Layer {shadowLayersCount >= 3 ? '3' : '2'}</Label>
+                          <input
+                            type="color"
+                            value={shadowLayer3Color}
+                            onChange={(e) => setShadowLayer3Color(e.target.value)}
+                            className="h-10 w-full rounded-md border bg-background p-1"
+                          />
+                        </div>
+                        {shadowLayersCount === 4 && (
+                          <div className="space-y-2">
+                            <Label>Shadow Layer 4</Label>
+                            <input
+                              type="color"
+                              value={shadowLayer4Color}
+                              onChange={(e) => setShadowLayer4Color(e.target.value)}
+                              className="h-10 w-full rounded-md border bg-background p-1"
+                            />
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+                        <div className="space-y-2">
+                          <Label>Shadow Layer 4</Label>
+                          <input
+                            type="color"
+                            value={shadowLayer4Color}
+                            onChange={(e) => setShadowLayer4Color(e.target.value)}
+                            className="h-10 w-full rounded-md border bg-background p-1"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Highlight Color</Label>
                           <input
                             type="color"
                             value={subtitleHighlightColor}
                             onChange={(e) => setSubtitleHighlightColor(e.target.value)}
                             className="h-10 w-full rounded-md border bg-background p-1"
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Stroke</Label>
-                          <input
-                            type="color"
-                            value={subtitleStrokeColor}
-                            onChange={(e) => setSubtitleStrokeColor(e.target.value)}
-                            className="h-10 w-full rounded-md border bg-background p-1"
-                          />
+                          <p className="text-xs text-muted-foreground">For word highlighting</p>
                         </div>
                         <div className="space-y-2">
                           <Label>Background</Label>
@@ -441,6 +537,7 @@ export default function MoneyPrinterForm({
                             onChange={(e) => setSubtitleBackgroundColor(e.target.value)}
                             className="h-10 w-full rounded-md border bg-background p-1"
                           />
+                          <p className="text-xs text-muted-foreground">Usually disabled for 3D effect</p>
                         </div>
                       </div>
                     </div>
@@ -501,7 +598,6 @@ export default function MoneyPrinterForm({
                         checked={useLocalGpu}
                         onCheckedChange={(v) => {
                           setUseLocalGpu(!!v)
-                          if (v) setUseCloudGpu(false)
                         }}
                       />
                     </div>
@@ -550,13 +646,18 @@ export default function MoneyPrinterForm({
                 setSubtitleFont("Arial-Bold")
                 setSubtitleFontSize(48)
                 setSubtitleDefaultColor("#FFFFFF")
-                setSubtitleHighlightColor("#FFFF00")
+                setSubtitleHighlightColor("#FFFFFF")  // Changed to white
                 setSubtitleStrokeColor("#000000")
                 setSubtitleBackgroundColor("#000000")
-                setSubtitleStrokeWidth(2)
-                setSubtitleBackgroundOpacity(0.6)
-                setSubtitlePaddingX(16)
-                setSubtitlePaddingY(12)
+                setSubtitleStrokeWidth(0)  // Disabled for new style
+                setSubtitleBackgroundOpacity(0.0)  // Disabled for new style
+                setSubtitlePaddingX(20)  // Increased padding
+                setSubtitlePaddingY(16)
+                setShadowLayersCount(4)  // Professional (4 layers)
+                setShadowLayer1Color("#4A90E2")  // Light blue
+                setShadowLayer2Color("#357ABD")  // Medium blue
+                setShadowLayer3Color("#2E5F8A")  // Dark blue
+                setShadowLayer4Color("#1E3F5A")  // Darkest blue
                 setUseWhisperEnhanced(false)
                 setWhisperModel("base")
                 onChangeAiModel(aiModel)

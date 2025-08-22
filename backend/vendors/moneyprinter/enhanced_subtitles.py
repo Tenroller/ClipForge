@@ -30,18 +30,35 @@ class SubtitleConfig:
     font_family: str = "Arial-Bold"
     font_size: int = 48
     font_bold: bool = True
+    letter_spacing: float = 1.5         # Letter spacing for better readability
     
     # Colors (hex format)
     default_color: str = "#FFFFFF"      # White for unspoken words
-    highlight_color: str = "#FFFF00"    # Yellow for currently spoken word
-    stroke_color: str = "#000000"       # Black outline
+    highlight_color: str = "#FFFFFF"    # White for currently spoken word (changed from yellow)
+    stroke_color: str = "#000000"       # Black outline (kept for fallback)
     background_color: str = "#000000"   # Black background
     
+    # 3D Blue Shadow Effects (Multiple Layers)
+    shadow_enabled: bool = True
+    shadow_layers_count: int = 4            # Number of shadow layers (2, 3, or 4)
+    shadow_layer_1_color: str = "#4A90E2"    # Light blue (closest to text)
+    shadow_layer_1_offset_x: int = 2
+    shadow_layer_1_offset_y: int = 2
+    shadow_layer_2_color: str = "#357ABD"    # Medium blue
+    shadow_layer_2_offset_x: int = 4
+    shadow_layer_2_offset_y: int = 4
+    shadow_layer_3_color: str = "#2E5F8A"    # Dark blue
+    shadow_layer_3_offset_x: int = 6
+    shadow_layer_3_offset_y: int = 6
+    shadow_layer_4_color: str = "#1E3F5A"    # Darkest blue (furthest from text)
+    shadow_layer_4_offset_x: int = 8
+    shadow_layer_4_offset_y: int = 8
+    
     # Visual effects
-    stroke_width: int = 3
-    background_opacity: float = 0.0
-    padding_x: int = 16
-    padding_y: int = 12
+    stroke_width: int = 0               # Disabled stroke for cleaner look
+    background_opacity: float = 0.0     # No background for modern look
+    padding_x: int = 20                 # Increased padding for better spacing
+    padding_y: int = 16
     
     # Animation settings
     highlight_transition: float = 0.1   # Smooth transition time
@@ -50,11 +67,10 @@ class SubtitleConfig:
     # Layout settings
     position: str = "center,bottom"     # Position on screen
     max_width_percent: float = 0.85     # Max width as % of video width
-    line_spacing: float = 1.2           # Line height multiplier
+    line_spacing: float = 1.4           # Increased line spacing for better readability
     
-    # TikTok-style effects
-    shadow_enabled: bool = True
-    shadow_color: str = "#000000"
+    # Legacy shadow (kept for backward compatibility)
+    shadow_color: str = "#4A90E2"       # Now uses blue instead of black
     shadow_offset_x: int = 2
     shadow_offset_y: int = 2
     glow_enabled: bool = False
@@ -185,6 +201,90 @@ def create_word_clips(
     return clips
 
 
+def create_3d_shadow_text_clip(
+    text: str,
+    font_size: int,
+    font_family: str,
+    config: SubtitleConfig,
+    max_width: int,
+    duration: float
+) -> CompositeVideoClip:
+    """
+    Create a text clip with 3D blue shadow effect using multiple layers.
+    """
+    clips = []
+    
+    # Create shadow layers (from back to front) based on config
+    if config.shadow_enabled and config.shadow_layers_count >= 2:
+        # Define all available shadow layers
+        all_shadow_layers = [
+            (config.shadow_layer_4_color, config.shadow_layer_4_offset_x, config.shadow_layer_4_offset_y),  # Furthest
+            (config.shadow_layer_3_color, config.shadow_layer_3_offset_x, config.shadow_layer_3_offset_y),
+            (config.shadow_layer_2_color, config.shadow_layer_2_offset_x, config.shadow_layer_2_offset_y),
+            (config.shadow_layer_1_color, config.shadow_layer_1_offset_x, config.shadow_layer_1_offset_y)   # Closest
+        ]
+        
+        # Only use the requested number of layers, starting from the furthest
+        # For 2 layers: use layer 4 and 1 (furthest and closest)
+        # For 3 layers: use layer 4, 3, and 1 (skip layer 2)
+        # For 4 layers: use all layers
+        if config.shadow_layers_count == 2:
+            shadow_layers = [all_shadow_layers[0], all_shadow_layers[3]]  # Layer 4 and 1
+        elif config.shadow_layers_count == 3:
+            shadow_layers = [all_shadow_layers[0], all_shadow_layers[1], all_shadow_layers[3]]  # Layer 4, 3, and 1
+        else:  # 4 layers
+            shadow_layers = all_shadow_layers
+        
+        for shadow_color, offset_x, offset_y in shadow_layers:
+            try:
+                shadow_clip = TextClip(
+                    text=text,
+                    font_size=font_size,
+                    color=shadow_color,
+                    font=font_family,
+                    method='caption',
+                    size=(max_width, None),
+                    interline=int(font_size * 0.1)  # Letter spacing effect
+                ).with_position((offset_x, offset_y)).with_duration(duration)
+                clips.append(shadow_clip)
+            except Exception as e:
+                print(f"Error creating shadow layer with color {shadow_color}: {e}")
+    
+    # Create main text (white, on top)
+    try:
+        main_text = TextClip(
+            text=text,
+            font_size=font_size,
+            color=config.default_color,
+            font=font_family,
+            method='caption',
+            size=(max_width, None),
+            interline=int(font_size * 0.1)  # Letter spacing effect
+        ).with_position((0, 0)).with_duration(duration)
+        clips.append(main_text)
+    except Exception as e:
+        print(f"Error creating main text clip: {e}")
+        # Fallback to basic text
+        main_text = TextClip(
+            text=text,
+            font_size=font_size,
+            color=config.default_color,
+            size=(max_width, None)
+        ).with_position((0, 0)).with_duration(duration)
+        clips.append(main_text)
+    
+    if not clips:
+        # Emergency fallback
+        return TextClip(
+            text=text,
+            font_size=font_size,
+            color="#FFFFFF",
+            size=(max_width, None)
+        ).with_duration(duration)
+    
+    return CompositeVideoClip(clips)
+
+
 def create_sentence_highlight_clip(
     sentence_data: Dict[str, Any],
     config: SubtitleConfig,
@@ -207,29 +307,17 @@ def create_sentence_highlight_clip(
     font_size = max(20, int(video_height * (config.font_size / 1000)))
     max_width = int(video_width * config.max_width_percent)
     
-    # Create base text clip to measure dimensions
-    try:
-        base_text_clip = TextClip(
-            text=sentence_text,
-            font_size=font_size,
-            color=config.default_color,
-            font=config.font_family,
-            stroke_color=config.stroke_color,
-            stroke_width=config.stroke_width,
-            method='caption',
-            size=(max_width, None)
-        )
-    except Exception as e:
-        print(f"Error creating base text clip: {e}")
-        # Fallback with minimal parameters
-        base_text_clip = TextClip(
-            text=sentence_text,
-            font_size=font_size,
-            color=config.default_color,
-            size=(max_width, None)
-        )
+    # Create the 3D shadow text clip with new styling
+    base_text_clip = create_3d_shadow_text_clip(
+        text=sentence_text,
+        font_size=font_size,
+        font_family=config.font_family,
+        config=config,
+        max_width=max_width,
+        duration=sentence_duration
+    )
     
-    # Create background only if opacity > 0
+    # Create background only if opacity > 0 (disabled by default in new style)
     if config.background_opacity > 0:
         bg_width = base_text_clip.w + 2 * config.padding_x
         bg_height = base_text_clip.h + 2 * config.padding_y
@@ -246,73 +334,15 @@ def create_sentence_highlight_clip(
         text_padding_x = 0
         text_padding_y = 0
     
-    # Create the dynamic text clip with highlighting
-    def make_text_frame(t):
-        """Generate text with appropriate highlighting at time t."""
-        absolute_time = sentence_start + t
-        
-        # Find currently spoken word
-        current_word_idx = None
-        for word_data in words:
-            if word_data['start_time'] <= absolute_time <= word_data['end_time']:
-                current_word_idx = word_data['word_index']
-                break
-        
-        # Create text with highlighting
-        sentence_words = re.findall(r'\b\w+\b', sentence_text)
-        highlighted_text = ""
-        
-        for idx, word in enumerate(sentence_words):
-            if idx == current_word_idx:
-                # Apply highlight styling
-                highlighted_text += word + " "
-            else:
-                highlighted_text += word + " "
-        
-        return highlighted_text.strip()
-    
-    # For now, create a simpler version with color transitions
-    # We'll create overlapping clips with different colors
-    text_clips = []
-    
-    # Base text (always visible with default color)
-    base_positioned = base_text_clip.with_position((text_padding_x, text_padding_y)).with_duration(sentence_duration)
-    text_clips.append(base_positioned)
-    
-    # Create highlight clips for each word
-    for word_data in words:
-        word_start_rel = word_data['start_time'] - sentence_start
-        word_duration = word_data['end_time'] - word_data['start_time']
-        
-        if word_start_rel >= 0 and word_duration > 0:
-            try:
-                # Create highlighted version of the entire sentence
-                highlighted_text_clip = TextClip(
-                    text=sentence_text,
-                    font_size=font_size,
-                    color=config.highlight_color,
-                    font=config.font_family,
-                    stroke_color=config.stroke_color,
-                    stroke_width=config.stroke_width,
-                    method='caption',
-                    size=(max_width, None)
-                ).with_position((text_padding_x, text_padding_y)).with_duration(word_duration).with_start(word_start_rel)
-                
-                # TODO: Implement actual word-level masking
-                # For now, this will highlight the entire sentence during each word
-                # In a full implementation, you would create a mask that only highlights the specific word
-                
-                text_clips.append(highlighted_text_clip)
-                
-            except Exception as e:
-                print(f"Error creating highlight clip for word '{word_data['word']}': {e}")
-                continue
+    # Since we're using white text for both default and highlight, we can simplify
+    # Position the text clip
+    positioned_text = base_text_clip.with_position((text_padding_x, text_padding_y))
     
     # Combine all elements
     if background is not None:
-        all_clips = [background] + text_clips
+        all_clips = [background, positioned_text]
     else:
-        all_clips = text_clips
+        all_clips = [positioned_text]
     
     try:
         sentence_clip = CompositeVideoClip(all_clips).with_start(sentence_start)
@@ -410,7 +440,8 @@ def generate_enhanced_subtitles(
     sentences: List[str],
     audio_clips: List[Any],
     config: Optional[SubtitleConfig] = None,
-    video_size: Tuple[int, int] = (1080, 1920)
+    video_size: Tuple[int, int] = (1080, 1920),
+    output_path: Optional[str] = None
 ) -> str:
     """
     Generate enhanced subtitle data with TikTok-style configuration.
@@ -460,14 +491,17 @@ def generate_enhanced_subtitles(
     
     # Save to file - use absolute path
     import os
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    subtitles_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), 'subtitles')
-    subtitle_path = os.path.join(subtitles_dir, f"{uuid.uuid4()}_enhanced.json")
+    if output_path is not None:
+        subtitle_path = output_path
+    else:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        subtitles_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), 'subtitles')
+        subtitle_path = os.path.join(subtitles_dir, f"{uuid.uuid4()}_enhanced.json")
     Path(subtitle_path).parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(subtitle_path, 'w', encoding='utf-8') as f:
         json.dump(subtitle_data, f, indent=2, ensure_ascii=False)
-    
+
     print(f"Enhanced subtitle data saved to: {subtitle_path}")
     return subtitle_path
 
@@ -546,7 +580,7 @@ def create_tiktok_style_config(
     font_family: str = "Arial-Bold",
     font_size: int = 48,
     default_color: str = "#FFFFFF",
-    highlight_color: str = "#FFFF00",
+    highlight_color: str = "#FFFFFF",  # Changed to white for new style
     position: str = "center,bottom",
     **kwargs
 ) -> SubtitleConfig:

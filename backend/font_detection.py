@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 """
 Font detection utility for cross-platform font availability.
@@ -8,6 +7,9 @@ import os
 import platform
 from pathlib import Path
 from typing import List, Set
+from logging_config import get_logger
+
+logger = get_logger("font_detection")
 
 
 def get_system_fonts() -> List[str]:
@@ -105,39 +107,34 @@ def test_font_availability(font_list: List[str]) -> List[str]:
     try:
         from moviepy import TextClip
     except ImportError:
-        print("MoviePy not available for font testing")
+        logger.warning("MoviePy not available for font testing")
         return font_list
-    
     # Test each font by attempting to create a small TextClip
     for font in font_list:
         try:
             test_clip = TextClip("Test", font=font, font_size=20)
             working_fonts.append(font)
-            print(f"✅ Font '{font}' works")
+            logger.info(f"✅ Font '{font}' works")
         except Exception as e:
-            print(f"❌ Font '{font}' failed: {e}")
-    
+            logger.error(f"❌ Font '{font}' failed: {e}")
     return working_fonts
 
 
 if __name__ == "__main__":
-    print("=== System Font Detection ===")
+    logger.info("=== System Font Detection ===")
     fonts = get_system_fonts()
-    print(f"Found {len(fonts)} potential fonts on system:")
+    logger.info(f"Found {len(fonts)} potential fonts on system:")
     for font in fonts[:20]:  # Show first 20
-        print(f"  - {font}")
-    
+        logger.info(f"  - {font}")
     if len(fonts) > 20:
-        print(f"  ... and {len(fonts) - 20} more")
-    
+        logger.info(f"  ... and {len(fonts) - 20} more")
     # Test common subtitle fonts
-    print("\n=== Testing Common Subtitle Fonts ===")
+    logger.info("\n=== Testing Common Subtitle Fonts ===")
     common_subtitle_fonts = [
         "Arial-Bold", "Arial", "Helvetica-Bold", "Impact", 
         "Times-Bold", "Comic Sans MS", "Montserrat", "Roboto"
     ]
-    
     working = test_font_availability(common_subtitle_fonts)
-    print(f"\n✅ {len(working)} out of {len(common_subtitle_fonts)} common fonts work:")
+    logger.info(f"\n✅ {len(working)} out of {len(common_subtitle_fonts)} common fonts work:")
     for font in working:
-        print(f"  - {font}")
+        logger.info(f"  - {font}")

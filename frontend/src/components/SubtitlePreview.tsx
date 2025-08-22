@@ -44,11 +44,19 @@ export function SubtitlePreview({
   position,
   onChangePosition,
   sampleText = 'This is how your subtitles will look',
+  shadowLayer1Color = '#4A90E2',
+  shadowLayer2Color = '#357ABD',
+  shadowLayer3Color = '#2E5F8A',
+  shadowLayer4Color = '#1E3F5A',
 }: {
   color: string
   position: SubtitlesPosition
   onChangePosition: (pos: SubtitlesPosition) => void
   sampleText?: string
+  shadowLayer1Color?: string
+  shadowLayer2Color?: string
+  shadowLayer3Color?: string
+  shadowLayer4Color?: string
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const itemRef = useRef<HTMLDivElement | null>(null)
@@ -112,6 +120,14 @@ export function SubtitlePreview({
 
   const setGrid = (h: Horizontal, v: Vertical) => onChangePosition(`${h},${v}`)
 
+  // Create 3D blue shadow effect
+  const textShadowStyle = `
+    2px 2px 0px ${shadowLayer1Color},
+    4px 4px 0px ${shadowLayer2Color},
+    6px 6px 0px ${shadowLayer3Color},
+    8px 8px 0px ${shadowLayer4Color}
+  `
+
   return (
     <div className="space-y-3">
       <div
@@ -124,11 +140,19 @@ export function SubtitlePreview({
         </div>
         <div
           ref={itemRef}
-          className="absolute cursor-move px-3 py-2 rounded-md bg-black/40 border border-white/10 select-none"
-          style={{ left: xPx, top: yPx, color, textShadow: '2px 2px 0px rgba(0,0,0,0.6), -2px -2px 0px rgba(0,0,0,0.6)' }}
+          className="absolute cursor-move px-4 py-3 select-none"
+          style={{ 
+            left: xPx, 
+            top: yPx, 
+            color, 
+            textShadow: textShadowStyle,
+            letterSpacing: '1.5px',  // Generous letter spacing
+            fontWeight: 'bold',      // Bold font
+            fontSize: '14px'         // Slightly larger for better visibility
+          }}
           onMouseDown={handleMouseDown}
         >
-          <div className="text-center font-semibold leading-snug">
+          <div className="text-center font-black leading-snug">
             {sampleText}
           </div>
         </div>

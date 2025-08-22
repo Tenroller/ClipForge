@@ -1,4 +1,6 @@
-# AI Video Generator - Enterprise Edition
+# AI Video Generator with Cloud GPU Support
+
+An AI-powered video generation platform that supports both local processing and cloud GPU acceleration via Modal. - Enterprise Edition
 
 [![CI/CD](https://github.com/your-repo/ai-video-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/your-repo/ai-video-generator/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com)
@@ -16,6 +18,9 @@ A comprehensive, production-ready platform for generating short-form videos thro
 - **Unified Interface**: Single UI for both workflows with live progress tracking
 
 ### 🚀 **Enterprise Capabilities**
+- **Cloud GPU Acceleration**: Modal integration for 10x faster processing with L40S/A100/H100 GPUs
+- **Hybrid Processing**: Seamless switching between local and cloud GPU execution
+- **Cost Optimization**: Automatic fallback to local processing with usage monitoring
 - **Horizontal Scaling**: Redis-based job queue with worker distribution
 - **Advanced Caching**: Multi-level caching (Memory/Redis/File) for 60-90% performance improvement
 - **Batch Processing**: Bulk video generation with configurable concurrency
@@ -38,6 +43,10 @@ ai-video-generator/
 ├── backend/                  # FastAPI server with enterprise features
 │   ├── vendors/              # Vendored MoneyPrinter & Brainrot backends
 │   ├── tests/                # Comprehensive test suite
+│   ├── modal_config.py       # Modal GPU cloud configuration
+│   ├── modal_gpu_functions.py# GPU-accelerated processing functions
+│   ├── modal_service.py      # Cloud GPU service layer
+│   ├── modal_integration.py  # Sync wrappers for existing code
 │   ├── database.py           # SQLite/PostgreSQL job persistence
 │   ├── caching.py            # Multi-level caching system
 │   ├── metrics.py            # Prometheus metrics collection
@@ -50,6 +59,8 @@ ai-video-generator/
 │   ├── Dockerfile.frontend
 │   └── docker-compose.yml
 ├── .github/workflows/        # CI/CD automation
+├── deploy_modal.py           # Modal deployment script
+├── MODAL_GPU_SETUP.md        # Cloud GPU setup guide
 └── requirements.txt          # Python dependencies
 ```
 
@@ -130,6 +141,33 @@ npm install
 # Start development server
 npm run dev
 ```
+
+#### Cloud GPU Setup (Optional)
+
+To enable cloud GPU acceleration via Modal:
+
+```bash
+# Install Modal
+pip install modal
+
+# Authenticate with Modal
+python -m modal setup
+
+# Deploy GPU functions
+cd backend
+python ../deploy_modal.py
+
+# Test the integration
+python test_modal_integration.py
+```
+
+**Benefits of Cloud GPU acceleration:**
+- 🚀 **10x faster processing** with L40S, A100, or H100 GPUs
+- 💰 **Pay-per-use** - only charged for actual GPU time
+- 🌐 **No local GPU required** - works on any machine
+- 🔄 **Automatic fallback** to local processing if Modal is unavailable
+
+See `MODAL_GPU_SETUP.md` for detailed configuration and cost information.
 
 ## ⚙️ Configuration
 

@@ -16,9 +16,16 @@ export default function CreatorPage() {
   const [models, setModels] = useState<string[]>([])
   const [voices, setVoices] = useState<string[]>([])
   const [voice, setVoice] = useState<string>('af_bella')
-  const [subtitleColor, setSubtitleColor] = useState<string>('#FFFF00')
+  const [subtitleColor, setSubtitleColor] = useState<string>('#FFFFFF')  // Changed to white
   const [subtitlePosition, setSubtitlePosition] = useState<string>('center,bottom')
   const [subtitlePositionRaw, setSubtitlePositionRaw] = useState<string>('center,bottom')
+  
+  // 3D Blue Shadow Colors for Enhanced Subtitles
+  const [shadowLayersCount, setShadowLayersCount] = useState<number>(4)  // Number of shadow layers (2, 3, or 4)
+  const [shadowLayer1Color, setShadowLayer1Color] = useState<string>('#4A90E2')
+  const [shadowLayer2Color, setShadowLayer2Color] = useState<string>('#357ABD')
+  const [shadowLayer3Color, setShadowLayer3Color] = useState<string>('#2E5F8A')
+  const [shadowLayer4Color, setShadowLayer4Color] = useState<string>('#1E3F5A')
 
   const jobManager = useJobManager()
 
@@ -178,9 +185,14 @@ export default function CreatorPage() {
                 onSubmit={startMoneyPrinter}
                 formId="moneyprinter-form"
                 onReset={() => {
-                  setSubtitleColor('#FFFF00')
+                  setSubtitleColor('#FFFFFF')  // Changed to white
                   setSubtitlePosition('center,bottom')
                   setVoice('af_bella')
+                  setShadowLayersCount(4)  // Professional (4 layers)
+                  setShadowLayer1Color('#4A90E2')
+                  setShadowLayer2Color('#357ABD')
+                  setShadowLayer3Color('#2E5F8A')
+                  setShadowLayer4Color('#1E3F5A')
                 }}
               />
             </div>
@@ -198,6 +210,11 @@ export default function CreatorPage() {
                   previewUrl={undefined} // We'll handle preview in the result panel now
                   color={subtitleColor}
                   positionRaw={subtitlePositionRaw}
+                  shadowLayersCount={shadowLayersCount}
+                  shadowLayer1Color={shadowLayer1Color}
+                  shadowLayer2Color={shadowLayer2Color}
+                  shadowLayer3Color={shadowLayer3Color}
+                  shadowLayer4Color={shadowLayer4Color}
                   onChangePositionRaw={(raw) => setSubtitlePositionRaw(raw)}
                 />
               </div>

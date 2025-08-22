@@ -68,16 +68,7 @@ class JobStore:
                 CREATE INDEX IF NOT EXISTS idx_jobs_workflow ON jobs(workflow)
             """)
             
-            # Users table
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id TEXT PRIMARY KEY,
-                    email TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL,
-                    password_salt TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
+
             
             # Best-effort add columns if missing (older DBs)
             try:
@@ -259,81 +250,7 @@ class JobStore:
             
             return jobs
 
-    # User management
-    def create_user(self, user_id: str, email: str, password_hash: str, password_salt: str) -> None:
-        with self.lock:
-            with self._get_connection() as conn:
-                conn.execute(
-                    "INSERT INTO users (id, email, password_hash, password_salt) VALUES (?, ?, ?, ?)",
-                    (user_id, email, password_hash, password_salt)
-                )
-                conn.commit()
 
-    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
-        with self._get_connection() as conn:
-            row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-            return dict(row) if row else None
-
-    def get_resumable_jobs(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """Get jobs that can be resumed (failed/cancelled with resume data)."""
-        with self._get_connection() as conn:
-            params: list[Any] = []
-            where = ["status IN ('error', 'cancelled')", "resume_data IS NOT NULL"]
-            
-            if user_id:
-                where.append("user_id = ?")
-                params.append(user_id)
-                
-            where_clause = " WHERE " + " AND ".join(where)
-            query = f"SELECT * FROM jobs{where_clause} ORDER BY updated_at DESC"
-            
-            rows = conn.execute(query, tuple(params)).fetchall()
-            
-            jobs = []
-            for row in rows:
-                job = dict(row)
-                try:
-                    job["logs"] = json.loads(job["logs"]) if job["logs"] else []
-                except (json.JSONDecodeError, TypeError):
-                    job["logs"] = []
-                
-                try:
-                    job["result"] = json.loads(job["result_data"]) if job["result_data"] else None
-                except (json.JSONDecodeError, TypeError):
-                    job["result"] = None
-                    
-                try:
-                    job["resume_data"] = json.loads(job["resume_data"]) if job["resume_data"] else None
-                except (json.JSONDecodeError, TypeError):
-                    job["resume_data"] = None
-                
-                job["error"] = job["error_message"]
-                
-                # Clean up internal fields but keep resume_data
-                for field in ["result_data", "error_message", "request_data"]:
-                    job.pop(field, None)
-                
-                jobs.append(job)
-            
-            return jobs
-
-    def mark_job_resumed(self, job_id: str) -> None:
-        """Mark a job as resumed (clear error state, set to running)."""
-        with self.lock:
-            with self._get_connection() as conn:
-                conn.execute("""
-                    UPDATE jobs 
-                    SET status = 'running', 
-                        error_message = NULL,
-                        updated_at = CURRENT_TIMESTAMP 
-                    WHERE id = ?
-                """, (job_id,))
-                conn.commit()
-    
-    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
-        with self._get_connection() as conn:
-            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-            return dict(row) if row else None
     
     def delete_old_jobs(self, days: int = 30) -> int:
         """Delete jobs older than specified days."""

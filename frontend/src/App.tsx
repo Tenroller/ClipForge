@@ -9,9 +9,9 @@ import ActivityPage from './pages/ActivityPage'
 import DownloadsPage from './pages/DownloadsPage'
 import NewLandingPage from './components/NewLandingPage'
 import SidebarRouter from './components/SidebarRouter'
-import AuthDialog from './components/AuthDialog'
-import AuthStatus from './components/AuthStatus'
+// ...existing code...
 import { useJobManager } from './hooks/useJobManager'
+import { Toaster } from '@/components/components/ui/toaster'
 
 const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
@@ -20,7 +20,7 @@ export default function App() {
 	const location = useLocation()
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
 	const [showMobileSidebar, setShowMobileSidebar] = useState(false)
-	const [showAuth, setShowAuth] = useState(false)
+	// ...existing code...
 	
 	// Get active job count for the sidebar
 	const jobManager = useJobManager()
@@ -38,7 +38,6 @@ export default function App() {
 		return (
 			<>
 				<NewLandingPage onGetStarted={onGetStarted} />
-				<AuthDialog open={showAuth} onOpenChange={setShowAuth} onAuth={() => window.location.reload()} />
 			</>
 		)
 	}
@@ -117,12 +116,11 @@ export default function App() {
 						</div>
 						
 						<div className="flex items-center gap-3">
-						<div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
+							<div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
 								<div className="size-2 rounded-full bg-green-500 animate-pulse"></div>
 								<span className="text-xs font-medium text-muted-foreground">API: {API.replace('http://', '')}</span>
 							</div>
-						<AuthStatus onLoginClick={() => setShowAuth(true)} />
-						<ThemeToggle />
+							<ThemeToggle />
 						</div>
 					</div>
 				</header>
@@ -139,7 +137,8 @@ export default function App() {
 						</Routes>
 					</div>
 				</main>
-				<AuthDialog open={showAuth} onOpenChange={setShowAuth} onAuth={() => window.location.reload()} />
+				{/* AuthDialog removed */}
+				<Toaster />
 			</div>
 		</div>
 	)
