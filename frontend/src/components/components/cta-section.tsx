@@ -1,6 +1,6 @@
 import { Button } from "@/components/components/ui/button"
 import { Card } from "@/components/components/ui/card"
-import { ArrowRight, Star } from "lucide-react"
+import { FaArrowRight, FaStar } from "react-icons/fa"
 
 type CTASectionProps = {
   onGetStarted?: () => void
@@ -14,7 +14,7 @@ export function CTASection({ onGetStarted }: CTASectionProps = {}) {
           <div className="flex justify-center mb-6">
             <div className="flex items-center gap-1">
               {[...Array(5)].map((_, i) => (
-                <Star key={i} className="h-5 w-5 fill-primary text-primary" />
+                <FaStar key={i} className="h-5 w-5 fill-primary text-primary" />
               ))}
             </div>
           </div>
@@ -35,7 +35,7 @@ export function CTASection({ onGetStarted }: CTASectionProps = {}) {
               onClick={onGetStarted}
             >
               Start Free Trial
-              <ArrowRight className="ml-2 h-5 w-5" />
+              <FaArrowRight className="ml-2 h-5 w-5" />
             </Button>
             <Button variant="outline" size="lg" className="text-lg px-8 py-3 bg-transparent">
               View Pricing

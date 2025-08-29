@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Button } from "@/components/components/ui/button"
-import { Menu, X, Video, Zap, Activity, Download } from "lucide-react"
+import { FaBars, FaTimes, FaVideo, FaBolt, FaChartLine, FaDownload } from "react-icons/fa"
 import { useNavigate, useLocation } from "react-router-dom"
 
 export function Navigation() {
@@ -9,10 +9,10 @@ export function Navigation() {
   const location = useLocation()
 
   const navItems = [
-    { name: "AI Video Creator", href: "/creator", icon: Video },
-    { name: "Compilation Generator", href: "/compilations", icon: Zap },
-    { name: "Activity", href: "/activity", icon: Activity },
-    { name: "Downloads", href: "/downloads", icon: Download },
+      { name: "AI Video Creator", href: "/creator", icon: FaVideo },
+  { name: "Compilation Generator", href: "/compilations", icon: FaBolt },
+  { name: "Activity", href: "/activity", icon: FaChartLine },
+  { name: "Downloads", href: "/downloads", icon: FaDownload },
   ]
 
   const handleNavigation = (href: string) => {
@@ -75,7 +75,7 @@ export function Navigation() {
               onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-label="Toggle navigation menu"
             >
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+              {isMenuOpen ? <FaTimes className="h-6 w-6" /> : <FaBars className="h-6 w-6" />}
             </Button>
           </div>
         </div>

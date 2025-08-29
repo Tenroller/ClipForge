@@ -50,7 +50,7 @@ def fetch_songs(zip_url: str) -> None:
     try:
         logger.info(colored(f" => Fetching songs...", "magenta"))
 
-        files_dir = "../Songs"
+        files_dir = "../../../Songs"
         if not os.path.exists(files_dir):
             os.mkdir(files_dir)
             logger.info(colored(f"Created directory: {files_dir}", "green"))
@@ -62,17 +62,17 @@ def fetch_songs(zip_url: str) -> None:
         response = requests.get(zip_url)
 
         # Save the zip file
-        with open("../Songs/songs.zip", "wb") as file:
+        with open("../../../Songs/songs.zip", "wb") as file:
             file.write(response.content)
 
         # Unzip the file
-        with zipfile.ZipFile("../Songs/songs.zip", "r") as file:
-            file.extractall("../Songs")
+        with zipfile.ZipFile("../../../Songs/songs.zip", "r") as file:
+            file.extractall("../../../Songs")
 
         # Remove the zip file
-        os.remove("../Songs/songs.zip")
+        os.remove("../../../Songs/songs.zip")
 
-        logger.info(colored(" => Downloaded Songs to ../Songs.", "green"))
+        logger.info(colored(" => Downloaded Songs to ../../../Songs.", "green"))
 
     except Exception as e:
         logger.error(colored(f"Error occurred while fetching songs: {str(e)}", "red"))
@@ -85,13 +85,13 @@ def choose_random_song() -> str:
         str: The path to the chosen song.
     """
     try:
-        songs = os.listdir("../Songs")
+        songs = os.listdir("../../../Songs")
         songs = [s for s in songs if s.lower().endswith((".mp3", ".wav", ".m4a"))]
         if not songs:
-            raise RuntimeError("No songs available in ../Songs")
+            raise RuntimeError("No songs available in ../../../Songs")
         song = random.choice(songs)
         logger.info(colored(f"Chose song: {song}", "green"))
-        return f"../Songs/{song}"
+        return f"../../../Songs/{song}"
     except Exception as e:
         logger.error(colored(f"Error occurred while choosing random song: {str(e)}", "red"))
         raise

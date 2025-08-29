@@ -39,6 +39,28 @@ except Exception:
 ASSEMBLY_AI_API_KEY = os.getenv("ASSEMBLY_AI_API_KEY")
 
 
+def test_gpu_encoding():
+    """Test if GPU encoding is actually working by running a simple FFmpeg command."""
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+        ffmpeg_cmd = get_ffmpeg_exe() if get_ffmpeg_exe else 'ffmpeg'
+
+        # Test NVENC encoding
+        result = subprocess.run([
+            ffmpeg_cmd, '-f', 'lavfi', '-i', 'testsrc=duration=1:size=320x240:rate=1',
+            '-c:v', 'h264_nvenc', '-f', 'null', '-'
+        ], capture_output=True, text=True, timeout=10)
+
+        if result.returncode == 0:
+            print(colored("[+] GPU encoding test PASSED - NVENC is working", "green"))
+            return True
+        else:
+            print(colored(f"[-] GPU encoding test FAILED: {result.stderr}", "red"))
+            return False
+    except Exception as e:
+        print(colored(f"[-] GPU encoding test ERROR: {e}", "red"))
+        return False
+
 def detect_gpu_codec() -> Optional[Dict[str, Union[str, List[str]]]]:
     """
     Detects available GPU encoders and returns optimal codec settings.
@@ -69,6 +91,12 @@ def detect_gpu_codec() -> Optional[Dict[str, Union[str, List[str]]]]:
         
         if 'h264_nvenc' in encoders_output:
             print(colored("[+] NVIDIA GPU encoder (NVENC) detected!", "green"))
+            # Test if GPU encoding actually works
+            if test_gpu_encoding():
+                print(colored("[+] GPU encoding test PASSED - using NVENC", "green"))
+            else:
+                print(colored("[-] GPU encoding test FAILED - falling back to CPU", "red"))
+                return None
             return {
                 'codec': 'h264_nvenc',
                 'ffmpeg_params': [
@@ -147,7 +175,7 @@ def get_video_codec_settings(use_gpu: bool = True) -> Dict[str, Any]:
     }
 
 
-def save_video(video_url: str, directory: str = "../temp") -> str:
+def save_video(video_url: str, directory: str = "../../../temp") -> str:
     """
     Saves a video from a given URL and returns the path to the video.
 
@@ -392,7 +420,7 @@ def generate_subtitles(audio_path: str, sentences: List[str], audio_clips: List[
         srt_equalizer.equalize_srt_file(srt_path, srt_path, max_chars)
 
     # Save subtitles
-    subtitles_path = f"../subtitles/{uuid.uuid4()}.srt"
+    subtitles_path = f"./subtitles/{uuid.uuid4()}.srt"
 
     if ASSEMBLY_AI_API_KEY is not None and ASSEMBLY_AI_API_KEY != "":
         print(colored("[+] Creating subtitles using AssemblyAI", "blue"))
@@ -433,7 +461,7 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
         str: The path to the combined video.
     """
     video_id = uuid.uuid4()
-    combined_video_path = f"../temp/{video_id}.mp4"
+    combined_video_path = f"../../../temp/{video_id}.mp4"
     
     # Required duration of each clip
     req_dur = max_duration / len(video_paths)
@@ -522,13 +550,17 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
     codec_settings = get_video_codec_settings(use_gpu)
     # Remove 'logger' from codec_settings to avoid parameter conflict
     write_settings = {k: v for k, v in codec_settings.items() if k != 'logger'}
+
+    # Debug: Print actual codec settings being used
+    print(colored(f"[debug] Using codec: {write_settings.get('codec', 'unknown')}", "cyan"))
+    print(colored(f"[debug] FFmpeg params: {write_settings.get('ffmpeg_params', 'none')}", "cyan"))
     
     try:
         final_clip_typed: CompositeVideoClip = cast(CompositeVideoClip, final_clip)
         final_clip_typed.write_videofile(
-            combined_video_path, 
+            combined_video_path,
             threads=threads,
-            logger=None,    # Disable default logger
+            logger="bar",
             **write_settings
         )
         
@@ -1038,8 +1070,11 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         positioned_subs = subtitles
         print(colored(f"[debug] Using enhanced subtitle positioning", "cyan"))
         print(colored(f"[debug] Enhanced subtitle type: {type(subtitles)}", "cyan"))
-        if hasattr(subtitles, 'clips'):
-            print(colored(f"[debug] Enhanced subtitle has {len(subtitles.clips)} clips", "cyan"))
+        # Only access clips on CompositeVideoClip, not SubtitlesClip
+        if isinstance(subtitles, CompositeVideoClip):
+            enhanced_subs = cast(CompositeVideoClip, subtitles)
+            if hasattr(enhanced_subs, 'clips'):
+                print(colored(f"[debug] Enhanced subtitle has {len(enhanced_subs.clips)} clips", "cyan"))
     else:
         # Traditional subtitles need manual positioning
         positioned_subs = subtitles.with_position(_safe_area_pos_fn)
@@ -1104,16 +1139,19 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
     try:
         # Remove any masks from subtitle clips to prevent broadcasting errors
         # Subtitles are text overlays and don't need transparency masking
-        if hasattr(positioned_subs, 'clips') and positioned_subs.clips:
-            print(colored(f"[debug] Processing {len(positioned_subs.clips)} subtitle clips - removing masks", "cyan"))
-            for i, clip in enumerate(positioned_subs.clips):
-                try:
-                    if hasattr(clip, 'mask') and clip.mask is not None:
-                        # Remove mask since subtitles don't need transparency
-                        positioned_subs.clips[i] = clip.without_mask()
-                        print(colored(f"[debug] Removed mask from subtitle clip {i}", "yellow"))
-                except Exception as clip_fix_error:
-                    print(colored(f"[warn] Could not remove mask from clip {i}: {clip_fix_error}", "yellow"))
+        # Only access clips on CompositeVideoClip, not SubtitlesClip
+        if isinstance(positioned_subs, CompositeVideoClip):
+            composite_subs = cast(CompositeVideoClip, positioned_subs)
+            if hasattr(composite_subs, 'clips') and composite_subs.clips:
+                print(colored(f"[debug] Processing {len(composite_subs.clips)} subtitle clips - removing masks", "cyan"))
+                for i, clip in enumerate(composite_subs.clips):
+                    try:
+                        if hasattr(clip, 'mask') and clip.mask is not None:
+                            # Remove mask since subtitles don't need transparency
+                            composite_subs.clips[i] = clip.without_mask()
+                            print(colored(f"[debug] Removed mask from subtitle clip {i}", "yellow"))
+                    except Exception as clip_fix_error:
+                        print(colored(f"[warn] Could not remove mask from clip {i}: {clip_fix_error}", "yellow"))
 
         result: CompositeVideoClip = CompositeVideoClip([
             base_clip,
@@ -1138,7 +1176,11 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
 
     # Get GPU-optimized codec settings
     codec_settings = get_video_codec_settings(use_gpu)
-    
+
+    # Debug: Print actual codec settings being used
+    print(colored(f"[debug] Using codec: {codec_settings.get('codec', 'unknown')}", "cyan"))
+    print(colored(f"[debug] FFmpeg params: {codec_settings.get('ffmpeg_params', 'none')}", "cyan"))
+
     from typing import Any
     result_any: Any = result
 

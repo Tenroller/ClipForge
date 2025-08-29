@@ -3,19 +3,19 @@ import { Button } from '@/components/components/ui/button'
 import { Badge } from '@/components/components/ui/badge'
 import { Separator } from '@/components/components/ui/separator'
 import { 
-  Clapperboard, 
-  Sparkles, 
-  Brain, 
-  Home, 
-  Settings, 
-  HelpCircle, 
-  Menu,
-  X,
-  Activity,
-  Download,
-  History,
-  ChevronRight
-} from 'lucide-react'
+  FaFilm, 
+  FaStar, 
+  FaBrain, 
+  FaHome, 
+  FaCog, 
+  FaQuestionCircle, 
+  FaBars,
+  FaTimes,
+  FaChartLine,
+  FaDownload,
+  FaHistory,
+  FaChevronRight
+} from 'react-icons/fa'
 import { cn } from '@/components/lib/utils'
 
 type SidebarProps = {
@@ -43,14 +43,14 @@ export default function Sidebar({
     {
       id: 'landing',
       label: 'Home',
-      icon: <Home className="size-4" />,
+      icon: <FaHome className="size-4" />,
       view: 'landing' as const,
       description: 'Landing page'
     },
     {
       id: 'moneyprinter',
       label: 'AI Video Creator',
-      icon: <Sparkles className="size-4" />,
+      icon: <FaStar className="size-4" />,
       view: 'moneyprinter' as const,
       description: 'Create videos with AI',
       badge: activeJobs > 0 ? activeJobs.toString() : undefined
@@ -58,7 +58,7 @@ export default function Sidebar({
     {
       id: 'brainrot',
       label: 'Compilations',
-      icon: <Brain className="size-4" />,
+      icon: <FaBrain className="size-4" />,
       view: 'brainrot' as const,
       description: 'Create from existing videos'
     }
@@ -68,14 +68,14 @@ export default function Sidebar({
     {
       id: 'activity',
       label: 'Activity',
-      icon: <Activity className="size-4" />,
+      icon: <FaChartLine className="size-4" />,
       description: 'Job history & status',
       disabled: false
     },
     {
       id: 'downloads',
       label: 'Downloads',
-      icon: <Download className="size-4" />,
+      icon: <FaDownload className="size-4" />,
       description: 'Manage your videos',
       disabled: false
     }
@@ -93,7 +93,7 @@ export default function Sidebar({
           {!isCollapsed && (
             <div className="flex items-center gap-3">
               <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center shadow-lg">
-                <Clapperboard className="size-4 text-white" />
+                <FaFilm className="size-4 text-white" />
               </div>
               <div>
                 <h2 className="font-semibold text-sm">AI Video Creator</h2>
@@ -108,7 +108,7 @@ export default function Sidebar({
               onClick={onToggleCollapse}
               className="shrink-0 p-1.5 h-auto"
             >
-              {isCollapsed ? <Menu className="size-4" /> : <X className="size-4" />}
+              {isCollapsed ? <FaBars className="size-4" /> : <FaTimes className="size-4" />}
             </Button>
           )}
         </div>
@@ -154,7 +154,7 @@ export default function Sidebar({
                       </Badge>
                     )}
                     {currentView === item.view && (
-                      <ChevronRight className="size-3 text-primary" />
+                      <FaChevronRight className="size-3 text-primary" />
                     )}
                   </>
                 )}
@@ -234,7 +234,7 @@ export default function Sidebar({
           onClick={onSettingsClick}
         >
           <div className="flex items-center gap-3 w-full">
-            <Settings className="size-4 shrink-0" />
+            <FaCog className="size-4 shrink-0" />
             {!isCollapsed && (
               <div className="flex-1 text-left">
                 <div className="font-medium text-sm">Settings</div>

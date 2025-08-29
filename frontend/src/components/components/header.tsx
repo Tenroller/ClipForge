@@ -1,4 +1,4 @@
-import { Clapperboard, LinkIcon, Moon, Sun, Workflow, Brain } from "lucide-react"
+import { FaFilm, FaLink, FaMoon, FaSun, FaCogs, FaBrain } from "react-icons/fa"
 import { Tabs, TabsList, TabsTrigger } from "@/components/components/ui/tabs"
 import { Badge } from "@/components/components/ui/badge"
 import { Button } from "@/components/components/ui/button"
@@ -12,7 +12,7 @@ export default function Header() {
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <div className="size-9 rounded-lg bg-muted border flex items-center justify-center">
-            <Clapperboard className="size-5" />
+            <FaFilm className="size-5" />
           </div>
           <div>
             <h1 className="text-xl font-semibold leading-none">AI Video Creator</h1>
@@ -22,7 +22,7 @@ export default function Header() {
 
         <div className="ml-auto flex items-center gap-2">
           <Badge variant="outline" className="gap-1">
-            <LinkIcon className="size-3" />
+            <FaLink className="size-3" />
             API: localhost:8080
           </Badge>
           <Button
@@ -31,8 +31,8 @@ export default function Header() {
             aria-label="Toggle theme"
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
           >
-            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <FaSun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <FaMoon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
           </Button>
         </div>
       </div>
@@ -41,10 +41,10 @@ export default function Header() {
         <Tabs defaultValue="moneyprinter" className="w-full">
           <TabsList className="w-fit">
             <TabsTrigger value="moneyprinter" className="gap-2">
-              <Workflow className="size-4" /> Create videos purrely with AI
+              <FaCogs className="size-4" /> Create videos purrely with AI
             </TabsTrigger>
             <TabsTrigger value="brainrot" disabled className="gap-2">
-              <Brain className="size-4" /> Create videos from compilations
+              <FaBrain className="size-4" /> Create videos from compilations
             </TabsTrigger>
           </TabsList>
         </Tabs>

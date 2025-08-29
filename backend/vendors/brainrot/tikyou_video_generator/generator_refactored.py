@@ -28,7 +28,8 @@ from moviepy import (
     ColorClip,
     TextClip,
     concatenate_videoclips,
-    vfx
+    vfx,
+    VideoClip
 )
 
 from .processor import CatVideoProcessor
@@ -61,7 +62,7 @@ class ClipProcessor:
         self.config = config
         self.logger = logger
     
-    def process_clip_for_compilation(self, clip_path: str, target_resolution: Tuple[int, int]) -> Optional[VideoFileClip]:
+    def process_clip_for_compilation(self, clip_path: str, target_resolution: Tuple[int, int]) -> Optional[VideoClip]:
         """
         Load, resize, and process a single clip for compilation.
         Refactored from the original large method.
@@ -125,7 +126,7 @@ class ClipProcessor:
         
         return is_low_res
     
-    def _process_low_resolution_clip(self, clip: VideoFileClip, target_resolution: Tuple[int, int]) -> VideoFileClip:
+    def _process_low_resolution_clip(self, clip: VideoFileClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Process low resolution clip with solid background"""
         target_w, target_h = target_resolution
         
@@ -151,11 +152,13 @@ class ClipProcessor:
         # Preserve audio
         if final_clip.audio is None and clip.audio is not None:
             self.logger.video_processing("Preserving original audio...")
-            final_clip.audio = clip.audio
+            # Convert AudioFileClip to CompositeAudioClip for compatibility
+            from moviepy import CompositeAudioClip
+            final_clip.audio = CompositeAudioClip([clip.audio])
         
         return final_clip
     
-    def _resize_clip_to_fit(self, clip: VideoFileClip, target_resolution: Tuple[int, int]) -> VideoFileClip:
+    def _resize_clip_to_fit(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Resize clip to fit within target bounds while preserving aspect ratio"""
         target_w, target_h = target_resolution
         w, h = clip.size
@@ -166,12 +169,12 @@ class ClipProcessor:
         if w > clip_max_w or h > clip_max_h:
             ratio = min(clip_max_w/w, clip_max_h/h)
             self.logger.video_processing(f"Resizing clip by ratio: {ratio:.3f}")
-            return clip.with_effects([vfx.Resize(ratio)])
+            return clip.with_effects([vfx.Resize(ratio)])  # type: ignore
         else:
             self.logger.video_processing("No resize needed, clip fits within bounds")
             return clip
     
-    def _process_high_resolution_clip(self, clip: VideoFileClip, target_resolution: Tuple[int, int]) -> VideoFileClip:
+    def _process_high_resolution_clip(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Process high resolution clip with standard approach"""
         w, h = clip.size
         target_w, target_h = target_resolution
@@ -188,31 +191,35 @@ class ClipProcessor:
                 return self._resize_and_crop_tall_clip(clip, target_resolution)
         else:
             self.logger.video_processing("Aspect ratios match, simple resize...")
-            return clip.with_effects([vfx.Resize(width=target_w, height=target_h)])
+            return clip.with_effects([vfx.Resize(width=target_w, height=target_h)])  # type: ignore
     
-    def _resize_and_crop_wide_clip(self, clip: VideoFileClip, target_resolution: Tuple[int, int]) -> VideoFileClip:
+    def _resize_and_crop_wide_clip(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Resize and crop a wide clip"""
         target_w, target_h = target_resolution
         self.logger.video_processing("Clip is wider than target, resizing and cropping...")
-        
-        resized_clip = clip.with_effects([vfx.Resize(height=target_h)])
+
+        resized_clip = clip.with_effects([vfx.Resize(height=target_h)])  # type: ignore
+        # Get dimensions after resize
+        resized_w, resized_h = resized_clip.size  # type: ignore
         return resized_clip.with_effects([
-            vfx.Crop(x_center=resized_clip.w / 2, y_center=resized_clip.h / 2, 
+            vfx.Crop(x_center=resized_w / 2, y_center=resized_h / 2,
                   width=target_w, height=target_h)
-        ])
+        ])  # type: ignore
     
-    def _resize_and_crop_tall_clip(self, clip: VideoFileClip, target_resolution: Tuple[int, int]) -> VideoFileClip:
+    def _resize_and_crop_tall_clip(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Resize and crop a tall clip"""
         target_w, target_h = target_resolution
         self.logger.video_processing("Clip is taller than target, resizing and cropping...")
-        
-        resized_clip = clip.with_effects([vfx.Resize(width=target_w)])
+
+        resized_clip = clip.with_effects([vfx.Resize(width=target_w)])  # type: ignore
+        # Get dimensions after resize
+        resized_w, resized_h = resized_clip.size  # type: ignore
         return resized_clip.with_effects([
-            vfx.Crop(x_center=resized_clip.w / 2, y_center=resized_clip.h / 2, 
+            vfx.Crop(x_center=resized_w / 2, y_center=resized_h / 2,
                   width=target_w, height=target_h)
-        ])
+        ])  # type: ignore
     
-    def _ensure_audio_track(self, clip: VideoFileClip) -> VideoFileClip:
+    def _ensure_audio_track(self, clip: VideoClip) -> VideoClip:
         """Ensure clip has an audio track, add silent one if missing"""
         if clip.audio is None:
             self.logger.video_processing("Clip has no audio, adding silent track")
@@ -497,7 +504,7 @@ class CompilationBuilder:
         
         return result
     
-    def _process_clips_for_compilation(self, clips: List[ClipInfo], target_resolution: Tuple[int, int]) -> List[VideoFileClip]:
+    def _process_clips_for_compilation(self, clips: List[ClipInfo], target_resolution: Tuple[int, int]) -> List[VideoClip]:
         """Process clips for compilation"""
         self.logger.processing_step(f"Processing {len(clips)} clips for compilation...")
         
@@ -522,7 +529,7 @@ class CompilationBuilder:
         self.logger.processing_step(f"Successfully processed {len(final_clips)} clips")
         return final_clips
     
-    def _create_compilation_from_clips(self, clips: List[VideoFileClip]) -> VideoFileClip:
+    def _create_compilation_from_clips(self, clips: List[VideoClip]) -> VideoClip:
         """Create compilation by concatenating clips"""
         self.logger.processing_step("Concatenating clips into final compilation...")
         
@@ -540,7 +547,7 @@ class CompilationBuilder:
                 reason=f"Concatenation failed: {str(e)}"
             )
     
-    def _add_title_overlay(self, compilation: VideoFileClip, title: str) -> VideoFileClip:
+    def _add_title_overlay(self, compilation: VideoClip, title: str) -> VideoClip:
         """Add title overlay to compilation"""
         self.logger.processing_step(f"Adding title overlay: '{title}'")
         
@@ -563,7 +570,7 @@ class CompilationBuilder:
             self.logger.warning(f"Failed to add title overlay: {e}")
             return compilation
     
-    def _write_compilation_to_file(self, compilation: VideoFileClip, output_path: str):
+    def _write_compilation_to_file(self, compilation: VideoClip, output_path: str):
         """Write compilation to file with optimized encoding"""
         self.logger.processing_step(f"Writing compilation to file: {output_path}")
         
@@ -604,7 +611,7 @@ class CompilationBuilder:
             raise EncodingError(
                 input_path="compilation",
                 output_path=output_path,
-                codec=encoding_params['codec'],
+                codec=str(encoding_params['codec']),
                 reason=str(e)
             )
 

@@ -7,7 +7,7 @@ import { Input } from "@/components/components/ui/input"
 import { Textarea } from "@/components/components/ui/textarea"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/components/ui/select"
 import { Switch } from "@/components/components/ui/switch"
-import { HelpCircle, RefreshCw, Sparkles, Cpu, Loader2, Type, ChevronDown, ChevronUp } from "lucide-react"
+import { FaQuestionCircle, FaRedo, FaStar, FaMicrochip, FaSpinner, FaFont, FaChevronDown, FaChevronUp } from "react-icons/fa"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/components/ui/tooltip"
 import { Button } from "@/components/components/ui/button"
 import { toast } from "sonner"
@@ -94,7 +94,7 @@ export default function MoneyPrinterForm({
           <CardHeader>
             <CardTitle className="flex items-center gap-3">
               <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                <Sparkles className="size-4 text-white" />
+                <FaStar className="size-4 text-white" />
               </div>
               Video Configuration
             </CardTitle>
@@ -128,7 +128,7 @@ export default function MoneyPrinterForm({
             {/* Basic Settings */}
             <div className="space-y-4">
               <div className="form-section-title">
-                <Sparkles className="size-4 text-blue-500" />
+                <FaStar className="size-4 text-blue-500" />
                 Basic Settings
               </div>
               
@@ -163,7 +163,7 @@ export default function MoneyPrinterForm({
                       }}
                       title="Generate with AI"
                     >
-                      <Sparkles className="size-3" />
+                      <FaStar className="size-3" />
                       {suggesting ? 'Generating…' : 'Generate'}
                     </Button>
                   </div>
@@ -184,7 +184,7 @@ export default function MoneyPrinterForm({
                         AI Model
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <HelpCircle className="size-3.5 text-muted-foreground" />
+                            <FaQuestionCircle className="size-3.5 text-muted-foreground" />
                           </TooltipTrigger>
                           <TooltipContent>Choose a capable, cost‑effective model</TooltipContent>
                         </Tooltip>
@@ -313,9 +313,9 @@ export default function MoneyPrinterForm({
                 onClick={() => setShowSubtitleSettings(!showSubtitleSettings)}
                 className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
               >
-                <Type className="size-4 text-green-500" />
+                <FaFont className="size-4 text-green-500" />
                 Advanced Subtitle Options
-                {showSubtitleSettings ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                                  {showSubtitleSettings ? <FaChevronUp className="size-4" /> : <FaChevronDown className="size-4" />}
               </button>
               
               {showSubtitleSettings && (
@@ -331,7 +331,7 @@ export default function MoneyPrinterForm({
                     </Label>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="size-3.5 text-muted-foreground" />
+                        <FaQuestionCircle className="size-3.5 text-muted-foreground" />
                       </TooltipTrigger>
                       <TooltipContent>Highlight each word as it's spoken, TikTok style</TooltipContent>
                     </Tooltip>
@@ -349,7 +349,7 @@ export default function MoneyPrinterForm({
                     </Label>
                     <Tooltip>
                       <TooltipTrigger>
-                        <HelpCircle className="size-3.5 text-muted-foreground" />
+                        <FaQuestionCircle className="size-3.5 text-muted-foreground" />
                       </TooltipTrigger>
                       <TooltipContent>Use OpenAI Whisper for ultra-precise word timing (3-word windows)</TooltipContent>
                     </Tooltip>
@@ -553,9 +553,9 @@ export default function MoneyPrinterForm({
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
               >
-                <Cpu className="size-4 text-purple-500" />
+                <FaMicrochip className="size-4 text-purple-500" />
                 Advanced Options
-                {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                                  {showAdvanced ? <FaChevronUp className="size-4" /> : <FaChevronDown className="size-4" />}
               </button>
               
               {showAdvanced && (
@@ -566,7 +566,7 @@ export default function MoneyPrinterForm({
                         <Label htmlFor={parasId}>Paragraphs</Label>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <HelpCircle className="size-3.5 text-muted-foreground" />
+                            <FaQuestionCircle className="size-3.5 text-muted-foreground" />
                           </TooltipTrigger>
                           <TooltipContent>Number of script segments</TooltipContent>
                         </Tooltip>
@@ -578,7 +578,7 @@ export default function MoneyPrinterForm({
                         <Label htmlFor={threadsId}>Threads</Label>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <HelpCircle className="size-3.5 text-muted-foreground" />
+                            <FaQuestionCircle className="size-3.5 text-muted-foreground" />
                           </TooltipTrigger>
                           <TooltipContent>Parallel workers; higher is faster, heavier</TooltipContent>
                         </Tooltip>
@@ -624,12 +624,12 @@ export default function MoneyPrinterForm({
             >
               {busy ? (
                 <>
-                  <Loader2 className="size-4 animate-spin mr-2" />
+                                      <FaSpinner className="size-4 animate-spin mr-2" />
                   Creating Video...
                 </>
               ) : (
                 <>
-                  <Sparkles className="size-4 mr-2" />
+                                      <FaStar className="size-4 mr-2" />
                   Generate Video
                 </>
               )}
@@ -666,7 +666,7 @@ export default function MoneyPrinterForm({
                 onReset?.()
               }}
             >
-              <RefreshCw className="size-4 mr-2" /> Reset Form
+                                <FaRedo className="size-4 mr-2" /> Reset Form
             </Button>
           </CardFooter>
         </form>

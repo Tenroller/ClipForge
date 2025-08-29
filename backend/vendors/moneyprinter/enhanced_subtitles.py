@@ -76,7 +76,7 @@ def extract_audio(video_path: str) -> str | None:
         video_clip = VideoFileClip(video_path)
 
         # Write the audio from the video clip to the temporary file
-        video_clip.audio.write_audiofile(temp_audio_path, codec='pcm_s16le')
+        video_clip.audio.write_audiofile(temp_audio_path, codec='pcm_s16le') # type: ignore
         video_clip.close()
 
         print(f"Successfully extracted audio to {temp_audio_path}")
@@ -101,17 +101,31 @@ def transcribe_audio_with_word_timestamps(audio_path: str, model_size: str) -> d
     try:
         # Load the audio file
         audio = whisper.load_audio(audio_path)
+        print(f"Audio loaded, shape: {audio.shape if hasattr(audio, 'shape') else 'unknown'}")
 
         # Load the specified Whisper model
         model = whisper.load_model(model_size, device="cpu")
+        print(f"Model '{model_size}' loaded successfully")
 
         # Transcribe the audio to get segments and word-level timestamps
         result = whisper.transcribe(model, audio, language="en", beam_size=5, best_of=5, temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0))
 
         print("Transcription complete.")
+        print(f"Result keys: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        if isinstance(result, dict):
+            segments = result.get('segments', [])
+            print(f"Number of segments: {len(segments)}")
+            if segments:
+                first_segment = segments[0]
+                print(f"First segment keys: {list(first_segment.keys()) if isinstance(first_segment, dict) else 'Not a dict'}")
+                if isinstance(first_segment, dict) and 'words' in first_segment:
+                    print(f"Number of words in first segment: {len(first_segment['words'])}")
+        
         return result
     except Exception as e:
         print(f"Error during transcription: {e}")
+        import traceback
+        traceback.print_exc()
         return {}
 
 
@@ -239,14 +253,23 @@ def create_ass_file(word_level_data: dict, ass_path: str, config: SubtitleConfig
         subs.styles["Default"] = default_style
 
         # Iterate through each segment (line) of the transcription
-        for segment in word_level_data.get("segments", []):
-            if not segment.get("words"):
+        segments = word_level_data.get("segments", [])
+        print(f"Processing {len(segments)} segments for ASS file creation")
+        
+        for segment_idx, segment in enumerate(segments):
+            words = segment.get("words", [])
+            if not words:
+                print(f"Warning: Segment {segment_idx} has no words, skipping")
                 continue
+                
+            print(f"Processing segment {segment_idx}: {len(words)} words, duration: {segment.get('end', 0) - segment.get('start', 0):.2f}s")
 
             # Create individual subtitle events for each word timing
             for i, word in enumerate(segment["words"]):
                 word_start_ms = int(word["start"] * 1000)
                 word_end_ms = int(word["end"] * 1000)
+                
+                print(f"    Word {i}: '{word.get('text', '')}' at {word_start_ms}ms - {word_end_ms}ms")
 
                 # Build sentence with only current word highlighted
                 sentence_text = ""
@@ -313,6 +336,7 @@ def create_ass_file(word_level_data: dict, ass_path: str, config: SubtitleConfig
         # Save the complete .ass file
         subs.save(ass_path, encoding="utf-8")
         print(f"Successfully created .ass file at: {ass_path}")
+        print(f"Total subtitle events created: {len(subs.events)}")
         return True
 
     except Exception as e:
@@ -456,33 +480,58 @@ def generate_enhanced_subtitles(
     import tempfile
     from moviepy import concatenate_audioclips
 
+    print(f"Creating audio file from {len(audio_clips)} audio clips")
+
     try:
         # Combine all audio clips
-        combined_audio = concatenate_audioclips(audio_clips)
+        if not audio_clips:
+            print("Warning: No audio clips provided")
+            return ""
 
-        # Save to temporary file
-        temp_audio_path = tempfile.mktemp(suffix='.wav')
+        combined_audio = concatenate_audioclips(audio_clips)
+        print(f"Combined audio duration: {combined_audio.duration}s")
+
+        # Save to temporary file in project temp directory
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+        temp_audio_path = str(temp_dir / f"temp_audio_{uuid.uuid4()}.wav")
         combined_audio.write_audiofile(temp_audio_path, codec='pcm_s16le')
 
         # Transcribe with word timestamps
+        print(f"Starting transcription with model: {config.whisper_model}")
         transcription_data = transcribe_audio_with_word_timestamps(temp_audio_path, config.whisper_model)
 
         # Create subtitle data structure
+        if transcription_data and isinstance(transcription_data, dict):
+            segments = transcription_data.get('segments', [])
+            if not segments:
+                print("Warning: Transcription completed but no segments found")
+                print(f"Transcription data keys: {list(transcription_data.keys())}")
+                transcription_data = None
+            else:
+                print(f"Transcription successful with {len(segments)} segments")
+                print(f"First segment keys: {list(segments[0].keys()) if segments else 'No segments'}")
+        else:
+            print("Warning: Transcription failed or returned invalid data")
+            print(f"Transcription data type: {type(transcription_data)}")
+            print(f"Transcription data: {transcription_data}")
+            transcription_data = None
+
         if transcription_data:
             # Transform Whisper transcription data to expected format
-            sentences = []
+            processed_sentences: List[Dict[str, Any]] = []
             word_timings = []
-            
+
             for segment in transcription_data.get('segments', []):
                 # Create sentence entry
-                sentence = {
+                sentence_dict: Dict[str, Any] = {
                     'text': segment.get('text', '').strip(),
                     'start_time': segment.get('start', 0),
                     'end_time': segment.get('end', 0),
                     'confidence': segment.get('confidence', 0)
                 }
-                sentences.append(sentence)
-                
+                processed_sentences.append(sentence_dict)
+
                 # Create word timing entries
                 for word in segment.get('words', []):
                     word_timing = {
@@ -490,35 +539,74 @@ def generate_enhanced_subtitles(
                         'start_time': word.get('start', 0),
                         'end_time': word.get('end', 0),
                         'confidence': word.get('confidence', 0),
-                        'sentence_index': len(sentences) - 1,
-                        'sentence': sentence['text']
+                        'sentence_index': len(processed_sentences) - 1,
+                        'sentence': sentence_dict['text']
                     }
                     word_timings.append(word_timing)
-            
+
             subtitle_data = {
                 'version': '1.0',
                 'type': 'enhanced_ass',
                 'config': asdict(config),
-                'sentences': sentences,
+                'sentences': processed_sentences,
                 'word_timings': word_timings,
                 'transcription': transcription_data,  # Keep original for compatibility
                 'metadata': {
                     'total_segments': len(transcription_data.get('segments', [])),
                     'total_duration': transcription_data.get('duration', 0),
-                    'total_sentences': len(sentences),
+                    'total_sentences': len(processed_sentences),
                     'total_words': len(word_timings)
                 }
             }
         else:
-            # Fallback to basic structure
+            # Fallback to basic structure using provided sentences
+            print("Creating fallback subtitle structure from provided sentences")
+
+            # Estimate timing based on audio clips
+            fallback_sentences: List[Dict[str, Any]] = []
+            fallback_word_timings = []
+            current_time = 0.0
+
+            for i, (sentence, audio_clip) in enumerate(zip(sentences, audio_clips)):
+                # Get duration from audio clip
+                duration = audio_clip.duration if hasattr(audio_clip, 'duration') else 2.0
+
+                sentence_data = {
+                    'text': sentence,
+                    'start_time': current_time,
+                    'end_time': current_time + duration,
+                    'confidence': 1.0
+                }
+                fallback_sentences.append(sentence_data)
+
+                # Create word-level timing (simple word-by-word split)
+                words = sentence.split()
+                word_duration = duration / max(len(words), 1)
+
+                for j, word in enumerate(words):
+                    word_start = current_time + (j * word_duration)
+                    word_end = current_time + ((j + 1) * word_duration)
+
+                    word_timing = {
+                        'word': word,
+                        'start_time': word_start,
+                        'end_time': word_end,
+                        'confidence': 1.0,
+                        'sentence_index': i,
+                        'sentence': sentence
+                    }
+                    fallback_word_timings.append(word_timing)
+
+                current_time += duration
+
             subtitle_data = {
                 'version': '1.0',
                 'type': 'enhanced_ass',
                 'config': asdict(config),
-                'sentences': [],
-                'word_timings': [],
+                'sentences': fallback_sentences,
+                'word_timings': fallback_word_timings,
                 'transcription': {},
-                'metadata': {'total_segments': 0, 'total_duration': 0, 'total_sentences': 0, 'total_words': 0}
+                'metadata': {'total_segments': len(fallback_sentences), 'total_duration': current_time, 'total_sentences': len(fallback_sentences), 'total_words': len(fallback_word_timings)}
             }
 
         # Save to file
@@ -527,16 +615,35 @@ def generate_enhanced_subtitles(
             subtitles_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(current_dir))), 'subtitles')
             output_path = os.path.join(subtitles_dir, f"{uuid.uuid4()}_enhanced.json")
 
+        # Ensure the output path is absolute
+        output_path = os.path.abspath(output_path)
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(subtitle_data, f, indent=2, ensure_ascii=False)
 
         print(f"Enhanced subtitle data saved to: {output_path}")
+
+        # Cleanup temporary audio file
+        try:
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+                print(f"Cleaned up temporary audio file: {temp_audio_path}")
+        except OSError as e:
+            print(f"Warning: Could not cleanup temporary audio file: {e}")
+
         return output_path
 
     except Exception as e:
         print(f"Error generating enhanced subtitles: {e}")
+        # Cleanup temporary audio file on error
+        try:
+            if os.path.exists(temp_audio_path):
+                os.remove(temp_audio_path)
+                print(f"Cleaned up temporary audio file after error: {temp_audio_path}")
+        except OSError as cleanup_e:
+            print(f"Warning: Could not cleanup temporary audio file after error: {cleanup_e}")
+
         # Return empty structure
         if output_path:
             subtitle_data = {
@@ -576,6 +683,15 @@ def convert_json_to_ass_and_burn(
         # Load JSON subtitle data
         with open(json_subtitle_path, 'r', encoding='utf-8') as f:
             subtitle_data = json.load(f)
+            
+        print(f"Loaded subtitle file: {json_subtitle_path}")
+        print(f"Absolute path: {os.path.abspath(json_subtitle_path)}")
+        print(f"Current working directory: {os.getcwd()}")
+        print(f"File exists: {os.path.exists(json_subtitle_path)}")
+        print(f"File size: {os.path.getsize(json_subtitle_path) if os.path.exists(json_subtitle_path) else 'N/A'} bytes")
+        print(f"File contains keys: {list(subtitle_data.keys())}")
+        print(f"Type: {subtitle_data.get('type', 'unknown')}")
+        print(f"Version: {subtitle_data.get('version', 'unknown')}")
         
         # Load config from JSON if not provided
         if config is None and 'config' in subtitle_data:
@@ -584,15 +700,46 @@ def convert_json_to_ass_and_burn(
         elif config is None:
             config = SubtitleConfig()
         
-        # Create temporary ASS file
-        import tempfile
-        ass_path = tempfile.mktemp(suffix='.ass')
+        # Create temporary ASS file in project temp directory
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+        ass_path = str(temp_dir / f"temp_subtitles_{uuid.uuid4()}.ass")
         
-        # Convert transcription data to ASS format
-        transcription_data = subtitle_data.get('transcription', {})
-        if not transcription_data:
-            print("No transcription data found in JSON subtitle file")
+        # Check for required subtitle data
+        sentences = subtitle_data.get('sentences', [])
+        word_timings = subtitle_data.get('word_timings', [])
+        
+        print(f"Subtitle data validation: {len(sentences)} sentences, {len(word_timings)} word timings")
+        
+        if not sentences or not word_timings:
+            print("No subtitle data found in JSON subtitle file")
+            print(f"Available keys: {list(subtitle_data.keys())}")
             return False
+            
+        # Convert subtitle data to ASS format - use the sentences and word_timings
+        # The create_ass_file function expects word-level data with segments
+        transcription_data = {
+            'segments': [
+                {
+                    'start': sentence.get('start_time', 0),
+                    'end': sentence.get('end_time', 0),
+                    'text': sentence.get('text', ''),
+                    'words': [
+                        {
+                            'start': word.get('start_time', 0),
+                            'end': word.get('end_time', 0),
+                            'text': word.get('word', '')
+                        }
+                        for word in word_timings if word.get('sentence_index') == i
+                    ]
+                }
+                for i, sentence in enumerate(sentences)
+            ]
+        }
+        
+        print(f"Converted transcription data: {len(transcription_data['segments'])} segments")
+        for i, segment in enumerate(transcription_data['segments']):
+            print(f"  Segment {i}: {len(segment['words'])} words, duration: {segment['end'] - segment['start']:.2f}s")
         
         # Create ASS file
         if not create_ass_file(transcription_data, ass_path, config):
@@ -677,7 +824,11 @@ def create_tiktok_style_config(
 def create_subtitle_config_from_legacy(config: Dict[str, Any]) -> SubtitleConfig:
     """Convert legacy subtitle config format to new format."""
     # Handle color mapping: use primary_color if available, otherwise default_color, otherwise white
-    primary_color = config.get('primary_color') or config.get('default_color') or '&H00FFFFFF'
+    primary_color = config.get('primary_color')
+    if not primary_color:
+        primary_color = config.get('default_color')
+    if not primary_color:
+        primary_color = '&H00FFFFFF'
 
     return SubtitleConfig(
         font_family=config.get('font_family', 'Arial'),

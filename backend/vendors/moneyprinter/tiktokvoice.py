@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import os
 import tempfile
+import uuid
 import warnings
+from pathlib import Path
 from typing import List
 
 try:
@@ -112,7 +114,9 @@ def tts(text: str, voice: str = "af_bella", filename: str = "output.mp3", play_s
             raise RuntimeError("Kokoro returned no audio data")
 
         # Always generate a WAV first, then convert to requested path
-        tmp_wav = tempfile.mktemp(suffix=".wav")
+        temp_dir = Path("temp")
+        temp_dir.mkdir(exist_ok=True)
+        tmp_wav = str(temp_dir / f"temp_audio_{uuid.uuid4()}.wav")
         sf = _lazy_import_soundfile()
         sf.write(tmp_wav, audio_data, 24000)
 

@@ -271,7 +271,7 @@ class TikTokVideoCreator:
             
             # Position video in the middle area of the frame
             video_y_position = 650
-            video_clip = video_clip.with_position(('center', video_y_position))
+            video_clip = video_clip.with_position(('center', video_y_position))  # type: ignore
 
             final_clip = CompositeVideoClip([background, video_clip], size=(W, H))
             final_clip.duration = video_clip.duration
@@ -366,15 +366,15 @@ class TikTokVideoCreator:
                         print(f"  Using vertical video directly (no template)")
                         clip = VideoFileClip(video_path)
                         # Ensure it's the right size for TikTok (1080x1920)
-                        if clip.h != 1920 or clip.w != 1080:
-                            clip = clip.resized(height=1920)
-                            if clip.w > 1080:
+                        if clip.h != 1920 or clip.w != 1080:  # type: ignore
+                            clip = clip.resized(height=1920)  # type: ignore
+                            if clip.w > 1080:  # type: ignore
                                 # If width is still too wide, center crop it
-                                x1 = (clip.w - 1080) // 2
-                                clip = clip.cropped(x1=x1, width=1080)
-                            elif clip.w < 1080:
+                                x1 = (clip.w - 1080) // 2  # type: ignore
+                                clip = clip.cropped(x1=x1, width=1080)  # type: ignore
+                            elif clip.w < 1080:  # type: ignore
                                 # If width is too narrow, resize by width
-                                clip = clip.resized(width=1080)
+                                clip = clip.resized(width=1080)  # type: ignore
                     
                     elif orientation == 'square':
                         # Convert square to vertical by adding padding or using template
@@ -448,7 +448,7 @@ class TikTokVideoCreator:
             else:
                 print(f"   - GPU Options: Using NVENC hardware acceleration")
             
-            final_video.write_videofile(
+            final_video.write_videofile(  # type: ignore
                 output_path,
                 codec=codec,
                 audio_codec='aac',

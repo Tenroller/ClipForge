@@ -32,7 +32,11 @@ class TextToImageRenderer:
     def render_text_to_image(self, text, output_path, width=1080, height=200, font_size=32, font_color="black", background_color="white"):
         """Render text to an image using HTML/CSS and Playwright"""
         self.init_browser()
-        
+
+        if not self.page:
+            print("Failed to initialize browser page")
+            return output_path
+
         # Create an HTML document with the text
         html_content = f"""
         <!DOCTYPE html>
@@ -67,14 +71,14 @@ class TextToImageRenderer:
         </body>
         </html>
         """
-        
+
         # Set viewport size
         self.page.set_viewport_size({"width": width, "height": height})
-        
+
         # Set content and wait for it to load
         self.page.set_content(html_content)
         self.page.wait_for_load_state("networkidle")
-        
+
         return output_path
 
 def get_next_video_number(output_dir):
@@ -139,13 +143,13 @@ def create_video(video_path, text, output_path=None, title=None):
     video_y_position = 650  # Position video in the middle area of the frame
     
     # Set positions for the clips
-    text_clip = text_clip.with_position(('center', text_y_position))
-    video_clip = video_clip.with_position(('center', video_y_position))
+    text_clip = text_clip.with_position(('center', text_y_position))  # type: ignore
+    video_clip = video_clip.with_position(('center', video_y_position))  # type: ignore
     
     # Add title at the very top if provided
     clips_to_composite = [background, text_clip, video_clip]
     if title_clip:
-        title_clip = title_clip.with_position(('center', 100))  # Position title at the top
+        title_clip = title_clip.with_position(('center', 100))  # type: ignore  # Position title at the top
         clips_to_composite.insert(1, title_clip)  # Insert after background but before text
     
     # Composite all the clips together

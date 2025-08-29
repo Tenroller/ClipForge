@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/component
 import { Checkbox } from "@/components/components/ui/checkbox"
 import { Badge } from "@/components/components/ui/badge"
 import { Progress } from "@/components/components/ui/progress"
-import { Loader2 } from "lucide-react"
+import { FaSpinner } from "react-icons/fa"
 import { formatDuration } from "@/lib/formatDuration"
 
 export type JobStep = {
@@ -59,7 +59,7 @@ export default function JobPanel({ jobId, status, steps, error, started_at, dura
         <CardTitle className="flex items-center gap-3">
           <div className="size-8 rounded-lg bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center">
             {isActive ? (
-              <Loader2 className="size-4 text-white animate-spin" />
+              <FaSpinner className="size-4 text-white animate-spin" />
             ) : (
               <div className="size-2 bg-white rounded-full" />
             )}
@@ -80,7 +80,7 @@ export default function JobPanel({ jobId, status, steps, error, started_at, dura
               className="text-xs h-6"
             >
               {viewStatus}
-              {isActive && <Loader2 className="size-3 ml-1 animate-spin" />}
+              {isActive && <FaSpinner className="size-3 ml-1 animate-spin" />}
             </Badge>
           </div>
           {jobId && (
@@ -139,7 +139,7 @@ export default function JobPanel({ jobId, status, steps, error, started_at, dura
                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                         </svg>
                       ) : s.active ? (
-                        <Loader2 className="size-3 animate-spin" />
+                        <FaSpinner className="size-3 animate-spin" />
                       ) : (
                         <span className="text-xs font-medium text-muted-foreground">{index + 1}</span>
                       )}
@@ -180,7 +180,7 @@ export default function JobPanel({ jobId, status, steps, error, started_at, dura
         ) : (
           <div className="text-center py-8">
             <div className="size-16 mx-auto rounded-full bg-muted/50 flex items-center justify-center mb-4">
-              <Loader2 className="size-6 text-muted-foreground" />
+              <FaSpinner className="size-6 text-muted-foreground" />
             </div>
             <p className="text-sm text-muted-foreground">No active job</p>
             <p className="text-xs text-muted-foreground/70 mt-1">Start a video generation to see progress</p>

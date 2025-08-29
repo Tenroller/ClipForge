@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/components/ui/button'
-import { Clapperboard, Menu } from 'lucide-react'
+import { FaFilm, FaBars } from 'react-icons/fa'
 import ThemeToggle from './components/ThemeToggle'
 import CreatorPage from './pages/CreatorPage'
 import CompilationsPage from './pages/CompilationsPage'
@@ -77,12 +77,12 @@ export default function App() {
 								className="lg:hidden px-2"
 								onClick={() => setShowMobileSidebar(!showMobileSidebar)}
 							>
-								<Menu className="size-4" />
+								<FaBars className="size-4" />
 							</Button>
 							
 							<div className="flex items-center gap-3">
 								<div className="size-10 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center shadow-lg">
-									<Clapperboard className="size-5 text-white" />
+									<FaFilm className="size-5 text-white" />
 								</div>
 								<div>
 									<Routes>

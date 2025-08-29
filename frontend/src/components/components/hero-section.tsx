@@ -1,6 +1,6 @@
 import { Button } from "@/components/components/ui/button"
 import { Card } from "@/components/components/ui/card"
-import { Play, Sparkles, Zap } from "lucide-react"
+import { FaPlay, FaStar, FaBolt } from "react-icons/fa"
 
 type HeroSectionProps = {
   onGetStarted?: () => void
@@ -26,7 +26,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps = {}) {
               className="bg-primary hover:bg-primary/90 text-lg px-8 py-3"
               onClick={onGetStarted}
             >
-              <Play className="mr-2 h-5 w-5" />
+              <FaPlay className="mr-2 h-5 w-5" />
               Start Creating
             </Button>
             <Button variant="outline" size="lg" className="text-lg px-8 py-3 bg-transparent">
@@ -38,7 +38,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps = {}) {
           <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
             <Card className="p-6 bg-card hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-center w-12 h-12 bg-primary/10 rounded-lg mb-4 mx-auto">
-                <Sparkles className="h-6 w-6 text-primary" />
+                <FaStar className="h-6 w-6 text-primary" />
               </div>
               <h3 className="text-lg font-semibold mb-2">AI Script Generation</h3>
               <p className="text-muted-foreground text-sm">Generate engaging video scripts with advanced AI models</p>
@@ -46,7 +46,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps = {}) {
 
             <Card className="p-6 bg-card hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-center w-12 h-12 bg-accent/10 rounded-lg mb-4 mx-auto">
-                <Play className="h-6 w-6 text-accent" />
+                <FaPlay className="h-6 w-6 text-accent" />
               </div>
               <h3 className="text-lg font-semibold mb-2">Voice Synthesis</h3>
               <p className="text-muted-foreground text-sm">
@@ -56,7 +56,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps = {}) {
 
             <Card className="p-6 bg-card hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-center w-12 h-12 bg-secondary/10 rounded-lg mb-4 mx-auto">
-                <Zap className="h-6 w-6 text-secondary" />
+                <FaBolt className="h-6 w-6 text-secondary" />
               </div>
               <h3 className="text-lg font-semibold mb-2">Real-time Preview</h3>
               <p className="text-muted-foreground text-sm">

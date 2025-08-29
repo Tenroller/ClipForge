@@ -1,41 +1,41 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/components/ui/card"
 import { Badge } from "@/components/components/ui/badge"
-import { Video, Mic, Type, Palette, Zap, BarChart3 } from "lucide-react"
+import { FaVideo, FaMicrophone, FaFont, FaPalette, FaBolt, FaChartBar } from "react-icons/fa"
 
 export function FeaturesSection() {
   const features = [
     {
-      icon: Video,
+      icon: FaVideo,
       title: "AI Video Creator",
       description: "Generate professional videos with customizable scripts, voice synthesis, and subtitle styling.",
       badges: ["AI-Powered", "Customizable"],
     },
     {
-      icon: Mic,
+      icon: FaMicrophone,
       title: "Voice Selection",
       description: "Choose from multiple TTS voices with preview functionality and background music options.",
       badges: ["Multiple Voices", "Preview"],
     },
     {
-      icon: Type,
+      icon: FaFont,
       title: "Advanced Subtitles",
       description: "TikTok-style subtitles with extensive customization including fonts, colors, and positioning.",
       badges: ["TikTok Style", "Customizable"],
     },
     {
-      icon: Palette,
+      icon: FaPalette,
       title: "Visual Customization",
       description: "Real-time color picker, position grid, and live preview in mobile 9:16 format.",
       badges: ["Real-time", "Mobile Format"],
     },
     {
-      icon: Zap,
+      icon: FaBolt,
       title: "Performance Optimization",
       description: "Local GPU acceleration with CUDA support and cloud GPU processing options.",
       badges: ["GPU Accelerated", "Cloud Ready"],
     },
     {
-      icon: BarChart3,
+      icon: FaChartBar,
       title: "Real-time Monitoring",
       description: "WebSocket-based live progress updates with step-by-step visual indicators.",
       badges: ["Live Updates", "Progress Tracking"],

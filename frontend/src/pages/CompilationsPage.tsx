@@ -5,7 +5,7 @@ import { Input } from '@/components/components/ui/input'
 import { Label } from '@/components/components/ui/label'
 import { Button } from '@/components/components/ui/button'
 import { Switch } from '@/components/components/ui/switch'
-import { Loader2, Brain, HelpCircle, Cpu } from 'lucide-react'    
+import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip } from 'react-icons/fa'    
 import { MultiJobPanel } from '@/components/MultiJobPanel'
 import ResultPanel from '@/components/ResultPanel'
 import { useJobManager } from '@/hooks/useJobManager'
@@ -155,7 +155,7 @@ export default function CompilationsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
                   <div className="size-8 rounded-lg bg-gradient-to-r from-green-500 to-blue-600 flex items-center justify-center">
-                    <Brain className="size-4 text-white" />
+                    <FaBrain className="size-4 text-white" />
                   </div>
                   Brainrot Generator
                 </CardTitle>
@@ -184,7 +184,7 @@ export default function CompilationsPage() {
                     <div className="space-y-2">
                       <Label htmlFor="numCompilations">
                         Compilations
-                        <HelpCircle className="inline size-3 ml-1 opacity-60" />
+                        <FaQuestionCircle className="inline size-3 ml-1 opacity-60" />
                       </Label>
                       <Input
                         id="numCompilations"
@@ -200,7 +200,7 @@ export default function CompilationsPage() {
                     <div className="space-y-2">
                       <Label htmlFor="maxReuse">
                         Max Reuse
-                        <HelpCircle className="inline size-3 ml-1 opacity-60" />
+                        <FaQuestionCircle className="inline size-3 ml-1 opacity-60" />
                       </Label>
                       <Input
                         id="maxReuse"
@@ -246,9 +246,9 @@ export default function CompilationsPage() {
                   <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
                     <div className="flex items-center gap-3">
                       {useGpu ? (
-                        <Cpu className="size-5 text-green-500" />
+                        <FaMicrochip className="size-5 text-green-500" />
                       ) : (
-                        <Cpu className="size-5 text-gray-500" />
+                        <FaMicrochip className="size-5 text-gray-500" />
                       )}
                       <div>
                         <Label htmlFor="use-gpu-brainrot" className="font-medium">
@@ -276,12 +276,12 @@ export default function CompilationsPage() {
                   >
                     {busy ? (
                       <>
-                        <Loader2 className="size-4 mr-2 animate-spin" />
+                        <FaSpinner className="size-4 mr-2 animate-spin" />
                         Starting Compilation...
                       </>
                     ) : (
                       <>
-                        <Brain className="size-4 mr-2" />
+                        <FaBrain className="size-4 mr-2" />
                         Generate Compilation
                       </>
                     )}
@@ -295,7 +295,7 @@ export default function CompilationsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
                   <div className="size-8 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center">
-                    <HelpCircle className="size-4 text-white" />
+                    <FaQuestionCircle className="size-4 text-white" />
                   </div>
                   How It Works
                 </CardTitle>

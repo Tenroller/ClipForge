@@ -12,6 +12,16 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
+# Windows console encoding setup for Unicode support
+if sys.platform == "win32":
+    try:
+        # Try to set console to UTF-8 mode
+        import subprocess
+        subprocess.run(['chcp', '65001'], shell=True, capture_output=True)
+        # Also try to set environment variable
+        os.environ['PYTHONIOENCODING'] = 'utf-8'
+    except Exception:
+        pass
 
 import asyncio
 from collections import defaultdict
@@ -130,8 +140,29 @@ else:
 def _signal_handler(signum, frame):
     """Signal handler for graceful shutdown."""
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-    # Call the comprehensive cleanup function
-    _cleanup_resources()
+    
+    # Set a timeout for cleanup to prevent hanging
+    import threading
+    import time
+    
+    def cleanup_with_timeout():
+        try:
+            _cleanup_resources()
+            logger.info("Cleanup completed successfully")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
+    
+    # Run cleanup in a separate thread with timeout
+    cleanup_thread = threading.Thread(target=cleanup_with_timeout, daemon=True)
+    cleanup_thread.start()
+    cleanup_thread.join(timeout=10)  # 10 second timeout
+    
+    if cleanup_thread.is_alive():
+        logger.warning("Cleanup timeout reached, forcing exit")
+    
+    # Force exit after cleanup attempt
+    logger.info("Shutdown complete, exiting")
+    os._exit(0)
 
 
 @asynccontextmanager
@@ -173,36 +204,78 @@ async def lifespan(app: FastAPI):
     finally:
         broadcaster_task.cancel()
         # In Python 3.12+ asyncio.CancelledError may not inherit from Exception
-        with contextlib.suppress(Exception, asyncio.CancelledError):
-            await broadcaster_task
+        try:
+            await asyncio.wait_for(broadcaster_task, timeout=3.0)  # 3 second timeout
+        except asyncio.TimeoutError:
+            logger.warning("Broadcaster task cleanup timeout reached")
+        except Exception:
+            pass  # Other exceptions are fine to ignore during shutdown
         
         # Cleanup multiprocessing resources to prevent semaphore leaks
         try:
-            # Use the specific semaphore cleanup function
-            _cleanup_multiprocessing_semaphores()
-            # Also force cleanup of resource tracker
-            _force_cleanup_resource_tracker()
-            # Final comprehensive cleanup
-            _cleanup_multiprocessing_final()
-            # Most aggressive cleanup
-            _cleanup_multiprocessing_aggressive()
-            # Ultimate cleanup
-            _cleanup_multiprocessing_ultimate()
-            # Final attempt cleanup
-            _cleanup_multiprocessing_final_attempt()
-            # Nuclear cleanup
-            _cleanup_multiprocessing_nuclear()
-            logger.info("Multiprocessing resources cleaned up")
+            # Use the simplified cleanup function with timeout
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(lambda: _cleanup_multiprocessing_resources())
+                try:
+                    future.result(timeout=5)  # 5 second timeout
+                    logger.info("Multiprocessing resources cleaned up")
+                except concurrent.futures.TimeoutError:
+                    logger.warning("Multiprocessing cleanup timeout reached")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
         except Exception as e:
             logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
         
         # Cleanup threading resources
         try:
-            # Release the job semaphore
-            JOB_SEMAPHORE.release()
-            logger.info("Threading resources cleaned up")
+            # Release the job semaphore with timeout
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(lambda: JOB_SEMAPHORE.release())
+                try:
+                    future.result(timeout=2)  # 2 second timeout
+                    logger.info("Threading resources cleaned up")
+                except concurrent.futures.TimeoutError:
+                    logger.warning("Threading cleanup timeout reached")
+                except ValueError:
+                    # Semaphore is already at maximum value, which is fine
+                    logger.info("Threading resources already cleaned up")
+                except Exception:
+                    pass  # Other exceptions are fine to ignore during shutdown
         except Exception:
             pass  # Semaphore might already be released
+
+        # Cleanup any remaining WebSocket connections
+        try:
+            active_connections = sum(len(subscribers) for subscribers in WS_SUBSCRIBERS.values())
+            if active_connections > 0:
+                logger.info(f"Cleaning up {active_connections} WebSocket connections...")
+                
+                # Close all WebSocket connections
+                try:
+                    await _cleanup_websockets()
+                    logger.info("WebSocket connections cleaned up")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+            else:
+                logger.info("No active WebSocket connections found")
+        except Exception as e:
+            logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+
+
+async def _cleanup_websockets():
+    """Helper function to cleanup WebSocket connections."""
+    for job_id in list(WS_SUBSCRIBERS.keys()):
+        for websocket in list(WS_SUBSCRIBERS[job_id]):
+            try:
+                # Try to close the websocket gracefully
+                if hasattr(websocket, 'close'):
+                    await websocket.close()
+            except Exception:
+                pass
+        WS_SUBSCRIBERS[job_id].clear()
+    WS_SUBSCRIBERS.clear()
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -722,12 +795,16 @@ def moneyprinter_generate(
 
                     # Download several videos per term locally, filter by duration >= 4
                     video_paths: list[str] = []
+                    # Create temp directory in the project root
+                    temp_dir = ROOT / "temp"
+                    temp_dir.mkdir(exist_ok=True)
+                    
                     for term in terms:
                         urls = search_for_stock_videos(term, os.getenv("PEXELS_API_KEY", ""), 5, 4)
                         for url in urls[:2]:
                             _check_cancel(job_id)
                             try:
-                                local_path = mp_save_video(url, directory="../temp")
+                                local_path = mp_save_video(url, directory=str(temp_dir))
                                 video_paths.append(local_path)
                             except Exception:
                                 logger.warning(f"[moneyprinter_generate] Job {job_id}: Failed to download video for url {url}")
@@ -746,7 +823,7 @@ def moneyprinter_generate(
                     _log_job(f"tts: generating {len([s for s in script.split('. ') if s])} audio segments using voice={req.voice}")
                     sentences = [s for s in script.split(". ") if s]
                     audio_clips = []
-                    temp_dir = Path("../temp")
+                    temp_dir = ROOT / "temp"
                     temp_dir.mkdir(exist_ok=True)
                     
                     temp_audio_files = []
@@ -1459,6 +1536,7 @@ def _is_allowed_path(p: Path) -> bool:
     allowed_roots = [
         DEFAULT_OUTPUT_DIR.resolve(), 
         (ROOT / "brainrot_output").resolve(),
+        (ROOT / "temp").resolve(),  # Allow access to temp directory
         # Include old moneyprinter temp directory for backwards compatibility
         (VENDOR_ROOT / "moneyprinter" / "cat-video-creator" / "output").resolve()
     ]
@@ -1480,7 +1558,7 @@ def download_file(path: str):
     # If the path doesn't exist as-is, try to resolve it relative to allowed directories
     if not file_path.exists() or not file_path.is_file():
         # Try to find the file in allowed directories
-        allowed_roots = [DEFAULT_OUTPUT_DIR.resolve(), (ROOT / "brainrot_output").resolve()]
+        allowed_roots = [DEFAULT_OUTPUT_DIR.resolve(), (ROOT / "brainrot_output").resolve(), (ROOT / "temp").resolve()]
         
         # Also check the old moneyprinter temp directory for backwards compatibility
         moneyprinter_temp = VENDOR_ROOT / "moneyprinter" / "cat-video-creator" / "output"
@@ -1557,479 +1635,152 @@ def list_videos(dir: str):
     return {"files": files}
 
 
-def _cleanup_multiprocessing_semaphores():
-    """Specific cleanup function for multiprocessing semaphores."""
+def _cleanup_multiprocessing_resources():
+    """Cleanup multiprocessing resources to prevent leaks."""
     try:
         import multiprocessing
-        import multiprocessing.resource_tracker
         
-        # Force cleanup of resource tracker semaphores
-        if hasattr(multiprocessing, 'resource_tracker'):
-            # Clear all cleanup callbacks
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
+        # Clean up any remaining processes with timeout
+        processes = multiprocessing.active_children()
+        if processes:
+            logger.info(f"Cleaning up {len(processes)} active processes...")
             
-            # Force cleanup of any remaining semaphores
-            if hasattr(multiprocessing.resource_tracker, '_semaphores'):
-                for sem in list(multiprocessing.resource_tracker._semaphores):
-                    try:
-                        if hasattr(sem, 'close'):
-                            sem.close()
-                        if hasattr(sem, 'unlink'):
-                            sem.unlink()
-                    except Exception:
-                        pass
-                multiprocessing.resource_tracker._semaphores.clear()
+            for process in processes:
+                try:
+                    process.terminate()
+                    process.join(timeout=2)  # 2 second timeout per process
+                    if process.is_alive():
+                        logger.warning(f"Force killing process {process.pid}")
+                        process.kill()  # Force kill if still alive
+                        process.join(timeout=1)  # Brief wait after kill
+                except Exception as e:
+                    logger.warning(f"Error cleaning up process {process.pid}: {e}")
+        else:
+            logger.info("No active multiprocessing processes found")
         
-        # Additional cleanup for multiprocessing semaphores
-        try:
-            import multiprocessing.synchronize
-            # This is a more aggressive cleanup approach
-            for obj in multiprocessing.synchronize._Semaphore.__dict__.values():
-                if hasattr(obj, 'close'):
-                    try:
-                        obj.close()
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-        
-        # Force cleanup of any remaining multiprocessing resources
-        if hasattr(multiprocessing, '_cleanup'):
-            multiprocessing._cleanup()
-            
-        logger.info("Multiprocessing semaphores cleaned up")
+        logger.info("Multiprocessing resources cleaned up")
     except Exception as e:
-        logger.warning(f"Failed to cleanup multiprocessing semaphores: {e}")
-
-
-def _force_cleanup_resource_tracker():
-    """Force cleanup of multiprocessing resource tracker to prevent semaphore leaks."""
-    try:
-        import multiprocessing
-        import multiprocessing.resource_tracker
-        
-        # More aggressive cleanup of resource tracker
-        if hasattr(multiprocessing, 'resource_tracker'):
-            # Clear all cleanup callbacks
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-            
-            # Force cleanup of any remaining semaphores
-            if hasattr(multiprocessing.resource_tracker, '_semaphores'):
-                for sem in list(multiprocessing.resource_tracker._semaphores):
-                    try:
-                        if hasattr(sem, 'close'):
-                            sem.close()
-                        if hasattr(sem, 'unlink'):
-                            sem.unlink()
-                    except Exception:
-                        pass
-                multiprocessing.resource_tracker._semaphores.clear()
-            
-            # Clear any remaining resources
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-        
-        # Force cleanup of any remaining multiprocessing resources
-        if hasattr(multiprocessing, '_cleanup'):
-            multiprocessing._cleanup()
-            
-        logger.info("Resource tracker force cleaned up")
-    except Exception as e:
-        logger.warning(f"Failed to force cleanup resource tracker: {e}")
-
-
-def _cleanup_multiprocessing_final():
-    """Final cleanup function for multiprocessing resources."""
-    try:
-        import multiprocessing
-        import multiprocessing.resource_tracker
-        
-        # Force cleanup of resource tracker
-        if hasattr(multiprocessing, 'resource_tracker'):
-            # Clear all cleanup callbacks
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-            
-            # Force cleanup of any remaining semaphores
-            if hasattr(multiprocessing.resource_tracker, '_semaphores'):
-                for sem in list(multiprocessing.resource_tracker._semaphores):
-                    try:
-                        if hasattr(sem, 'close'):
-                            sem.close()
-                        if hasattr(sem, 'unlink'):
-                            sem.unlink()
-                    except Exception:
-                        pass
-                multiprocessing.resource_tracker._semaphores.clear()
-            
-            # Clear any remaining resources
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-        
-        # Force cleanup of any remaining multiprocessing resources
-        if hasattr(multiprocessing, '_cleanup'):
-            multiprocessing._cleanup()
-            
-        # Additional cleanup for multiprocessing semaphores
-        try:
-            import multiprocessing.synchronize
-            # This is a more aggressive cleanup approach
-            for obj in multiprocessing.synchronize._Semaphore.__dict__.values():
-                if hasattr(obj, 'close'):
-                    try:
-                        obj.close()
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-            
-        logger.info("Multiprocessing final cleanup completed")
-    except Exception as e:
-        logger.warning(f"Failed to complete multiprocessing final cleanup: {e}")
-
-
-def _cleanup_multiprocessing_aggressive():
-    """Most aggressive cleanup function for multiprocessing resources."""
-    try:
-        import multiprocessing
-        import multiprocessing.resource_tracker
-        
-        # Force cleanup of resource tracker
-        if hasattr(multiprocessing, 'resource_tracker'):
-            # Clear all cleanup callbacks
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-            
-            # Force cleanup of any remaining semaphores
-            if hasattr(multiprocessing.resource_tracker, '_semaphores'):
-                for sem in list(multiprocessing.resource_tracker._semaphores):
-                    try:
-                        if hasattr(sem, 'close'):
-                            sem.close()
-                        if hasattr(sem, 'unlink'):
-                            sem.unlink()
-                    except Exception:
-                        pass
-                multiprocessing.resource_tracker._semaphores.clear()
-            
-            # Clear any remaining resources
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-        
-        # Force cleanup of any remaining multiprocessing resources
-        if hasattr(multiprocessing, '_cleanup'):
-            multiprocessing._cleanup()
-            
-        # Additional cleanup for multiprocessing semaphores
-        try:
-            import multiprocessing.synchronize
-            # This is a more aggressive cleanup approach
-            for obj in multiprocessing.synchronize._Semaphore.__dict__.values():
-                if hasattr(obj, 'close'):
-                    try:
-                        obj.close()
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-            
-        # Force cleanup of any remaining multiprocessing resources
-        try:
-            # This is the most aggressive cleanup approach
-            import multiprocessing.util
-            if hasattr(multiprocessing.util, '_cleanup'):
-                multiprocessing.util._cleanup()
-        except Exception:
-            pass
-            
-        logger.info("Multiprocessing aggressive cleanup completed")
-    except Exception as e:
-        logger.warning(f"Failed to complete multiprocessing aggressive cleanup: {e}")
-
-
-def _cleanup_multiprocessing_ultimate():
-    """Ultimate cleanup function for multiprocessing resources."""
-    try:
-        import multiprocessing
-        import multiprocessing.resource_tracker
-        
-        # Force cleanup of resource tracker
-        if hasattr(multiprocessing, 'resource_tracker'):
-            # Clear all cleanup callbacks
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-            
-            # Force cleanup of any remaining semaphores
-            if hasattr(multiprocessing.resource_tracker, '_semaphores'):
-                for sem in list(multiprocessing.resource_tracker._semaphores):
-                    try:
-                        if hasattr(sem, 'close'):
-                            sem.close()
-                        if hasattr(sem, 'unlink'):
-                            sem.unlink()
-                    except Exception:
-                        pass
-                multiprocessing.resource_tracker._semaphores.clear()
-            
-            # Clear any remaining resources
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-        
-        # Force cleanup of any remaining multiprocessing resources
-        if hasattr(multiprocessing, '_cleanup'):
-            multiprocessing._cleanup()
-            
-        # Additional cleanup for multiprocessing semaphores
-        try:
-            import multiprocessing.synchronize
-            # This is a more aggressive cleanup approach
-            for obj in multiprocessing.synchronize._Semaphore.__dict__.values():
-                if hasattr(obj, 'close'):
-                    try:
-                        obj.close()
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-            
-        # Force cleanup of any remaining multiprocessing resources
-        try:
-            # This is the most aggressive cleanup approach
-            import multiprocessing.util
-            if hasattr(multiprocessing.util, '_cleanup'):
-                multiprocessing.util._cleanup()
-        except Exception:
-            pass
-            
-        # Final cleanup attempt
-        try:
-            # Force cleanup of any remaining multiprocessing resources
-            import multiprocessing.pool
-            if hasattr(multiprocessing.pool, '_cleanup'):
-                multiprocessing.pool._cleanup()
-        except Exception:
-            pass
-            
-        logger.info("Multiprocessing ultimate cleanup completed")
-    except Exception as e:
-        logger.warning(f"Failed to complete multiprocessing ultimate cleanup: {e}")
-
-
-def _cleanup_multiprocessing_final_attempt():
-    """Final attempt cleanup function for multiprocessing resources."""
-    try:
-        import multiprocessing
-        import multiprocessing.resource_tracker
-        
-        # Force cleanup of resource tracker
-        if hasattr(multiprocessing, 'resource_tracker'):
-            # Clear all cleanup callbacks
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-            
-            # Force cleanup of any remaining semaphores
-            if hasattr(multiprocessing.resource_tracker, '_semaphores'):
-                for sem in list(multiprocessing.resource_tracker._semaphores):
-                    try:
-                        if hasattr(sem, 'close'):
-                            sem.close()
-                        if hasattr(sem, 'unlink'):
-                            sem.unlink()
-                    except Exception:
-                        pass
-                multiprocessing.resource_tracker._semaphores.clear()
-            
-            # Clear any remaining resources
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-        
-        # Force cleanup of any remaining multiprocessing resources
-        if hasattr(multiprocessing, '_cleanup'):
-            multiprocessing._cleanup()
-            
-        # Additional cleanup for multiprocessing semaphores
-        try:
-            import multiprocessing.synchronize
-            # This is a more aggressive cleanup approach
-            for obj in multiprocessing.synchronize._Semaphore.__dict__.values():
-                if hasattr(obj, 'close'):
-                    try:
-                        obj.close()
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-            
-        # Force cleanup of any remaining multiprocessing resources
-        try:
-            # This is the most aggressive cleanup approach
-            import multiprocessing.util
-            if hasattr(multiprocessing.util, '_cleanup'):
-                multiprocessing.util._cleanup()
-        except Exception:
-            pass
-            
-        # Final cleanup attempt
-        try:
-            # Force cleanup of any remaining multiprocessing resources
-            import multiprocessing.pool
-            if hasattr(multiprocessing.pool, '_cleanup'):
-                multiprocessing.pool._cleanup()
-        except Exception:
-            pass
-            
-        # Final cleanup attempt
-        try:
-            # Force cleanup of any remaining multiprocessing resources
-            import multiprocessing.managers
-            if hasattr(multiprocessing.managers, '_cleanup'):
-                multiprocessing.managers._cleanup()
-        except Exception:
-            pass
-            
-        logger.info("Multiprocessing final attempt cleanup completed")
-    except Exception as e:
-        logger.warning(f"Failed to complete multiprocessing final attempt cleanup: {e}")
-
-
-def _cleanup_multiprocessing_nuclear():
-    """Nuclear cleanup function for multiprocessing resources."""
-    try:
-        import multiprocessing
-        import multiprocessing.resource_tracker
-        
-        # Force cleanup of resource tracker
-        if hasattr(multiprocessing, 'resource_tracker'):
-            # Clear all cleanup callbacks
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-            
-            # Force cleanup of any remaining semaphores
-            if hasattr(multiprocessing.resource_tracker, '_semaphores'):
-                for sem in list(multiprocessing.resource_tracker._semaphores):
-                    try:
-                        if hasattr(sem, 'close'):
-                            sem.close()
-                        if hasattr(sem, 'unlink'):
-                            sem.unlink()
-                    except Exception:
-                        pass
-                multiprocessing.resource_tracker._semaphores.clear()
-            
-            # Clear any remaining resources
-            if hasattr(multiprocessing.resource_tracker, '_CLEANUP_CALLBACKS'):
-                multiprocessing.resource_tracker._CLEANUP_CALLBACKS.clear()
-        
-        # Force cleanup of any remaining multiprocessing resources
-        if hasattr(multiprocessing, '_cleanup'):
-            multiprocessing._cleanup()
-            
-        # Additional cleanup for multiprocessing semaphores
-        try:
-            import multiprocessing.synchronize
-            # This is a more aggressive cleanup approach
-            for obj in multiprocessing.synchronize._Semaphore.__dict__.values():
-                if hasattr(obj, 'close'):
-                    try:
-                        obj.close()
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-            
-        # Force cleanup of any remaining multiprocessing resources
-        try:
-            # This is the most aggressive cleanup approach
-            import multiprocessing.util
-            if hasattr(multiprocessing.util, '_cleanup'):
-                multiprocessing.util._cleanup()
-        except Exception:
-            pass
-            
-        # Final cleanup attempt
-        try:
-            # Force cleanup of any remaining multiprocessing resources
-            import multiprocessing.pool
-            if hasattr(multiprocessing.pool, '_cleanup'):
-                multiprocessing.pool._cleanup()
-        except Exception:
-            pass
-            
-        # Final cleanup attempt
-        try:
-            # Force cleanup of any remaining multiprocessing resources
-            import multiprocessing.managers
-            if hasattr(multiprocessing.managers, '_cleanup'):
-                multiprocessing.managers._cleanup()
-        except Exception:
-            pass
-            
-        # Nuclear cleanup attempt
-        try:
-            # Force cleanup of any remaining multiprocessing resources
-            import multiprocessing.heap
-            if hasattr(multiprocessing.heap, '_cleanup'):
-                multiprocessing.heap._cleanup()
-        except Exception:
-            pass
-            
-        logger.info("Multiprocessing nuclear cleanup completed")
-    except Exception as e:
-        logger.warning(f"Failed to complete multiprocessing nuclear cleanup: {e}")
+        logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
 
 
 def _cleanup_resources():
     """Comprehensive cleanup function for all resources."""
     logger.info("Cleaning up resources...")
     
-    # Cleanup multiprocessing resources
-    try:
-        # Use the specific semaphore cleanup function
-        _cleanup_multiprocessing_semaphores()
-        # Also force cleanup of resource tracker
-        _force_cleanup_resource_tracker()
-        # Final comprehensive cleanup
-        _cleanup_multiprocessing_final()
-        # Most aggressive cleanup
-        _cleanup_multiprocessing_aggressive()
-        # Ultimate cleanup
-        _cleanup_multiprocessing_ultimate()
-        # Final attempt cleanup
-        _cleanup_multiprocessing_final_attempt()
-        # Nuclear cleanup
-        _cleanup_multiprocessing_nuclear()
-        logger.info("Multiprocessing resources cleaned up")
-    except Exception as e:
-        logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
+    # Set overall timeout for cleanup
+    import threading
+    import time
     
-    # Cleanup threading resources
-    try:
-        # Release the job semaphore
-        JOB_SEMAPHORE.release()
-        logger.info("Threading resources cleaned up")
-    except Exception:
-        pass  # Semaphore might already be released
+    def cleanup_worker():
+        try:
+            # Cleanup multiprocessing resources
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(lambda: _cleanup_multiprocessing_resources())
+                try:
+                    future.result(timeout=5)  # 5 second timeout
+                    logger.info("Multiprocessing resources cleaned up")
+                except concurrent.futures.TimeoutError:
+                    logger.warning("Multiprocessing cleanup timeout reached")
+                except Exception as e:
+                    logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
+            
+            # Cleanup threading resources - only release if we have permits
+            try:
+                # Try to release the semaphore with timeout
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(lambda: JOB_SEMAPHORE.release())
+                    try:
+                        future.result(timeout=2)  # 2 second timeout
+                        logger.info("Threading resources cleaned up")
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("Threading cleanup timeout reached")
+                    except ValueError:
+                        # Semaphore is already at maximum value, which is fine
+                        logger.info("Threading resources already cleaned up")
+                    except Exception:
+                        pass  # Other exceptions are fine to ignore during shutdown
+            except Exception:
+                pass  # Semaphore might already be released
+            
+            # Cleanup any remaining WebSocket connections
+            try:
+                active_connections = sum(len(subscribers) for subscribers in WS_SUBSCRIBERS.values())
+                if active_connections > 0:
+                    logger.info(f"Cleaning up {active_connections} WebSocket connections...")
+                    
+                    # Close all WebSocket connections
+                    try:
+                        # Since this is in a non-async context, we'll just clear the subscribers
+                        # The actual cleanup will happen in the async context
+                        for job_id in list(WS_SUBSCRIBERS.keys()):
+                            WS_SUBSCRIBERS[job_id].clear()
+                        WS_SUBSCRIBERS.clear()
+                        logger.info("WebSocket connections cleaned up")
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+                else:
+                    logger.info("No active WebSocket connections found")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+                
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
     
-    # Cleanup any remaining WebSocket connections
-    try:
-        for job_id in list(WS_SUBSCRIBERS.keys()):
-            WS_SUBSCRIBERS[job_id].clear()
-        WS_SUBSCRIBERS.clear()
-        logger.info("WebSocket connections cleaned up")
-    except Exception as e:
-        logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+    # Run cleanup with timeout
+    cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+    cleanup_thread.start()
+    cleanup_thread.join(timeout=15)  # 15 second overall timeout
+    
+    if cleanup_thread.is_alive():
+        logger.warning("Cleanup timeout reached, some resources may not be fully cleaned up")
+    else:
+        logger.info("Cleanup completed successfully")
 
 
-# Register cleanup function to run on exit
-atexit.register(_cleanup_resources)
+# Register cleanup function to run on exit with timeout
+def _atexit_cleanup_with_timeout():
+    """Atexit cleanup wrapper with timeout to prevent hanging."""
+    import threading
+    import time
+    
+    def cleanup_worker():
+        try:
+            _cleanup_resources()
+        except Exception as e:
+            logger.error(f"Error during atexit cleanup: {e}")
+    
+    cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+    cleanup_thread.start()
+    cleanup_thread.join(timeout=10)  # 10 second timeout
+    
+    if cleanup_thread.is_alive():
+        logger.warning("Atexit cleanup timeout reached")
+
+atexit.register(_atexit_cleanup_with_timeout)
 
 if __name__ == "__main__":
     import uvicorn
     try:
         uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)
     finally:
-        _cleanup_resources()
+        # Run cleanup with timeout
+        import threading
+        import time
+        
+        def cleanup_worker():
+            try:
+                _cleanup_resources()
+            except Exception as e:
+                logger.error(f"Error during main cleanup: {e}")
+        
+        cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+        cleanup_thread.start()
+        cleanup_thread.join(timeout=10)  # 10 second timeout
+        
+        if cleanup_thread.is_alive():
+            logger.warning("Main cleanup timeout reached, forcing exit")
+            os._exit(1)
 
 

@@ -85,8 +85,8 @@ def generate():
         GENERATING = True
 
         # Clean
-        clean_dir("../temp/")
-        clean_dir("../subtitles/")
+        clean_dir("../../../temp/")
+        clean_dir("./subtitles/")
 
 
         # Parse JSON
@@ -256,14 +256,14 @@ def generate():
                         "data": [],
                     }
                 )
-            current_tts_path = f"../temp/{uuid4()}.mp3"
+            current_tts_path = f"../../../temp/{uuid4()}.mp3"
             tts(sentence, voice, filename=current_tts_path)
             audio_clip = AudioFileClip(current_tts_path)
             paths.append(audio_clip)
 
         # Combine all TTS files using moviepy
         final_audio = concatenate_audioclips(paths)
-        tts_path = f"../temp/{uuid4()}.mp3"
+        tts_path = f"../../../temp/{uuid4()}.mp3"
         final_audio.write_audiofile(tts_path)
 
         try:
@@ -294,7 +294,7 @@ def generate():
         print(colored("   Keywords: ", "blue"))
         print(colored(f"  {', '.join(keywords)}", "blue"))
 
-        video_clip = VideoFileClip(f"../temp/{final_video_path}")
+        video_clip = VideoFileClip(f"../../../temp/{final_video_path}")
         
         # Get GPU-optimized codec settings for final export
         codec_settings = get_video_codec_settings(use_gpu)
@@ -318,9 +318,9 @@ def generate():
             video_clip = video_clip.with_audio(comp_audio)
             video_clip = video_clip.with_fps(30)
             video_clip = video_clip.with_duration(original_duration)
-            video_clip.write_videofile(f"../{final_video_path}", threads=n_threads or 1, logger=None, **write_settings)
+            video_clip.write_videofile(final_video_path, threads=n_threads or 1, logger=None, **write_settings)
         else:
-            video_clip.write_videofile(f"../{final_video_path}", threads=n_threads or 1, logger=None, **write_settings)
+            video_clip.write_videofile(final_video_path, threads=n_threads or 1, logger=None, **write_settings)
 
 
         # Let user know

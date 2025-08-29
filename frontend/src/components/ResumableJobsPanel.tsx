@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Button } from '@/components/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/components/ui/card'
 import { Badge } from '@/components/components/ui/badge'
-import { RefreshCw, Play, AlertTriangle, CheckCircle, Clock } from 'lucide-react'
+import { FaRedo, FaPlay, FaExclamationTriangle, FaCheckCircle, FaClock } from 'react-icons/fa'
 import { ManagedJob } from '@/lib/jobManager'
 
 interface ResumableJobsPanelProps {
@@ -54,11 +54,11 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'error':
-        return <AlertTriangle className="h-4 w-4 text-red-500" />
+        return <FaExclamationTriangle className="h-4 w-4 text-red-500" />
       case 'cancelled':
-        return <Clock className="h-4 w-4 text-orange-500" />
+        return <FaClock className="h-4 w-4 text-orange-500" />
       default:
-        return <CheckCircle className="h-4 w-4 text-gray-500" />
+        return <FaCheckCircle className="h-4 w-4 text-gray-500" />
     }
   }
 
@@ -97,7 +97,7 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <RefreshCw className="h-5 w-5 animate-spin" />
+                          <FaRedo className="h-5 w-5 animate-spin" />
             Loading resumable jobs...
           </CardTitle>
         </CardHeader>
@@ -119,14 +119,14 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
           onClick={loadResumableJobs}
           disabled={loading}
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+                          <FaRedo className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
       {resumableJobs.length === 0 ? (
         <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <FaCheckCircle className="h-4 w-4 text-green-600" />
           <span className="text-green-800">
             No resumable jobs found. Jobs that fail or are cancelled will appear here if they can be resumed.
           </span>
@@ -156,9 +156,9 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
                       disabled={resumingJobs.has(job.id)}
                     >
                       {resumingJobs.has(job.id) ? (
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        <FaRedo className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
-                        <Play className="h-4 w-4 mr-2" />
+                                                  <FaPlay className="h-4 w-4 mr-2" />
                       )}
                       Resume
                     </Button>
@@ -196,7 +196,7 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
                   
                   {job.error && (
                     <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                      <AlertTriangle className="h-4 w-4 text-red-600" />
+                      <FaExclamationTriangle className="h-4 w-4 text-red-600" />
                       <span className="text-red-800 text-sm">
                         <strong>Error:</strong> {job.error}
                       </span>

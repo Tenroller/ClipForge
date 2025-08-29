@@ -3,14 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/component
 import { Button } from "@/components/components/ui/button"
 import { Badge } from "@/components/components/ui/badge"
 import { 
-  X, 
-  Download, 
-  BadgeCheck, 
-  Clock,
-  ExternalLink,
-  Copy,
-  Check
-} from "lucide-react"
+  FaTimes, 
+  FaDownload, 
+  FaCheckCircle, 
+  FaClock,
+  FaExternalLinkAlt,
+  FaCopy,
+  FaCheck
+} from "react-icons/fa"
 import { type ManagedJob } from "@/lib/jobManager"
 import { formatDuration as formatDurationLib } from "@/lib/formatDuration"
 
@@ -68,7 +68,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-3">
               <div className="size-8 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 flex items-center justify-center">
-                <BadgeCheck className="size-4 text-white" />
+                <FaCheckCircle className="size-4 text-white" />
               </div>
               <div>
                 <div>Video Generated Successfully</div>
@@ -83,7 +83,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               onClick={onClose}
               className="p-1 h-8 w-8"
             >
-              <X className="size-4" />
+              <FaTimes className="size-4" />
             </Button>
           </div>
         </CardHeader>
@@ -115,7 +115,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                     onClick={copyJobId}
                     className="p-1 h-6 w-6"
                   >
-                    {copied ? <Check className="size-3 text-green-600" /> : <Copy className="size-3" />}
+                    {copied ? <FaCheck className="size-3 text-green-600" /> : <FaCopy className="size-3" />}
                   </Button>
                 </div>
               </div>
@@ -132,7 +132,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               <div className="p-3 rounded-lg bg-muted/30 border">
                 <div className="text-xs text-muted-foreground mb-1">Processing Time</div>
                 <div className="flex items-center gap-2 text-sm">
-                  <Clock className="size-3" />
+                  <FaClock className="size-3" />
                   {job.duration_seconds ? formatDurationLib(job.duration_seconds) : formatDuration(job.createdAt)}
                 </div>
               </div>
@@ -169,7 +169,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
           <div className="p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border border-green-200 dark:border-green-800">
             <div className="flex items-center gap-3 mb-3">
               <div className="size-6 rounded-full bg-green-500 flex items-center justify-center">
-                <BadgeCheck className="size-3 text-white" />
+                <FaCheckCircle className="size-3 text-white" />
               </div>
               <div>
                 <div className="font-medium text-green-800 dark:text-green-200 text-sm">
@@ -184,7 +184,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
               {job.steps.filter(s => s.done && s.key !== 'done').map((step) => (
                 <div key={step.key} className="flex items-center gap-1.5 text-green-700 dark:text-green-300">
-                  <BadgeCheck className="size-3" />
+                  <FaCheckCircle className="size-3" />
                   <span>{step.label}</span>
                 </div>
               ))}
@@ -215,7 +215,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                     rel="noreferrer"
                     className="flex items-center gap-2"
                   >
-                    <Download className="size-4" />
+                    <FaDownload className="size-4" />
                     Download Video
                   </a>
                 </Button>
@@ -231,7 +231,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                     target="_blank" 
                     rel="noreferrer"
                   >
-                    <ExternalLink className="size-4" />
+                    <FaExternalLinkAlt className="size-4" />
                   </a>
                 </Button>
               </div>

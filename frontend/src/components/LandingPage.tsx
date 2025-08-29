@@ -3,19 +3,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/component
 import { Button } from '@/components/components/ui/button'
 import { Badge } from '@/components/components/ui/badge'
 import { 
-  Clapperboard, 
-  Sparkles, 
-  Brain, 
-  Cpu, 
-  Type, 
-  Play, 
-  CheckCircle, 
-  ArrowRight,
-  Zap,
-  Download,
-  Users,
-  Globe
-} from 'lucide-react'
+  FaFilm, 
+  FaStar, 
+  FaBrain, 
+  FaMicrochip, 
+  FaFont, 
+  FaPlay, 
+  FaCheckCircle, 
+  FaArrowRight,
+  FaBolt,
+  FaDownload,
+  FaUsers,
+  FaGlobe
+} from 'react-icons/fa'
 import ThemeToggle from './ThemeToggle'
 
 type LandingPageProps = {
@@ -28,42 +28,42 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
   const features = [
     {
       id: 'ai-powered',
-      icon: <Sparkles className="size-6 text-blue-500" />,
+      icon: <FaStar className="size-6 text-blue-500" />,
       title: 'AI-Powered Video Creation',
       description: 'Generate engaging videos from just a topic using advanced AI models like Gemini 2.0 Flash.',
       gradient: 'from-blue-500 to-cyan-500'
     },
     {
       id: 'compilation-mode',
-      icon: <Brain className="size-6 text-purple-500" />,
+      icon: <FaBrain className="size-6 text-purple-500" />,
       title: 'Smart Compilations',
       description: 'Create compilation videos from existing YouTube content with intelligent clip selection.',
       gradient: 'from-purple-500 to-pink-500'
     },
     {
       id: 'tiktok-subtitles',
-      icon: <Type className="size-6 text-green-500" />,
+      icon: <FaFont className="size-6 text-green-500" />,
       title: 'TikTok-Style Subtitles',
       description: 'Word-by-word highlighting with customizable fonts, colors, and animations.',
       gradient: 'from-green-500 to-emerald-500'
     },
     {
       id: 'gpu-acceleration',
-      icon: <Cpu className="size-6 text-orange-500" />,
+      icon: <FaMicrochip className="size-6 text-orange-500" />,
       title: 'GPU Acceleration',
       description: 'Lightning-fast processing with local GPU support and cloud computing options.',
       gradient: 'from-orange-500 to-red-500'
     },
     {
       id: 'voice-synthesis',
-      icon: <Play className="size-6 text-indigo-500" />,
+      icon: <FaPlay className="size-6 text-indigo-500" />,
       title: 'Premium Voice Synthesis',
       description: 'High-quality text-to-speech with multiple voice options and natural pronunciation.',
       gradient: 'from-indigo-500 to-blue-500'
     },
     {
       id: 'realtime-progress',
-      icon: <Zap className="size-6 text-yellow-500" />,
+      icon: <FaBolt className="size-6 text-yellow-500" />,
       title: 'Real-time Progress',
       description: 'Live updates and preview as your video is being generated with WebSocket integration.',
       gradient: 'from-yellow-500 to-orange-500'
@@ -71,10 +71,10 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
   ]
 
   const stats = [
-    { label: 'Videos Generated', value: '10,000+', icon: <Play className="size-5" /> },
-    { label: 'Active Users', value: '500+', icon: <Users className="size-5" /> },
-    { label: 'Processing Speed', value: '3x Faster', icon: <Zap className="size-5" /> },
-    { label: 'Global Reach', value: '50+ Countries', icon: <Globe className="size-5" /> }
+    { label: 'Videos Generated', value: '10,000+', icon: <FaPlay className="size-5" /> },
+    { label: 'Active Users', value: '500+', icon: <FaUsers className="size-5" /> },
+    { label: 'Processing Speed', value: '3x Faster', icon: <FaBolt className="size-5" /> },
+    { label: 'Global Reach', value: '50+ Countries', icon: <FaGlobe className="size-5" /> }
   ]
 
   return (
@@ -84,7 +84,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
             <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center shadow-lg">
-              <Clapperboard className="size-6 text-white" />
+              <FaFilm className="size-6 text-white" />
             </div>
             <div>
               <h1 className="section-title flex items-center gap-2 text-2xl">
@@ -108,7 +108,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
         <section className="text-center py-16 lg:py-24 fade-in">
           <div className="max-w-4xl mx-auto">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted/50 border border-border/50 mb-8">
-              <Sparkles className="size-4 text-blue-500" />
+              <FaStar className="size-4 text-blue-500" />
               <span className="text-sm font-medium">Powered by Advanced AI</span>
             </div>
             
@@ -127,9 +127,9 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 className="btn-primary text-lg px-8 py-6 h-auto group"
                 onClick={onGetStarted}
               >
-                <Sparkles className="size-5 mr-2 group-hover:animate-pulse" />
+                <FaStar className="size-5 mr-2 group-hover:animate-pulse" />
                 Get Started Free
-                <ArrowRight className="size-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                <FaArrowRight className="size-5 ml-2 group-hover:translate-x-1 transition-transform" />
               </Button>
               
               <Button 
@@ -137,7 +137,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                 size="lg" 
                 className="text-lg px-8 py-6 h-auto group border-border/50 hover:border-border/70"
               >
-                <Play className="size-5 mr-2" />
+                <FaPlay className="size-5 mr-2" />
                 Watch Demo
               </Button>
             </div>
@@ -263,7 +263,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
             <CardContent className="text-center py-16 px-8">
               <div className="max-w-3xl mx-auto">
                 <div className="size-20 rounded-full bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center mx-auto mb-8 shadow-2xl">
-                  <Clapperboard className="size-10 text-white" />
+                  <FaFilm className="size-10 text-white" />
                 </div>
                 
                 <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-6">
@@ -281,23 +281,23 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
                     className="btn-primary text-lg px-8 py-6 h-auto group"
                     onClick={onGetStarted}
                   >
-                    <Sparkles className="size-5 mr-2 group-hover:animate-pulse" />
+                    <FaStar className="size-5 mr-2 group-hover:animate-pulse" />
                     Start Creating Now
-                    <ArrowRight className="size-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                    <FaArrowRight className="size-5 ml-2 group-hover:translate-x-1 transition-transform" />
                   </Button>
                 </div>
                 
                 <div className="flex items-center justify-center gap-6 mt-8 text-sm text-muted-foreground">
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="size-4 text-green-500" />
+                    <FaCheckCircle className="size-4 text-green-500" />
                     Free to start
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="size-4 text-green-500" />
+                    <FaCheckCircle className="size-4 text-green-500" />
                     No watermarks
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle className="size-4 text-green-500" />
+                    <FaCheckCircle className="size-4 text-green-500" />
                     High quality exports
                   </div>
                 </div>
@@ -313,7 +313,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center">
-                <Clapperboard className="size-4 text-white" />
+                <FaFilm className="size-4 text-white" />
               </div>
               <div>
                 <div className="font-semibold">AI Video Creator</div>

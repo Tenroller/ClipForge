@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/components/ui/card'
 import { Badge } from '@/components/components/ui/badge'
 import { Button } from '@/components/components/ui/button'
-import { Eye, RefreshCw, Loader2 } from 'lucide-react'
+import { FaEye, FaRedo, FaSpinner } from 'react-icons/fa'
 import { listJobs, remakeJob, type JobRecord } from '@/lib/api'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
@@ -109,9 +109,9 @@ export default function ActivityPage() {
                           title="Remake with same parameters"
                         >
                           {remakingJobs.has(j.id) ? (
-                            <Loader2 className="size-3 mr-1 animate-spin" />
+                            <FaSpinner className="size-3 mr-1 animate-spin" />
                           ) : (
-                            <RefreshCw className="size-3 mr-1" />
+                            <FaRedo className="size-3 mr-1" />
                           )}
                           Remake
                         </Button>
@@ -142,7 +142,7 @@ export default function ActivityPage() {
                           onClick={() => handleViewResult(j)}
                           className="h-7 px-2 text-xs"
                         >
-                          <Eye className="size-3 mr-1" />
+                          <FaEye className="size-3 mr-1" />
                           View
                         </Button>
                       )}

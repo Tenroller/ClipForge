@@ -29,16 +29,15 @@ class JSONFormatter(logging.Formatter):
         
         # Add extra fields if present
         if hasattr(record, "job_id"):
-            log_entry["job_id"] = record.job_id
+            log_entry["job_id"] = getattr(record, "job_id")
         
         if hasattr(record, "workflow"):
-            log_entry["workflow"] = record.workflow
-        
+            log_entry["workflow"] = getattr(record, "workflow")
         if hasattr(record, "user_ip"):
-            log_entry["user_ip"] = record.user_ip
-        
+            log_entry["user_ip"] = getattr(record, "user_ip")
+            
         if hasattr(record, "duration"):
-            log_entry["duration"] = record.duration
+            log_entry["duration"] = getattr(record, "duration")
         
         # Add exception info if present
         if record.exc_info:
@@ -65,6 +64,47 @@ class ColoredConsoleFormatter(logging.Formatter):
         return super().format(record)
 
 
+class WindowsSafeConsoleHandler(logging.StreamHandler):
+    """Console handler that safely handles Unicode on Windows."""
+    
+    def __init__(self, stream=None):
+        super().__init__(stream)
+        # Force UTF-8 encoding for the stream on Windows
+        if sys.platform == "win32":
+            try:
+                # Try to set UTF-8 encoding for the stream
+                if hasattr(self.stream, 'reconfigure'):
+                    self.stream.reconfigure(encoding='utf-8', errors='replace')
+                elif hasattr(self.stream, 'encoding'):
+                    # For older Python versions, we'll handle encoding in emit
+                    pass
+            except Exception:
+                # Fallback to error handling in emit
+                pass
+    
+    def emit(self, record):
+        try:
+            super().emit(record)
+        except UnicodeEncodeError:
+            # Fallback: replace problematic characters
+            try:
+                msg = self.format(record)
+                # Replace common problematic Unicode characters
+                safe_msg = msg.encode('utf-8', errors='replace').decode('utf-8')
+                if hasattr(self.stream, 'write'):
+                    self.stream.write(safe_msg + self.terminator)
+                    self.flush()
+            except Exception:
+                # Last resort: write ASCII-only message
+                try:
+                    safe_msg = record.getMessage().encode('ascii', errors='replace').decode('ascii')
+                    fallback_msg = f"{record.asctime} - {record.name} - {record.levelname} - {safe_msg}\n"
+                    self.stream.write(fallback_msg)
+                    self.flush()
+                except Exception:
+                    pass
+
+
 def setup_logging() -> logging.Logger:
     """Setup application logging with console and file handlers."""
     # Always use the root logs directory
@@ -79,8 +119,12 @@ def setup_logging() -> logging.Logger:
     # Clear existing handlers
     logger.handlers.clear()
     
-    # Console handler with colors
-    console_handler = logging.StreamHandler(sys.stdout)
+    # Console handler with Windows-safe Unicode handling
+    if sys.platform == "win32":
+        console_handler = WindowsSafeConsoleHandler(sys.stdout)
+    else:
+        console_handler = logging.StreamHandler(sys.stdout)
+    
     console_handler.setLevel(logging.INFO)
     console_formatter = ColoredConsoleFormatter(
         fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -89,11 +133,12 @@ def setup_logging() -> logging.Logger:
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
     
-    # File handler with rotation
+    # File handler with rotation and UTF-8 encoding
     file_handler = logging.handlers.RotatingFileHandler(
         log_dir / "app.log",
         maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5
+        backupCount=5,
+        encoding='utf-8'  # Explicitly set UTF-8 encoding
     )
     file_handler.setLevel(logging.DEBUG)
     file_formatter = logging.Formatter(
@@ -108,7 +153,8 @@ def setup_logging() -> logging.Logger:
         json_handler = logging.handlers.RotatingFileHandler(
             log_dir / "app.json.log",
             maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=5
+            backupCount=5,
+            encoding='utf-8'  # Explicitly set UTF-8 encoding
         )
         json_handler.setLevel(logging.INFO)
         json_handler.setFormatter(JSONFormatter())
@@ -118,7 +164,8 @@ def setup_logging() -> logging.Logger:
     error_handler = logging.handlers.RotatingFileHandler(
         log_dir / "errors.log",
         maxBytes=5 * 1024 * 1024,  # 5MB
-        backupCount=3
+        backupCount=3,
+        encoding='utf-8'  # Explicitly set UTF-8 encoding
     )
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(file_formatter)

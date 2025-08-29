@@ -528,7 +528,7 @@ class CatVideoProcessor:
             left_crop = 0
             for x in range(width // 3):  # Check up to 1/3 of width
                 column = gray[:, x]
-                if np.mean(column) > threshold:
+                if np.mean(column.astype(np.float64)) > threshold:
                     left_crop = x
                     break
             
@@ -536,7 +536,7 @@ class CatVideoProcessor:
             right_crop = 0
             for x in range(width - 1, width * 2 // 3, -1):  # Check from right
                 column = gray[:, x]
-                if np.mean(column) > threshold:
+                if np.mean(column.astype(np.float64)) > threshold:
                     right_crop = width - x - 1
                     break
             
@@ -596,7 +596,7 @@ class CatVideoProcessor:
             for x in range(width):
                 column = gray[:, x]
                 # Use local variance to detect texture
-                variance = np.var(column)
+                variance = np.var(column.astype(np.float64))
                 variances.append(variance)
             
             variances = np.array(variances)
@@ -802,7 +802,7 @@ class CatVideoProcessor:
             variances = []
             for x in range(width):
                 column = gray[:, x]
-                variance = np.var(column)
+                variance = np.var(column.astype(np.float64))
                 variances.append(variance)
             
             variances = np.array(variances)
@@ -1006,8 +1006,8 @@ class CatVideoProcessor:
                 left_edge = gray[:, :edge_width]
                 right_edge = gray[:, -edge_width:]
                 
-                left_var = np.var(left_edge)
-                right_var = np.var(right_edge)
+                left_var = np.var(left_edge.astype(np.float64))
+                right_var = np.var(right_edge.astype(np.float64))
                 avg_var = (left_var + right_var) / 2
                 
                 print(f"[Auto] Frame analysis: width={width}, height={height}")
@@ -1015,11 +1015,11 @@ class CatVideoProcessor:
                 
                 # More sophisticated analysis for blurred pillarboxes
                 # Check if the edges look like stretched/blurred content
-                left_mean = np.mean(left_edge)
-                right_mean = np.mean(right_edge)
+                left_mean = np.mean(left_edge.astype(np.float64))
+                right_mean = np.mean(right_edge.astype(np.float64))
                 center_width = width // 3
                 center_region = gray[:, center_width:width-center_width]
-                center_var = np.var(center_region)
+                center_var = np.var(center_region.astype(np.float64))
                 
                 print(f"[Auto] Content analysis: center_var={center_var:.2f}, left_mean={left_mean:.2f}, right_mean={right_mean:.2f}")
                 
@@ -1084,11 +1084,11 @@ class CatVideoProcessor:
                 column = gray[:, x]
                 
                 # 1. Texture analysis - local variation
-                texture_score = np.std(column)
+                texture_score = np.std(column.astype(np.float64))
                 texture_scores.append(texture_score)
                 
                 # 2. Brightness analysis - pillarboxes often have different brightness
-                brightness_score = np.mean(column)
+                brightness_score = np.mean(column.astype(np.float64))
                 brightness_scores.append(brightness_score)
                 
                 # 3. Gradient analysis - transitions between regions
@@ -1232,8 +1232,8 @@ class CatVideoProcessor:
         """
         print(f"[YOLOv8 Detection] Starting YOLOv8 object-based pillarbox detection")
         try:
-            from ultralytics import YOLO
-            import torch
+            from ultralytics import YOLO  # type: ignore
+            import torch  # type: ignore
         except ImportError:
             print("[YOLOv8 Detection] ultralytics not installed, falling back to vision methods")
             return self.detect_pillarboxes_transition_based(video_path, sample_frames)
@@ -1369,7 +1369,7 @@ class CatVideoProcessor:
                     ret, frame = cap.read()
                     if ret:
                         crop_region = frame[:, left_crop:left_crop+crop_width]
-                        region_variance = np.var(cv2.cvtColor(crop_region, cv2.COLOR_BGR2GRAY))
+                        region_variance = np.var(cv2.cvtColor(crop_region, cv2.COLOR_BGR2GRAY).astype(np.float64))
                         print(f"[Crop Detection] Crop region variance: {region_variance:.2f}")
                         if region_variance < 10:
                             print(f"[Crop Detection] Crop region appears empty (variance={region_variance:.2f})")

@@ -316,7 +316,7 @@ def create_3_word_window_clip(
                                 # Scale up small clips to maintain consistent height
                                 scale_factor = 50.0 / clip_h
                                 try:
-                                    word_clip = word_clip.resize(scale_factor)
+                                    word_clip = word_clip.resized(scale_factor)
                                     clip_w = int(clip_w * scale_factor)
                                     clip_h = int(clip_h * scale_factor)
                                     print(f"DEBUG: Scaled up small word clip '{word}' to maintain height: {clip_h}")
@@ -398,12 +398,13 @@ def create_3_word_window_clip(
             
         # Additional safeguard: ensure minimum dimensions (at least 10 pixels each)
         # This prevents broadcasting errors in MoviePy composite operations
-        if hasattr(word_clip, 'w') and hasattr(word_clip, 'h'):
-            if word_clip.w < 10 or word_clip.h < 10:
-                print(f"VALIDATION ERROR: Word clip for '{word}' has insufficient dimensions (w={word_clip.w}, h={word_clip.h}), skipping")
-                continue
-                
-        print(f"DEBUG: Successfully created word clip for '{word}': w={word_clip.w}, h={word_clip.h}")
+        clip_w = getattr(word_clip, 'w', 0)
+        clip_h = getattr(word_clip, 'h', 0)
+        if clip_w < 10 or clip_h < 10:
+            print(f"VALIDATION ERROR: Word clip for '{word}' has insufficient dimensions (w={clip_w}, h={clip_h}), skipping")
+            continue
+
+        print(f"DEBUG: Successfully created word clip for '{word}': w={clip_w}, h={clip_h}")
         
         individual_word_clips.append(word_clip)
         total_text_width += clip_width

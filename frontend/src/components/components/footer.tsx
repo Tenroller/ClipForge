@@ -1,4 +1,4 @@
-import { Video, Github, Twitter, Linkedin, Mail } from "lucide-react"
+import { FaVideo, FaGithub, FaTwitter, FaLinkedin, FaEnvelope } from "react-icons/fa"
 import { useNavigate } from "react-router-dom"
 
 export function Footer() {
@@ -40,10 +40,10 @@ export function Footer() {
   }
 
   const socialLinks = [
-    { name: "GitHub", icon: Github, href: "#" },
-    { name: "Twitter", icon: Twitter, href: "#" },
-    { name: "LinkedIn", icon: Linkedin, href: "#" },
-    { name: "Email", icon: Mail, href: "mailto:hello@videoai.com" },
+    { name: "GitHub", icon: FaGithub, href: "#" },
+    { name: "Twitter", icon: FaTwitter, href: "#" },
+    { name: "LinkedIn", icon: FaLinkedin, href: "#" },
+    { name: "Email", icon: FaEnvelope, href: "mailto:hello@videoai.com" },
   ]
 
   return (
@@ -53,7 +53,7 @@ export function Footer() {
           {/* Brand */}
           <div className="col-span-2">
             <div className="flex items-center mb-4">
-              <Video className="h-8 w-8 text-primary mr-2" />
+              <FaVideo className="h-8 w-8 text-primary mr-2" />
               <span className="text-2xl font-bold font-serif text-foreground">VideoAI</span>
             </div>
             <p className="text-muted-foreground mb-6 max-w-sm leading-relaxed">

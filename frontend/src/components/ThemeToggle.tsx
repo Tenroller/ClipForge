@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Sun, Moon } from 'lucide-react'
+import { FaSun, FaMoon } from 'react-icons/fa'
 import { Button } from '@/components/components/ui/button'
 
 function getInitialIsDark(): boolean {
@@ -34,7 +34,7 @@ export function ThemeToggle() {
       className="gap-2"
       title={isDark ? 'Light mode' : 'Dark mode'}
     >
-      {isDark ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
+      {isDark ? <FaSun className="size-4" aria-hidden /> : <FaMoon className="size-4" aria-hidden />}
       <span className="hidden md:inline">{isDark ? 'Light' : 'Dark'}</span>
     </Button>
   )

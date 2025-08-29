@@ -27,6 +27,16 @@ import torch
 import time
 import uuid
 
+<<<<<<< Updated upstream
+=======
+# Apply MoviePy patches early to prevent AttributeError issues
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+
+except ImportError:
+    pass  # Patch not available
+
+>>>>>>> Stashed changes
 from moviepy import (
     VideoFileClip,
     AudioFileClip,
