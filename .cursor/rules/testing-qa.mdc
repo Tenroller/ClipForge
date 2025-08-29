@@ -1,0 +1,210 @@
+---
+globs: test_*.py,*.test.ts,*.spec.ts
+description: Testing patterns and quality assurance for the AI Video Generator
+---
+
+# Testing and Quality Assurance
+
+## Backend Testing
+
+### Test Structure
+Located in `backend/tests/`:
+- `test_api.py` - API endpoint testing
+- `test_endpoints.py` - Endpoint-specific tests
+- `test_enhanced_features.py` - Advanced feature testing
+- `test_models.py` - Data model testing
+
+### Running Tests
+```bash
+# Run all backend tests
+cd backend/
+pytest
+
+# Run specific test file
+pytest tests/test_api.py
+
+# Run with coverage
+pytest --cov=backend --cov-report=html
+
+# Run tests in verbose mode
+pytest -v
+```
+
+### Test Categories
+- **Unit Tests**: Test individual functions and classes
+- **Integration Tests**: Test API endpoints and database interactions
+- **End-to-End Tests**: Test complete video generation workflows
+
+## Frontend Testing
+
+### Testing Setup
+```bash
+cd frontend/
+# Install testing dependencies
+npm install --save-dev @testing-library/react @testing-library/jest-dom vitest
+
+# Run tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+```
+
+### Component Testing Patterns
+```typescript
+// Example component test
+import { render, screen } from '@testing-library/react'
+import { VideoPanel } from '@/components/VideoPanel'
+
+test('renders video panel correctly', () => {
+  render(<VideoPanel jobId="test-job" />)
+  expect(screen.getByText('Processing...')).toBeInTheDocument()
+})
+```
+
+## API Testing
+
+### Bruno Collection
+Use the Bruno API testing collection:
+- Located in `Bruno/` directory
+- `bruno.json` - Collection configuration
+- Test various endpoints and scenarios
+
+### Manual API Testing
+```bash
+# Health check
+curl http://localhost:8080/api/health
+
+# Generate video
+curl -X POST http://localhost:8080/api/moneyprinter/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Test video", "voice": "alloy"}'
+
+# Check job status
+curl http://localhost:8080/api/jobs/{job_id}
+```
+
+## Quality Assurance Checklist
+
+### Pre-Deployment Checks
+- [ ] Backend tests pass: `pytest`
+- [ ] Frontend builds successfully: `npm run build`
+- [ ] API endpoints respond correctly
+- [ ] Environment variables configured
+- [ ] Required API keys set
+- [ ] Database migrations applied
+
+### Performance Testing
+- [ ] Video generation completes within expected time
+- [ ] Memory usage stays within limits
+- [ ] Concurrent job handling works correctly
+- [ ] WebSocket connections stable
+
+### Integration Testing
+- [ ] Frontend connects to backend APIs
+- [ ] Job progress updates via WebSocket
+- [ ] File downloads work correctly
+- [ ] Error handling displays properly
+
+## Debugging Tools
+
+### Logging Levels
+```python
+# Set logging level
+import logging
+logging.getLogger().setLevel(logging.DEBUG)
+
+# Structured logging
+logger.info("Video generation started", {
+    "job_id": job_id,
+    "user_id": user_id,
+    "video_type": "moneyprinter"
+})
+```
+
+### Debug Endpoints
+- `GET /api/health` - Basic health check
+- `GET /api/metrics` - Application metrics
+- `GET /api/gpu-info` - GPU utilization
+- `GET /api/cache/stats` - Cache statistics
+
+### Error Monitoring
+- Check `logs/errors.log` for application errors
+- Monitor job failure rates via metrics
+- Review WebSocket connection stability
+
+## Testing Best Practices
+
+### Backend Testing
+```python
+# Mock external API calls
+@patch('backend.vendors.moneyprinter.search.search_videos')
+def test_video_generation(self, mock_search):
+    mock_search.return_value = ['video1.mp4', 'video2.mp4']
+    # Test video generation logic
+```
+
+### Frontend Testing
+```typescript
+// Mock API calls
+jest.mock('@/lib/api', () => ({
+  generateVideo: jest.fn().mockResolvedValue({ job_id: 'test-job' })
+}))
+```
+
+### Test Data Management
+- Use test-specific database for integration tests
+- Mock external services (Pexels, OpenAI, etc.)
+- Clean up test files and cache after tests
+- Use realistic but minimal test data
+
+## Continuous Integration
+
+### GitHub Actions Example
+```yaml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run backend tests
+        run: pytest backend/tests/
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - name: Install frontend deps
+        run: cd frontend && npm install
+      - name: Run frontend tests
+        run: cd frontend && npm test
+```
+
+## Performance Benchmarks
+
+### Target Metrics
+- Video generation time: < 5 minutes for standard videos
+- API response time: < 500ms for simple requests
+- Memory usage: < 2GB per concurrent job
+- WebSocket latency: < 100ms for status updates
+
+### Monitoring Commands
+```bash
+# Monitor system resources
+top -p $(pgrep -f uvicorn)
+htop
+
+# Check disk usage
+df -h
+du -sh output/ cache/
+
+# Monitor network connections
+netstat -tlnp | grep :8080
+```

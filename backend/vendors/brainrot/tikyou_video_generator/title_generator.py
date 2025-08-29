@@ -32,9 +32,9 @@ class TitleGenerator:
         Args:
             api_key (str): Google Gemini API key. If None, will try to get from environment.
         """
-        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
+        self.api_key = api_key or os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
         if not self.api_key:
-            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable or pass api_key parameter.")
         
         # Initialize Gemini client
         self.client = genai.Client(api_key=self.api_key)

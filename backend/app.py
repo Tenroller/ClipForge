@@ -1297,10 +1297,11 @@ def brainrot_generate(
                 num_compilations=req.numCompilations,
                 min_duration=req.minDuration,
                 max_duration=req.maxDuration,
+                video_clips=video_clips  # Pass the already-processed clips
             )
 
             if not JOB_CONTROLS[job_id]["cancel"].is_set():
-                # Find generated video files
+                # Find generated video files with more detailed information
                 generated_videos = []
                 output_path = Path(output_dir)
                 if output_path.exists():
@@ -1308,13 +1309,44 @@ def brainrot_generate(
                     for pattern in ["*.mp4", "*.mov", "*.avi", "*.mkv"]:
                         for video_file in output_path.glob(pattern):
                             if video_file.is_file():
-                                generated_videos.append(str(video_file.name))
+                                try:
+                                    stat = video_file.stat()
+                                    # Get file size in MB
+                                    size_mb = round(stat.st_size / (1024 * 1024), 2)
+                                    
+                                    # Extract compilation info from filename
+                                    filename = video_file.name
+                                    is_tts = "_tts" in filename
+                                    is_normal = "_normal" in filename
+                                    compilation_type = "TTS" if is_tts else "Normal" if is_normal else "Unknown"
+                                    
+                                    generated_videos.append({
+                                        "filename": filename,
+                                        "path": str(video_file.resolve()),
+                                        "size_mb": size_mb,
+                                        "size_bytes": stat.st_size,
+                                        "mtime": stat.st_mtime,
+                                        "compilation_type": compilation_type,
+                                        "download_url": f"/api/download?path={video_file.resolve()}"
+                                    })
+                                except Exception as e:
+                                    logger.warning(f"Failed to get file info for {video_file}: {e}")
+                                    continue
+                
+                # Sort videos by modification time (newest first)
+                generated_videos.sort(key=lambda x: x["mtime"], reverse=True)
                 
                 duration_seconds = int(time.time() - start_time)
                 result_data = {
                     "output_dir": output_dir,
                     "generated_videos": generated_videos,
-                    "video_count": len(generated_videos)
+                    "video_count": len(generated_videos),
+                    "total_size_mb": sum(v["size_mb"] for v in generated_videos),
+                    "compilation_types": {
+                        "normal": len([v for v in generated_videos if v["compilation_type"] == "Normal"]),
+                        "tts": len([v for v in generated_videos if v["compilation_type"] == "TTS"]),
+                        "total": len(generated_videos)
+                    }
                 }
                 _update_job(job_id, status="done", result=result_data, duration_seconds=duration_seconds)
         except Exception as e:

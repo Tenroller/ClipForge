@@ -10,6 +10,7 @@ import { MultiJobPanel } from '@/components/MultiJobPanel'
 import ResultPanel from '@/components/ResultPanel'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
+import { GeneratedVideosPanel } from '@/components/GeneratedVideosPanel'
 
 const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
@@ -47,8 +48,8 @@ export default function CompilationsPage() {
     const payload = {
       youtubeUrl: String(form.get('youtubeUrl') || ''),
       numCompilations: Number(form.get('numCompilations') || 1),
-      minDuration: Number(form.get('minDuration') || 60),
-      maxDuration: Number(form.get('maxDuration') || 110),
+      minDuration: Number(form.get('minDuration') || 20),
+      maxDuration: Number(form.get('maxDuration') || 40),
       maxReuse: Number(form.get('maxReuse') || 3),
     }
     
@@ -85,6 +86,20 @@ export default function CompilationsPage() {
     setSelectedResult(null)
   }
 
+  // Get completed brainrot jobs with generated videos
+  const completedBrainrotJobs = jobManager.jobs.filter(job => 
+    job.workflow === 'brainrot' && 
+    job.status === 'done' && 
+    job.result?.generated_videos
+  )
+
+  // Get the most recent completed job with videos
+  const latestCompletedJob = completedBrainrotJobs.length > 0 
+    ? completedBrainrotJobs.sort((a, b) => 
+        (b.result?.duration_seconds || 0) - (a.result?.duration_seconds || 0)
+      )[0] 
+    : null
+
   return (
     <div className="container-page-wide fade-in">
       <div aria-live="polite" className="sr-only">
@@ -112,6 +127,15 @@ export default function CompilationsPage() {
             onViewResult={handleViewResult}
             onRemoveJob={jobManager.removeJob}
             onClearCompleted={jobManager.clearCompletedJobs}
+          />
+        )}
+
+        {/* Generated Videos Panel - Show when there are completed jobs with videos */}
+        {latestCompletedJob && latestCompletedJob.result?.generated_videos && (
+          <GeneratedVideosPanel
+            videos={latestCompletedJob.result.generated_videos}
+            totalSizeMb={latestCompletedJob.result.total_size_mb || 0}
+            compilationTypes={latestCompletedJob.result.compilation_types || { normal: 0, tts: 0, total: 0 }}
           />
         )}
 
@@ -167,7 +191,7 @@ export default function CompilationsPage() {
                         name="numCompilations"
                         type="number"
                         min="1"
-                        max="10"
+                        max="100"
                         defaultValue="1"
                         className="transition-all duration-200"
                       />

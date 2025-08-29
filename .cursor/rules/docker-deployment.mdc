@@ -1,0 +1,118 @@
+---
+alwaysApply: false
+description: Docker deployment and containerization guide
+---
+
+# Docker Deployment Guide
+
+## Container Setup
+
+### Backend Container
+```dockerfile
+# Dockerfile.backend
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY backend/ ./backend/
+EXPOSE 8080
+CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8080"]
+```
+
+### Frontend Container
+```dockerfile
+# Dockerfile.frontend
+FROM node:18-alpine
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+RUN npm run build
+EXPOSE 80
+CMD ["npm", "run", "preview"]
+```
+
+## Docker Commands
+
+### Building Images
+```bash
+# Backend
+docker build -f docker/Dockerfile.backend -t ai-video-backend .
+
+# Frontend
+docker build -f docker/Dockerfile.frontend \
+  --build-arg VITE_API_BASE=http://localhost:8080 \
+  -t ai-video-frontend .
+```
+
+### Running Containers
+```bash
+# Backend
+docker run -p 8080:8080 ai-video-backend
+
+# Frontend
+docker run -p 5173:80 ai-video-frontend
+```
+
+### Docker Compose
+```yaml
+# docker/docker-compose.yml
+version: '3.8'
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8080:8080"
+    environment:
+      - VIDEOHELPER_OUTPUT_DIR=/app/output
+    volumes:
+      - ./output:/app/output
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "5173:80"
+    environment:
+      - VITE_API_BASE=http://localhost:8080
+```
+
+## Environment Configuration
+
+### Required Environment Variables
+```bash
+# Backend environment
+PEXELS_API_KEY=your_pexels_key
+GOOGLE_API_KEY=your_google_key
+API_KEY=optional_api_key
+CORS_ALLOW_ORIGINS=*
+RATE_LIMIT_PER_MINUTE=60
+
+# Frontend environment
+VITE_API_BASE=http://localhost:8080
+```
+
+### Volume Mounts
+- `/app/output` - Generated video storage
+- `/app/logs` - Application logs
+- `/app/cache` - Cache directory
+
+## Production Considerations
+
+### Security
+- Set `API_KEY` for endpoint protection
+- Configure `CORS_ALLOW_ORIGINS` appropriately
+- Use secure API keys for external services
+
+### Performance
+- Configure appropriate rate limits
+- Set up proper logging and monitoring
+- Consider GPU acceleration for video processing
+
+### Networking
+- Backend on port 8080
+- Frontend on port 80 (container) / 5173 (host)
+- WebSocket connections for real-time updates

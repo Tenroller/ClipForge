@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Refactored TikYou Video Generator
+TikYou Video Generator
 
-This is an improved version of the original generator.py with better architecture,
-proper logging, configuration management, input validation, and caching.
+Takes a YouTube URL, downloads the video, splits it into individual clips,
+processes them based on orientation, and creates 3 random vertical compilations.
 """
 
 import sys
@@ -24,10 +24,8 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from moviepy import (
     VideoFileClip,
-    AudioFileClip,
     CompositeVideoClip,
     ColorClip,
-    ImageClip,
     TextClip,
     concatenate_videoclips,
     vfx
@@ -38,18 +36,18 @@ from .tiktok import TikTokVideoCreator
 from .title_generator import TitleGenerator
 
 # Import our new modules
-from .config import TikYouConfig, config
+from .config import TikYouConfig
 from .logging_config import get_logger, get_performance_logger
 from .validation import InputValidator, validate_youtube_url, ensure_valid_or_raise
-from .caching import get_cache_manager, get_video_analysis_cache, get_converted_clip_cache
+from .caching import get_video_analysis_cache
 from .data_models import (
     ClipInfo, VideoOrientation, SceneType, ProcessingStatus, CompilationType,
-    CompilationRequest, CompilationResult, ProcessingSession, PerformanceStats,
+    CompilationRequest, CompilationResult, PerformanceStats,
     SystemResources, ProcessingParams, create_system_resources, create_performance_stats
 )
 from .exceptions import (
-    TikYouException, VideoProcessingError, CompilationError, ResourceError,
-    ValidationError, EncodingError, create_error_context
+    CompilationError,
+    ValidationError, EncodingError
 )
 
 logger = get_logger()
@@ -231,7 +229,6 @@ class VideoProcessor:
     
     def __init__(self, config: TikYouConfig):
         self.config = config
-        self.logger = logger
         self.validator = InputValidator()
         self.cache = get_video_analysis_cache()
         self.processor = CatVideoProcessor(output_dir=config.paths.output_dir)
@@ -247,7 +244,7 @@ class VideoProcessor:
         # Validate URL
         url_validation = validate_youtube_url(youtube_url)
         ensure_valid_or_raise(url_validation, ValidationError)
-        
+            
         # Extract video ID
         video_id = self._extract_video_id(youtube_url)
         

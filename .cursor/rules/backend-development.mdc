@@ -1,0 +1,100 @@
+---
+globs: *.py
+description: Backend development patterns and conventions
+---
+
+# Backend Development Guide
+
+## Tech Stack
+- **Framework**: FastAPI with async support
+- **Database**: SQLite with SQLAlchemy
+- **Job Queue**: Custom job queue system
+- **Logging**: Structured logging with configurable levels
+- **Metrics**: Prometheus-style metrics collection
+
+## Key Modules
+```
+backend/
+├── app.py              # Main FastAPI application
+├── job_queue.py        # Job queue management
+├── database.py         # Database models and connections
+├── metrics.py          # Metrics collection
+├── logging_config.py   # Logging configuration
+├── validation.py       # Request/response validation
+└── vendors/           # Third-party integrations
+    ├── moneyprinter/   # MoneyPrinter video engine
+    └── brainrot/       # Brainrot video engine
+```
+
+## Important Files
+- **app.py**: Main FastAPI app with route definitions
+- **job_queue.py**: Asynchronous job processing system
+- **database.py**: SQLAlchemy models for jobs and batches
+- **metrics.py**: Application metrics and monitoring
+- **logging_config.py**: Structured logging setup
+
+## Video Generation Engines
+
+### MoneyPrinter Engine
+Located in `backend/vendors/moneyprinter/`:
+- `main.py` - Main video generation logic
+- `video.py` - Video processing and editing
+- `search.py` - Stock video and image search
+- `gpt.py` - AI text generation integration
+- `tiktokvoice.py` - Text-to-speech integration
+
+### Brainrot Engine
+Located in `backend/vendors/brainrot/tikyou_video_generator/`:
+- `generator.py` - Main video generation pipeline
+- `tts_generator.py` - Text-to-speech processing
+- `title_generator.py` - Dynamic title creation
+
+## Development Patterns
+
+### Async/Await
+```python
+@app.post("/api/generate")
+async def generate_video(request: GenerateRequest):
+    job_id = await job_queue.add_job("generate_video", request.dict())
+    return {"job_id": job_id}
+```
+
+### Job Processing
+```python
+# Add job to queue
+job_id = await job_queue.add_job("task_name", payload)
+
+# Process job asynchronously
+async def process_video_generation(job_id: str, payload: dict):
+    # Video generation logic here
+    pass
+```
+
+### Error Handling
+```python
+try:
+    result = await some_async_operation()
+except Exception as e:
+    logger.error(f"Operation failed: {e}")
+    raise HTTPException(status_code=500, detail=str(e))
+```
+
+### Logging
+```python
+from backend.logging_config import get_logger
+logger = get_logger(__name__)
+
+logger.info("Starting video generation", job_id=job_id)
+logger.error("Video generation failed", error=str(e), job_id=job_id)
+```
+
+## Database Models
+- Job status tracking with SQLite
+- Batch job management
+- File metadata storage
+- Metrics and statistics
+
+## Testing
+- Tests located in `backend/tests/`
+- Use `pytest` for running tests
+- Mock external API calls for testing

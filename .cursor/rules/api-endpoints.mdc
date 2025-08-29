@@ -1,0 +1,52 @@
+---
+alwaysApply: true
+description: API endpoints and conventions for the AI Video Generator
+---
+
+# API Endpoints Reference
+
+## Core Endpoints
+- `GET /api/health` - Health check
+- `GET /api/ping` - Simple ping check
+
+## Video Generation
+- `POST /api/moneyprinter/generate` - Generate MoneyPrinter video
+- `POST /api/brainrot/generate` - Generate Brainrot video
+- `POST /api/brainrot/playlist` - Generate Brainrot playlist
+
+## Job Management
+- `GET /api/jobs` - List all jobs
+- `GET /api/jobs/{job_id}` - Get specific job status
+- `POST /api/jobs/{job_id}/cancel` - Cancel a job
+- `GET /ws/jobs/{job_id}` - WebSocket for real-time job updates
+
+## Batch Operations
+- `POST /api/batch` - Create batch job
+- `POST /api/batch/{batch_id}/start` - Start batch processing
+- `GET /api/batch/{batch_id}` - Get batch status
+- `GET /api/batch/{batch_id}/results` - Get batch results
+- `POST /api/batch/{batch_id}/cancel` - Cancel batch
+- `GET /api/batches` - List all batches
+
+## Resources
+- `GET /api/models` - Available AI models
+- `GET /api/voices` - Available TTS voices
+- `GET /api/voice-sample` - Get voice sample audio
+- `GET /api/gpu-info` - GPU information
+
+## File Operations
+- `GET /api/download` - Download generated videos
+- `GET /api/list-videos` - List available videos
+
+## Monitoring & Cache
+- `GET /api/metrics` - Application metrics
+- `GET /api/metrics/stats` - Metrics statistics
+- `GET /api/cache/stats` - Cache statistics
+- `POST /api/cache/clear` - Clear cache
+
+## API Conventions
+- **Authentication**: Send `X-API-Key` header if `API_KEY` env var is set
+- **Rate Limiting**: Configurable per-IP limits via `RATE_LIMIT_PER_MINUTE`
+- **CORS**: Configurable via `CORS_ALLOW_ORIGINS` (default: "*")
+- **WebSocket**: Real-time job progress updates at `/ws/jobs/{job_id}`
+- **Response Format**: JSON with consistent error handling

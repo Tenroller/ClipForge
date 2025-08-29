@@ -1,0 +1,145 @@
+---
+alwaysApply: false
+description: Video generation engines (MoneyPrinter and Brainrot) usage guide
+---
+
+# Video Generation Engines
+
+## MoneyPrinter Engine
+
+### Overview
+MoneyPrinter creates professional-looking videos with:
+- Stock video footage from Pexels
+- AI-generated scripts and narration
+- Automated subtitle generation
+- Multiple subtitle styles (enhanced, word-highlight, whisper)
+
+### Key Components
+Located in `backend/vendors/moneyprinter/`:
+- `main.py` - Main generation pipeline
+- `video.py` - Video editing and composition
+- `search.py` - Stock footage search
+- `gpt.py` - Script generation
+- `tiktokvoice.py` - Text-to-speech
+
+### Subtitle Systems
+- `enhanced_subtitles.py` - Advanced subtitle rendering
+- `optimized_subtitle_integration.py` - Performance optimization
+- `whisper_enhanced_subtitles.py` - Whisper AI integration
+- `word_highlight_subtitles.py` - Word-by-word highlighting
+- `stable_ts_enhanced_subtitles.py` - Timestamp synchronization
+
+### API Usage
+```python
+POST /api/moneyprinter/generate
+{
+  "prompt": "Create a video about artificial intelligence",
+  "voice": "alloy",
+  "music": "inspiring",
+  "subtitle_style": "enhanced"
+}
+```
+
+## Brainrot Engine
+
+### Overview
+Brainrot creates TikTok-style videos with:
+- Dynamic title generation
+- Fast-paced editing
+- Trendy visual effects
+- Playlist compilation support
+
+### Key Components
+Located in `backend/vendors/brainrot/tikyou_video_generator/`:
+- `generator.py` - Main video generation
+- `generator_refactored.py` - Refactored version
+- `tts_generator.py` - Text-to-speech processing
+- `title_generator.py` - Dynamic titles
+
+### API Usage
+```python
+POST /api/brainrot/generate
+{
+  "topic": "Viral dance trends",
+  "duration": 30,
+  "style": "trendy"
+}
+
+POST /api/brainrot/playlist
+{
+  "videos": ["video1.mp4", "video2.mp4"],
+  "transitions": "smooth"
+}
+```
+
+## Video Processing Features
+
+### Common Capabilities
+- **Resolution**: Multiple output resolutions
+- **Format**: MP4 with optimized encoding
+- **Audio**: Background music + voiceover
+- **Subtitles**: Multiple styles and languages
+- **Effects**: Transitions, overlays, text effects
+
+### Output Structure
+```
+output/
+├── moneyprinter_{job_id}.mp4    # MoneyPrinter videos
+├── {video_id}_compilation_{n}.mp4  # Brainrot compilations
+├── {video_id}/                    # Source video directory
+│   ├── {video_id}.mp4            # Original video
+│   └── {video_id}_cropped.mp4     # Processed video
+```
+
+## Configuration Options
+
+### Voice Options
+Available voices depend on TTS provider:
+- OpenAI voices: alloy, echo, fable, onyx, nova, shimmer
+- Custom voices through TikTok integration
+
+### Music Options
+- Built-in music library
+- Custom audio file upload
+- Genre-based selection
+
+### Subtitle Styles
+- `enhanced` - Professional subtitles with styling
+- `whisper` - AI-generated accurate subtitles
+- `word_highlight` - Word-by-word highlighting
+- `simple` - Basic subtitle overlay
+
+## Performance Considerations
+
+### Resource Requirements
+- **CPU**: Multi-core recommended for video processing
+- **RAM**: 8GB+ for concurrent jobs
+- **Storage**: Fast SSD for temporary files
+- **GPU**: Optional for accelerated encoding
+
+### Optimization Tips
+- Process videos sequentially to avoid resource contention
+- Use appropriate video resolutions for target platforms
+- Enable caching for repeated assets
+- Monitor GPU utilization via `/api/gpu-info`
+
+## Error Handling
+
+### Common Issues
+- **API Key Errors**: Verify Pexels/Google API keys
+- **TTS Failures**: Check voice availability
+- **Video Processing**: Check disk space and permissions
+- **Memory Issues**: Reduce concurrent jobs
+
+### Debugging
+```bash
+# Check job status
+GET /api/jobs/{job_id}
+
+# View detailed logs
+tail -f logs/backend.log
+
+# Check system resources
+GET /api/gpu-info
+GET /api/metrics
+```

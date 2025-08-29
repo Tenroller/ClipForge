@@ -1,0 +1,68 @@
+---
+globs: *.tsx,*.ts
+description: Frontend development patterns and conventions
+---
+
+# Frontend Development Guide
+
+## Tech Stack
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite
+- **Styling**: Tailwind CSS + shadcn/ui components
+- **State Management**: React hooks + custom hooks
+- **API Client**: Custom API layer with job management
+
+## Key Components Structure
+```
+frontend/src/
+├── components/           # Main components
+│   ├── components/ui/   # shadcn/ui components
+│   ├── Sidebar.tsx      # Main navigation
+│   ├── ResultPanel.tsx  # Job results display
+│   └── MultiJobPanel.tsx # Multi-job management
+├── hooks/
+│   ├── useJobManager.ts # Job state management
+│   └── use-toast.ts     # Toast notifications
+├── lib/
+│   ├── api.ts          # API client functions
+│   ├── jobManager.ts   # Job management utilities
+│   └── ui.ts           # UI utilities
+└── pages/              # Route-based pages
+```
+
+## Important Components
+- **SidebarRouter**: Main navigation and routing logic
+- **useJobManager**: Custom hook for managing video generation jobs
+- **MultiJobPanel**: Handles multiple concurrent jobs
+- **ResultPanel**: Displays job results and progress
+- **GeneratedVideosPanel**: Shows completed videos
+
+## API Integration Patterns
+```typescript
+// Use the custom API client
+import { apiClient } from '@/lib/api';
+
+// Example: Generate video
+const response = await apiClient.generateVideo({
+  prompt: "Create a video about cats",
+  voice: "alloy"
+});
+```
+
+## Job Management
+- Jobs are managed via WebSocket connections for real-time updates
+- Use `useJobManager` hook for consistent job state handling
+- Support for batch operations and job cancellation
+- Automatic retry logic for failed jobs
+
+## State Management
+- Prefer React hooks over external state libraries
+- Use `useJobManager` for job-related state
+- Local component state for UI-specific state
+- Context providers for shared application state
+
+## Styling Conventions
+- Use Tailwind CSS classes for styling
+- Leverage shadcn/ui components for consistent UI
+- Follow component composition patterns
+- Use CSS variables for theme customization

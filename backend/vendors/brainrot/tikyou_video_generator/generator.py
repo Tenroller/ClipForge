@@ -27,14 +27,6 @@ import torch
 import time
 import uuid
 
-# Apply MoviePy patches early to prevent AttributeError issues
-try:
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-    from moviepy_patch import apply_moviepy_patches
-    apply_moviepy_patches()
-except ImportError:
-    pass  # Patch not available
-
 from moviepy import (
     VideoFileClip,
     AudioFileClip,
@@ -921,7 +913,7 @@ class TikYouGenerator:
         
         return results
     
-    def generate_tikyou_videos(self, youtube_url, num_compilations=None, min_duration=60, max_duration=110, max_reuse=3):
+    def generate_tikyou_videos(self, youtube_url, num_compilations=None, min_duration=60, max_duration=110, max_reuse=3, video_clips=None):
         """
         Generate a number of vertical "brainrot" videos from a single YouTube URL.
         
@@ -932,6 +924,7 @@ class TikYouGenerator:
             min_duration (int): The minimum duration of each compilation in seconds.
             max_duration (int): The maximum duration of each compilation in seconds.
             max_reuse (int): The maximum number of times a single clip can be reused.
+            video_clips (list, optional): Pre-processed video clips. If provided, skips video download and processing.
         """
         start_time = time.time()
         
@@ -964,14 +957,20 @@ class TikYouGenerator:
             available_variations.append("TTS Intro")
         print(f"   ✅ Available variations: {', '.join(available_variations)}")
         
-        # 1. Process the video and get clips
+        # 1. Process the video and get clips (or use pre-processed clips)
         print(f"\n{'='*50}")
         print(f"PHASE 1: Video Processing")
         print(f"{'='*50}")
         
         phase_start = time.time()
-        video_clips = self.process_single_video(youtube_url)
-        performance_stats['download_time'] = time.time() - phase_start
+        if video_clips is None:
+            # Only download and process if clips weren't provided
+            print(f"📥 No pre-processed clips provided, downloading and processing video...")
+            video_clips = self.process_single_video(youtube_url)
+            performance_stats['download_time'] = time.time() - phase_start
+        else:
+            print(f"✅ Using {len(video_clips)} pre-processed video clips")
+            performance_stats['download_time'] = 0  # No download time since clips were provided
         
         if not video_clips:
             print("❌ No video clips were processed. Exiting.")
