@@ -1752,7 +1752,7 @@ class CatVideoProcessor:
             clip_info = self.get_video_info(output_filename)
             
             # Append clip information to the list
-            if clip_info and clip_info.get('duration') and clip_info['duration'] > 0.5:  # Filter out very short clips
+            if clip_info and clip_info.get('duration') and clip_info['duration'] >= 3.0:  # Filter out very short clips (minimum 3 seconds)
                 # ✅ Detect and crop pillarboxes on each clip
                 print(f"🔍 Detecting pillarboxes on scene {i+1}...")
                 cropped_clip_path = self.crop_video_if_vertical_with_blur(output_filename)

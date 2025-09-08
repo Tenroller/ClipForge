@@ -1051,7 +1051,7 @@ class TikYouGenerator:
         
         phase_start = time.time()
         categorized_clips = self.categorize_clips(video_clips)
-        all_clips = [clip for clips in categorized_clips.values() for clip in clips if clip['duration'] >= 1.0]
+        all_clips = [clip for clips in categorized_clips.values() for clip in clips if clip['duration'] >= 3.0]
         performance_stats['total_clips_processed'] = len(all_clips)
         performance_stats['processing_time'] = time.time() - phase_start
         
