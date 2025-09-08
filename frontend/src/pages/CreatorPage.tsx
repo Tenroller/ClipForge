@@ -6,6 +6,14 @@ import { MultiJobPanel } from '@/components/MultiJobPanel'
 import ResultPanel from '@/components/ResultPanel'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
+import { generateMoneyPrinterVideo } from '@/lib/api'
+
+// Development-only logging
+const devLog = (message: string, ...args: any[]) => {
+  if (import.meta.env.DEV) {
+    console.log(message, ...args)
+  }
+}
 
 const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
@@ -39,7 +47,7 @@ export default function CreatorPage() {
         // Validate all current jobs to remove any 404s
         const removedCount = await jobManager.validateAllJobs()
         if (removedCount > 0) {
-          console.log(`CreatorPage: Cleaned up ${removedCount} non-existent jobs`)
+          devLog('CreatorPage: Cleaned up', removedCount, 'non-existent jobs')
         }
       } catch (e) {
         console.warn('Failed to cleanup legacy jobs:', e)
@@ -92,7 +100,7 @@ export default function CreatorPage() {
       subtitlePaddingX: Number(form.get('subtitlePaddingX') || 16),
       subtitlePaddingY: Number(form.get('subtitlePaddingY') || 12),
     }
-    
+
     if (!payload.videoSubject) {
       toast.error('Subject is required')
       return
@@ -100,16 +108,10 @@ export default function CreatorPage() {
 
     setBusy(true)
     try {
-      const res = await fetch(`${API}/api/moneyprinter/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Request failed')
-      
+      const data = await generateMoneyPrinterVideo(payload)
+
       // Add job to the manager
-      console.log('CreatorPage: Adding job to manager', data.jobId, payload);
+      devLog('CreatorPage: Adding job to manager', data.jobId, payload);
       jobManager.addJob(data.jobId, 'moneyprinter', payload)
       toast.success('Job started successfully')
     } catch (e: any) {

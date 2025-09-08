@@ -1,0 +1,15 @@
+meta {
+  name: Get Voices
+  type: http
+  seq: 10
+}
+
+get {
+  url: http://0.0.0.0:8080/api/voices
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

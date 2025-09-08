@@ -258,6 +258,12 @@ def log_security_event(logger: logging.Logger, event_type: str,
     )
 
 
-# Initialize logging when module is imported
-main_logger = setup_logging()
-main_logger.info("Logging system initialized")
+# Export initialization function - don't auto-initialize to avoid duplicates in reload mode
+def initialize_logging() -> logging.Logger:
+    """Initialize logging system and return the main logger."""
+    logger = setup_logging()
+    logger.info("Logging system initialized")
+    return logger
+
+# Keep backwards compatibility - this will be None until initialized
+main_logger = None

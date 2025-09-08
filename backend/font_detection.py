@@ -6,10 +6,20 @@ Font detection utility for cross-platform font availability.
 import os
 import platform
 from pathlib import Path
-from typing import List, Set
-from logging_config import get_logger
+from typing import List, Set, Optional, Union
+try:
+    from logging_config import get_logger
+except ImportError:
+    # Fallback logger if logging_config is not available
+    import logging
+    def get_logger(name):
+        return logging.getLogger(name)
 
 logger = get_logger("font_detection")
+
+# Centralized font configuration
+DEFAULT_FONT_PATH = Path(__file__).resolve().parent / "vendors" / "fonts" / "EpundaSlab-VariableFont_wght.ttf"
+DEFAULT_FONT_SIZE = 48
 
 
 def get_system_fonts() -> List[str]:
@@ -138,3 +148,64 @@ if __name__ == "__main__":
     logger.info(f"\n✅ {len(working)} out of {len(common_subtitle_fonts)} common fonts work:")
     for font in working:
         logger.info(f"  - {font}")
+
+
+def get_default_font_path() -> Optional[str]:
+    """
+    Get the path to the default font file.
+
+    Returns:
+        Path to the default font file, or None if not found
+    """
+    if DEFAULT_FONT_PATH.exists():
+        return str(DEFAULT_FONT_PATH)
+    else:
+        logger.warning(f"Default font file not found at {DEFAULT_FONT_PATH}")
+        return None
+
+
+def get_font_fallback_list() -> List[Optional[str]]:
+    """
+    Get the complete font fallback list, prioritizing the default font.
+
+    Returns:
+        List of font paths/names to try, with None as final fallback
+    """
+    fallback_list = []
+
+    # Try the default font first
+    default_font_path = get_default_font_path()
+    if default_font_path:
+        fallback_list.append(default_font_path)
+        logger.info(f"✅ Using default font: {default_font_path}")
+
+    # System font fallbacks
+    system_fallbacks = [
+        "EpundaSlab-VariableFont_wght.ttf",  # Direct filename
+        "EpundaSlab.ttf",  # Alternative name
+        "Arial-Bold",
+        "Arial",
+        "Helvetica-Bold",
+        "Helvetica",
+        "Liberation Sans Bold",
+        "DejaVu Sans Bold",
+        None  # MoviePy default
+    ]
+
+    fallback_list.extend(system_fallbacks)
+    return fallback_list
+
+
+def get_font_for_textclip() -> Optional[str]:
+    """
+    Get the font to use for TextClip creation, prioritizing the default font.
+
+    Returns:
+        Font name/path for TextClip, or None for default
+    """
+    default_font_path = get_default_font_path()
+    if default_font_path:
+        return default_font_path
+
+    # Fallback to system fonts
+    return "Arial-Bold"

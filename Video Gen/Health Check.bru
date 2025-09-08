@@ -1,0 +1,15 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 2
+}
+
+get {
+  url: http://0.0.0.0:8080/api/health
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

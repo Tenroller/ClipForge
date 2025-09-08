@@ -38,3 +38,15 @@ jobs.db
 jobs.db
 /backend/vendors/moneyprinter/subtitles
 /testing
+/backend/config/__pycache__
+/backend/temp_vertical
+/backend/tests
+/backend/debug_frames
+/backend/vendors/brainrot/tikyou_video_generator/__pycache__
+/temp_vertical
+/test_scene_detection/.venv
+/test_scene_detection
+/backend/vendors/Compilation/__pycache__
+/backend/vendors/AIvideos/subtitles
+/backend/vendors/AIvideos/__pycache__
+/backend/utils/__pycache__

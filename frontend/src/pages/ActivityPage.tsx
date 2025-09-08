@@ -9,6 +9,13 @@ import { type ManagedJob } from '@/lib/jobManager'
 import ResultPanel from '@/components/ResultPanel'
 import ResumableJobsPanel from '@/components/ResumableJobsPanel'
 
+// Development-only logging
+const devLog = (message: string, ...args: any[]) => {
+  if (import.meta.env.DEV) {
+    console.log(message, ...args)
+  }
+}
+
 export default function ActivityPage() {
   const [serverJobs, setServerJobs] = useState<JobRecord[]>([])
   const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
@@ -43,7 +50,7 @@ export default function ActivityPage() {
       setServerJobs(updatedJobs)
       
       // Show success message (you could add a toast notification here)
-      console.log(`Job remade successfully: ${result.job_id}`)
+      devLog(`Job remade successfully: ${result.job_id}`)
       
     } catch (error) {
       console.error('Failed to remake job:', error)

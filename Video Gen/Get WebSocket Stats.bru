@@ -1,0 +1,15 @@
+meta {
+  name: Get WebSocket Stats
+  type: http
+  seq: 24
+}
+
+get {
+  url: http://0.0.0.0:8080/api/websocket/stats
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Get Auth Status
+  type: http
+  seq: 38
+}
+
+get {
+  url: http://0.0.0.0:8080/api/auth/status
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

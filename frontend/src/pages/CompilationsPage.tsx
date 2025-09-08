@@ -5,19 +5,28 @@ import { Input } from '@/components/components/ui/input'
 import { Label } from '@/components/components/ui/label'
 import { Button } from '@/components/components/ui/button'
 import { Switch } from '@/components/components/ui/switch'
-import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip } from 'react-icons/fa'    
+import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip } from 'react-icons/fa'
 import { MultiJobPanel } from '@/components/MultiJobPanel'
 import ResultPanel from '@/components/ResultPanel'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
 import { GeneratedVideosPanel } from '@/components/GeneratedVideosPanel'
+import { generateBrainrotVideo } from '@/lib/api'
 
-const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+// Development-only logging
+const devLog = (message: string, ...args: any[]) => {
+  if (import.meta.env.DEV) {
+    console.log(message, ...args)
+  }
+}
+
+
 
 export default function CompilationsPage() {
   const [busy, setBusy] = useState(false)
   const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
   const [useGpu, setUseGpu] = useState(true)
+  const [isUnlimited, setIsUnlimited] = useState(false)
 
   const jobManager = useJobManager()
 
@@ -31,7 +40,7 @@ export default function CompilationsPage() {
         // Validate all current jobs to remove any 404s
         const removedCount = await jobManager.validateAllJobs()
         if (removedCount > 0) {
-          console.log(`CompilationsPage: Cleaned up ${removedCount} non-existent jobs`)
+          devLog(`CompilationsPage: Cleaned up ${removedCount} non-existent jobs`)
         }
       } catch (e) {
         console.warn('Failed to cleanup legacy jobs:', e)
@@ -44,15 +53,16 @@ export default function CompilationsPage() {
   async function startBrainrot(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     const form = new FormData(e.currentTarget)
-    
+
     const payload = {
       youtubeUrl: String(form.get('youtubeUrl') || ''),
       numCompilations: Number(form.get('numCompilations') || 1),
       minDuration: Number(form.get('minDuration') || 20),
       maxDuration: Number(form.get('maxDuration') || 40),
       maxReuse: Number(form.get('maxReuse') || 3),
+      unlimited: isUnlimited,
     }
-    
+
     if (!payload.youtubeUrl) {
       toast.error('YouTube URL is required')
       return
@@ -60,16 +70,12 @@ export default function CompilationsPage() {
 
     setBusy(true)
     try {
-      const res = await fetch(`${API}/api/brainrot/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Request failed')
-      
+      const data = await generateBrainrotVideo(payload)
+
       // Add job to the manager
+      console.log('CompilationsPage: Adding job to manager:', data.jobId, payload);
       jobManager.addJob(data.jobId, 'brainrot', payload)
+      console.log('CompilationsPage: Job added, current jobs:', jobManager.jobs.length);
       toast.success('Compilation job started successfully')
     } catch (e: any) {
       toast.error(e.message)
@@ -121,7 +127,11 @@ export default function CompilationsPage() {
 
       <div className="slide-in space-y-8">
         {/* Job Queue - Show only when there are jobs */}
-        {jobManager.jobs.filter(j => j.workflow === 'brainrot').length > 0 && (
+        {(() => {
+          const brainrotJobs = jobManager.jobs.filter(j => j.workflow === 'brainrot');
+          console.log('CompilationsPage: Brainrot jobs count:', brainrotJobs.length, brainrotJobs);
+          return brainrotJobs.length > 0;
+        })() && (
           <MultiJobPanel
             jobs={jobManager.jobs.filter(j => j.workflow === 'brainrot')}
             onViewResult={handleViewResult}
@@ -130,14 +140,40 @@ export default function CompilationsPage() {
           />
         )}
 
-        {/* Generated Videos Panel - Show when there are completed jobs with videos */}
-        {latestCompletedJob && latestCompletedJob.result?.generated_videos && (
-          <GeneratedVideosPanel
-            videos={latestCompletedJob.result.generated_videos}
-            totalSizeMb={latestCompletedJob.result.total_size_mb || 0}
-            compilationTypes={latestCompletedJob.result.compilation_types || { normal: 0, tts: 0, total: 0 }}
-          />
-        )}
+        {/* Generated Videos Panel - Show when there are completed jobs with videos or jobs in progress */}
+        {(() => {
+          const brainrotJobs = jobManager.jobs.filter(j => j.workflow === 'brainrot')
+          const activeJob = brainrotJobs.find(j => j.status === 'running' || j.status === 'queued')
+          const completedJobWithVideos = brainrotJobs.find(j =>
+            j.status === 'done' && j.result?.generated_videos
+          )
+
+          // Show panel if there's an active job or completed job with videos
+          const shouldShowPanel = activeJob || completedJobWithVideos
+
+          if (!shouldShowPanel) return null
+
+          // Determine which job data to use
+          const displayJob = completedJobWithVideos || activeJob
+          const videos = displayJob?.result?.generated_videos || []
+          const isGenerating = displayJob?.status === 'running' || displayJob?.status === 'queued'
+
+          // Get numCompilations from the job payload
+          const numCompilations = displayJob ? (displayJob as any).payload?.numCompilations || 0 : 0
+          const isUnlimited = displayJob ? (displayJob as any).payload?.unlimited || false : false
+          const expectedVideos = displayJob?.result?.expected_videos || (isUnlimited ? null : (numCompilations * 2))
+
+          return (
+            <GeneratedVideosPanel
+              videos={videos}
+              totalSizeMb={displayJob?.result?.total_size_mb || 0}
+              compilationTypes={displayJob?.result?.compilation_types || { normal: 0, tts: 0, total: 0 }}
+              numCompilations={numCompilations}
+              expectedVideos={expectedVideos}
+              isGenerating={isGenerating}
+            />
+          )
+        })()}
 
         {/* Result Panel - Show when a result is selected */}
         {selectedResult && (
@@ -193,6 +229,7 @@ export default function CompilationsPage() {
                         min="1"
                         max="100"
                         defaultValue="1"
+                        disabled={isUnlimited}
                         className="transition-all duration-200"
                       />
                     </div>
@@ -212,6 +249,27 @@ export default function CompilationsPage() {
                         className="transition-all duration-200"
                       />
                     </div>
+                  </div>
+
+                  {/* Unlimited Generation Checkbox */}
+                  <div className="space-y-2">
+                    <Label htmlFor="unlimited">
+                      Unlimited Generation
+                      <FaQuestionCircle className="inline size-3 ml-1 opacity-60" />
+                    </Label>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          id="unlimited"
+                          name="unlimited"
+                          type="checkbox"
+                          checked={isUnlimited}
+                          onChange={(e) => setIsUnlimited(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <Label htmlFor="unlimited" className="text-sm text-muted-foreground">
+                          Generate unlimited compilations until clips are exhausted (limited by max reuse setting)
+                        </Label>
+                      </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">

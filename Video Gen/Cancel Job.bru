@@ -1,0 +1,15 @@
+meta {
+  name: Cancel Job
+  type: http
+  seq: 8
+}
+
+post {
+  url: http://0.0.0.0:8080/api/jobs/{{job_id}}/cancel
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

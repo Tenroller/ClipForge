@@ -1,4 +1,4 @@
-import { useState } from "react"
+import React, { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/components/ui/card"
 import { Badge } from "@/components/components/ui/badge"
 import { Button } from "@/components/components/ui/button"
@@ -18,6 +18,13 @@ import {
 } from "react-icons/fa"
 import { type ManagedJob } from "@/lib/jobManager"
 import { formatDuration } from "@/lib/formatDuration"
+
+// Development-only logging
+const devLog = (message: string, ...args: any[]) => {
+  if (import.meta.env.DEV) {
+    console.log(message, ...args)
+  }
+}
 
 interface MultiJobPanelProps {
   jobs: ManagedJob[]
@@ -74,7 +81,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
   const [showCompleted, setShowCompleted] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
   
-  console.log('MultiJobPanel: Rendering with', jobs.length, 'jobs', jobs);
+  devLog('MultiJobPanel: Rendering with', jobs.length, 'jobs', jobs);
 
   const activeJobs = jobs.filter(job => !['done', 'error', 'cancelled'].includes(job.status))
   const completedJobs = jobs.filter(job => ['done', 'error', 'cancelled'].includes(job.status))

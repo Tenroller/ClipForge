@@ -1,0 +1,41 @@
+meta {
+  name: Create Batch
+  type: http
+  seq: 32
+}
+
+post {
+  url: http://0.0.0.0:8080/api/batch
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "Test Batch",
+    "jobs": [
+      {
+        "workflow": "moneyprinter",
+        "request_data": {
+          "videoSubject": "Create a video about AI",
+          "aiModel": "gemini-2.0-flash",
+          "voice": "af_bella"
+        }
+      },
+      {
+        "workflow": "brainrot",
+        "request_data": {
+          "youtubeUrl": "https://www.youtube.com/watch?v=PAORQoMvSdY",
+          "numCompilations": 1
+        }
+      }
+    ],
+    "priority": "normal",
+    "maxConcurrent": 2,
+    "stopOnError": false
+  }
+}
+
+settings {
+  encodeUrl: true
+}

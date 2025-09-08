@@ -2,25 +2,26 @@ import { useState } from 'react'
 import { Button } from '@/components/components/ui/button'
 import { Badge } from '@/components/components/ui/badge'
 import { Separator } from '@/components/components/ui/separator'
-import { 
-  FaFilm, 
-  FaStar, 
-  FaBrain, 
-  FaHome, 
-  FaCog, 
-  FaQuestionCircle, 
+import {
+  FaFilm,
+  FaStar,
+  FaBrain,
+  FaHome,
+  FaCog,
+  FaQuestionCircle,
   FaBars,
   FaTimes,
   FaChartLine,
   FaDownload,
   FaHistory,
-  FaChevronRight
+  FaChevronRight,
+  FaTrash
 } from 'react-icons/fa'
 import { cn } from '@/components/lib/utils'
 
 type SidebarProps = {
-  currentView: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads'
-  onNavigate: (view: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads') => void
+  currentView: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads' | 'cleanup'
+  onNavigate: (view: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads' | 'cleanup') => void
   onSettingsClick?: () => void
   className?: string
   isCollapsed?: boolean
@@ -77,6 +78,13 @@ export default function Sidebar({
       label: 'Downloads',
       icon: <FaDownload className="size-4" />,
       description: 'Manage your videos',
+      disabled: false
+    },
+    {
+      id: 'cleanup',
+      label: 'Cleanup',
+      icon: <FaTrash className="size-4" />,
+      description: 'Clean temp files',
       disabled: false
     }
   ]
@@ -195,6 +203,7 @@ export default function Sidebar({
               onClick={() => {
                 if (item.id === 'activity') onNavigate('activity')
                 if (item.id === 'downloads') onNavigate('downloads')
+                if (item.id === 'cleanup') onNavigate('cleanup')
               }}
               onMouseEnter={() => setHoveredItem(item.id)}
               onMouseLeave={() => setHoveredItem(null)}

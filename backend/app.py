@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 import threading
 from pathlib import Path
 from typing import Optional, Dict, Any, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 # Windows console encoding setup for Unicode support
 if sys.platform == "win32":
@@ -35,6 +35,7 @@ from fastapi.background import BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
+
 from validation import (
     validate_youtube_url, validate_subject, validate_custom_prompt,
     validate_zip_url, validate_color, validate_subtitle_position,
@@ -42,17 +43,21 @@ from validation import (
 )
 from logging_config import get_logger, log_request, log_job_event, log_error, log_security_event
 from metrics import get_metrics, record_request_metrics, init_metrics_system, track_job_metrics
+from utils.error_handling import handle_error, create_error_response, ProcessingError, ResourceError
 
 
 
-ROOT = Path(__file__).resolve().parents[1]
+# Use centralized configuration and path management
+from config import get_config
+from utils.paths import get_project_root, get_output_path, get_backend_path
+
+ROOT = get_project_root()
 # Ensure a unified output directory for all generators
-DEFAULT_OUTPUT_DIR = (ROOT / "output").resolve()
+DEFAULT_OUTPUT_DIR = get_output_path()
 os.environ.setdefault("VIDEOHELPER_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR))
-DEFAULT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # Vendored copies live under backend/vendors/
 # Use the current file's directory to locate the vendors folder reliably.
-VENDOR_ROOT = Path(__file__).resolve().parent / "vendors"
+VENDOR_ROOT = get_backend_path("vendors")
 MONEYPRINTER_BACKEND = VENDOR_ROOT / "moneyprinter"
 BRAINROT_ROOT = VENDOR_ROOT / "brainrot"
 
@@ -75,8 +80,20 @@ except Exception:
     # python-dotenv is optional; env vars can be provided by shell or process manager
     pass
 
-# Initialize logger
-logger = get_logger("video_generator")
+# Early logger for module-level initialization (will be replaced in lifespan)
+import logging
+early_logger = logging.getLogger("video_generator")
+early_logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+early_logger.addHandler(handler)
+
+logger = early_logger  # Use early logger until proper initialization
+
+# Global flags to track shutdown and cleanup state
+_SHUTDOWN_IN_PROGRESS = False
+_CLEANUP_COMPLETED = False
+
 
 # Setup espeak-ng environment for Kokoro TTS
 # Clear potentially problematic espeakng_loader environment variables
@@ -84,17 +101,21 @@ for key in ['ESPEAK_DATA_PATH', 'ESPEAKNG_DATA_PATH', 'PHONEMIZER_ESPEAK_DATA_PA
     if key in os.environ:
         del os.environ[key]
 
-# Use system espeak-ng if available (recommended for macOS with Homebrew)
+# Use system espeak-ng if available (recommended for macOS with Homebrew, Linux, and Windows)
 system_espeak_paths = [
     '/opt/homebrew/bin/espeak-ng',  # Homebrew ARM64
     '/usr/local/bin/espeak-ng',    # Homebrew x86_64
-    '/usr/bin/espeak-ng'           # System package
+    '/usr/bin/espeak-ng',          # System package (Linux)
+    'C:\\Program Files\\eSpeak NG\\espeak-ng.exe',  # Windows winget installation
+    'C:\\Program Files (x86)\\eSpeak NG\\espeak-ng.exe'  # Windows 32-bit
 ]
 
 system_espeak_data_paths = [
     '/opt/homebrew/share/espeak-ng-data',  # Homebrew ARM64
     '/usr/local/share/espeak-ng-data',    # Homebrew x86_64
-    '/usr/share/espeak-ng-data'           # System package
+    '/usr/share/espeak-ng-data',          # System package (Linux)
+    'C:\\Program Files\\eSpeak NG\\espeak-ng-data',  # Windows winget installation
+    'C:\\Program Files (x86)\\eSpeak NG\\espeak-ng-data'  # Windows 32-bit
 ]
 
 system_espeak = None
@@ -113,6 +134,14 @@ for data_path in system_espeak_data_paths:
 if system_espeak and system_data:
     os.environ['PHONEMIZER_ESPEAK_PATH'] = system_espeak
     os.environ['ESPEAK_DATA_PATH'] = system_data
+
+    # For Windows, also add to PATH if it's not already there
+    if system_espeak.startswith('C:\\Program Files'):
+        espeak_dir = os.path.dirname(system_espeak)
+        current_path = os.environ.get('PATH', '')
+        if espeak_dir not in current_path:
+            os.environ['PATH'] = espeak_dir + os.pathsep + current_path
+
     logger.info(f"✅ Configured system espeak-ng for Kokoro TTS:")
     logger.info(f"   ESPEAK_PATH: {system_espeak}")
     logger.info(f"   DATA_PATH: {system_data}")
@@ -137,29 +166,46 @@ else:
         logger.error(f"⚠️  Error setting up espeak-ng environment: {e}")
 
 
+def _is_interpreter_shutting_down():
+    """Check if the Python interpreter is shutting down."""
+    import sys
+    try:
+        # Check if the interpreter is shutting down
+        return sys.is_finalizing()
+    except AttributeError:
+        # sys.is_finalizing() is Python 3.7+, fallback to checking thread count
+        import threading
+        return len(threading.enumerate()) <= 2  # Only main thread + daemon threads
+
+
 def _signal_handler(signum, frame):
     """Signal handler for graceful shutdown."""
+    global _SHUTDOWN_IN_PROGRESS
+    _SHUTDOWN_IN_PROGRESS = True
+
     logger.info(f"Received signal {signum}, initiating graceful shutdown...")
-    
+
     # Set a timeout for cleanup to prevent hanging
     import threading
     import time
-    
+
     def cleanup_with_timeout():
         try:
             _cleanup_resources()
             logger.info("Cleanup completed successfully")
         except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
-    
+            # Don't log "can't register atexit after shutdown" errors during import
+            if "can't register atexit after shutdown" not in str(e):
+                logger.error(f"Error during cleanup: {e}")
+
     # Run cleanup in a separate thread with timeout
     cleanup_thread = threading.Thread(target=cleanup_with_timeout, daemon=True)
     cleanup_thread.start()
     cleanup_thread.join(timeout=10)  # 10 second timeout
-    
+
     if cleanup_thread.is_alive():
         logger.warning("Cleanup timeout reached, forcing exit")
-    
+
     # Force exit after cleanup attempt
     logger.info("Shutdown complete, exiting")
     os._exit(0)
@@ -168,9 +214,37 @@ def _signal_handler(signum, frame):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context to manage background broadcaster task."""
-    global MAIN_LOOP
+    global MAIN_LOOP, logger
     MAIN_LOOP = asyncio.get_running_loop()
-    
+
+    # Initialize logging system (only once per process)
+    from logging_config import initialize_logging
+    logger = initialize_logging()
+
+    # Initialize enhanced systems
+    try:
+        init_metrics_system()
+
+        # Initialize utility systems
+        from utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
+        from utils.websocket_manager import init_websocket_manager
+        from utils.streaming_processor import init_streaming_processor
+        from utils.fonts import init_font_manager
+        from utils.paths import init_path_manager
+        from utils.gpu_manager import init_gpu_manager
+
+        init_temp_manager()
+        cleanup_temp_files_on_startup()
+        init_websocket_manager()
+        init_streaming_processor()
+        init_font_manager()
+        init_path_manager()
+        init_gpu_manager()
+
+        logger.info("✅ All systems initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize enhanced systems: {e}")
+
     # Register signal handlers for graceful shutdown
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
@@ -182,21 +256,12 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 # Exit cleanly on shutdown
                 break
-            subscribers = list(WS_SUBSCRIBERS.get(job_id, set()))
-            if not subscribers:
-                continue
-            dead = []
-            for ws in subscribers:
-                try:
-                    await ws.send_json(payload)
-                except Exception:
-                    dead.append(ws)
-            # Cleanup dead sockets
-            for ws in dead:
-                try:
-                    WS_SUBSCRIBERS[job_id].discard(ws)
-                except Exception:
-                    pass
+
+            # Use the new WebSocket manager for broadcasting
+            try:
+                await _broadcast_job_update(job_id, payload)
+            except Exception as e:
+                logger.warning(f"Failed to broadcast job update for {job_id}: {e}")
 
     broadcaster_task = asyncio.create_task(_broadcast_loop())
     try:
@@ -212,70 +277,68 @@ async def lifespan(app: FastAPI):
             pass  # Other exceptions are fine to ignore during shutdown
         
         # Cleanup multiprocessing resources to prevent semaphore leaks
-        try:
-            # Use the simplified cleanup function with timeout
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(lambda: _cleanup_multiprocessing_resources())
-                try:
-                    future.result(timeout=5)  # 5 second timeout
-                    logger.info("Multiprocessing resources cleaned up")
-                except concurrent.futures.TimeoutError:
-                    logger.warning("Multiprocessing cleanup timeout reached")
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
-        except Exception as e:
-            logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
-        
+        if not _is_interpreter_shutting_down():
+            try:
+                # Use the simplified cleanup function with timeout
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(lambda: _cleanup_multiprocessing_resources())
+                    try:
+                        future.result(timeout=5)  # 5 second timeout
+                        logger.debug("Multiprocessing resources cleaned up")
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("Multiprocessing cleanup timeout reached")
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
+        else:
+            logger.debug("Interpreter shutting down, skipping multiprocessing cleanup")
+
         # Cleanup threading resources
-        try:
-            # Release the job semaphore with timeout
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(lambda: JOB_SEMAPHORE.release())
-                try:
-                    future.result(timeout=2)  # 2 second timeout
-                    logger.info("Threading resources cleaned up")
-                except concurrent.futures.TimeoutError:
-                    logger.warning("Threading cleanup timeout reached")
-                except ValueError:
-                    # Semaphore is already at maximum value, which is fine
-                    logger.info("Threading resources already cleaned up")
-                except Exception:
-                    pass  # Other exceptions are fine to ignore during shutdown
-        except Exception:
-            pass  # Semaphore might already be released
+        if not _is_interpreter_shutting_down():
+            try:
+                # Release the job semaphore with timeout
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(lambda: JOB_SEMAPHORE.release())
+                    try:
+                        future.result(timeout=2)  # 2 second timeout
+                        logger.debug("Threading resources cleaned up")
+                    except concurrent.futures.TimeoutError:
+                        logger.warning("Threading cleanup timeout reached")
+                    except ValueError:
+                        # Semaphore is already at maximum value, which is fine
+                        logger.debug("Threading resources already cleaned up")
+                    except Exception:
+                        pass  # Other exceptions are fine to ignore during shutdown
+            except Exception:
+                pass  # Semaphore might already be released
+        else:
+            logger.debug("Interpreter shutting down, skipping threading cleanup")
 
         # Cleanup any remaining WebSocket connections
         try:
             active_connections = sum(len(subscribers) for subscribers in WS_SUBSCRIBERS.values())
             if active_connections > 0:
                 logger.info(f"Cleaning up {active_connections} WebSocket connections...")
-                
+
                 # Close all WebSocket connections
                 try:
                     await _cleanup_websockets()
-                    logger.info("WebSocket connections cleaned up")
+                    logger.debug("WebSocket connections cleaned up")
                 except Exception as e:
                     logger.warning(f"Failed to cleanup WebSocket connections: {e}")
             else:
-                logger.info("No active WebSocket connections found")
+                logger.debug("No active WebSocket connections found")
         except Exception as e:
             logger.warning(f"Failed to cleanup WebSocket connections: {e}")
 
 
 async def _cleanup_websockets():
-    """Helper function to cleanup WebSocket connections."""
-    for job_id in list(WS_SUBSCRIBERS.keys()):
-        for websocket in list(WS_SUBSCRIBERS[job_id]):
-            try:
-                # Try to close the websocket gracefully
-                if hasattr(websocket, 'close'):
-                    await websocket.close()
-            except Exception:
-                pass
-        WS_SUBSCRIBERS[job_id].clear()
-    WS_SUBSCRIBERS.clear()
+    """Helper function to cleanup WebSocket connections using the manager."""
+    from utils.websocket_manager import cleanup_websocket_connections
+    return await cleanup_websocket_connections(timeout=10.0)
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
@@ -296,7 +359,13 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             status_code = response.status_code
         except Exception as e:
-            log_error(logger, e, {"path": path, "method": method, "client_ip": client_ip})
+            # Use standardized error handling
+            error_info = handle_error(e, {
+                "path": path,
+                "method": method,
+                "client_ip": client_ip,
+                "endpoint": "middleware"
+            })
             raise
         finally:
             # Log request completion
@@ -330,16 +399,8 @@ app = FastAPI(
     * **Brainrot Workflow**: Create TikTok-style compilations from YouTube videos
     * **Real-time Progress**: WebSocket support for live job updates
     * **Job Management**: Persistent job storage with SQLite/PostgreSQL support
-    * **Security**: Optional API key authentication and rate limiting
+    * **Security**: Rate limiting
     * **Monitoring**: Comprehensive logging and error tracking
-    
-    ## Authentication
-    
-    If `API_KEY` environment variable is set, protected endpoints require the `X-API-Key` header:
-    
-    ```
-    X-API-Key: your-secret-api-key
-    ```
     
     ## Rate Limiting
     
@@ -513,10 +574,11 @@ class MoneyPrinterRequest(BaseModel):
 
 class BrainrotRequest(BaseModel):
     youtubeUrl: str
-    numCompilations: int = Field(default=1, ge=1, le=10)
+    numCompilations: int = Field(default=1, ge=1)
     minDuration: int = Field(default=60, ge=10, le=3600)
     maxDuration: int = Field(default=110, ge=10, le=3600)
-    maxReuse: int = Field(default=3, ge=1, le=10)
+    maxReuse: int = Field(default=3, ge=1)
+    unlimited: bool = Field(default=False)
 
     @field_validator('youtubeUrl')
     @classmethod
@@ -524,11 +586,13 @@ class BrainrotRequest(BaseModel):
         return validate_youtube_url(v)
 
 
+
+
 from database import get_job_store, migrate_from_json
+from job_queue_unified import get_job_queue, update_job_progress
 
 # Legacy file-based storage for migration
 JOBS_FILE = DEFAULT_OUTPUT_DIR / "jobs.json"
-JOB_CONTROLS: Dict[str, Dict[str, Any]] = {}
 
 # Initialize database and migrate existing data
 job_store = get_job_store()
@@ -541,13 +605,10 @@ if JOBS_FILE.exists():
         JOBS_FILE.rename(backup_file)
         logger.info(f"   Backed up original file to {backup_file}")
 
-# Initialize enhanced systems
-try:
-    init_metrics_system()
-    
-    logger.info("✅ All systems initialized")
-except Exception as e:
-    logger.error(f"Failed to initialize enhanced systems: {e}")
+# Initialize unified job queue
+job_queue = get_job_queue()
+
+# System initialization moved to lifespan startup to avoid duplicates
 
 # Remove old job loading/saving functions as they're now handled by database
 
@@ -555,12 +616,15 @@ except Exception as e:
 WS_SUBSCRIBERS: Dict[str, set] = defaultdict(set)
 ASYNC_QUEUE: "asyncio.Queue[tuple[str, Dict[str, Any]]]" = asyncio.Queue()
 MAIN_LOOP: "asyncio.AbstractEventLoop | None" = None
-JOB_SEMAPHORE = threading.Semaphore(max(1, int(os.getenv("MAX_CONCURRENT_JOBS", "2") or "2")))
+# Use centralized configuration
+config = get_config()
+max_concurrent_jobs = config.get_int('videohelper_max_concurrent_jobs', 2)
+JOB_SEMAPHORE = threading.Semaphore(max(1, max_concurrent_jobs))
 # Backwards-compat in tests that patch `app.JOBS`
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 # Simple optional in-memory rate limiter (per minute)
-RATE_LIMIT_PER_MIN = int(os.getenv("RATE_LIMIT_PER_MINUTE", "0") or "0")
+RATE_LIMIT_PER_MIN = config.get_int('rate_limit_per_minute', 0)
 RATE_LIMIT_BUCKETS: Dict[str, deque] = defaultdict(deque)  # key: f"{bucket}:{ip}"
 RATE_LIMIT_LOCK = threading.Lock()
 
@@ -568,7 +632,8 @@ def _enqueue_job_update(job_id: str) -> None:
     """Thread-safe enqueue of a job update for websocket broadcast."""
     global MAIN_LOOP
     try:
-        payload = job_store.get_job(job_id)
+        # Get job data from unified queue (which includes database data)
+        payload = job_queue.get_job_status(job_id)
         if payload and MAIN_LOOP is not None:
             MAIN_LOOP.call_soon_threadsafe(ASYNC_QUEUE.put_nowait, (job_id, payload))
     except Exception:
@@ -576,14 +641,58 @@ def _enqueue_job_update(job_id: str) -> None:
         pass
 
 
+async def _broadcast_job_update(job_id: str, payload: Dict[str, Any]):
+    """Broadcast job update to all WebSocket subscribers for this job."""
+    from utils.websocket_manager import get_websocket_manager
+
+    ws_manager = get_websocket_manager()
+    subscribers = ws_manager.get_subscribers_for_job(job_id)
+
+    if not subscribers:
+        return
+
+    dead_connections = []
+    for websocket in subscribers:
+        try:
+            await websocket.send_json(payload)
+            # Update activity timestamp
+            ws_manager.update_activity(job_id, websocket)
+        except Exception:
+            # Connection is dead, mark for removal
+            dead_connections.append(websocket)
+
+    # Clean up dead connections
+    for websocket in dead_connections:
+        ws_manager.remove_connection(job_id, websocket)
+
+    if dead_connections:
+        logger.debug(f"Cleaned up {len(dead_connections)} dead WebSocket connections for job {job_id}")
+
+
 def _update_job(job_id: str, **fields: Any) -> None:
-    job_store.update_job(job_id, **fields)
+    """Update job in unified queue (which handles database persistence)."""
+    # Handle special fields that need queue-specific processing
+    if 'logs' in fields and fields['logs']:
+        # Add log message to queue
+        job_queue.update_job_progress(job_id, fields.get('step', ''), fields['logs'][-1])
+        fields.pop('logs')  # Remove from database update
+
+    if 'step' in fields:
+        job_queue.update_job_progress(job_id, fields['step'])
+        fields.pop('step')  # Remove from database update
+
+    # Update database directly for remaining fields
+    if fields:
+        job_store.update_job(job_id, **fields)
+
     _enqueue_job_update(job_id)
 
 
 def _check_cancel(job_id: str) -> None:
-    ctrl = JOB_CONTROLS.get(job_id)
-    if ctrl and ctrl.get("cancel") and ctrl["cancel"].is_set():
+    """Check if job has been cancelled."""
+    # The unified queue handles cancellation internally
+    status = job_queue.get_job_status(job_id)
+    if status and status.get('status') == 'cancelled':
         raise RuntimeError("cancelled")
 
 
@@ -606,15 +715,6 @@ def ensure_on_path(path: Path):
         sys.path.insert(0, path_str)
 
 
-def require_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
-    """Optional API key protection.
-
-    If environment variable API_KEY is set, require header X-API-Key to match it.
-    If not set, allow all requests.
-    """
-    expected = os.getenv("API_KEY")
-    if expected and (x_api_key or "") != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 @app.get("/api/health", tags=["System"], summary="Health Check")
@@ -628,226 +728,235 @@ def health():
     }
 
 
+
+
 @app.post(
     "/api/moneyprinter/generate",
     tags=["Video Generation"],
     summary="Generate AI Video",
     description="""
     Create a video using AI-powered script generation, stock footage, and text-to-speech.
-    
+
     This endpoint starts a video generation job and returns immediately with a job ID.
     Use the job ID to track progress via WebSocket or polling.
-    
+
     **Process Overview:**
     1. Generate script from subject using AI model
-    2. Extract search terms for stock footage  
+    2. Extract search terms for stock footage
     3. Download relevant stock videos
     4. Generate text-to-speech audio
     5. Create subtitles
     6. Compose final video with audio and subtitles
-    
+
     **Required Environment Variables:**
     - `PEXELS_API_KEY`: For stock video search
     - `GOOGLE_API_KEY` or `GEMINI_API_KEY`: For AI script generation
+
     """
 )
 def moneyprinter_generate(
     req: MoneyPrinterRequest,
-    _: None = Depends(require_api_key),
-
-    
 ):
+
     job_id = str(uuid.uuid4())
-    
+
     # Debug: Log the request parameters
     logger.debug(f"Request useTikTokSubtitles: {req.useTikTokSubtitles} (type: {type(req.useTikTokSubtitles)})")
     logger.debug(f"Request subtitleFont: {req.subtitleFont}")
-    
-    logger.info(f"[moneyprinter_generate] Creating job {job_id}")
-    job_store.create_job(job_id, "moneyprinter", req.model_dump())
-    JOB_CONTROLS[job_id] = {"cancel": threading.Event()}
-    _enqueue_job_update(job_id)
 
-    def _log_job(message: str) -> None:
+    logger.info(f"[moneyprinter_generate] Creating job {job_id}")
+
+    # Use unified queue for job management
+    job_queue.add_job(
+        _run_moneyprinter_job,
+        job_id,  # Pass job_id as positional argument
+        job_id=job_id,  # Also keep for database persistence
+        workflow="moneyprinter",
+        req=req
+    )
+
+    # Ensure job is persisted to database before returning
+    # This prevents race conditions where frontend tries to fetch job immediately
+    max_retries = 5
+    for attempt in range(max_retries):
         try:
             job = job_store.get_job(job_id)
-            
             if job:
-                logs = job.get("logs", [])
-                if not isinstance(logs, list):
-                    logs = []
-                logs.append(message)
-                _update_job(job_id, logs=logs)
-        except Exception:
-            # Best-effort logging
-            pass
+                logger.info(f"[moneyprinter_generate] Job {job_id} successfully persisted to database")
+                break
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+        except Exception as db_e:
+            logger.warning(f"[moneyprinter_generate] Database check failed for job {job_id}, attempt {attempt + 1}: {db_e}")
+            if attempt < max_retries - 1:
+                time.sleep(0.1 * (attempt + 1))
 
-    def _run_job():
-        logger.info(f"[moneyprinter_generate] Started processing job {job_id}")
-        start_time = time.time()
-        
+    return {"status": "queued", "jobId": job_id}
+
+def _run_moneyprinter_job(job_id: str, req: MoneyPrinterRequest):
+    """Execute MoneyPrinter video generation job."""
+    logger.info(f"[moneyprinter_generate] Started processing job {job_id}")
+    start_time = time.time()
+
+    try:
+        # Record when job actually started processing
+        logger.info(f"[moneyprinter_generate] Job {job_id}: Marking as started")
+        _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
+
+        # Ensure output directory environment variable is set for the job thread
+        logger.info(f"[moneyprinter_generate] Job {job_id}: Setting VIDEOHELPER_OUTPUT_DIR to {DEFAULT_OUTPUT_DIR}")
+
+
+        logger.info(f"[moneyprinter_generate] Job {job_id}: Ensuring MONEYPRINTER_BACKEND on path and entering directory")
+
+        from vendors.AIvideos.utils import fetch_songs, check_env_vars
+        from vendors.AIvideos.gpt import generate_script, get_search_terms
+        from vendors.AIvideos.search import search_for_stock_videos
+        from vendors.AIvideos.tiktokvoice import tts
+        from vendors.AIvideos.video import generate_subtitles, combine_videos, generate_video
+        from vendors.AIvideos.video import save_video as mp_save_video
+        from moviepy import AudioFileClip, CompositeAudioClip, VideoFileClip, concatenate_audioclips  # type: ignore
+        from pathlib import Path
+        import shutil
+
+        logger.info(f"[moneyprinter_generate] Job {job_id}: Step validate_env - checking AIvideos environment variables")
+        _update_job(job_id, step="validate_env")
+        update_job_progress(job_id, "validate_env", "validate_env: checking AIvideos environment variables")
         try:
-            # Record when job actually started processing
-            logger.info(f"[moneyprinter_generate] Job {job_id}: Marking as started")
-            _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
-            
-            # Ensure output directory environment variable is set for the job thread
-            logger.info(f"[moneyprinter_generate] Job {job_id}: Setting VIDEOHELPER_OUTPUT_DIR to {DEFAULT_OUTPUT_DIR}")
-            os.environ["VIDEOHELPER_OUTPUT_DIR"] = str(DEFAULT_OUTPUT_DIR)
-            
-            logger.info(f"[moneyprinter_generate] Job {job_id}: Ensuring MONEYPRINTER_BACKEND on path and entering directory")
-            ensure_on_path(MONEYPRINTER_BACKEND)
-            with pushd(MONEYPRINTER_BACKEND):
-                # Lazy imports from vendored MoneyPrinter project
-                from vendors.moneyprinter.utils import fetch_songs, check_env_vars
-                from vendors.moneyprinter.gpt import generate_script, get_search_terms
-                from vendors.moneyprinter.search import search_for_stock_videos
-                from vendors.moneyprinter.tiktokvoice import tts
-                from vendors.moneyprinter.video import generate_subtitles, combine_videos, generate_video
-                from vendors.moneyprinter.video import save_video as mp_save_video
-                from moviepy import AudioFileClip, CompositeAudioClip, VideoFileClip, concatenate_audioclips  # type: ignore
-                from pathlib import Path
-                import shutil
+            check_env_vars()
+        except SystemExit:
+            raise RuntimeError("Missing required AIvideos environment variables")
 
-                logger.info(f"[moneyprinter_generate] Job {job_id}: Step validate_env - checking MoneyPrinter environment variables")
-                _update_job(job_id, step="validate_env")
-                _log_job("validate_env: checking MoneyPrinter environment variables")
-                try:
-                    check_env_vars()
-                except SystemExit:
-                    raise RuntimeError("Missing required MoneyPrinter environment variables")
+        _check_cancel(job_id)
+        if req.useMusic and req.zipUrl:
+            logger.info(f"[moneyprinter_generate] Job {job_id}: Step fetch_music - downloading songs from zipUrl={req.zipUrl}")
+            _update_job(job_id, step="fetch_music")
+            update_job_progress(job_id, "fetch_music", f"fetch_music: downloading songs from zipUrl={req.zipUrl}")
+            fetch_songs(req.zipUrl)
+                    
+                    
+
+            # Check if this is a shared content benchmark request
+            use_shared_content = hasattr(req, '_shared_content') and getattr(req, '_shared_content', False)
+            if use_shared_content:
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step benchmark - using shared content for identical testing")
+                update_job_progress(job_id, "benchmark", "benchmark: using shared content for identical testing")
+                
+                # Extract shared content from request
+                shared_script = getattr(req, '_shared_script', None)
+                shared_terms = getattr(req, '_shared_search_terms', [])
+                shared_sentences = getattr(req, '_shared_sentences', [])
+                shared_video_paths = getattr(req, '_shared_stock_videos', [])
+                shared_tts_path = getattr(req, '_shared_tts_path', None)
+                
+                if not shared_script or not shared_video_paths or not shared_tts_path:
+                    raise RuntimeError("Incomplete shared content provided")
+                
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step benchmark - shared content loaded - {len(shared_video_paths)} videos, script length: {len(shared_script)}")
+                update_job_progress(job_id, "benchmark", f"benchmark: shared content loaded - {len(shared_video_paths)} videos, script length: {len(shared_script)}")
+                
+                # Skip content generation steps and use shared content
+                script = shared_script
+                terms = shared_terms
+                sentences = shared_sentences
+                video_paths = shared_video_paths
+                tts_path = shared_tts_path
+                
+                # Copy shared audio to temp for processing  
+                temp_dir = Path("../temp")
+                temp_dir.mkdir(exist_ok=True)
+                temp_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
+                shutil.copy2(shared_tts_path, temp_tts_path)
+                tts_path = str(temp_tts_path)
+                temp_audio_files = [tts_path]
+                
+                # Create audio clips for subtitles
+                audio_clips = [AudioFileClip(tts_path)]
+                
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step benchmark - skipped content generation, proceeding to video assembly")
+                update_job_progress(job_id, "benchmark", "benchmark: skipped content generation, proceeding to video assembly")
+                
+                
+                
+            else:
+                # Normal content generation path
+                _check_cancel(job_id)
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step script_generation - model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
+                _update_job(job_id, step="script_generation")
+                update_job_progress(job_id, "script_generation", f"script_generation: model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
+                script = generate_script(req.videoSubject, req.paragraphNumber, req.aiModel, req.voice, req.customPrompt or "")
+                if not script:
+                    raise RuntimeError("Script generation failed")
+                
+                
 
                 _check_cancel(job_id)
-                if req.useMusic and req.zipUrl:
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step fetch_music - downloading songs from zipUrl={req.zipUrl}")
-                    _update_job(job_id, step="fetch_music")
-                    _log_job(f"fetch_music: downloading songs from zipUrl={req.zipUrl}")
-                    fetch_songs(req.zipUrl)
-                   
-                    
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step search_terms - extracting search terms from script")
+                _update_job(job_id, step="search_terms")
+                terms = get_search_terms(req.videoSubject, 10, script, req.aiModel)
+                update_job_progress(job_id, "search_terms", f"search_terms: {len(terms)} terms -> {terms[:5]}{'...' if len(terms) > 5 else ''}")
+                
+                
 
-                # Check if this is a shared content benchmark request
-                use_shared_content = hasattr(req, '_shared_content') and getattr(req, '_shared_content', False)
-                if use_shared_content:
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step benchmark - using shared content for identical testing")
-                    _log_job("benchmark: using shared content for identical testing")
-                    
-                    # Extract shared content from request
-                    shared_script = getattr(req, '_shared_script', None)
-                    shared_terms = getattr(req, '_shared_search_terms', [])
-                    shared_sentences = getattr(req, '_shared_sentences', [])
-                    shared_video_paths = getattr(req, '_shared_stock_videos', [])
-                    shared_tts_path = getattr(req, '_shared_tts_path', None)
-                    shared_subtitles_path = getattr(req, '_shared_subtitles_path', None)
-                    
-                    if not shared_script or not shared_video_paths or not shared_tts_path:
-                        raise RuntimeError("Incomplete shared content provided")
-                    
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step benchmark - shared content loaded - {len(shared_video_paths)} videos, script length: {len(shared_script)}")
-                    _log_job(f"benchmark: shared content loaded - {len(shared_video_paths)} videos, script length: {len(shared_script)}")
-                    
-                    # Skip content generation steps and use shared content
-                    script = shared_script
-                    terms = shared_terms
-                    sentences = shared_sentences
-                    video_paths = shared_video_paths
-                    tts_path = shared_tts_path
-                    
-                    # Copy shared audio to temp for processing  
-                    temp_dir = Path("../temp")
-                    temp_dir.mkdir(exist_ok=True)
-                    temp_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
-                    shutil.copy2(shared_tts_path, temp_tts_path)
-                    tts_path = str(temp_tts_path)
-                    temp_audio_files = [tts_path]
-                    
-                    # Create audio clips for subtitles
-                    audio_clips = [AudioFileClip(tts_path)]
-                    
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step benchmark - skipped content generation, proceeding to video assembly")
-                    _log_job("benchmark: skipped content generation, proceeding to video assembly")
-                    
-                  
-                    
-                else:
-                    # Normal content generation path
-                    _check_cancel(job_id)
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step script_generation - model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
-                    _update_job(job_id, step="script_generation")
-                    _log_job(f"script_generation: model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
-                    script = generate_script(req.videoSubject, req.paragraphNumber, req.aiModel, req.voice, req.customPrompt or "")
-                    if not script:
-                        raise RuntimeError("Script generation failed")
-                    
-                   
+                _check_cancel(job_id)
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step stock_download - downloading stock videos for terms")
+                _update_job(job_id, step="stock_download")
 
-                    _check_cancel(job_id)
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step search_terms - extracting search terms from script")
-                    _update_job(job_id, step="search_terms")
-                    terms = get_search_terms(req.videoSubject, 10, script, req.aiModel)
-                    _log_job(f"search_terms: {len(terms)} terms -> {terms[:5]}{'...' if len(terms) > 5 else ''}")
-                    
-                   
-
-                    _check_cancel(job_id)
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step stock_download - downloading stock videos for terms")
-                    _update_job(job_id, step="stock_download")
-
-                    # Download several videos per term locally, filter by duration >= 4
-                    video_paths: list[str] = []
-                    # Create temp directory in the project root
-                    temp_dir = ROOT / "temp"
-                    temp_dir.mkdir(exist_ok=True)
-                    
-                    for term in terms:
-                        urls = search_for_stock_videos(term, os.getenv("PEXELS_API_KEY", ""), 5, 4)
-                        for url in urls[:2]:
-                            _check_cancel(job_id)
-                            try:
-                                local_path = mp_save_video(url, directory=str(temp_dir))
-                                video_paths.append(local_path)
-                            except Exception:
-                                logger.warning(f"[moneyprinter_generate] Job {job_id}: Failed to download video for url {url}")
-                                continue
-                    if not video_paths:
-                        logger.error(f"[moneyprinter_generate] Job {job_id}: No stock videos downloaded")
-                        raise RuntimeError("No stock videos downloaded")
-                    else:
-                        logger.info(f"[moneyprinter_generate] Job {job_id}: Downloaded {len(video_paths)} stock video clips")
-                        _log_job(f"stock_download: downloaded {len(video_paths)} clips")
-                        
-                 
-                    _check_cancel(job_id)
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: Step tts - generating audio segments using voice={req.voice}")
-                    _update_job(job_id, step="tts")
-                    _log_job(f"tts: generating {len([s for s in script.split('. ') if s])} audio segments using voice={req.voice}")
-                    sentences = [s for s in script.split(". ") if s]
-                    audio_clips = []
-                    temp_dir = ROOT / "temp"
-                    temp_dir.mkdir(exist_ok=True)
-                    
-                    temp_audio_files = []
-                    for s in sentences:
+                # Download several videos per term locally, filter by duration >= 4
+                video_paths: list[str] = []
+                # Create temp directory in the project root
+                temp_dir = ROOT / "temp"
+                temp_dir.mkdir(exist_ok=True)
+                
+                for term in terms:
+                    urls = search_for_stock_videos(term, os.getenv("PEXELS_API_KEY", ""), 5, 4)
+                    for url in urls[:2]:
                         _check_cancel(job_id)
-                        current_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
-                        tts(s, req.voice, filename=str(current_tts_path))
-                        audio_clips.append(AudioFileClip(str(current_tts_path)))
-                        temp_audio_files.append(str(current_tts_path))
+                        try:
+                            local_path = mp_save_video(url, directory=str(temp_dir))
+                            video_paths.append(local_path)
+                        except Exception:
+                            logger.warning(f"[AIvideos_generate] Job {job_id}: Failed to download video for url {url}")
+                            continue
+                if not video_paths:
+                    logger.error(f"[AIvideos_generate] Job {job_id}: No stock videos downloaded")
+                    raise RuntimeError("No stock videos downloaded")
+                else:
+                    logger.info(f"[AIvideos_generate] Job {job_id}: Downloaded {len(video_paths)} stock video clips")
+                    update_job_progress(job_id, "stock_download", f"stock_download: downloaded {len(video_paths)} clips")
+                    
+                
+                _check_cancel(job_id)
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step tts - generating audio segments using voice={req.voice}")
+                _update_job(job_id, step="tts")
+                update_job_progress(job_id, "tts", f"tts: generating {len([s for s in script.split('. ') if s])} audio segments using voice={req.voice}")
+                sentences = [s for s in script.split(". ") if s]
+                audio_clips = []
+                temp_dir = ROOT / "temp"
+                temp_dir.mkdir(exist_ok=True)
+                    
+                temp_audio_files = []
+                for s in sentences:
+                    _check_cancel(job_id)
+                    current_tts_path = temp_dir / f"{uuid.uuid4()}.mp3"
+                    tts(s, req.voice, filename=str(current_tts_path))
+                    audio_clips.append(AudioFileClip(str(current_tts_path)))
+                    temp_audio_files.append(str(current_tts_path))
 
-                    if not audio_clips:
-                        logger.error(f"[moneyprinter_generate] Job {job_id}: No audio clips generated")
-                        raise RuntimeError("No audio clips generated")
+                if not audio_clips:
+                    logger.error(f"[AIvideos_generate] Job {job_id}: No audio clips generated")
+                    raise RuntimeError("No audio clips generated")
 
-                    tts_path = str(temp_dir / f"{uuid.uuid4()}.mp3")
-                    concatenate_audioclips(audio_clips).write_audiofile(tts_path)
-                    temp_audio_files.append(tts_path)
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: TTS concatenated audio -> {tts_path}")
-                    _log_job(f"tts: concatenated audio -> {tts_path}")
+                tts_path = str(temp_dir / f"{uuid.uuid4()}.mp3")
+                concatenate_audioclips(audio_clips).write_audiofile(tts_path)
+                temp_audio_files.append(tts_path)
+                logger.info(f"[AIvideos_generate] Job {job_id}: TTS concatenated audio -> {tts_path}")
+                update_job_progress(job_id, "tts", f"tts: concatenated audio -> {tts_path}")
                     
                     
 
                 _check_cancel(job_id)
-                logger.info(f"[moneyprinter_generate] Job {job_id}: Step subtitles - generating subtitles")
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step subtitles - generating subtitles")
                 _update_job(job_id, step="subtitles")
                 
                 # Choose subtitle generation method based on request
@@ -857,7 +966,7 @@ def moneyprinter_generate(
                 try:
                     if req.useTikTokSubtitles:
                         if req.useWhisperEnhanced:
-                            from vendors.moneyprinter.whisper_enhanced_subtitles import generate_enhanced_subtitles_with_optional_whisper
+                            from vendors.AIvideos.whisper_enhanced_subtitles import generate_enhanced_subtitles_with_optional_whisper
                             subtitle_config = {
                                 'font_family': req.subtitleFont,
                                 'font_size': req.subtitleFontSize,
@@ -887,10 +996,10 @@ def moneyprinter_generate(
                                 config=subtitle_config,
                                 video_size=(1080, 1920)
                             )
-                            logger.info(f"[moneyprinter_generate] Job {job_id}: Subtitles - using Whisper-enhanced TikTok-style subtitles -> {subtitles_path}")
-                            _log_job(f"subtitles: using Whisper-enhanced TikTok-style subtitles -> {subtitles_path}")
+                            logger.info(f"[AIvideos_generate] Job {job_id}: Subtitles - using Whisper-enhanced TikTok-style subtitles -> {subtitles_path}")
+                            update_job_progress(job_id, "subtitles", f"subtitles: using Whisper-enhanced TikTok-style subtitles -> {subtitles_path}")
                         else:
-                            from vendors.moneyprinter.enhanced_subtitles import generate_enhanced_subtitles, SubtitleConfig
+                            from vendors.AIvideos.enhanced_subtitles import generate_enhanced_subtitles, SubtitleConfig
                             subtitle_config_dict = {
                                 'font_family': req.subtitleFont,
                                 'font_size': req.subtitleFontSize,
@@ -918,25 +1027,25 @@ def moneyprinter_generate(
                                 video_size=(1080, 1920),
                                 output_path=output_path
                             )
-                            logger.info(f"[moneyprinter_generate] Job {job_id}: Subtitles - using TikTok-style enhanced subtitles -> {subtitles_path}")
-                            _log_job(f"subtitles: using TikTok-style enhanced subtitles -> {subtitles_path}")
+                            logger.info(f"[AIvideos_generate] Job {job_id}: Subtitles - using TikTok-style enhanced subtitles -> {subtitles_path}")
+                            update_job_progress(job_id, "subtitles", f"subtitles: using TikTok-style enhanced subtitles -> {subtitles_path}")
                     else:
                         if not tts_path:
                             raise RuntimeError("TTS path is required for subtitle generation")
                         subtitles_path = generate_subtitles(audio_path=str(tts_path), sentences=sentences, audio_clips=audio_clips, voice=req.voice)
-                        logger.info(f"[moneyprinter_generate] Job {job_id}: Subtitles - using traditional subtitles -> {subtitles_path}")
-                        _log_job(f"subtitles: using traditional subtitles -> {subtitles_path}")
+                        logger.info(f"[AIvideos_generate] Job {job_id}: Subtitles - using traditional subtitles -> {subtitles_path}")
+                        update_job_progress(job_id, "subtitles", f"subtitles: using traditional subtitles -> {subtitles_path}")
 
-                   
+                    
                     # Strict subtitle file validation
                     if not subtitles_path:
-                        logger.error(f"[moneyprinter_generate] Job {job_id}: Subtitles ERROR - subtitle file not created: {subtitles_path}")
-                        _log_job(f"subtitles: ERROR - subtitle file not created: {subtitles_path}")
+                        logger.error(f"[AIvideos_generate] Job {job_id}: Subtitles ERROR - subtitle file not created: {subtitles_path}")
+                        update_job_progress(job_id, "subtitles", f"subtitles: ERROR - subtitle file not created: {subtitles_path}")
                         raise RuntimeError(f"Subtitle generation failed: file not created: {subtitles_path}")
                     sp = Path(subtitles_path)
                     if not sp.exists() or sp.stat().st_size < 10:
-                        logger.error(f"[moneyprinter_generate] Job {job_id}: Subtitles ERROR - subtitle file not created or empty: {subtitles_path}")
-                        _log_job(f"subtitles: ERROR - subtitle file not created or empty: {subtitles_path}")
+                        logger.error(f"[AIvideos_generate] Job {job_id}: Subtitles ERROR - subtitle file not created or empty: {subtitles_path}")
+                        update_job_progress(job_id, "subtitles", f"subtitles: ERROR - subtitle file not created or empty: {subtitles_path}")
                         raise RuntimeError(f"Subtitle generation failed: file not created or empty: {subtitles_path}")
 
                     # Enhanced subtitle: must be valid JSON with required fields
@@ -948,69 +1057,78 @@ def moneyprinter_generate(
                             if not (isinstance(data, dict) and 'sentences' in data and 'word_timings' in data):
                                 raise ValueError("Enhanced subtitle JSON missing required fields")
                         except Exception as e:
-                            logger.error(f"[moneyprinter_generate] Job {job_id}: Subtitles ERROR - invalid enhanced subtitle JSON: {e}")
-                            _log_job(f"subtitles: ERROR - invalid enhanced subtitle JSON: {e}")
+                            logger.error(f"[AIvideos_generate] Job {job_id}: Subtitles ERROR - invalid enhanced subtitle JSON: {e}")
+                            update_job_progress(job_id, "subtitles", f"subtitles: ERROR - invalid enhanced subtitle JSON: {e}")
                             raise RuntimeError(f"Subtitle generation failed: invalid enhanced subtitle JSON: {e}")
                     # SRT: must not be JSON and must have SRT structure
                     elif subtitles_path.endswith('.srt'):
                         with sp.open("r", encoding="utf-8", errors="ignore") as fh:
                             head = fh.read(512)
                         if head.strip().startswith('{'):
-                            logger.error(f"[moneyprinter_generate] Job {job_id}: Subtitles ERROR - SRT file is actually JSON: {subtitles_path}")
-                            _log_job(f"subtitles: ERROR - SRT file is actually JSON: {subtitles_path}")
+                            logger.error(f"[AIvideos_generate] Job {job_id}: Subtitles ERROR - SRT file is actually JSON: {subtitles_path}")
+                            update_job_progress(job_id, "subtitles", f"subtitles: ERROR - SRT file is actually JSON: {subtitles_path}")
                             raise RuntimeError(f"Subtitle generation failed: SRT file is actually JSON: {subtitles_path}")
                         if not any('-->' in line for line in head.splitlines()):
-                            logger.error(f"[moneyprinter_generate] Job {job_id}: Subtitles ERROR - SRT file missing timing lines: {subtitles_path}")
-                            _log_job(f"subtitles: ERROR - SRT file missing timing lines: {subtitles_path}")
+                            logger.error(f"[AIvideos_generate] Job {job_id}: Subtitles ERROR - SRT file missing timing lines: {subtitles_path}")
+                            update_job_progress(job_id, "subtitles", f"subtitles: ERROR - SRT file missing timing lines: {subtitles_path}")
                             raise RuntimeError(f"Subtitle generation failed: SRT file missing timing lines: {subtitles_path}")
                     else:
-                        logger.error(f"[moneyprinter_generate] Job {job_id}: Subtitles ERROR - unknown subtitle file extension: {subtitles_path}")
-                        _log_job(f"subtitles: ERROR - unknown subtitle file extension: {subtitles_path}")
+                        logger.error(f"[AIvideos_generate] Job {job_id}: Subtitles ERROR - unknown subtitle file extension: {subtitles_path}")
+                        update_job_progress(job_id, "subtitles", f"subtitles: ERROR - unknown subtitle file extension: {subtitles_path}")
                         raise RuntimeError(f"Subtitle generation failed: unknown subtitle file extension: {subtitles_path}")
                 except Exception as e:
-                    logger.error(f"[moneyprinter_generate] Job {job_id}: Subtitles failed to generate or inspect file: {e}")
-                    _log_job(f"subtitles: failed to generate or inspect file: {e}")
+                    logger.error(f"[AIvideos_generate] Job {job_id}: Subtitles failed to generate or inspect file: {e}")
+                    update_job_progress(job_id, "subtitles", f"subtitles: failed to generate or inspect file: {e}")
                     raise
 
                 _check_cancel(job_id)
-                logger.info(f"[moneyprinter_generate] Job {job_id}: Step compose_video - threads={req.threads or 2} useGPU={req.useGPU} color={req.color or '#FFFF00'} position={req.subtitlesPosition}")
+                logger.info(f"[AIvideos_generate] Job {job_id}: Step compose_video - threads={req.threads or 2} useGPU={req.useGPU} color={req.color or '#FFFF00'} position={req.subtitlesPosition}")
                 _update_job(job_id, step="compose_video")
-                _log_job(
+                update_job_progress(job_id, "compose_video",
                     f"compose_video: threads={req.threads or 2} useGPU={req.useGPU} color={req.color or '#FFFF00'} position={req.subtitlesPosition}"
                 )
                 temp_audio = AudioFileClip(tts_path)
                 
-                # Use local video processing
-                combined_video_path = combine_videos(video_paths, int(temp_audio.duration), 5, req.threads or 2, req.useGPU)
-                logger.info(f"[moneyprinter_generate] Job {job_id}: Combined video -> {combined_video_path}")
-                _log_job(f"compose_video: combined video -> {combined_video_path}")
+                # Use intelligent GPU decision making
+                from utils.gpu_manager import should_use_gpu
+                gpu_decision = should_use_gpu(estimated_memory_gb=2.0)  # Estimate 2GB for video processing
+                use_gpu = req.useGPU and gpu_decision['use_gpu']
+
+                if not gpu_decision['use_gpu'] and req.useGPU:
+                    logger.info(f"GPU requested but not recommended: {gpu_decision['reason']}")
+
+                # Use local video processing with optional streaming for memory efficiency
+                use_streaming = os.getenv("VIDEOHELPER_USE_STREAMING", "false").lower() == "true"
+                combined_video_path = combine_videos(video_paths, int(temp_audio.duration), 5, req.threads or 2, use_gpu, use_streaming)
+                logger.info(f"[AIvideos_generate] Job {job_id}: Combined video -> {combined_video_path}")
+                update_job_progress(job_id, "compose_video", f"compose_video: combined video -> {combined_video_path}")
 
                 # Log environment versions helpful for font/TextClip issues
                 try:
                     import platform  # type: ignore
                     import moviepy  # type: ignore
                     from PIL import Image, ImageFont, __version__ as PIL_VERSION  # type: ignore
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: env: python={platform.python_version()} moviepy={getattr(moviepy, '__version__', 'unknown')} pillow={PIL_VERSION}")
-                    _log_job(
+                    logger.info(f"[AIvideos_generate] Job {job_id}: env: python={platform.python_version()} moviepy={getattr(moviepy, '__version__', 'unknown')} pillow={PIL_VERSION}")
+                    update_job_progress(job_id, "compose_video",
                         f"env: python={platform.python_version()} moviepy={getattr(moviepy, '__version__', 'unknown')} pillow={PIL_VERSION}"
                     )
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: PIL ImageFont module file={getattr(ImageFont, '__file__', 'unknown')}")
-                    _log_job(f"PIL ImageFont module file={getattr(ImageFont, '__file__', 'unknown')}")
+                    logger.info(f"[AIvideos_generate] Job {job_id}: PIL ImageFont module file={getattr(ImageFont, '__file__', 'unknown')}")
+                    update_job_progress(job_id, "compose_video", f"PIL ImageFont module file={getattr(ImageFont, '__file__', 'unknown')}")
                 except Exception as e:
-                    logger.warning(f"[moneyprinter_generate] Job {job_id}: env: failed to get version info ({e})")
-                    _log_job(f"env: failed to get version info ({e})")
+                    logger.warning(f"[AIvideos_generate] Job {job_id}: env: failed to get version info ({e})")
+                    update_job_progress(job_id, "compose_video", f"env: failed to get version info ({e})")
 
                 try:
                     # Debug: Check subtitle file type before video generation
-                    from vendors.moneyprinter.enhanced_subtitles import is_enhanced_subtitle_file
+                    from vendors.AIvideos.enhanced_subtitles import is_enhanced_subtitle_file
                     
                     if subtitles_path:
                         is_enhanced = is_enhanced_subtitle_file(subtitles_path)
-                        logger.info(f"[moneyprinter_generate] Job {job_id}: compose_video: subtitle_type={'enhanced' if is_enhanced else 'traditional'} path={subtitles_path}")
-                        _log_job(f"compose_video: subtitle_type={'enhanced' if is_enhanced else 'traditional'} path={subtitles_path}")
+                        logger.info(f"[AIvideos_generate] Job {job_id}: compose_video: subtitle_type={'enhanced' if is_enhanced else 'traditional'} path={subtitles_path}")
+                        update_job_progress(job_id, "compose_video", f"compose_video: subtitle_type={'enhanced' if is_enhanced else 'traditional'} path={subtitles_path}")
                     else:
-                        logger.warning(f"[moneyprinter_generate] Job {job_id}: compose_video: no_subtitles_path")
-                        _log_job(f"compose_video: no_subtitles_path")
+                        logger.warning(f"[AIvideos_generate] Job {job_id}: compose_video: no_subtitles_path")
+                        update_job_progress(job_id, "compose_video", f"compose_video: no_subtitles_path")
                     
                     # Use local video generation
                     final_video_path = generate_video(
@@ -1025,16 +1143,16 @@ def moneyprinter_generate(
                 except Exception as ge:
                     import traceback
                     tb = traceback.format_exc()
-                    logger.error(f"[moneyprinter_generate] Job {job_id}: compose_video: generate_video failed: {ge}")
-                    logger.error(f"[moneyprinter_generate] Job {job_id}: traceback: {tb}")
-                    _log_job(f"compose_video: generate_video failed: {ge}")
-                    _log_job(f"traceback: {tb}")
+                    logger.error(f"[AIvideos_generate] Job {job_id}: compose_video: generate_video failed: {ge}")
+                    logger.error(f"[AIvideos_generate] Job {job_id}: traceback: {tb}")
+                    update_job_progress(job_id, "compose_video", f"compose_video: generate_video failed: {ge}")
+                    update_job_progress(job_id, "compose_video", f"traceback: {tb}")
                     raise
 
                 # Optional background music
                 if req.useMusic:
                     _check_cancel(job_id)
-                    from vendors.moneyprinter.utils import choose_random_song
+                    from vendors.AIvideos.utils import choose_random_song
                     song_path = choose_random_song()
                     codec_settings = {"codec": "h264_nvenc" if req.useGPU else "libx264", "audio_codec": "aac"}
                     video_clip_path = Path(str(final_video_path))
@@ -1053,57 +1171,190 @@ def moneyprinter_generate(
                     )
                     video_clip.write_videofile(str(video_clip_path), threads=req.threads or 1, **codec_settings)
 
-                if not JOB_CONTROLS[job_id]["cancel"].is_set():
-                    # Move video to final output location with job ID as filename
-                    # Use the default output directory (root output folder)
-                    output_dir = DEFAULT_OUTPUT_DIR
-                    output_dir.mkdir(exist_ok=True)
-                    final_output_path = output_dir / f"moneyprinter_{job_id}.mp4"
-                    
-                    # Move the video from temporary location to final output location
+                _check_cancel(job_id)
+                # Create job-specific output folder named with job UUID
+                job_output_dir = DEFAULT_OUTPUT_DIR / job_id
+                job_output_dir.mkdir(parents=True, exist_ok=True)
+
+                # Move video to job-specific folder
+                final_output_path = job_output_dir / "AIvideos.mp4"
+
+                # Move the video from temporary location to final output location
+                try:
+                    if Path(final_video_path).exists():
+                        shutil.move(str(final_video_path), str(final_output_path))
+                        final_video_path = str(final_output_path.resolve())
+                        logger.info(f"[AIvideos_generate] Job {job_id}: moved video to final location: {final_video_path}")
+                        update_job_progress(job_id, "done", f"moved video to final location: {final_video_path}")
+                    else:
+                        logger.warning(f"[AIvideos_generate] Job {job_id}: warning: video file not found at {final_video_path}")
+                        update_job_progress(job_id, "done", f"warning: video file not found at {final_video_path}")
+                except Exception as move_error:
+                    logger.warning(f"[AIvideos_generate] Job {job_id}: warning: could not move video to final location: {move_error}")
+                    update_job_progress(job_id, "done", f"warning: could not move video to final location: {move_error}")
+                    # Continue with original path if move fails
+
+                # Move subtitles file to job-specific folder if it exists
+                final_subtitles_path = None
+                if subtitles_path and Path(subtitles_path).exists():
                     try:
-                        if Path(final_video_path).exists():
-                            shutil.move(str(final_video_path), str(final_output_path))
-                            final_video_path = str(final_output_path.resolve())
-                            logger.info(f"[moneyprinter_generate] Job {job_id}: moved video to final location: {final_video_path}")
-                            _log_job(f"moved video to final location: {final_video_path}")
-                        else:
-                            logger.warning(f"[moneyprinter_generate] Job {job_id}: warning: video file not found at {final_video_path}")
-                            _log_job(f"warning: video file not found at {final_video_path}")
+                        subtitles_filename = Path(subtitles_path).name
+                        final_subtitles_path = job_output_dir / subtitles_filename
+                        shutil.move(str(subtitles_path), str(final_subtitles_path))
+                        final_subtitles_path = str(final_subtitles_path.resolve())
+                        logger.info(f"[AIvideos_generate] Job {job_id}: moved subtitles to final location: {final_subtitles_path}")
+                        update_job_progress(job_id, "done", f"moved subtitles to final location: {final_subtitles_path}")
                     except Exception as move_error:
-                        logger.warning(f"[moneyprinter_generate] Job {job_id}: warning: could not move video to final location: {move_error}")
-                        _log_job(f"warning: could not move video to final location: {move_error}")
-                        # Continue with original path if move fails
-                    
-                    duration_seconds = int(time.time() - start_time)
-                    logger.info(f"[moneyprinter_generate] Job {job_id}: done: final video -> {final_video_path} (took {duration_seconds}s)")
-                    _log_job(f"done: final video -> {final_video_path} (took {duration_seconds}s)")
-                    _update_job(job_id, status="done", result={"output": str(final_video_path), "subtitles": subtitles_path}, duration_seconds=duration_seconds)
+                        logger.warning(f"[AIvideos_generate] Job {job_id}: warning: could not move subtitles to final location: {move_error}")
+                        update_job_progress(job_id, "done", f"warning: could not move subtitles to final location: {move_error}")
+                        final_subtitles_path = subtitles_path  # Use original path if move fails
+                else:
+                    final_subtitles_path = subtitles_path
 
-        except Exception as e:
-            duration_seconds = int(time.time() - start_time)
-            if str(e) == "cancelled":
-                logger.info(f"[moneyprinter_generate] Job {job_id}: Job cancelled")
-                _update_job(job_id, status="cancelled", error="cancelled", duration_seconds=duration_seconds)
-            else:
-                # Preserve the last known step in the error and include a hint if it's a font/TextClip issue
-                hint = ""
-                msg = str(e)
-                if any(k in msg.lower() for k in ["font", "pillow", "textclip"]):
-                    hint = " (possible font/Pillow/TextClip configuration issue)"
-                logger.error(f"[moneyprinter_generate] Job {job_id}: error: {msg}{hint}")
-                _log_job(f"error: {msg}{hint}")
-                _update_job(job_id, status="error", error=msg, duration_seconds=duration_seconds)
+                duration_seconds = int(time.time() - start_time)
+                logger.info(f"[AIvideos_generate] Job {job_id}: done: final video -> {final_video_path} (took {duration_seconds}s)")
+                update_job_progress(job_id, "done", f"done: final video -> {final_video_path} (took {duration_seconds}s)")
+                _update_job(job_id, status="done", result={"output": str(final_video_path), "subtitles": final_subtitles_path}, duration_seconds=duration_seconds)
 
-    # Run the long-running job in a detached daemon thread rather than Starlette BackgroundTasks.
-    # This avoids noisy asyncio.CancelledError tracebacks on server shutdown (Ctrl+C)
-    # when Starlette awaits background tasks during request teardown.
-    # Enforce global concurrency limit
-    def _runner_with_limit():
-        with JOB_SEMAPHORE:
-            _run_job()
-    threading.Thread(target=_runner_with_limit, name=f"moneyprinter-job-{job_id}", daemon=True).start()
+    except Exception as e:
+        duration_seconds = int(time.time() - start_time)
+        if str(e) == "cancelled":
+            logger.info(f"[AIvideos_generate] Job {job_id}: Job cancelled")
+            _update_job(job_id, status="cancelled", error="cancelled", duration_seconds=duration_seconds)
+        else:
+            # Use standardized error handling
+            error_info = handle_error(e, {
+                "job_id": job_id,
+                "step": "video_generation",
+                "duration_seconds": duration_seconds
+            })
+
+            # Add specific hints for common issues
+            error_msg = error_info['error']['message']
+            if any(k in error_msg.lower() for k in ["font", "pillow", "textclip"]):
+                error_msg += " (possible font/Pillow/TextClip configuration issue)"
+
+            update_job_progress(job_id, "error", f"error: {error_msg}")
+            _update_job(job_id, status="error", error=error_msg, duration_seconds=duration_seconds)
+
+
     return {"status": "queued", "jobId": job_id}
+
+def _run_brainrot_job(job_id: str, req_dict: dict):
+    """Execute Brainrot video generation job."""
+    logger.info(f"[brainrot_generate] Started processing job {job_id}")
+    start_time = time.time()
+
+    try:
+        # Convert dict back to BrainrotRequest
+        req = BrainrotRequest(**req_dict)
+
+        # Record when job actually started processing
+        _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
+
+        from vendors.Compilation.generator import TikYouGenerator
+
+        _check_cancel(job_id)
+        _update_job(job_id, step="process_video")
+
+        # Create job-specific output folder named with job UUID
+        job_output_dir = DEFAULT_OUTPUT_DIR / job_id
+        job_output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = str(job_output_dir.resolve())
+
+        generator = TikYouGenerator(output_dir=output_dir)
+        video_clips = generator.process_single_video(req.youtubeUrl)
+        if not video_clips:
+            raise RuntimeError("No clips generated from source video")
+
+        _check_cancel(job_id)
+        _update_job(job_id, step="generate_compilations")
+
+        # Initialize partial results tracking
+        partial_results = {
+            "output_dir": output_dir,
+            "generated_videos": [],
+            "video_count": 0,
+            "total_size_mb": 0,
+            "compilation_types": {"normal": 0, "tts": 0, "total": 0},
+            "expected_videos": None if req.unlimited else req.numCompilations * 2  # Normal + TTS per compilation, None for unlimited
+        }
+
+        # Track individual video progress
+        completed_videos = []
+
+        # Override the create_all_compilation_variations method to send real-time updates
+        original_create_all_compilation_variations = generator.create_all_compilation_variations
+
+        def create_all_compilation_variations_with_progress(selected_clips, base_output_path, video_id, compilation_num):
+            results = original_create_all_compilation_variations(selected_clips, base_output_path, video_id, compilation_num)
+
+            # Send update for each completed video
+            for variation_name, path in [('normal', results.get('normal')), ('tts', results.get('tts'))]:
+                if path and os.path.exists(path):
+                    try:
+                        stat = Path(path).stat()
+                        size_mb = round(stat.st_size / (1024 * 1024), 2)
+
+                        filename = os.path.basename(path)
+                        is_tts = "_tts" in filename
+                        is_normal = "_normal" in filename
+                        compilation_type = "TTS" if is_tts else "Normal" if is_normal else "Unknown"
+
+                        video_info = {
+                            "filename": filename,
+                            "path": str(Path(path).resolve()),
+                            "size_mb": size_mb,
+                            "size_bytes": stat.st_size,
+                            "mtime": stat.st_mtime,
+                            "compilation_type": compilation_type,
+                            "download_url": f"/api/download?path={Path(path).resolve()}",
+                            "compilation_num": compilation_num,
+                            "variation": variation_name
+                        }
+
+                        completed_videos.append(video_info)
+
+                        # Update partial results
+                        partial_results["generated_videos"] = completed_videos
+                        partial_results["video_count"] = len(completed_videos)
+                        partial_results["total_size_mb"] = sum(v["size_mb"] for v in completed_videos)
+                        partial_results["compilation_types"]["normal"] = len([v for v in completed_videos if v["compilation_type"] == "Normal"])
+                        partial_results["compilation_types"]["tts"] = len([v for v in completed_videos if v["compilation_type"] == "TTS"])
+                        partial_results["compilation_types"]["total"] = len(completed_videos)
+
+                        # Send WebSocket update with partial results
+                        _update_job(job_id, result=partial_results)
+
+                    except Exception as e:
+                        logger.warning(f"Failed to process completed video {path}: {e}")
+
+            return results
+
+        # Monkey patch the method for real-time updates
+        generator.create_all_compilation_variations = create_all_compilation_variations_with_progress
+
+        # Generate videos with progress tracking
+        generator.generate_tikyou_videos(
+            req.youtubeUrl,
+            num_compilations=None if req.unlimited else req.numCompilations,
+            min_duration=req.minDuration,
+            max_duration=req.maxDuration,
+            video_clips=video_clips  # Pass the already-processed clips
+        )
+
+        _check_cancel(job_id)
+        # Final update with all videos
+        duration_seconds = int(time.time() - start_time)
+        partial_results["generated_videos"].sort(key=lambda x: x["mtime"], reverse=True)
+        _update_job(job_id, status="done", result=partial_results, duration_seconds=duration_seconds)
+
+    except Exception as e:
+        duration_seconds = int(time.time() - start_time)
+        if str(e) == "cancelled":
+            _update_job(job_id, status="cancelled", error="cancelled", duration_seconds=duration_seconds)
+        else:
+            _update_job(job_id, status="error", error=str(e), duration_seconds=duration_seconds)
 
 
 class SuggestSubjectRequest(BaseModel):
@@ -1112,7 +1363,7 @@ class SuggestSubjectRequest(BaseModel):
     topicHint: str | None = None
 
 
-@app.post("/api/moneyprinter/suggest-subject")
+@app.post("/api/AIvideos/suggest-subject")
 def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
     """Suggest a short content subject using Gemini.
 
@@ -1134,13 +1385,12 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
     except Exception:
         pass
 
-    ensure_on_path(MONEYPRINTER_BACKEND)
-    with pushd(MONEYPRINTER_BACKEND):
-        try:
-            from vendors.moneyprinter.gpt import generate_response  # type: ignore
-        except Exception as e:
-            log_error(logger, e, {"endpoint": "suggest_subject", "stage": "import_vendor"})
-            raise HTTPException(status_code=500, detail=f"Failed to initialize Gemini backend: {e}")
+    # Import the generate_response function
+    try:
+        from vendors.AIvideos.gpt import generate_response  # type: ignore
+    except Exception as e:
+        log_error(logger, e, {"endpoint": "suggest_subject", "stage": "import_vendor"})
+        raise HTTPException(status_code=500, detail=f"Failed to initialize Gemini backend: {e}")
 
     examples = req.examples or [
         "Good foods for cats",
@@ -1166,6 +1416,7 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
         model = req.aiModel or "gemini-2.0-flash"
         logger.info("suggest-subject: calling Gemini", extra={"endpoint": "suggest_subject", "stage": "call_gemini", "ai_model": model, "prompt_len": len(prompt)})
         raw = generate_response(prompt, model)
+
     except Exception as e:
         log_error(logger, e, {"endpoint": "suggest_subject", "stage": "call_gemini"})
         raise HTTPException(status_code=500, detail=f"Gemini request failed: {e}")
@@ -1187,22 +1438,60 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
         pass
     return {"subject": text}
 
-@app.get("/api/models", tags=["Configuration"], summary="List AI Models")
+
+@app.post("/api/moneyprinter/suggest-subject", tags=["Video Generation"], summary="Suggest Subject (Alias)")
+def suggest_subject_alias(req: SuggestSubjectRequest) -> Dict[str, str]:
+    """Alias for /api/AIvideos/suggest-subject for frontend compatibility."""
+    return suggest_subject(req)
+
+
+@app.get("/api/AIvideos/models", tags=["Configuration"], summary="List AI Models")
 def list_models() -> Dict[str, List[str]]:
-    """List available Gemini models (static list; can be swapped to dynamic)."""
-    # Use a curated list compatible with current SDK; replace with API discovery if desired
-    models = [
-        "gemini-2.0-flash",
-        "gemini-2.0-pro-exp",
-        "gemini-2.0-pro",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash-lite",
-    ]
-    return {"models": models}
+    """List available Gemini models using API discovery."""
+    try:
+        import google.generativeai as genai
+        
+        # Get API key from environment
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            logger.warning("No Gemini API key found, returning fallback models")
+            # Fallback to static list if no API key
+            return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
+        
+        genai.configure(api_key=api_key)
+        
+        # Discover available models
+        available_models = []
+        for model in genai.list_models():
+            if 'generateContent' in model.supported_generation_methods:
+                # Extract model name (remove 'models/' prefix if present)
+                model_name = model.name
+                if model_name.startswith('models/'):
+                    model_name = model_name[7:]
+                available_models.append(model_name)
+        
+        # Sort models for consistent ordering
+        available_models.sort()
+        
+        if not available_models:
+            logger.warning("No models discovered, returning fallback models")
+            return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
+        
+        return {"models": available_models}
+        
+    except Exception as e:
+        logger.error(f"Failed to discover Gemini models: {e}")
+        # Return fallback models on error
+        return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
 
 
-@app.get("/api/gpu-info")
+@app.get("/api/models", tags=["Configuration"], summary="List AI Models (Alias)")
+def list_models_alias() -> Dict[str, List[str]]:
+    """Alias for /api/AIvideos/models for frontend compatibility."""
+    return list_models()
+
+
+@app.get("/api/AIvideos/gpu-info")
 def get_gpu_info() -> Dict[str, Any]:
     """Return information about locally available GPU acceleration.
 
@@ -1261,19 +1550,14 @@ def get_gpu_info() -> Dict[str, Any]:
         }
     }
 
-
 @app.get("/api/voices")
 def list_voices() -> Dict[str, List[str]]:
     """Expose Kokoro voices used by the AI video workflow."""
-    ensure_on_path(MONEYPRINTER_BACKEND)
     start_ts = time.time()
     try:
-        with pushd(MONEYPRINTER_BACKEND):
-            # Avoid importing heavy Kokoro runtime just to list voices.
-            # Use the static VOICES constant from the vendor module so this
-            # endpoint works even when Kokoro/torch are not installed.
-            from vendors.moneyprinter.tiktokvoice import VOICES as KOKORO_VOICES  # type: ignore
-            voices = list(KOKORO_VOICES)
+        # Import voices directly without changing directory since they're in AIvideos
+        from vendors.AIvideos.tiktokvoice import VOICES as KOKORO_VOICES  # type: ignore
+        voices = list(KOKORO_VOICES)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load voices: {e}")
     duration = time.time() - start_ts
@@ -1299,14 +1583,14 @@ def voice_sample(voice: str, text: Optional[str] = None):
     # Load TTS functions within moneyprinter context
     with pushd(MONEYPRINTER_BACKEND):
         try:
-            from vendors.moneyprinter.tiktokvoice import tts, list_voices as kokoro_voices  # type: ignore
+            from vendors.AIvideos.tiktokvoice import tts, list_voices as kokoro_voices  # type: ignore
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to load TTS backend: {e}")
 
     # Safely attempt to load available voices using static constant to
     # avoid forcing Kokoro runtime at import time.
     try:
-        from vendors.moneyprinter.tiktokvoice import VOICES as KOKORO_VOICES  # type: ignore
+        from vendors.AIvideos.tiktokvoice import VOICES as KOKORO_VOICES  # type: ignore
         voices = set(KOKORO_VOICES)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load voices: {e}")
@@ -1333,113 +1617,44 @@ def voice_sample(voice: str, text: Optional[str] = None):
     return FileResponse(str(target), filename=target.name, media_type="audio/mpeg")
 
 
-@app.post("/api/brainrot/generate")
+@app.post("/api/brainrot/generate", tags=["Video Generation"], summary="Generate Brainrot Compilation")
 def brainrot_generate(
     req: BrainrotRequest,
-    _: None = Depends(require_api_key),
-  
 ):
-    job_id = str(uuid.uuid4())
-    job_store.create_job(job_id, "brainrot", req.dict())
-    JOB_CONTROLS[job_id] = {"cancel": threading.Event()}
-    _enqueue_job_update(job_id)
+    try:
+        job_id = str(uuid.uuid4())
 
-    def _run_job():
-        start_time = time.time()
-        
-        try:
-            # Record when job actually started processing
-            _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
-            
-            ensure_on_path(BRAINROT_ROOT)
-            with pushd(BRAINROT_ROOT):
-                from tikyou_video_generator.generator import TikYouGenerator  # type: ignore
+        # Use unified queue for job management
+        job_queue.add_job(
+            _run_brainrot_job,
+            job_id,
+            req.model_dump(),  # Convert Pydantic model to dict for serialization
+            workflow="brainrot"
+        )
 
-            _check_cancel(job_id)
-            _update_job(job_id, step="process_video")
-            
-            # Always use the main output directory for consistency
-            output_dir = str(DEFAULT_OUTPUT_DIR.resolve())
-            Path(output_dir).mkdir(parents=True, exist_ok=True)
+        # Ensure job is persisted to database before returning
+        # This prevents race conditions where frontend tries to fetch job immediately
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                job = job_store.get_job(job_id)
+                if job:
+                    logger.info(f"[brainrot_generate] Job {job_id} successfully persisted to database")
+                    break
+                if attempt < max_retries - 1:
+                    time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+            except Exception as db_e:
+                logger.warning(f"[brainrot_generate] Database check failed for job {job_id}, attempt {attempt + 1}: {db_e}")
+                if attempt < max_retries - 1:
+                    time.sleep(0.1 * (attempt + 1))
 
-            generator = TikYouGenerator(output_dir=output_dir)
-            video_clips = generator.process_single_video(req.youtubeUrl)
-            if not video_clips:
-                raise RuntimeError("No clips generated from source video")
+        return {"status": "success", "jobId": job_id}
 
-            _check_cancel(job_id)
-            _update_job(job_id, step="generate_compilations")
-            generator.generate_tikyou_videos(
-                req.youtubeUrl,
-                num_compilations=req.numCompilations,
-                min_duration=req.minDuration,
-                max_duration=req.maxDuration,
-                video_clips=video_clips  # Pass the already-processed clips
-            )
-
-            if not JOB_CONTROLS[job_id]["cancel"].is_set():
-                # Find generated video files with more detailed information
-                generated_videos = []
-                output_path = Path(output_dir)
-                if output_path.exists():
-                    # Look for video files (common formats)
-                    for pattern in ["*.mp4", "*.mov", "*.avi", "*.mkv"]:
-                        for video_file in output_path.glob(pattern):
-                            if video_file.is_file():
-                                try:
-                                    stat = video_file.stat()
-                                    # Get file size in MB
-                                    size_mb = round(stat.st_size / (1024 * 1024), 2)
-                                    
-                                    # Extract compilation info from filename
-                                    filename = video_file.name
-                                    is_tts = "_tts" in filename
-                                    is_normal = "_normal" in filename
-                                    compilation_type = "TTS" if is_tts else "Normal" if is_normal else "Unknown"
-                                    
-                                    generated_videos.append({
-                                        "filename": filename,
-                                        "path": str(video_file.resolve()),
-                                        "size_mb": size_mb,
-                                        "size_bytes": stat.st_size,
-                                        "mtime": stat.st_mtime,
-                                        "compilation_type": compilation_type,
-                                        "download_url": f"/api/download?path={video_file.resolve()}"
-                                    })
-                                except Exception as e:
-                                    logger.warning(f"Failed to get file info for {video_file}: {e}")
-                                    continue
-                
-                # Sort videos by modification time (newest first)
-                generated_videos.sort(key=lambda x: x["mtime"], reverse=True)
-                
-                duration_seconds = int(time.time() - start_time)
-                result_data = {
-                    "output_dir": output_dir,
-                    "generated_videos": generated_videos,
-                    "video_count": len(generated_videos),
-                    "total_size_mb": sum(v["size_mb"] for v in generated_videos),
-                    "compilation_types": {
-                        "normal": len([v for v in generated_videos if v["compilation_type"] == "Normal"]),
-                        "tts": len([v for v in generated_videos if v["compilation_type"] == "TTS"]),
-                        "total": len(generated_videos)
-                    }
-                }
-                _update_job(job_id, status="done", result=result_data, duration_seconds=duration_seconds)
-        except Exception as e:
-            duration_seconds = int(time.time() - start_time)
-            if str(e) == "cancelled":
-                _update_job(job_id, status="cancelled", error="cancelled", duration_seconds=duration_seconds)
-            else:
-                _update_job(job_id, status="error", error=str(e), duration_seconds=duration_seconds)
-
-    # Run the job in a detached daemon thread to avoid shutdown cancellation noise
-    def _runner_with_limit():
-        with JOB_SEMAPHORE:
-            _run_job()
-    threading.Thread(target=_runner_with_limit, name=f"brainrot-job-{job_id}", daemon=True).start()
-    return {"status": "queued", "jobId": job_id}
-
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate brainrot video: {e}")
+    
+  
+    
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str):
@@ -1451,41 +1666,23 @@ def job_status(job_id: str):
 
 @app.get("/api/jobs", tags=["Job Management"], summary="List Jobs")
 def list_jobs(
-    limit: int = 50, 
-    status: Optional[str] = None,
-    _: None = Depends(require_api_key)
+    limit: int = 50,
+    status: Optional[str] = None
 ) -> Dict[str, Any]:
     """List jobs with optional filtering."""
+
     jobs = job_store.list_jobs(limit=min(limit, 100), status=status)
     return {"jobs": jobs, "total": len(jobs)}
 
 
-@app.post("/api/jobs/{job_id}/cancel")
-def cancel_job(job_id: str, _: None = Depends(require_api_key)):
-    ctrl = JOB_CONTROLS.get(job_id)
-    if not ctrl:
-        raise HTTPException(status_code=404, detail="Job not found")
-    ctrl["cancel"].set()
+@app.post("/api/jobs/{job_id}/cancel", tags=["Job Management"], summary="Cancel Job")
+def cancel_job(job_id: str):
+
+    # Use unified queue for job cancellation
+    if not job_queue.cancel_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found or cannot be cancelled")
     _update_job(job_id, status="cancelled")
     return {"status": "cancelled", "jobId": job_id}
-
-
-# Enhanced features endpoints
-
-@app.get("/api/metrics", tags=["Monitoring"], summary="Get Metrics")
-def get_prometheus_metrics(_: None = Depends(require_api_key)):
-    """Get Prometheus metrics in text format."""
-    metrics = get_metrics()
-    return Response(
-        content=metrics.get_metrics_text(),
-        media_type="text/plain"
-    )
-
-
-@app.get("/api/metrics/stats", tags=["Monitoring"], summary="Get Metrics Stats")
-def get_metrics_stats(_: None = Depends(require_api_key)) -> Dict[str, Any]:
-    """Get metrics statistics."""
-    return get_metrics().get_stats()
 
 class PlaylistBatchRequest(BaseModel):
     playlistUrl: str
@@ -1496,49 +1693,78 @@ class PlaylistBatchRequest(BaseModel):
     priority: str = "normal"
     maxConcurrent: int = 3
     stopOnError: bool = False
-    # Brainrot common params
-    numCompilations: int = Field(default=1, ge=1, le=10)
+    # AIvideos common params
+    numCompilations: int = Field(default=1, ge=1)
     minDuration: int = Field(default=60, ge=10, le=3600)
     maxDuration: int = Field(default=110, ge=10, le=3600)
 
 
-@app.websocket("/ws/jobs/{job_id}")
+@app.websocket("/ws/AIvideos/jobs/{job_id}")
 async def websocket_job_updates(websocket: WebSocket, job_id: str):
+    from utils.websocket_manager import get_websocket_manager
+
+    ws_manager = get_websocket_manager()
+    client_info = {
+        'client_host': getattr(websocket.client, 'host', 'unknown') if websocket.client else 'unknown',
+        'user_agent': websocket.headers.get('user-agent', 'unknown')
+    }
+
+    # Add connection to manager
+    ws_manager.add_connection(job_id, websocket, client_info)
+
     await websocket.accept()
-    # Add to subscribers
-    WS_SUBSCRIBERS[job_id].add(websocket)
+
     # Send the current job state immediately if exists
     try:
-        initial = JOBS.get(job_id)
-        if initial is not None:
-            await websocket.send_json(initial)
-    except Exception:
-        pass
+        job = job_store.get_job(job_id)
+        if job is not None:
+            await websocket.send_json(job)
+    except Exception as e:
+        logger.warning(f"Failed to send initial job state: {e}")
+
     try:
-        # Keep the connection open; simple ping-pong to detect disconnect
+        # Keep the connection open with heartbeat monitoring
         while True:
             try:
-                await websocket.receive_text()
+                # Wait for messages with timeout
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
+                # Update activity on any received message
+                ws_manager.update_activity(job_id, websocket)
+
+                # Handle ping/pong
+                if message.lower() in ['ping', 'pong']:
+                    await websocket.send_text('pong' if message.lower() == 'ping' else 'pong')
+                else:
+                    # Echo back any other messages for debugging
+                    await websocket.send_text(f"echo: {message}")
+
+            except asyncio.TimeoutError:
+                # Send ping to check if connection is still alive
+                try:
+                    await websocket.send_text('ping')
+                    # Update activity on successful ping
+                    ws_manager.update_activity(job_id, websocket)
+                except Exception:
+                    # Connection likely dead
+                    break
             except WebSocketDisconnect:
                 break
-            except Exception:
-                # Ignore malformed frames; continue until disconnect
+            except Exception as e:
+                logger.warning(f"WebSocket error for job {job_id}: {e}")
                 await asyncio.sleep(0.5)
     finally:
-        try:
-            WS_SUBSCRIBERS[job_id].discard(websocket)
-        except Exception:
-            pass
+        # Remove connection from manager
+        ws_manager.remove_connection(job_id, websocket)
 
  
 def _is_allowed_path(p: Path) -> bool:
     p_resolved = p.resolve()
     allowed_roots = [
         DEFAULT_OUTPUT_DIR.resolve(), 
-        (ROOT / "brainrot_output").resolve(),
+        (ROOT / "AIvideos_output").resolve(),
         (ROOT / "temp").resolve(),  # Allow access to temp directory
         # Include old moneyprinter temp directory for backwards compatibility
-        (VENDOR_ROOT / "moneyprinter" / "cat-video-creator" / "output").resolve()
+        (VENDOR_ROOT / "AIvideos" / "cat-video-creator" / "output").resolve()
     ]
     for root in allowed_roots:
         try:
@@ -1553,17 +1779,20 @@ def _is_allowed_path(p: Path) -> bool:
 
 @app.get("/api/download")
 def download_file(path: str):
+    """Download a file."""
+
     file_path = Path(path)
     
     # If the path doesn't exist as-is, try to resolve it relative to allowed directories
     if not file_path.exists() or not file_path.is_file():
         # Try to find the file in allowed directories
-        allowed_roots = [DEFAULT_OUTPUT_DIR.resolve(), (ROOT / "brainrot_output").resolve(), (ROOT / "temp").resolve()]
+        allowed_roots = [DEFAULT_OUTPUT_DIR.resolve(), (ROOT / "AIvideos_output").resolve(), (ROOT / "temp").resolve()]
         
         # Also check the old moneyprinter temp directory for backwards compatibility
-        moneyprinter_temp = VENDOR_ROOT / "moneyprinter" / "cat-video-creator" / "output"
-        if moneyprinter_temp.exists():
-            allowed_roots.append(moneyprinter_temp.resolve())
+        AIvideos_temp = VENDOR_ROOT / "AIvideos" / "cat-video-creator" / "output"
+        
+        if AIvideos_temp.exists():
+            allowed_roots.append(AIvideos_temp.resolve())
         
         found_path = None
         for root in allowed_roots:
@@ -1582,7 +1811,7 @@ def download_file(path: str):
             except Exception:
                 continue
             
-            # Handle paths like "cat-video-creator/output/file.mp4"
+            # Handle paths like "AIvideos/output/file.mp4"
             if "output" in path:
                 filename = Path(path).name
                 candidate = root / filename
@@ -1635,16 +1864,249 @@ def list_videos(dir: str):
     return {"files": files}
 
 
+@app.post("/api/cleanup/temp-files", tags=["Maintenance"], summary="Clean up temporary files")
+async def cleanup_temp_files():
+    """Clean up all temporary files from the application using the automatic temp manager.
+
+    Returns a JSON object with cleanup statistics for each directory.
+    """
+    from utils.file_management import get_temp_manager
+
+    manager = get_temp_manager()
+    results = manager.cleanup_all(force=True)
+
+    # Aggregate results
+    total_files = sum(r.get('files_removed', 0) for r in results.values())
+    total_space = sum(r.get('space_freed_mb', 0) for r in results.values())
+    all_errors = []
+    for dir_results in results.values():
+        all_errors.extend(dir_results.get('errors', []))
+
+    result = {
+        "deleted_files": total_files,
+        "freed_space_mb": round(total_space, 2),
+        "directories_cleaned": list(results.keys()),
+        "errors": all_errors,
+        "directory_details": results
+    }
+
+    logger.info(f"Manual temp file cleanup completed: {total_files} files deleted, {total_space:.2f} MB freed")
+
+    return result
+
+
+@app.get("/api/cleanup/temp-files/stats", tags=["Maintenance"], summary="Get temporary files statistics")
+async def get_temp_files_stats():
+    """Get statistics about temporary files in the application using the temp manager.
+
+    Returns a JSON object with temp file statistics for all registered directories.
+    """
+    from utils.file_management import get_temp_manager
+
+    manager = get_temp_manager()
+    stats = manager.get_stats()
+
+    # Aggregate totals
+    total_files = sum(dir_stats.get('file_count', 0) for dir_stats in stats.values() if 'file_count' in dir_stats)
+    total_size = sum(dir_stats.get('total_size_mb', 0) for dir_stats in stats.values() if 'total_size_mb' in dir_stats)
+
+    result = {
+        "directories": list(stats.values()),
+        "total_files": total_files,
+        "total_size_mb": round(total_size, 2),
+        "manager_stats": {
+            "registered_directories": len(stats),
+            "background_cleanup_active": True  # Always active now
+        }
+    }
+
+    return result
+
+
+@app.get("/api/websocket/stats", tags=["Monitoring"], summary="Get WebSocket connection statistics")
+async def get_websocket_stats():
+    """Get statistics about WebSocket connections.
+
+    Returns connection counts, ages, and monitoring status.
+    """
+    from utils.websocket_manager import get_websocket_manager
+
+    ws_manager = get_websocket_manager()
+    stats = ws_manager.get_connection_stats()
+
+    return {
+        "websocket_stats": stats,
+        "monitoring_active": True
+    }
+
+
+@app.get("/api/database/stats", tags=["Monitoring"], summary="Get database statistics")
+async def get_database_stats():
+    """Get statistics about database usage and connections.
+
+    Returns job counts, database size, and connection pool status.
+    """
+    from database import get_job_store
+
+    job_store = get_job_store()
+    stats = job_store.get_stats()
+
+    # Database size not available for PostgreSQL
+    # Connection pool info from global engine configuration
+    config = get_config()
+
+    return {
+        "database_stats": stats,
+        "database_size_mb": 0,  # Not available for PostgreSQL
+        "connection_pool": {
+            "pool_size": config.get_int('videohelper_db_pool_size', 5),
+            "active_connections": 0,  # Not tracked in JobStore
+            "pool_timeout_seconds": config.get_int('videohelper_db_pool_timeout', 30)
+        }
+    }
+
+
+@app.get("/api/streaming/stats", tags=["Monitoring"], summary="Get streaming processor statistics")
+async def get_streaming_stats():
+    """Get statistics about streaming video processing.
+
+    Returns temp file counts, sizes, and processor status.
+    """
+    from utils.streaming_processor import get_streaming_processor
+
+    processor = get_streaming_processor()
+    stats = processor.get_stats()
+
+    # Check if streaming is enabled
+    streaming_enabled = os.getenv("VIDEOHELPER_USE_STREAMING", "false").lower() == "true"
+
+    return {
+        "streaming_processor": stats,
+        "streaming_enabled": streaming_enabled
+    }
+
+
+@app.get("/api/gpu/stats", tags=["Monitoring"], summary="Get GPU memory statistics")
+async def get_gpu_stats():
+    """Get GPU memory usage and optimization recommendations.
+
+    Returns GPU memory stats, usage history, and optimization suggestions.
+    """
+    from utils.gpu_manager import get_gpu_manager
+
+    gpu_manager = get_gpu_manager()
+    stats = gpu_manager.get_memory_stats()
+
+    # Add usage history for the last 5 minutes
+    usage_history = gpu_manager.get_usage_history(minutes=5)
+
+    # Get optimization recommendations
+    optimization = gpu_manager.optimize_for_task("general")
+
+    return {
+        "gpu_stats": stats,
+        "usage_history": usage_history,
+        "optimization_recommendations": optimization,
+        "memory_thresholds": gpu_manager.memory_thresholds
+    }
+
+
+@app.post("/api/gpu/cleanup", tags=["Maintenance"], summary="Trigger GPU memory cleanup")
+async def cleanup_gpu_memory():
+    """Manually trigger GPU memory cleanup.
+
+    Returns cleanup results and memory freed.
+    """
+    from utils.gpu_manager import cleanup_gpu_memory
+
+    result = cleanup_gpu_memory(force=True)
+    return result
+
+
+@app.get("/api/memory/config", tags=["Configuration"], summary="Get memory optimization settings")
+async def get_memory_config():
+    """Get current memory optimization configuration.
+
+    Returns settings for streaming, cleanup policies, and memory limits.
+    """
+    return {
+        "streaming": {
+            "enabled": os.getenv("VIDEOHELPER_USE_STREAMING", "false").lower() == "true",
+            "temp_cleanup_hours": int(os.getenv("VIDEOHELPER_STREAMING_CLEANUP_HOURS", "1"))
+        },
+        "temp_files": {
+            "cleanup_interval_minutes": int(os.getenv("VIDEOHELPER_TEMP_CLEANUP_INTERVAL", "30")),
+            "max_age_hours": int(os.getenv("VIDEOHELPER_TEMP_MAX_AGE_HOURS", "24"))
+        },
+        "database": {
+            "pool_size": int(os.getenv("VIDEOHELPER_DB_POOL_SIZE", "5")),
+            "pool_timeout": int(os.getenv("VIDEOHELPER_DB_POOL_TIMEOUT", "30"))
+        },
+        "websocket": {
+            "max_connection_age_hours": int(os.getenv("VIDEOHELPER_WS_MAX_AGE_HOURS", "1")),
+            "heartbeat_interval_seconds": int(os.getenv("VIDEOHELPER_WS_HEARTBEAT", "30"))
+        }
+    }
+
+
+@app.get("/api/progress/{job_id}", tags=["Monitoring"], summary="Get job progress")
+async def get_job_progress(job_id: str):
+    """Get detailed progress information for a specific job.
+
+    Returns step-by-step progress, ETA, and performance metrics.
+    """
+    from utils.progress_tracker import get_progress_tracker
+
+    tracker = get_progress_tracker(job_id)
+    return tracker.get_current_progress()
+
+
+@app.get("/api/progress", tags=["Monitoring"], summary="Get all job progress")
+async def get_all_job_progress():
+    """Get progress information for all active jobs.
+
+    Returns progress data for all currently running jobs.
+    """
+    from utils.progress_tracker import get_all_progress
+
+    return {"jobs": get_all_progress()}
+
+
+@app.get("/api/cache/stats", tags=["Monitoring"], summary="Get cache statistics")
+async def get_cache_stats():
+    """Get cache performance and usage statistics.
+
+    Returns cache hit rates, sizes, and optimization metrics.
+    """
+    from utils.cache_manager import get_cache_manager
+
+    cache_manager = get_cache_manager()
+    return {"cache_stats": cache_manager.get_stats()}
+
+
+@app.post("/api/cache/clear", tags=["Maintenance"], summary="Clear cache")
+async def clear_cache():
+    """Clear all cache entries.
+
+    Returns number of entries cleared.
+    """
+    from utils.cache_manager import get_cache_manager
+
+    cache_manager = get_cache_manager()
+    cleared_count = cache_manager.clear()
+    return {"cleared_entries": cleared_count, "message": f"Cleared {cleared_count} cache entries"}
+
+
 def _cleanup_multiprocessing_resources():
     """Cleanup multiprocessing resources to prevent leaks."""
     try:
         import multiprocessing
-        
+
         # Clean up any remaining processes with timeout
         processes = multiprocessing.active_children()
         if processes:
             logger.info(f"Cleaning up {len(processes)} active processes...")
-            
+
             for process in processes:
                 try:
                     process.terminate()
@@ -1656,83 +2118,118 @@ def _cleanup_multiprocessing_resources():
                 except Exception as e:
                     logger.warning(f"Error cleaning up process {process.pid}: {e}")
         else:
-            logger.info("No active multiprocessing processes found")
-        
-        logger.info("Multiprocessing resources cleaned up")
+            logger.debug("No active multiprocessing processes found")
+
+        logger.debug("Multiprocessing resources cleaned up")
     except Exception as e:
         logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
 
 
 def _cleanup_resources():
     """Comprehensive cleanup function for all resources."""
+    global _CLEANUP_COMPLETED
+
+    # Prevent duplicate cleanup
+    if _CLEANUP_COMPLETED:
+        return
+
+    # Skip cleanup if interpreter is shutting down
+    if _is_interpreter_shutting_down():
+        logger.info("Interpreter shutting down, skipping resource cleanup")
+        _CLEANUP_COMPLETED = True
+        return
+
     logger.info("Cleaning up resources...")
-    
+
     # Set overall timeout for cleanup
     import threading
     import time
-    
+
     def cleanup_worker():
         try:
-            # Cleanup multiprocessing resources
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(lambda: _cleanup_multiprocessing_resources())
-                try:
-                    future.result(timeout=5)  # 5 second timeout
-                    logger.info("Multiprocessing resources cleaned up")
-                except concurrent.futures.TimeoutError:
-                    logger.warning("Multiprocessing cleanup timeout reached")
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
-            
-            # Cleanup threading resources - only release if we have permits
+            # Cleanup temp files first
             try:
-                # Try to release the semaphore with timeout
+                from utils.file_management import get_temp_manager
+                temp_manager = get_temp_manager()
+                temp_results = temp_manager.cleanup_all(force=True)
+                temp_files = sum(r.get('files_removed', 0) for r in temp_results.values())
+                temp_space = sum(r.get('space_freed_mb', 0) for r in temp_results.values())
+                logger.info(f"Temp files cleaned up: {temp_files} files, {temp_space:.2f} MB freed")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp files: {e}")
+
+            # Cleanup multiprocessing resources
+            if not _is_interpreter_shutting_down():
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(lambda: JOB_SEMAPHORE.release())
+                    future = executor.submit(lambda: _cleanup_multiprocessing_resources())
                     try:
-                        future.result(timeout=2)  # 2 second timeout
-                        logger.info("Threading resources cleaned up")
+                        future.result(timeout=5)  # 5 second timeout
+                        logger.info("Multiprocessing resources cleaned up")
                     except concurrent.futures.TimeoutError:
-                        logger.warning("Threading cleanup timeout reached")
-                    except ValueError:
-                        # Semaphore is already at maximum value, which is fine
-                        logger.info("Threading resources already cleaned up")
-                    except Exception:
-                        pass  # Other exceptions are fine to ignore during shutdown
-            except Exception:
-                pass  # Semaphore might already be released
-            
+                        logger.warning("Multiprocessing cleanup timeout reached")
+                    except Exception as e:
+                        logger.warning(f"Failed to cleanup multiprocessing resources: {e}")
+
+            # Cleanup threading resources - only release if we have permits
+            if not _is_interpreter_shutting_down():
+                try:
+                    # Try to release the semaphore with timeout
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(lambda: JOB_SEMAPHORE.release())
+                        try:
+                            future.result(timeout=2)  # 2 second timeout
+                            logger.info("Threading resources cleaned up")
+                        except concurrent.futures.TimeoutError:
+                            logger.warning("Threading cleanup timeout reached")
+                        except ValueError:
+                            # Semaphore is already at maximum value, which is fine
+                            logger.info("Threading resources already cleaned up")
+                        except Exception:
+                            pass  # Other exceptions are fine to ignore during shutdown
+                except Exception:
+                    pass  # Semaphore might already be released
+
+            # Cleanup database connections
+            try:
+                from database import cleanup_job_store
+                cleanup_job_store()
+                logger.info("Database connections cleaned up")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup database connections: {e}")
+
+            # Cleanup streaming processor temp files
+            try:
+                from utils.streaming_processor import cleanup_streaming_temp_files
+                cleanup_streaming_temp_files()
+                logger.info("Streaming processor temp files cleaned up")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup streaming temp files: {e}")
+
             # Cleanup any remaining WebSocket connections
             try:
-                active_connections = sum(len(subscribers) for subscribers in WS_SUBSCRIBERS.values())
-                if active_connections > 0:
-                    logger.info(f"Cleaning up {active_connections} WebSocket connections...")
-                    
-                    # Close all WebSocket connections
-                    try:
-                        # Since this is in a non-async context, we'll just clear the subscribers
-                        # The actual cleanup will happen in the async context
-                        for job_id in list(WS_SUBSCRIBERS.keys()):
-                            WS_SUBSCRIBERS[job_id].clear()
-                        WS_SUBSCRIBERS.clear()
-                        logger.info("WebSocket connections cleaned up")
-                    except Exception as e:
-                        logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+                from utils.websocket_manager import cleanup_websocket_connections_sync
+                cleanup_count = cleanup_websocket_connections_sync(timeout=10.0)
+                if cleanup_count > 0:
+                    logger.info(f"WebSocket connections cleaned up: {cleanup_count} connections")
                 else:
                     logger.info("No active WebSocket connections found")
             except Exception as e:
                 logger.warning(f"Failed to cleanup WebSocket connections: {e}")
-                
+
         except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
-    
+            # Don't log "can't register atexit after shutdown" errors during import
+            if "can't register atexit after shutdown" not in str(e):
+                logger.error(f"Error during cleanup: {e}")
+
     # Run cleanup with timeout
     cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
     cleanup_thread.start()
     cleanup_thread.join(timeout=15)  # 15 second overall timeout
-    
+
+    _CLEANUP_COMPLETED = True
+
     if cleanup_thread.is_alive():
         logger.warning("Cleanup timeout reached, some resources may not be fully cleaned up")
     else:
@@ -1742,45 +2239,62 @@ def _cleanup_resources():
 # Register cleanup function to run on exit with timeout
 def _atexit_cleanup_with_timeout():
     """Atexit cleanup wrapper with timeout to prevent hanging."""
+    global _SHUTDOWN_IN_PROGRESS
+
+    if _SHUTDOWN_IN_PROGRESS or _is_interpreter_shutting_down():
+        return  # Already handled by signal handler or interpreter is shutting down
+
+    _SHUTDOWN_IN_PROGRESS = True
+
     import threading
     import time
-    
+
     def cleanup_worker():
         try:
             _cleanup_resources()
         except Exception as e:
-            logger.error(f"Error during atexit cleanup: {e}")
-    
+            # Don't log "can't register atexit after shutdown" errors during import
+            if "can't register atexit after shutdown" not in str(e):
+                logger.error(f"Error during atexit cleanup: {e}")
+
     cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
     cleanup_thread.start()
     cleanup_thread.join(timeout=10)  # 10 second timeout
-    
+
     if cleanup_thread.is_alive():
         logger.warning("Atexit cleanup timeout reached")
 
-atexit.register(_atexit_cleanup_with_timeout)
+# Only register if not already shutting down
+try:
+    atexit.register(_atexit_cleanup_with_timeout)
+except Exception:
+    # atexit registration failed (interpreter shutting down)
+    pass
 
 if __name__ == "__main__":
     import uvicorn
     try:
         uvicorn.run("app:app", host="0.0.0.0", port=8080, reload=True)
     finally:
-        # Run cleanup with timeout
-        import threading
-        import time
-        
-        def cleanup_worker():
-            try:
-                _cleanup_resources()
-            except Exception as e:
-                logger.error(f"Error during main cleanup: {e}")
-        
-        cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
-        cleanup_thread.start()
-        cleanup_thread.join(timeout=10)  # 10 second timeout
-        
-        if cleanup_thread.is_alive():
-            logger.warning("Main cleanup timeout reached, forcing exit")
-            os._exit(1)
+        if not _SHUTDOWN_IN_PROGRESS:
+            _SHUTDOWN_IN_PROGRESS = True
+
+            # Run cleanup with timeout
+            import threading
+            import time
+
+            def cleanup_worker():
+                try:
+                    _cleanup_resources()
+                except Exception as e:
+                    logger.error(f"Error during main cleanup: {e}")
+
+            cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+            cleanup_thread.start()
+            cleanup_thread.join(timeout=10)  # 10 second timeout
+
+            if cleanup_thread.is_alive():
+                logger.warning("Main cleanup timeout reached, forcing exit")
+                os._exit(1)
 
 

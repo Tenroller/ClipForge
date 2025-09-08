@@ -1,0 +1,15 @@
+meta {
+  name: Cleanup Temp Files
+  type: http
+  seq: 22
+}
+
+post {
+  url: http://0.0.0.0:8080/api/cleanup/temp-files
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

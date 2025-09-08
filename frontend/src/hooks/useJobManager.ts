@@ -3,12 +3,19 @@ import JobManager, { type ManagedJob } from '@/lib/jobManager'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
+// Development-only logging
+const devLog = (message: string, ...args: any[]) => {
+  if (import.meta.env.DEV) {
+    console.log(message, ...args)
+  }
+}
+
 // Create a singleton JobManager instance
 let jobManagerInstance: JobManager | null = null
 
 function getJobManagerInstance(): JobManager {
   if (!jobManagerInstance) {
-    console.log('useJobManager: Creating new JobManager singleton instance')
+    devLog('useJobManager: Creating new JobManager singleton instance')
     jobManagerInstance = new JobManager(API_BASE)
     // Load persisted jobs on first initialization
     jobManagerInstance.loadFromLocalStorage()
@@ -23,12 +30,12 @@ export function useJobManager() {
 
   // Initialize job manager
   useEffect(() => {
-    console.log('useJobManager: Initializing hook instance')
+    devLog('useJobManager: Initializing hook instance')
     const jobManager = getJobManagerInstance()
     
     // Create listener for job updates
     const handleJobUpdate = (job: ManagedJob) => {
-      console.log('useJobManager: Received job update', job);
+      devLog('useJobManager: Received job update', job);
       setJobs(prevJobs => {
         const existingIndex = prevJobs.findIndex(j => j.id === job.id)
         if (existingIndex >= 0) {
@@ -47,13 +54,13 @@ export function useJobManager() {
     
     // Set initial jobs state from the manager
     const currentJobs = jobManager.getAllJobs()
-    console.log(`useJobManager: Setting initial jobs state with ${currentJobs.length} jobs`)
+    devLog(`useJobManager: Setting initial jobs state with ${currentJobs.length} jobs`)
     setJobs(currentJobs)
     setInitialized(true)
 
     return () => {
       // Remove listener on cleanup
-      console.log('useJobManager: Cleaning up hook instance')
+      devLog('useJobManager: Cleaning up hook instance')
       if (listenerRef.current) {
         jobManager.removeListener(listenerRef.current)
       }
@@ -65,7 +72,7 @@ export function useJobManager() {
     workflow: 'moneyprinter' | 'brainrot', 
     payload?: any
   ) => {
-    console.log('useJobManager: addJob called with', { id, workflow, payload });
+    devLog('useJobManager: addJob called with', { id, workflow, payload });
     const jobManager = getJobManagerInstance()
     jobManager.addJob(id, workflow, payload)
   }
@@ -115,12 +122,12 @@ export function useJobManager() {
         if (localStorage.getItem(key)) {
           localStorage.removeItem(key)
           removedCount++
-          console.log(`useJobManager: Removed legacy key: ${key}`)
+          devLog(`useJobManager: Removed legacy key: ${key}`)
         }
       })
       
       if (removedCount > 0) {
-        console.log(`useJobManager: Cleaned up ${removedCount} legacy localStorage entries`)
+        devLog(`useJobManager: Cleaned up ${removedCount} legacy localStorage entries`)
       }
       
       resolve()

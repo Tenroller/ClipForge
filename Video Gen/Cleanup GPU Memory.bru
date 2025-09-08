@@ -1,0 +1,15 @@
+meta {
+  name: Cleanup GPU Memory
+  type: http
+  seq: 28
+}
+
+post {
+  url: http://0.0.0.0:8080/api/gpu/cleanup
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

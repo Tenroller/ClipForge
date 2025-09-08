@@ -1,0 +1,15 @@
+meta {
+  name: Get GPU Info
+  type: http
+  seq: 12
+}
+
+get {
+  url: http://0.0.0.0:8080/api/gpu-info
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

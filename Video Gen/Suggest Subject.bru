@@ -1,0 +1,26 @@
+meta {
+  name: Suggest Subject
+  type: http
+  seq: 19
+}
+
+post {
+  url: http://0.0.0.0:8080/api/AIvideos/suggest-subject
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "aiModel": "gemini-2.0-flash",
+    "examples": [
+      "Create a video about cats",
+      "Make a tutorial on Python programming"
+    ],
+    "topicHint": "educational content"
+  }
+}
+
+settings {
+  encodeUrl: true
+}

@@ -1,0 +1,15 @@
+meta {
+  name: Get Database Stats
+  type: http
+  seq: 25
+}
+
+get {
+  url: http://0.0.0.0:8080/api/database/stats
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

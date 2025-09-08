@@ -1,0 +1,15 @@
+meta {
+  name: List Videos
+  type: http
+  seq: 14
+}
+
+get {
+  url: http://0.0.0.0:8080/api/list-videos?dir=output
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

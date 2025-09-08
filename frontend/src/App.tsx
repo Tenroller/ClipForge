@@ -7,21 +7,20 @@ import CreatorPage from './pages/CreatorPage'
 import CompilationsPage from './pages/CompilationsPage'
 import ActivityPage from './pages/ActivityPage'
 import DownloadsPage from './pages/DownloadsPage'
+import CleanupPage from './pages/CleanupPage'
 import NewLandingPage from './components/NewLandingPage'
 import SidebarRouter from './components/SidebarRouter'
-// ...existing code...
 import { useJobManager } from './hooks/useJobManager'
 import { Toaster } from '@/components/components/ui/toaster'
 
 const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
-export default function App() {
+function AppContent() {
 	const navigate = useNavigate()
 	const location = useLocation()
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
 	const [showMobileSidebar, setShowMobileSidebar] = useState(false)
-	// ...existing code...
-	
+
 	// Get active job count for the sidebar
 	const jobManager = useJobManager()
 	const activeJobCount = jobManager.getActiveJobs().length
@@ -79,7 +78,7 @@ export default function App() {
 							>
 								<FaBars className="size-4" />
 							</Button>
-							
+
 							<div className="flex items-center gap-3">
 								<div className="size-10 rounded-xl bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center shadow-lg">
 									<FaFilm className="size-5 text-white" />
@@ -110,11 +109,17 @@ export default function App() {
 												<p className="section-subtitle text-[11px]">Download completed videos</p>
 											</>
 										} />
+										<Route path="/cleanup" element={
+											<>
+												<h1 className="section-title text-lg">System Cleanup</h1>
+												<p className="section-subtitle text-[11px]">Clean temporary files</p>
+											</>
+										} />
 									</Routes>
 								</div>
 							</div>
 						</div>
-						
+
 						<div className="flex items-center gap-3">
 							<div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
 								<div className="size-2 rounded-full bg-green-500 animate-pulse"></div>
@@ -134,14 +139,16 @@ export default function App() {
 							<Route path="/compilations" element={<CompilationsPage />} />
 							<Route path="/activity" element={<ActivityPage />} />
 							<Route path="/downloads" element={<DownloadsPage />} />
+							<Route path="/cleanup" element={<CleanupPage />} />
 						</Routes>
 					</div>
 				</main>
-				{/* AuthDialog removed */}
 				<Toaster />
 			</div>
 		</div>
 	)
 }
 
-
+export default function App() {
+	return <AppContent />
+}

@@ -1,4 +1,44 @@
-# AI Video Generator with Cloud GPU Support
+# AI Video Generator
+
+## Authentication
+
+This application now includes user authentication to protect the video generation features.
+
+### Demo Accounts
+
+- **Username:** `admin` / **Password:** `admin123`
+- **Username:** `demo` / **Password:** `demo123`
+
+### How Authentication Works
+
+1. **Landing Page**: Users first see a landing page with information about the application
+2. **Login Required**: To access video generation tools, users must login
+3. **JWT Tokens**: Authentication uses JWT tokens stored in localStorage
+4. **Protected Routes**: All video generation endpoints require authentication
+5. **Session Management**: Users stay logged in until they logout or the token expires
+
+### API Endpoints
+
+#### Authentication Endpoints
+- `POST /api/auth/login` - Login with username/password
+- `POST /api/auth/logout` - Logout (client-side)
+- `GET /api/auth/me` - Get current user info
+- `POST /api/auth/verify` - Verify token validity
+
+#### Protected Endpoints
+All video generation endpoints now require authentication:
+- `POST /api/moneyprinter/generate`
+- `POST /api/brainrot/generate`
+- `GET /api/jobs`
+- `POST /api/jobs/{job_id}/cancel`
+- And all other job management endpoints
+
+### Running the Application
+
+1. **Backend**: `uvicorn app:app --host 0.0.0.0 --port 8080 --reload`
+2. **Frontend**: `npm run dev` (serves on port 5173)
+
+The frontend will automatically redirect unauthenticated users to login. with Cloud GPU Support
 
 An AI-powered video generation platform that supports both local processing and cloud GPU acceleration via Modal. - Enterprise Edition
 
@@ -50,7 +90,7 @@ ai-video-generator/
 │   ├── database.py           # SQLite/PostgreSQL job persistence
 │   ├── caching.py            # Multi-level caching system
 │   ├── metrics.py            # Prometheus metrics collection
-│   ├── job_queue.py          # Redis-based job queue
+│   ├── job_queue_unified.py  # Unified job queue system
 │   ├── batch_processing.py   # Bulk operation orchestration
 │   └── thumbnail_generator.py# Video preview generation
 ├── frontend/                 # React + TypeScript + Tailwind UI

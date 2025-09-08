@@ -1,0 +1,15 @@
+meta {
+  name: List Jobs
+  type: http
+  seq: 6
+}
+
+get {
+  url: http://0.0.0.0:8080/api/jobs?limit=10&status=running
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

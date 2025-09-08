@@ -1,0 +1,15 @@
+meta {
+  name: Get Batch Status
+  type: http
+  seq: 34
+}
+
+get {
+  url: http://0.0.0.0:8080/api/batch/{{batch_id}}
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}

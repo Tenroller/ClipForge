@@ -1,5 +1,12 @@
 import { downloadUrl } from './api'
 
+// Development-only logging
+const devLog = (message: string, ...args: any[]) => {
+  if (import.meta.env.DEV) {
+    console.log(message, ...args)
+  }
+}
+
 export type JobStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled'
 
 export type JobStep = {
@@ -65,12 +72,12 @@ class JobManager {
       
       // Validate legacy job IDs and remove invalid ones
       if (legacyJobIds.length > 0) {
-        console.log(`JobManager: Found ${legacyJobIds.length} legacy job IDs, validating...`)
+        devLog(`JobManager: Found ${legacyJobIds.length} legacy job IDs, validating...`)
         legacyJobIds.forEach(async (jobId) => {
           try {
-            const res = await fetch(`${this.apiBase}/api/jobs/${jobId}`)
-            if (res.status === 404) {
-              console.log(`JobManager: Cleaning up legacy job ${jobId} (404)`)
+            const exists = await this.validateJobExists(jobId, 2) // Fewer retries for legacy cleanup
+            if (!exists) {
+              devLog(`JobManager: Cleaning up legacy job ${jobId} (404)`)
               // Clear the specific legacy entries for this job
               legacyKeys.forEach(key => {
                 const data = localStorage.getItem(key)
@@ -79,7 +86,7 @@ class JobManager {
                     const parsed = JSON.parse(data)
                     if (parsed?.jobId === jobId) {
                       localStorage.removeItem(key)
-                      console.log(`JobManager: Removed legacy localStorage key: ${key}`)
+                      devLog(`JobManager: Removed legacy localStorage key: ${key}`)
                     }
                   } catch {}
                 }
@@ -100,7 +107,7 @@ class JobManager {
     workflow: 'moneyprinter' | 'brainrot', 
     payload?: any
   ) {
-    console.log(`JobManager: Adding new job ${id} with workflow ${workflow}`, payload);
+    devLog(`JobManager: Adding new job ${id} with workflow ${workflow}`, payload);
     const job: ManagedJob = {
       id,
       workflow,
@@ -209,16 +216,16 @@ class JobManager {
 
   addListener(listener: JobUpdateListener) {
     this.listeners.add(listener)
-    console.log(`JobManager: Added listener, total listeners: ${this.listeners.size}`)
+    devLog(`JobManager: Added listener, total listeners: ${this.listeners.size}`)
   }
 
   removeListener(listener: JobUpdateListener) {
     this.listeners.delete(listener)
-    console.log(`JobManager: Removed listener, total listeners: ${this.listeners.size}`)
+    devLog(`JobManager: Removed listener, total listeners: ${this.listeners.size}`)
   }
 
   private notifyListeners(job: ManagedJob) {
-    console.log(`JobManager: Notifying ${this.listeners.size} listeners about job ${job.id}`, job);
+    devLog(`JobManager: Notifying ${this.listeners.size} listeners about job ${job.id}`, job);
     this.listeners.forEach(listener => listener(job))
   }
 
@@ -228,7 +235,7 @@ class JobManager {
     // First check if the job exists via HTTP before establishing WebSocket
     this.validateJobExists(id).then(exists => {
       if (!exists) {
-        console.log(`JobManager: Job ${id} doesn't exist, removing from storage`)
+        devLog(`JobManager: Job ${id} doesn't exist, removing from storage`)
         this.removeJob(id)
         return
       }
@@ -241,17 +248,32 @@ class JobManager {
     })
   }
   
-  private async validateJobExists(id: string): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.apiBase}/api/jobs/${id}`)
-      if (res.status === 404) {
-        return false
+  private async validateJobExists(id: string, maxRetries: number = 3): Promise<boolean> {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const res = await fetch(`${this.apiBase}/api/jobs/${id}`)
+        if (res.status === 404) {
+          // If this is the last attempt, consider job doesn't exist
+          if (attempt === maxRetries - 1) {
+            return false
+          }
+          // Wait a bit before retrying in case of temporary persistence delay
+          await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)))
+          continue
+        }
+        return res.ok
+      } catch (error) {
+        // Network error - if this is the last attempt, assume job might exist
+        if (attempt === maxRetries - 1) {
+          devLog(`JobManager: Network error validating job ${id}, assuming it might exist`)
+          return true
+        }
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)))
       }
-      return res.ok
-    } catch {
-      // Network error, assume job might exist and let polling handle it
-      return true
     }
+    // Fallback - assume job might exist if we can't determine
+    return true
   }
   
   private establishWebSocketConnection(id: string) {
@@ -281,7 +303,7 @@ class JobManager {
       }
       
       ws.onerror = (error) => {
-        console.log(`WebSocket error for job ${id}:`, error)
+        devLog(`WebSocket error for job ${id}:`, error)
         this.startPollingFallback(id)
       }
       
@@ -291,7 +313,7 @@ class JobManager {
           // Normal closure or connection error, check if job still exists
           this.validateJobExists(id).then(exists => {
             if (!exists) {
-              console.log(`JobManager: Job ${id} no longer exists after WebSocket close, removing`)
+              devLog(`JobManager: Job ${id} no longer exists after WebSocket close, removing`)
               this.removeJob(id)
               return
             }
@@ -322,7 +344,7 @@ class JobManager {
         
         // Handle 404 - job doesn't exist, remove it from storage
         if (res.status === 404) {
-          console.log(`JobManager: Job ${id} not found (404), removing from storage`)
+          devLog(`JobManager: Job ${id} not found (404), removing from storage`)
           this.removeJob(id)
           return // Stop polling
         }
@@ -331,7 +353,7 @@ class JobManager {
         if (!res.ok) {
           // For 4xx errors (except 404), likely the job is gone or invalid
           if (res.status >= 400 && res.status < 500) {
-            console.log(`JobManager: Job ${id} returned ${res.status}, removing from storage`)
+            devLog(`JobManager: Job ${id} returned ${res.status}, removing from storage`)
             this.removeJob(id)
             return // Stop polling
           }
@@ -350,7 +372,7 @@ class JobManager {
       } catch (e) {
         // Check if this is a fetch error that might indicate 404
         if (e instanceof Error && e.message.includes('404')) {
-          console.log(`JobManager: Job ${id} not found, removing from storage`)
+          devLog(`JobManager: Job ${id} not found, removing from storage`)
           this.removeJob(id)
           return // Stop polling
         }
@@ -494,7 +516,7 @@ class JobManager {
       const jobsData = JSON.parse(saved)
       if (!Array.isArray(jobsData)) return
 
-      console.log(`JobManager: Loading ${jobsData.length} jobs from localStorage`)
+      devLog(`JobManager: Loading ${jobsData.length} jobs from localStorage`)
       
       // Restore jobs and validate them
       jobsData.forEach((jobData: any) => {
@@ -503,7 +525,7 @@ class JobManager {
           
           // Only reconnect to active jobs - this will trigger validation
           if (!['done', 'error', 'cancelled'].includes(jobData.status)) {
-            console.log(`JobManager: Reconnecting to active job ${jobData.id}`)
+            devLog(`JobManager: Reconnecting to active job ${jobData.id}`)
             this.connectJobUpdates(jobData.id)
           }
         }
@@ -516,7 +538,7 @@ class JobManager {
       setTimeout(() => {
         this.validateAllJobs().then(removedCount => {
           if (removedCount > 0) {
-            console.log(`JobManager: Initial cleanup removed ${removedCount} non-existent jobs`)
+            devLog(`JobManager: Initial cleanup removed ${removedCount} non-existent jobs`)
           }
         })
       }, 1000) // Wait a bit for connections to settle
@@ -532,31 +554,27 @@ class JobManager {
   async validateAllJobs(): Promise<number> {
     const allJobs = this.getAllJobs()
     let removedCount = 0
-    
-    console.log(`JobManager: Validating ${allJobs.length} jobs...`)
-    
+
+    devLog(`JobManager: Validating ${allJobs.length} jobs...`)
+
     for (const job of allJobs) {
       try {
-        const res = await fetch(`${this.apiBase}/api/jobs/${job.id}`)
-        if (res.status === 404) {
-          console.log(`JobManager: Removing non-existent job ${job.id}`)
-          this.removeJob(job.id)
-          removedCount++
-        } else if (res.status >= 400 && res.status < 500) {
-          // Other 4xx errors suggest the job is invalid
-          console.log(`JobManager: Removing invalid job ${job.id} (${res.status})`)
+        const exists = await this.validateJobExists(job.id, 2) // Fewer retries for bulk validation
+        if (!exists) {
+          devLog(`JobManager: Removing non-existent job ${job.id}`)
           this.removeJob(job.id)
           removedCount++
         }
       } catch (e) {
         console.error(`Failed to validate job ${job.id}:`, e)
+        // Don't remove on validation error - job might still exist
       }
     }
-    
+
     if (removedCount > 0) {
-      console.log(`JobManager: Cleaned up ${removedCount} invalid jobs`)
+      devLog(`JobManager: Cleaned up ${removedCount} invalid jobs`)
     }
-    
+
     return removedCount
   }
 

@@ -98,3 +98,6 @@ logger.error("Video generation failed", error=str(e), job_id=job_id)
 - Tests located in `backend/tests/`
 - Use `pytest` for running tests
 - Mock external API calls for testing
+
+
+MAKE SURE TO ALWAYS ACTIVATE THE VIRTUAL ENVIROMENT

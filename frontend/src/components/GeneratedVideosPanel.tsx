@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/components/ui/card"
 import { Button } from "@/components/components/ui/button"
 import { Badge } from "@/components/components/ui/badge"
-import { 
-  Download, 
+import {
+  Download,
   Play,
   Pause,
   Eye,
@@ -12,6 +12,7 @@ import {
   HardDrive,
   X
 } from "lucide-react"
+import { VideoSkeleton, VideoSkeletons } from "./VideoSkeleton"
 
 interface GeneratedVideo {
   filename: string
@@ -21,6 +22,8 @@ interface GeneratedVideo {
   mtime: number
   compilation_type: string
   download_url: string
+  compilation_num?: number
+  variation?: string
 }
 
 interface GeneratedVideosPanelProps {
@@ -32,13 +35,19 @@ interface GeneratedVideosPanelProps {
     total: number
   }
   onClose?: () => void
+  numCompilations?: number
+  expectedVideos?: number
+  isGenerating?: boolean
 }
 
-export function GeneratedVideosPanel({ 
-  videos, 
-  totalSizeMb, 
-  compilationTypes, 
-  onClose 
+export function GeneratedVideosPanel({
+  videos,
+  totalSizeMb,
+  compilationTypes,
+  onClose,
+  numCompilations = 0,
+  expectedVideos = 0,
+  isGenerating = false
 }: GeneratedVideosPanelProps) {
   const [playingVideo, setPlayingVideo] = useState<string | null>(null)
   const [expandedVideo, setExpandedVideo] = useState<string | null>(null)
@@ -108,6 +117,47 @@ export function GeneratedVideosPanel({
       default:
         return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300"
     }
+  }
+
+  // Show skeleton placeholders when videos are still generating (only for limited mode)
+  if (isGenerating && videos.length === 0 && numCompilations > 0 && expectedVideos !== null) {
+    return (
+      <Card className="enhanced-card border-l-4 border-l-blue-500">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-3">
+            <div className="size-8 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
+              <div className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            </div>
+            <div>
+              <div>Generating Videos</div>
+              <p className="text-sm font-normal text-muted-foreground">
+                {expectedVideos !== null
+                  ? `Creating ${expectedVideos} video compilations...`
+                  : 'Creating unlimited video compilations...'
+                }
+              </p>
+            </div>
+          </CardTitle>
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="p-1 h-8 w-8"
+            >
+              <X className="size-4" />
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <VideoSkeletons
+            numCompilations={numCompilations}
+            expectedVideos={expectedVideos}
+            completedVideos={0}
+          />
+        </CardContent>
+      </Card>
+    )
   }
 
   if (!videos || videos.length === 0) {
@@ -206,105 +256,162 @@ export function GeneratedVideosPanel({
 
         {/* Video List */}
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Generated Videos</h3>
-          
-          {videos.map((video, index) => (
-            <div key={video.path} className="border rounded-lg overflow-hidden">
-              {/* Video Header */}
-              <div className="p-4 bg-muted/30 border-b">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Badge 
-                      variant="outline" 
-                      className={getCompilationTypeColor(video.compilation_type)}
-                    >
-                      {video.compilation_type}
-                    </Badge>
-                    <span className="font-medium text-sm">{video.filename}</span>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">
+              {isGenerating ? 'Videos in Progress' : 'Generated Videos'}
+            </h3>
+            {isGenerating && expectedVideos !== null && expectedVideos > 0 && (
+              <Badge variant="outline" className="text-xs">
+                {videos.length}/{expectedVideos} completed
+              </Badge>
+            )}
+            {isGenerating && expectedVideos === null && (
+              <Badge variant="outline" className="text-xs">
+                {videos.length} generated (unlimited mode)
+              </Badge>
+            )}
+          </div>
+
+          {/* Mix of completed videos and skeleton placeholders */}
+          {(() => {
+            const completedVideos = videos
+            const skeletonVideos: Array<{compilationNum: number, variation: 'normal' | 'tts', isCompleted: boolean}> = []
+
+            // Generate skeleton list for expected videos (only for limited mode)
+            if (isGenerating && numCompilations > 0 && expectedVideos !== null) {
+              for (let i = 1; i <= numCompilations; i++) {
+                // Check if normal variation is completed
+                const normalCompleted = completedVideos.some(v =>
+                  v.compilation_num === i && v.variation === 'normal'
+                )
+                // Check if TTS variation is completed
+                const ttsCompleted = completedVideos.some(v =>
+                  v.compilation_num === i && v.variation === 'tts'
+                )
+
+                if (!normalCompleted) {
+                  skeletonVideos.push({ compilationNum: i, variation: 'normal', isCompleted: false })
+                }
+                if (!ttsCompleted) {
+                  skeletonVideos.push({ compilationNum: i, variation: 'tts', isCompleted: false })
+                }
+              }
+            }
+
+            return (
+              <>
+                {/* Render completed videos */}
+                {videos.map((video, index) => (
+                  <div key={video.path} className="border rounded-lg overflow-hidden">
+                    {/* Video Header */}
+                    <div className="p-4 bg-muted/30 border-b">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            variant="outline"
+                            className={getCompilationTypeColor(video.compilation_type)}
+                          >
+                            {video.compilation_type}
+                          </Badge>
+                          <span className="font-medium text-sm">{video.filename}</span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleVideoExpansion(video.path)}
+                            className="p-1 h-8 w-8"
+                          >
+                            <Eye className="size-4" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleVideoPlayback(video.path)}
+                            className="p-1 h-8 w-8"
+                            disabled={loadingVideos[video.path]}
+                          >
+                            {loadingVideos[video.path] ? (
+                              <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                            ) : playingVideo === video.path ? (
+                              <Pause className="size-4" />
+                            ) : (
+                              <Play className="size-4" />
+                            )}
+                          </Button>
+
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                          >
+                            <a
+                              href={video.download_url}
+                              download
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              <Download className="size-3 mr-1" />
+                              Download
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Video Metadata */}
+                      <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1">
+                          <HardDrive className="size-3" />
+                          {formatFileSize(video.size_mb)}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Clock className="size-3" />
+                          {formatDate(video.mtime)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Video Preview (when expanded) */}
+                    {expandedVideo === video.path && (
+                      <div className="p-4 bg-black">
+                        <video
+                          ref={(el) => {
+                            videoRefs.current[video.path] = el
+                          }}
+                          src={video.download_url}
+                          controls
+                          className="w-full max-h-[400px] rounded-lg"
+                          poster="/api/placeholder/640/360"
+                          preload="metadata"
+                          onPlay={() => setPlayingVideo(video.path)}
+                          onPause={() => setPlayingVideo(null)}
+                          onEnded={() => setPlayingVideo(null)}
+                          onError={(e) => {
+                            console.error('Video error:', e)
+                            setPlayingVideo(null)
+                          }}
+                        />
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleVideoExpansion(video.path)}
-                      className="p-1 h-8 w-8"
-                    >
-                      <Eye className="size-4" />
-                    </Button>
-                    
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleVideoPlayback(video.path)}
-                      className="p-1 h-8 w-8"
-                      disabled={loadingVideos[video.path]}
-                    >
-                      {loadingVideos[video.path] ? (
-                        <div className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      ) : playingVideo === video.path ? (
-                        <Pause className="size-4" />
-                      ) : (
-                        <Play className="size-4" />
-                      )}
-                    </Button>
-                    
-                    <Button
-                      asChild
-                      variant="outline"
-                      size="sm"
-                      className="h-8"
-                    >
-                      <a 
-                        href={video.download_url} 
-                        download 
-                        target="_blank" 
-                        rel="noreferrer"
-                      >
-                        <Download className="size-3 mr-1" />
-                        Download
-                      </a>
-                    </Button>
-                  </div>
-                </div>
-                
-                {/* Video Metadata */}
-                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <HardDrive className="size-3" />
-                    {formatFileSize(video.size_mb)}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="size-3" />
-                    {formatDate(video.mtime)}
-                  </div>
-                </div>
-              </div>
-              
-              {/* Video Preview (when expanded) */}
-              {expandedVideo === video.path && (
-                <div className="p-4 bg-black">
-                  <video 
-                    ref={(el) => {
-                      videoRefs.current[video.path] = el
-                    }}
-                    src={video.download_url}
-                    controls
-                    className="w-full max-h-[400px] rounded-lg"
-                    poster="/api/placeholder/640/360"
-                    preload="metadata"
-                    onPlay={() => setPlayingVideo(video.path)}
-                    onPause={() => setPlayingVideo(null)}
-                    onEnded={() => setPlayingVideo(null)}
-                    onError={(e) => {
-                      console.error('Video error:', e)
-                      setPlayingVideo(null)
-                    }}
+                ))}
+
+                {/* Render skeleton placeholders for videos still being generated */}
+                {skeletonVideos.map((skeleton, index) => (
+                  <VideoSkeleton
+                    key={`skeleton-${skeleton.compilationNum}-${skeleton.variation}`}
+                    compilationNum={skeleton.compilationNum}
+                    variation={skeleton.variation}
+                    expectedVideos={expectedVideos}
+                    completedVideos={videos.length}
                   />
-                </div>
-              )}
-            </div>
-          ))}
+                ))}
+              </>
+            )
+          })()}
         </div>
 
         {/* Download All Button */}

@@ -1,0 +1,25 @@
+meta {
+  name: Gen Brainrot
+  type: http
+  seq: 1
+}
+
+post {
+  url: http://0.0.0.0:8080/api/brainrot/generate
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "youtubeUrl": "https://www.youtube.com/watch?v=PAORQoMvSdY",
+    "numCompilations": 1,
+    "minDuration": 60,
+    "maxDuration": 110,
+    "maxReuse": 3
+  }
+}
+
+settings {
+  encodeUrl: true
+}
