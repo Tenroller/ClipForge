@@ -20,12 +20,23 @@ import argparse
 import shutil
 import gc
 import psutil
+import logging
 from pathlib import Path
 import multiprocessing
 from tqdm import tqdm
 import torch
 import time
 import uuid
+
+# Initialize logger for this module
+logger = logging.getLogger("video_generator.compilation")
+
+# Define placeholder logging functions if they don't exist in logging_config
+def log_generation_step(logger, *args, **kwargs):
+    logger.info(f"Generation step: {args}, {kwargs}")
+
+def log_file_operation(logger, operation, path, **kwargs):
+    logger.info(f"File {operation}: {path}, {kwargs}")
 
 
 from moviepy import (
@@ -81,14 +92,14 @@ def convert_clip_worker(args):
     return None
 
 class TikYouGenerator:
-    def __init__(self, output_dir="final_videos", ffmpeg_path=None):
-        # FFMPEG 7+ compatibility fix for moviepy
-        if "FFPROBE_BINARY" not in os.environ:
-            os.environ["FFPROBE_BINARY"] = r'C:\ffmpeg\bin\ffprobe.exe'
-
-        # Additional FFmpeg 7+ compatibility fixes
-        if "FFMPEG_BINARY" not in os.environ:
-            os.environ["FFMPEG_BINARY"] = r'C:\ffmpeg\bin\ffmpeg.exe'
+    def __init__(self, output_dir="final_videos", ffmpeg_path=None, tracker=None):
+        # FFMPEG 7+ compatibility fix for moviepy - cross-platform
+        
+        # Add the backend directory to the Python path
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+        from utils.ffmpeg_utils import setup_ffmpeg_environment
+        
+        setup_ffmpeg_environment()
         
         # Set FFmpeg 7+ compatibility flags
         os.environ["FFMPEG_7_COMPAT"] = "1"
@@ -100,6 +111,7 @@ class TikYouGenerator:
         self.processor = CatVideoProcessor(output_dir=output_dir, ffmpeg_path=ffmpeg_path)
         self.creator = TikTokVideoCreator(output_dir=output_dir, ffmpeg_path=ffmpeg_path)
         self.max_workers = min(multiprocessing.cpu_count(), 4)  # Limit to 4 workers max
+        self.tracker = tracker  # Add tracker support
         
         # Initialize TTS generator for enhanced video variations
         try:
@@ -107,11 +119,9 @@ class TikYouGenerator:
             from .tts_generator import TTSGenerator
             self.tts_generator = TTSGenerator()
             self.tts_enabled = True
-            print("🎙️ TTS Generator initialized successfully")
+            logger.info("TTS Generator initialized successfully")
         except Exception as e:
-            print(f"⚠️ TTS Generator initialization failed: {e}")
-            print("   This is likely due to dependency version incompatibilities")
-            print("   TTS variations will be skipped")
+            logger.warning(f"TTS Generator initialization failed: {e} - This is likely due to dependency version incompatibilities. TTS variations will be skipped")
             self.tts_generator = None
             self.tts_enabled = False
         
@@ -119,10 +129,9 @@ class TikYouGenerator:
         try:
             self.title_generator = TitleGenerator()
             self.title_enabled = True
-            print("🎬 Title Generator initialized successfully")
+            logger.info("Title Generator initialized successfully")
         except Exception as e:
-            print(f"⚠️ Title Generator initialization failed: {e}")
-            print("   Title overlays will be skipped")
+            logger.warning(f"Title Generator initialization failed: {e} - Title overlays will be skipped")
             self.title_generator = None
             self.title_enabled = False
         
@@ -151,6 +160,20 @@ class TikYouGenerator:
         
         # Create output directory
         Path(self.output_dir).mkdir(exist_ok=True)
+    
+    def _log(self, message, level="info", component="tikyou"):
+        """Helper method to log messages if tracker is available."""
+        if self.tracker:
+            self.tracker.add_log(message, level, component)
+        else:
+            # Fallback to print or logger if no tracker
+            if level == "error":
+                logger.error(f"{component}: {message}")
+            elif level == "warning":
+                logger.warning(f"{component}: {message}")
+            else:
+                logger.info(f"{component}: {message}")
+    
     
     def _check_memory_usage(self):
         """Check current memory usage and trigger cleanup if needed"""
@@ -356,42 +379,63 @@ class TikYouGenerator:
             sensitivity: Detection threshold
             method: Scene detection method - 'scenedetect' or 'moviepy'
         """
-        print(f"🎬 Processing YouTube URL: {youtube_url}")
+        self._log(f"Starting video processing for URL: {youtube_url}", "info", "process_single_video")
+        self._log(f"Using method: {method}, sensitivity: {sensitivity}", "info", "process_single_video")
         
+        log_generation_step(logger, None, "compilation", "youtube_processing_started",
+                           youtube_url=youtube_url)
+
         # Extract video ID
         try:
             video_id = self.extract_video_id(youtube_url)
-            print(f"📝 Extracted video ID: {video_id}")
+            logger.info(f"YouTube video ID extracted: {video_id}")
+            self._log(f"Extracted video ID: {video_id}", "info", "process_single_video")
         except ValueError as e:
-            print(f"❌ Error: {e}")
+            logger.error(f"Failed to extract YouTube video ID from URL {youtube_url}: {e}")
+            self._log(f"Failed to extract video ID: {str(e)}", "error", "process_single_video")
             return []
-        
+
         # Download the video
-        print(f"📥 Downloading video...")
+        self._log(f"Starting video download for ID: {video_id}", "info", "process_single_video")
+        log_generation_step(logger, None, "compilation", "video_download_started",
+                           video_id=video_id)
+        download_start = time.time()
         download_result = self.processor.download_video(video_id)
-        
+        download_duration = time.time() - download_start
+
         if not download_result or download_result[0] is None:
-            print(f"❌ Failed to download video {video_id}")
+            log_generation_step(logger, None, "compilation", "video_download_failed",
+                               video_id=video_id, duration=download_duration)
+            self._log(f"Video download failed for ID: {video_id}", "error", "process_single_video")
             return []
+
+        log_generation_step(logger, None, "compilation", "video_download_completed",
+                           video_id=video_id, duration=download_duration)
+        self._log(f"Video download completed in {download_duration:.1f}s", "info", "process_single_video")
         
         video_path = download_result[0]
-        print(f"✅ Downloaded: {video_path}")
+        if os.path.exists(video_path):
+            file_size = os.path.getsize(video_path)
+            log_file_operation(logger, "downloaded", video_path, file_size=file_size, duration=download_duration)
 
         # Add a small delay to ensure file is fully written (Windows file locking issue)
-        import time
         print(f"⏳ Waiting 2 seconds for file to be fully written...")
         time.sleep(2)
 
         # 2. ✅ Detect and crop pillarboxes on the main video
+        self._log("Detecting and cropping pillarboxes from main video", "info", "process_single_video")
         print(f"🔍 Detecting and cropping pillarboxes from main video...")
         cropped_video_path = self.processor.crop_video_if_vertical_with_blur(video_path)
         if cropped_video_path != video_path:
             print(f"✅ Pillarboxes cropped: {video_path} -> {cropped_video_path}")
+            self._log("Pillarboxes detected and cropped", "info", "process_single_video")
             video_path = cropped_video_path
         else:
             print(f"ℹ️  No pillarboxes detected or cropping not needed")
+            self._log("No pillarboxes detected or cropping not needed", "info", "process_single_video")
         
         # Analyze the video for scenes
+        self._log("Analyzing video for scenes", "info", "process_single_video")
         print(f"🔍 Analyzing video for scenes...")
         analysis = self.processor.analyze_video_scenes(video_path, threshold=sensitivity, method=method)
         
@@ -403,9 +447,12 @@ class TikYouGenerator:
         print(f"   - Scenes found: {len(scenes)}")
         print(f"   - Duration: {analysis['duration']:.1f}s")
         
+        self._log(f"Scene analysis complete: {'compilation' if is_compilation else 'single video'} with {len(scenes)} scenes, duration {analysis['duration']:.1f}s", "info", "process_single_video")
+        
         video_clips = []
         
         if is_compilation and len(scenes) > 1:
+            self._log(f"Splitting compilation into {len(scenes)} scenes", "info", "process_single_video")
             print(f"✂️  Splitting compilation into {len(scenes)} scenes...")
             # Split the video into scenes
             temp_dir, split_videos = self.processor.split_video_from_scenes(video_path, video_id, scenes)
@@ -430,7 +477,10 @@ class TikYouGenerator:
                         'type': 'split',
                         'source_id': video_id
                     })
+            
+            self._log(f"Successfully split video into {len(video_clips)} clips", "info", "process_single_video")
         else:
+            self._log("Using single video without splitting", "info", "process_single_video")
             print(f"📹 Single video, not splitting")
             # Use the whole video as a single clip
             orientation = self.creator.get_video_orientation(video_path)
@@ -444,6 +494,7 @@ class TikYouGenerator:
             })
         
         print(f"✅ Processing complete: {len(video_clips)} clips ready")
+        self._log(f"Video processing completed successfully: {len(video_clips)} clips ready", "info", "process_single_video")
         return video_clips
     
     def categorize_clips(self, video_clips):
@@ -534,6 +585,7 @@ class TikYouGenerator:
 
     def create_vertical_clip_from_horizontal(self, video_path):
         """Convert horizontal video to vertical format with optimized encoding"""
+        output_path = None  # Initialize to avoid scope issues
         try:
             # Use absolute path to avoid working directory issues
             # Get the backend directory (parent of vendors)
@@ -630,7 +682,7 @@ class TikYouGenerator:
         except Exception as e:
             print(f"❌ Error converting horizontal video: {e}")
             # Clean up partial file
-            if 'output_path' in locals() and os.path.exists(output_path):
+            if output_path and os.path.exists(output_path):
                 try:
                     os.remove(output_path)
                 except:
@@ -996,6 +1048,8 @@ class TikYouGenerator:
         """
         start_time = time.time()
         
+        self._log(f"Starting compilation generation: {num_compilations or 'unlimited'} videos, duration {min_duration}-{max_duration}s, max_reuse {max_reuse}", "info", "generate_tikyou_videos")
+        
         # Performance tracking
         performance_stats = {
             'start_time': start_time,
@@ -1024,6 +1078,7 @@ class TikYouGenerator:
         if self.tts_enabled:
             available_variations.append("TTS Intro")
         print(f"   ✅ Available variations: {', '.join(available_variations)}")
+        self._log(f"Available variations: {', '.join(available_variations)}", "info", "generate_tikyou_videos")
         
         # 1. Process the video and get clips (or use pre-processed clips)
         print(f"\n{'='*50}")
@@ -1033,14 +1088,17 @@ class TikYouGenerator:
         phase_start = time.time()
         if video_clips is None:
             # Only download and process if clips weren't provided
+            self._log("No pre-processed clips provided, downloading and processing video", "info", "generate_tikyou_videos")
             print(f"📥 No pre-processed clips provided, downloading and processing video...")
             video_clips = self.process_single_video(youtube_url)
             performance_stats['download_time'] = time.time() - phase_start
         else:
+            self._log(f"Using {len(video_clips)} pre-processed video clips", "info", "generate_tikyou_videos")
             print(f"✅ Using {len(video_clips)} pre-processed video clips")
             performance_stats['download_time'] = 0  # No download time since clips were provided
         
         if not video_clips:
+            self._log("No video clips were processed, exiting", "error", "generate_tikyou_videos")
             print("❌ No video clips were processed. Exiting.")
             return performance_stats
 
@@ -1055,7 +1113,10 @@ class TikYouGenerator:
         performance_stats['total_clips_processed'] = len(all_clips)
         performance_stats['processing_time'] = time.time() - phase_start
         
+        self._log(f"Categorized {len(all_clips)} clips (>=3s duration)", "info", "generate_tikyou_videos")
+        
         if not all_clips:
+            self._log("No clips long enough to be used in compilations", "error", "generate_tikyou_videos")
             print("❌ No clips long enough to be used in compilations.")
             return performance_stats
             
@@ -1071,6 +1132,7 @@ class TikYouGenerator:
         generation_start = time.time()
 
         if num_compilations:
+            self._log(f"Generating {num_compilations} compilation sets", "info", "generate_tikyou_videos")
             print(f"🎯 Generating {num_compilations} compilation sets (3 variations each)...")
             
             for i in range(num_compilations):
@@ -1079,6 +1141,8 @@ class TikYouGenerator:
                 print(f"COMPILATION SET {i+1}/{num_compilations}")
                 print(f"{'='*80}")
                 
+                self._log(f"Starting compilation set {i+1}/{num_compilations}", "info", "generate_tikyou_videos")
+                
                 # Update peak memory usage
                 current_memory = psutil.virtual_memory().percent
                 performance_stats['peak_memory_usage'] = max(performance_stats['peak_memory_usage'], current_memory)
@@ -1086,6 +1150,7 @@ class TikYouGenerator:
                 selected_clips = self._select_clips_with_constraints(all_clips, clip_usage, max_reuse, min_duration, max_duration)
                 
                 if not selected_clips:
+                    self._log("Could not create compilation with given constraints, stopping", "warning", "generate_tikyou_videos")
                     print("⚠️  Could not create a compilation with the given constraints. Stopping.")
                     performance_stats['failed_compilations'] += 1
                     break
@@ -1124,13 +1189,16 @@ class TikYouGenerator:
                     
                     performance_stats['total_output_size'] += total_set_size
                     print(f"   📦 Total set size: {total_set_size:.1f}MB")
+                    self._log(f"Compilation set {i+1} completed: {variations_result['successful_count']} variations, {total_set_size:.1f}MB", "info", "generate_tikyou_videos")
                 else:
                     performance_stats['failed_compilations'] += 1
+                    self._log(f"Compilation set {i+1} failed", "error", "generate_tikyou_videos")
                 
                 compilation_time = time.time() - compilation_start
                 print(f"   ⏱️  Total set creation time: {compilation_time:.1f}s")
 
         else:
+            self._log("Generating as many compilation sets as possible", "info", "generate_tikyou_videos")
             print("🎯 Generating as many compilation sets as possible...")
             compilation_num = 1
             while True:
@@ -1139,6 +1207,8 @@ class TikYouGenerator:
                 print(f"COMPILATION SET {compilation_num} (Unlimited Mode)")
                 print(f"{'='*80}")
                 
+                self._log(f"Starting compilation set {compilation_num} (unlimited mode)", "info", "generate_tikyou_videos")
+                
                 # Update peak memory usage
                 current_memory = psutil.virtual_memory().percent
                 performance_stats['peak_memory_usage'] = max(performance_stats['peak_memory_usage'], current_memory)
@@ -1146,6 +1216,7 @@ class TikYouGenerator:
                 selected_clips = self._select_clips_with_constraints(all_clips, clip_usage, max_reuse, min_duration, max_duration)
                 
                 if not selected_clips:
+                    self._log("No more valid compilations can be created with remaining clips", "info", "generate_tikyou_videos")
                     print("✅ No more valid compilations can be created with the remaining clips.")
                     break
                 
@@ -1183,8 +1254,10 @@ class TikYouGenerator:
                     
                     performance_stats['total_output_size'] += total_set_size
                     print(f"   📦 Total set size: {total_set_size:.1f}MB")
+                    self._log(f"Compilation set {compilation_num} completed: {variations_result['successful_count']} variations, {total_set_size:.1f}MB", "info", "generate_tikyou_videos")
                 else:
                     performance_stats['failed_compilations'] += 1
+                    self._log(f"Compilation set {compilation_num} failed", "error", "generate_tikyou_videos")
                 
                 compilation_time = time.time() - compilation_start
                 print(f"   ⏱️  Total set creation time: {compilation_time:.1f}s")
@@ -1219,6 +1292,9 @@ class TikYouGenerator:
         print(f"   🔍 Analysis & Categorization: {performance_stats['processing_time']:.1f}s")
         print(f"   🎬 Video Generation: {performance_stats['generation_time']:.1f}s")
         print(f"   🏁 Total Time: {total_time:.1f}s")
+        
+        # Log final summary
+        self._log(f"Generation completed: {performance_stats['successful_compilations']} sets, {performance_stats['total_variations']} variations, {total_time:.1f}s total", "info", "generate_tikyou_videos")
         
         if performance_stats['successful_compilations'] > 0:
             avg_time_per_set = performance_stats['generation_time'] / performance_stats['successful_compilations']

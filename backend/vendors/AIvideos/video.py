@@ -1,11 +1,19 @@
 import os
 import uuid
 import subprocess
+import sys
 
 import requests
 import srt_equalizer
 import assemblyai as aai
 from .enhanced_subtitles import SubtitleConfig
+
+# Add path to access backend logging
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+from logging_config import get_logger, log_generation_step, log_file_operation, log_api_call
+
+# Initialize logger for this module
+logger = get_logger("video_generator.ai_videos")
 
 
 from typing import List, Dict, Optional, Union, Any, cast, Tuple
@@ -220,7 +228,7 @@ def save_video(video_url: str, directory: str = "../../../temp") -> str:
     
     for attempt in range(max_retries):
         try:
-            print(colored(f"[info] Downloading video (attempt {attempt + 1}/{max_retries}): {video_url[:60]}...", "cyan"))
+            logger.debug(f"Video download attempt {attempt + 1}/{max_retries}: {video_url[:60]}...")
             
             # Use streaming download with timeout
             response = requests.get(video_url, timeout=timeout, stream=True)
@@ -232,21 +240,21 @@ def save_video(video_url: str, directory: str = "../../../temp") -> str:
                         f.write(chunk)
             
             file_size = os.path.getsize(video_path)
-            print(colored(f"[success] Video downloaded successfully: {file_size:,} bytes", "green"))
+            logger.info(f"Video downloaded successfully: {file_size:,} bytes")
             return video_path
             
         except requests.exceptions.Timeout:
-            print(colored(f"[warn] Download timeout on attempt {attempt + 1}", "yellow"))
+            logger.warning(f"Download timeout on attempt {attempt + 1}")
             if attempt == max_retries - 1:
                 raise RuntimeError(f"Video download timed out after {max_retries} attempts (timeout: {timeout}s)")
                 
         except requests.exceptions.RequestException as e:
-            print(colored(f"[warn] Request error on attempt {attempt + 1}: {e}", "yellow"))
+            logger.warning(f"Request error on attempt {attempt + 1}: {e}")
             if attempt == max_retries - 1:
                 raise RuntimeError(f"Video download failed after {max_retries} attempts: {str(e)}")
                 
         except Exception as e:
-            print(colored(f"[warn] Unexpected error on attempt {attempt + 1}: {e}", "yellow"))
+            logger.warning(f"Unexpected error on attempt {attempt + 1}: {e}")
             if attempt == max_retries - 1:
                 raise RuntimeError(f"Video download failed with unexpected error: {str(e)}")
         

@@ -13,6 +13,7 @@ import os
 import random
 import tempfile
 import warnings
+import logging
 import soundfile as sf
 from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, afx
 from google import genai
@@ -22,12 +23,23 @@ import torch
 
 
 import uuid
+import sys
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
     # dotenv not installed, environment variables must be set manually
     pass
+
+# Initialize logger for this module
+logger = logging.getLogger("video_generator.compilation.tts")
+
+# Define placeholder logging functions that were imported but may not exist
+def log_generation_step(logger, *args, **kwargs):
+    logger.info(f"Generation step: {args}, {kwargs}")
+
+def log_file_operation(logger, operation, path, **kwargs):
+    logger.info(f"File {operation}: {path}, {kwargs}")
 
 
 class TTSGenerator:
@@ -46,7 +58,7 @@ class TTSGenerator:
         self.client = genai.Client(api_key=self.api_key)
         
         # Initialize Kokoro TTS pipeline
-        print("🎤 Initializing Kokoro TTS...")
+        logger.info("Initializing Kokoro TTS pipeline...")
         
         # Suppress known warnings from the Kokoro model
         with warnings.catch_warnings():

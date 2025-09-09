@@ -232,20 +232,39 @@ export default function CleanupPage() {
 
                   {/* Recent Files */}
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-muted-foreground">Recent Files:</h4>
-                    <div className="space-y-1 max-h-40 overflow-y-auto">
-                      {dir.files.map((file) => (
-                        <div key={file.name} className="flex items-center justify-between py-1 px-2 rounded bg-muted/20">
-                          <div className="flex items-center gap-2">
-                            <FaFile className="size-3 text-muted-foreground" />
-                            <span className="text-sm font-mono truncate max-w-xs">{file.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{formatFileSize(file.size_mb)}</span>
-                            <span>{formatDate(file.modified)}</span>
-                          </div>
+                    <h4 className="text-sm font-medium text-muted-foreground">Directory Information:</h4>
+                    <div className="space-y-1">
+                      <div className="text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <span><strong>Path:</strong> {dir.path}</span>
                         </div>
-                      ))}
+                        {dir.oldest_file_age_hours != null && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span><strong>Oldest file:</strong> {dir.oldest_file_age_hours.toFixed(1)} hours old</span>
+                          </div>
+                        )}
+                      </div>
+                      {dir.files && dir.files.length > 0 ? (
+                        <div className="space-y-1 max-h-40 overflow-y-auto">
+                          {dir.files.map((file) => (
+                            <div key={file.name} className="flex items-center justify-between py-1 px-2 rounded bg-muted/20">
+                              <div className="flex items-center gap-2">
+                                <FaFile className="size-3 text-muted-foreground" />
+                                <span className="text-sm font-mono truncate max-w-xs">{file.name}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>{formatFileSize(file.size_mb)}</span>
+                                <span>{formatDate(file.modified)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground py-2">
+                          <FaFolder className="inline size-3 mr-2" />
+                          Directory details not available
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>

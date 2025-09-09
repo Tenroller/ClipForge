@@ -35,7 +35,7 @@ except ImportError:
     CONTENT_TYPE_LATEST = "text/plain"
     PROMETHEUS_AVAILABLE = False
 
-from logging_config import get_logger
+from .logging_config import get_logger
 
 logger = get_logger("metrics")
 

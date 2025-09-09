@@ -12,6 +12,7 @@ import os
 import random
 import subprocess
 import sys
+import logging
 from pathlib import Path
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
@@ -26,6 +27,19 @@ import re
 import time
 import yt_dlp
 import shutil
+
+# Initialize logger for this module
+logger = logging.getLogger("video_generator.compilation.processor")
+
+# Define placeholder logging functions that were imported but may not exist
+def log_generation_step(logger, *args, **kwargs):
+    logger.info(f"Generation step: {args}, {kwargs}")
+
+def log_file_operation(logger, operation, path, **kwargs):
+    logger.info(f"File {operation}: {path}, {kwargs}")
+
+def log_api_call(logger, *args, **kwargs):
+    logger.info(f"API call: {args}, {kwargs}")
 
 
 class SimpleScene:
@@ -53,11 +67,15 @@ def clean_text_for_filename(text):
 
 class CatVideoProcessor:
     def __init__(self, output_dir="final_videos", ffmpeg_path=None):
-        # FFmpeg 7+ compatibility fixes
-        if "FFMPEG_BINARY" not in os.environ:
-            os.environ["FFMPEG_BINARY"] = r'C:\ffmpeg\bin\ffmpeg.exe'
-        if "FFPROBE_BINARY" not in os.environ:
-            os.environ["FFPROBE_BINARY"] = r'C:\ffmpeg\bin\ffprobe.exe'
+        # FFmpeg 7+ compatibility fixes - cross-platform
+        import sys
+        import os
+        
+        # Add the backend directory to the Python path
+        sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+        from utils.ffmpeg_utils import setup_ffmpeg_environment
+        
+        setup_ffmpeg_environment()
         
         # Set FFmpeg 7+ compatibility flags
         os.environ["FFMPEG_7_COMPAT"] = "1"
@@ -114,7 +132,8 @@ class CatVideoProcessor:
     
     def download_video(self, video_id, max_retries=3):
         """Download a video from YouTube using yt-dlp with improved error handling and YouTube compatibility"""
-        print(f"Downloading video: {video_id}")
+        logger.info(f"Starting YouTube video download for: {video_id}")
+        download_start = time.time()
         
         # Create specific directory for this video
         video_output_dir = os.path.join(self.output_dir, video_id)
@@ -125,7 +144,8 @@ class CatVideoProcessor:
         
         for attempt in range(max_retries):
             try:
-                print(f"Attempt {attempt + 1} of {max_retries}")
+                logger.debug(f"YouTube download attempt {attempt + 1} of {max_retries} for video: {video_id}")
+                attempt_start = time.time()
                 
                 # Enhanced yt-dlp options to handle YouTube's recent changes
                 ydl_opts = {
@@ -1745,7 +1765,6 @@ class CatVideoProcessor:
                 continue
 
             # Add a small delay to ensure file is fully written (Windows file locking issue)
-            import time
             time.sleep(0.5)
 
             # Get video info

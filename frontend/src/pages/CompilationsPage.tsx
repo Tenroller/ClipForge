@@ -6,8 +6,8 @@ import { Label } from '@/components/components/ui/label'
 import { Button } from '@/components/components/ui/button'
 import { Switch } from '@/components/components/ui/switch'
 import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip } from 'react-icons/fa'
-import { MultiJobPanel } from '@/components/MultiJobPanel'
 import ResultPanel from '@/components/ResultPanel'
+import JobStartedNotification from '@/components/JobStartedNotification'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
 import { GeneratedVideosPanel } from '@/components/GeneratedVideosPanel'
@@ -126,17 +126,25 @@ export default function CompilationsPage() {
       </div>
 
       <div className="slide-in space-y-8">
-        {/* Job Queue - Show only when there are jobs */}
+        {/* Show active jobs as simple notifications with auto-redirect */}
         {(() => {
-          const brainrotJobs = jobManager.jobs.filter(j => j.workflow === 'brainrot');
-          console.log('CompilationsPage: Brainrot jobs count:', brainrotJobs.length, brainrotJobs);
-          return brainrotJobs.length > 0;
-        })() && (
-          <MultiJobPanel
-            jobs={jobManager.jobs.filter(j => j.workflow === 'brainrot')}
-            onViewResult={handleViewResult}
-            onRemoveJob={jobManager.removeJob}
-            onClearCompleted={jobManager.clearCompletedJobs}
+          const activeJobs = jobManager.jobs.filter(j => j.workflow === 'brainrot' && ['queued', 'running'].includes(j.status))
+          return activeJobs.map(job => (
+            <JobStartedNotification 
+              key={job.id}
+              jobId={job.id}
+              workflow={job.workflow}
+              autoRedirect={true}
+              redirectDelay={3000}
+            />
+          ))
+        })()}
+
+        {/* Result Panel - Show when a result is selected */}
+        {selectedResult && (
+          <ResultPanel
+            job={selectedResult}
+            onClose={handleCloseResult}
           />
         )}
 

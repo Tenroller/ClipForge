@@ -15,13 +15,14 @@ import {
   FaDownload,
   FaHistory,
   FaChevronRight,
-  FaTrash
+  FaTrash,
+  FaImages
 } from 'react-icons/fa'
 import { cn } from '@/components/lib/utils'
 
 type SidebarProps = {
-  currentView: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads' | 'cleanup'
-  onNavigate: (view: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads' | 'cleanup') => void
+  currentView: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads' | 'cleanup' | 'videos'
+  onNavigate: (view: 'landing' | 'moneyprinter' | 'brainrot' | 'activity' | 'downloads' | 'cleanup' | 'videos') => void
   onSettingsClick?: () => void
   className?: string
   isCollapsed?: boolean
@@ -66,6 +67,13 @@ export default function Sidebar({
   ]
 
   const utilityItems = [
+    {
+      id: 'videos',
+      label: 'Video Gallery',
+      icon: <FaImages className="size-4" />,
+      description: 'View all videos',
+      disabled: false
+    },
     {
       id: 'activity',
       label: 'Activity',
@@ -201,6 +209,7 @@ export default function Sidebar({
               )}
               disabled={item.disabled}
               onClick={() => {
+                if (item.id === 'videos') onNavigate('videos')
                 if (item.id === 'activity') onNavigate('activity')
                 if (item.id === 'downloads') onNavigate('downloads')
                 if (item.id === 'cleanup') onNavigate('cleanup')

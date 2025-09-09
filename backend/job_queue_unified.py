@@ -25,7 +25,7 @@ from typing import Dict, Any, Optional, List, Callable
 from dataclasses import dataclass
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, Future
-from logging_config import get_logger
+from .logging_config import get_logger
 
 logger = get_logger("job_queue_unified")
 
@@ -97,8 +97,87 @@ class UnifiedJobQueue:
         self.worker_thread: Optional[threading.Thread] = None
         self.job_store = job_store  # Database integration
 
+        # Handle orphaned jobs on startup
+        self._handle_orphaned_jobs()
+
         # Start the worker thread
         self.start_worker()
+
+    def _handle_orphaned_jobs(self):
+        """
+        Handle jobs that were marked as running but are orphaned due to server restart.
+        
+        This method finds jobs in the database that have status 'running' but are not
+        in the current job queue (because the server restarted). It marks them as
+        cancelled with an appropriate message.
+        """
+        if not self.job_store:
+            return
+            
+        try:
+            # Get all jobs with running status from database
+            running_jobs = self.job_store.list_jobs(limit=1000, status="running")
+            orphaned_count = 0
+            hung_count = 0
+            
+            from datetime import datetime, timezone
+            current_time = datetime.now(timezone.utc)
+            
+            for job_data in running_jobs:
+                job_id = job_data.get('id')
+                if not job_id:
+                    continue
+                    
+                # Check if job is orphaned (not in current queue)
+                if job_id not in self.jobs:
+                    orphaned_count += 1
+                    
+                    # Check if job has been running for too long (potential hung job)
+                    started_at = job_data.get('started_at')
+                    if started_at:
+                        try:
+                            # Parse ISO format datetime string
+                            if started_at.endswith('Z'):
+                                started_at = started_at[:-1] + '+00:00'
+                            start_time = datetime.fromisoformat(started_at)
+                            if start_time.tzinfo is None:
+                                start_time = start_time.replace(tzinfo=timezone.utc)
+                            
+                            running_duration = (current_time - start_time).total_seconds()
+                            max_duration = int(os.getenv("VIDEOHELPER_MAX_JOB_DURATION_HOURS", "4")) * 3600  # Default 4 hours
+                            
+                            if running_duration > max_duration:
+                                hung_count += 1
+                                error_msg = f"Job exceeded maximum duration ({running_duration/3600:.1f}h > 4h) - automatically cancelled"
+                                logger.warning(f"Job {job_id} was hung (running for {running_duration/3600:.1f}h)")
+                            else:
+                                error_msg = f"Server restarted while job was running (was running for {running_duration/60:.1f}m) - automatically cancelled"
+                        except Exception as e:
+                            logger.warning(f"Failed to parse start time for job {job_id}: {e}")
+                            error_msg = "Server restarted while job was running - automatically cancelled"
+                    else:
+                        error_msg = "Server restarted while job was running - automatically cancelled"
+                    
+                    # Mark as cancelled with explanation
+                    self.job_store.update_job(
+                        job_id,
+                        status="cancelled", 
+                        error=error_msg,
+                        ended_at=current_time.isoformat(),
+                        duration_seconds=0
+                    )
+                    
+                    logger.warning(f"Marked orphaned job {job_id} as cancelled")
+            
+            if orphaned_count > 0:
+                logger.warning(f"Found and cancelled {orphaned_count} orphaned jobs on startup ({hung_count} were hung for >4h)")
+                if hung_count > 0:
+                    logger.warning(f"Consider investigating why {hung_count} jobs were running for over 4 hours")
+            else:
+                logger.info("No orphaned jobs found on startup - all jobs are properly tracked")
+                
+        except Exception as e:
+            logger.error(f"Failed to handle orphaned jobs: {e}")
 
     def start_worker(self):
         """Start the background worker thread."""
@@ -571,7 +650,7 @@ def get_job_queue() -> UnifiedJobQueue:
     """Get or create the global job queue instance."""
     global _job_queue
     if _job_queue is None:
-        from database import get_job_store
+        from .database import get_job_store
 
         max_workers = int(os.getenv("VIDEOHELPER_MAX_CONCURRENT_JOBS", "2"))
         job_store = get_job_store()

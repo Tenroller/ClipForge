@@ -1,0 +1,194 @@
+"""
+Job management service layer.
+"""
+
+import time
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timezone
+
+
+class JobManagementService:
+    """Service for handling job management operations."""
+    
+    def __init__(self):
+        from ..database import get_job_store
+        from ..job_queue_unified import get_job_queue
+        self.job_store = get_job_store()
+        self.job_queue = get_job_queue()
+    
+    def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Get job by ID."""
+        return self.job_store.get_job(job_id)
+    
+    def list_jobs(self, limit: int = 50, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List jobs with optional filtering."""
+        return self.job_store.list_jobs(limit=min(limit, 100), status=status)
+    
+    def cancel_job(self, job_id: str) -> bool:
+        """Cancel a job."""
+        if not self.job_queue.cancel_job(job_id):
+            return False
+        self._update_job(job_id, status="cancelled")
+        return True
+    
+    def get_job_logs(self, job_id: str) -> Dict[str, Any]:
+        """Get comprehensive logs for a specific job."""
+        job = self.job_store.get_job(job_id)
+        if not job:
+            return {}
+        
+        # Get logs from the job record
+        job_logs = job.get('logs', [])
+        
+        # Try to get additional logs from progress tracker if job is active
+        additional_logs = []
+        try:
+            from ..utils.progress_tracker import get_progress_tracker
+            tracker = get_progress_tracker(job_id)
+            progress_data = tracker.get_current_progress()
+            if 'logs' in progress_data:
+                additional_logs = progress_data['logs']
+        except Exception as e:
+            from ..logging_config import get_logger
+            logger = get_logger("job_management")
+            logger.warning(f"Failed to get additional logs for job {job_id}: {e}")
+        
+        # Combine all logs and ensure they're timestamped
+        all_logs = []
+        
+        # Add job logs
+        for log_entry in job_logs:
+            if isinstance(log_entry, str):
+                all_logs.append({
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'message': log_entry,
+                    'source': 'job'
+                })
+            else:
+                all_logs.append(log_entry)
+        
+        # Add progress tracker logs
+        for log_entry in additional_logs:
+            if isinstance(log_entry, str):
+                all_logs.append({
+                    'timestamp': datetime.now(timezone.utc).isoformat(),
+                    'level': 'info',
+                    'message': log_entry,
+                    'source': 'progress'
+                })
+            elif isinstance(log_entry, dict):
+                # Format timestamp if it's a float (Unix timestamp)
+                timestamp = log_entry.get('timestamp', time.time())
+                if isinstance(timestamp, (int, float)):
+                    timestamp = datetime.fromtimestamp(timestamp, timezone.utc).isoformat()
+                
+                all_logs.append({
+                    'timestamp': timestamp,
+                    'level': log_entry.get('level', 'info'),
+                    'message': log_entry.get('message', str(log_entry)),
+                    'source': log_entry.get('source', 'progress')
+                })
+            else:
+                all_logs.append(log_entry)
+        
+        # Sort logs by timestamp
+        all_logs.sort(key=lambda x: x.get('timestamp', ''))
+        
+        return {
+            'job_id': job_id,
+            'logs': all_logs,
+            'total_logs': len(all_logs)
+        }
+    
+    def get_resumable_jobs(self) -> Dict[str, Any]:
+        """Get jobs that can be resumed (failed or cancelled jobs)."""
+        try:
+            from ..database import get_job_store
+            job_store = get_job_store()
+            
+            # Get jobs that are in resumable states
+            resumable_statuses = ['error', 'cancelled']
+            all_resumable = []
+            
+            for status in resumable_statuses:
+                jobs = job_store.list_jobs(limit=50, status=status)
+                all_resumable.extend(jobs)
+            
+            # Filter jobs that have partial progress and can actually be resumed
+            resumable_jobs = []
+            for job in all_resumable:
+                # Check if job has enough info to resume
+                if (job.get('workflow') and 
+                    job.get('request_data') and 
+                    job.get('step')):  # Has made some progress
+                    
+                    # Add next step information
+                    next_step = self._get_next_step_for_workflow(job['workflow'], job.get('step', ''))
+                    job['next_step'] = next_step
+                    resumable_jobs.append(job)
+            
+            return {
+                'resumable_jobs': resumable_jobs,
+                'total_count': len(resumable_jobs)
+            }
+        except Exception as e:
+            from ..utils.error_handling import handle_error
+            error_info = handle_error(e, {'operation': 'get_resumable_jobs'})
+            return {
+                'error': error_info['error']['message'],
+                'resumable_jobs': [],
+                'total_count': 0
+            }
+    
+    def _update_job(self, job_id: str, **fields: Any) -> None:
+        """Update job in unified queue (which handles database persistence)."""
+        # Handle special fields that need queue-specific processing
+        if 'logs' in fields and fields['logs']:
+            # Add log message to queue
+            self.job_queue.update_job_progress(job_id, fields.get('step', ''), fields['logs'][-1])
+            fields.pop('logs')  # Remove from database update
+
+        if 'step' in fields:
+            self.job_queue.update_job_progress(job_id, fields['step'])
+            fields.pop('step')  # Remove from database update
+
+        # Update database directly for remaining fields
+        if fields:
+            self.job_store.update_job(job_id, **fields)
+
+        self._enqueue_job_update(job_id)
+    
+    def _enqueue_job_update(self, job_id: str) -> None:
+        """Thread-safe enqueue of a job update for websocket broadcast."""
+        try:
+            from ..core.lifespan import MAIN_LOOP, ASYNC_QUEUE
+            # Get job data from unified queue (which includes database data)
+            payload = self.job_queue.get_job_status(job_id)
+            if payload and MAIN_LOOP is not None:
+                MAIN_LOOP.call_soon_threadsafe(ASYNC_QUEUE.put_nowait, (job_id, payload))
+        except Exception:
+            # Best-effort only
+            pass
+    
+    def _get_next_step_for_workflow(self, workflow: str, last_step: str) -> str:
+        """Determine the next step for a workflow based on the last completed step."""
+        if workflow == "moneyprinter":
+            steps = ["validate_env", "fetch_music", "script_generation", "search_terms", "stock_download", "tts", "subtitles", "compose_video"]
+            try:
+                current_index = steps.index(last_step)
+                if current_index < len(steps) - 1:
+                    return steps[current_index + 1]
+                return "completed"
+            except ValueError:
+                return steps[0]  # Start from beginning if step not found
+        elif workflow == "brainrot":
+            steps = ["process_video", "generate_compilations"]
+            try:
+                current_index = steps.index(last_step)
+                if current_index < len(steps) - 1:
+                    return steps[current_index + 1]
+                return "completed"
+            except ValueError:
+                return steps[0]
+        else:
+            return "unknown"

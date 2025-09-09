@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import MoneyPrinterForm from '@/components/components/moneyprinter-form'
 import PreviewPanel from '@/components/components/preview-panel'
-import { MultiJobPanel } from '@/components/MultiJobPanel'
 import ResultPanel from '@/components/ResultPanel'
+import JobStartedNotification from '@/components/JobStartedNotification'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
 import { generateMoneyPrinterVideo } from '@/lib/api'
@@ -149,15 +149,19 @@ export default function CreatorPage() {
       </div>
 
       <div className="slide-in space-y-8">
-        {/* Job Queue - Show only when there are jobs */}
-        {jobManager.jobs.length > 0 && (
-          <MultiJobPanel
-            jobs={jobManager.jobs}
-            onViewResult={handleViewResult}
-            onRemoveJob={jobManager.removeJob}
-            onClearCompleted={jobManager.clearCompletedJobs}
-          />
-        )}
+        {/* Show active jobs as simple notifications with auto-redirect */}
+        {(() => {
+          const activeJobs = jobManager.jobs.filter(j => j.workflow === 'moneyprinter' && ['queued', 'running'].includes(j.status))
+          return activeJobs.map(job => (
+            <JobStartedNotification 
+              key={job.id}
+              jobId={job.id}
+              workflow={job.workflow}
+              autoRedirect={true}
+              redirectDelay={3000}
+            />
+          ))
+        })()}
 
         {/* Result Panel - Show when a result is selected */}
         {selectedResult && (

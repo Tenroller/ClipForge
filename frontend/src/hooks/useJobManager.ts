@@ -134,6 +134,18 @@ export function useJobManager() {
     })
   }
 
+  const getResumableJobs = async (): Promise<ManagedJob[]> => {
+    const jobManager = getJobManagerInstance()
+    return jobManager.getResumableJobs()
+  }
+
+  const forceCleanup = async (): Promise<void> => {
+    const jobManager = getJobManagerInstance()
+    await jobManager.forceCleanup()
+    // Refresh the local jobs state after cleanup
+    setJobs(jobManager.getAllJobs())
+  }
+
   return {
     jobs,
     initialized,
@@ -145,5 +157,7 @@ export function useJobManager() {
     getActiveJobs,
     validateAllJobs,
     cleanupLegacyJobs,
+    getResumableJobs,
+    forceCleanup,
   }
 }

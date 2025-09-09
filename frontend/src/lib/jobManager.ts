@@ -152,26 +152,64 @@ class JobManager {
     }
   }
 
+  async resumeJob(id: string): Promise<boolean> {
+    try {
+      // For now, job resumption isn't fully implemented
+      // TODO: Implement proper job resumption in the backend
+      console.warn('Job resumption is not yet implemented')
+      return false
+      
+      /*
+      const res = await fetch(`${this.apiBase}/api/jobs/${id}/resume`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      })
+      
+      if (res.ok) {
+        // Add the job to active tracking if resume was successful
+        const jobData = await res.json()
+        if (jobData.id) {
+          this.addJob(jobData.id, jobData.workflow, jobData)
+        }
+        return true
+      }
+      return false
+      */
+    } catch (e) {
+      console.error('Failed to resume job:', e)
+      return false
+    }
+  }
+
   async getResumableJobs(): Promise<ManagedJob[]> {
     try {
       const res = await fetch(`${this.apiBase}/api/jobs/resumable`)
       if (res.ok) {
         const data = await res.json()
-        return data.resumable_jobs.map((job: any) => ({
-          id: job.id,
-          workflow: job.workflow,
-          status: job.status,
-          steps: this.getInitialSteps(job.workflow),
-          createdAt: new Date(job.created_at).getTime(),
-          progress: 0,
-          error: job.error,
-          canResume: true,
-          resumeInfo: {
-            lastCompletedStep: job.last_completed_step,
-            completedSteps: job.completed_steps,
-            nextStep: job.next_step
+        return data.resumable_jobs.map((job: any) => {
+          // Calculate completed steps based on workflow and current step
+          const steps = this.getInitialSteps(job.workflow)
+          const currentStepIndex = steps.findIndex(s => s.key === job.step)
+          const completedSteps = Math.max(0, currentStepIndex)
+          
+          return {
+            id: job.id,
+            workflow: job.workflow,
+            status: job.status,
+            steps: steps,
+            createdAt: new Date(job.created_at).getTime(),
+            progress: completedSteps > 0 ? Math.round((completedSteps / steps.length) * 100) : 0,
+            error: job.error,
+            canResume: true,
+            resumeInfo: {
+              lastCompletedStep: job.step || 'init',
+              completedSteps: completedSteps,
+              nextStep: job.next_step || 'unknown'
+            }
           }
-        }))
+        })
       }
       return []
     } catch (e) {
@@ -518,64 +556,157 @@ class JobManager {
 
       devLog(`JobManager: Loading ${jobsData.length} jobs from localStorage`)
       
-      // Restore jobs and validate them
-      jobsData.forEach((jobData: any) => {
-        if (jobData.id && jobData.workflow) {
-          this.jobs.set(jobData.id, jobData)
-          
-          // Only reconnect to active jobs - this will trigger validation
-          if (!['done', 'error', 'cancelled'].includes(jobData.status)) {
-            devLog(`JobManager: Reconnecting to active job ${jobData.id}`)
-            this.connectJobUpdates(jobData.id)
-          }
+      // First, filter out any jobs that are clearly invalid (malformed IDs, etc.)
+      const validJobsData = jobsData.filter((jobData: any) => {
+        if (!jobData.id || !jobData.workflow || typeof jobData.id !== 'string') {
+          devLog(`JobManager: Removing malformed job data:`, jobData)
+          return false
         }
+        return true
+      })
+
+      // Load valid jobs into memory but don't auto-connect yet
+      validJobsData.forEach((jobData: any) => {
+        this.jobs.set(jobData.id, jobData)
       })
       
-      // Check resumability for failed/cancelled jobs
-      this.checkAndUpdateResumability()
-      
-      // Aggressively validate all jobs to clean up any 404s immediately
-      setTimeout(() => {
-        this.validateAllJobs().then(removedCount => {
-          if (removedCount > 0) {
-            devLog(`JobManager: Initial cleanup removed ${removedCount} non-existent jobs`)
+      // Batch validate all jobs first to remove 404s before attempting connections
+      this.batchValidateJobs().then((validJobIds) => {
+        devLog(`JobManager: ${validJobIds.length} jobs validated, reconnecting to active ones`)
+        
+        // Only now connect to active jobs that passed validation
+        validJobIds.forEach(jobId => {
+          const job = this.jobs.get(jobId)
+          if (job && !['done', 'error', 'cancelled'].includes(job.status)) {
+            devLog(`JobManager: Reconnecting to active job ${jobId}`)
+            this.connectJobUpdates(jobId)
           }
         })
-      }, 1000) // Wait a bit for connections to settle
+        
+        // Check resumability for failed/cancelled jobs
+        this.checkAndUpdateResumability()
+      }).catch(error => {
+        devLog(`JobManager: Error during batch validation:`, error)
+      })
       
-      // Clean up any jobs that were removed during validation
-      this.saveToLocalStorage()
     } catch (e) {
       console.error('Failed to load jobs from localStorage:', e)
     }
   }
 
-  // Method to manually clean up non-existent jobs (can be called externally)
-  async validateAllJobs(): Promise<number> {
+  // Method to batch validate jobs without flooding with requests
+  private async batchValidateJobs(): Promise<string[]> {
     const allJobs = this.getAllJobs()
-    let removedCount = 0
+    const validJobIds: string[] = []
+    const invalidJobIds: string[] = []
 
-    devLog(`JobManager: Validating ${allJobs.length} jobs...`)
+    devLog(`JobManager: Batch validating ${allJobs.length} jobs...`)
 
-    for (const job of allJobs) {
-      try {
-        const exists = await this.validateJobExists(job.id, 2) // Fewer retries for bulk validation
-        if (!exists) {
-          devLog(`JobManager: Removing non-existent job ${job.id}`)
-          this.removeJob(job.id)
-          removedCount++
+    // Validate jobs in small batches to avoid overwhelming the server
+    const batchSize = 3
+    for (let i = 0; i < allJobs.length; i += batchSize) {
+      const batch = allJobs.slice(i, i + batchSize)
+      const promises = batch.map(async (job) => {
+        try {
+          const exists = await this.validateJobExists(job.id, 1) // Single retry for batch validation
+          return { jobId: job.id, exists }
+        } catch (e) {
+          devLog(`JobManager: Failed to validate job ${job.id}:`, e)
+          return { jobId: job.id, exists: false }
         }
-      } catch (e) {
-        console.error(`Failed to validate job ${job.id}:`, e)
-        // Don't remove on validation error - job might still exist
+      })
+
+      const results = await Promise.all(promises)
+      results.forEach(({ jobId, exists }) => {
+        if (exists) {
+          validJobIds.push(jobId)
+        } else {
+          invalidJobIds.push(jobId)
+        }
+      })
+
+      // Small delay between batches to be gentle on the server
+      if (i + batchSize < allJobs.length) {
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
     }
 
-    if (removedCount > 0) {
-      devLog(`JobManager: Cleaned up ${removedCount} invalid jobs`)
+    // Remove invalid jobs
+    invalidJobIds.forEach(jobId => {
+      devLog(`JobManager: Removing non-existent job ${jobId}`)
+      this.removeJob(jobId)
+    })
+
+    if (invalidJobIds.length > 0) {
+      devLog(`JobManager: Cleaned up ${invalidJobIds.length} invalid jobs`)
+      this.saveToLocalStorage()
     }
 
-    return removedCount
+    return validJobIds
+  }
+
+  // Method to manually clean up non-existent jobs (can be called externally)
+  async validateAllJobs(): Promise<number> {
+    return await this.batchValidateJobs().then(validJobIds => {
+      const allJobIds = Array.from(this.jobs.keys())
+      const removedCount = allJobIds.length - validJobIds.length
+      return removedCount
+    })
+  }
+
+  // Force cleanup of localStorage and invalid jobs
+  async forceCleanup(): Promise<void> {
+    devLog('JobManager: Starting force cleanup...')
+    
+    // Clear any problematic localStorage entries
+    const keysToCheck = [
+      'jobManager:jobs',
+      'creator:lastJob', 
+      'compilations:lastJob'
+    ]
+    
+    keysToCheck.forEach(key => {
+      try {
+        const data = localStorage.getItem(key)
+        if (data) {
+          if (key === 'jobManager:jobs') {
+            // Validate job manager data
+            const parsed = JSON.parse(data)
+            if (Array.isArray(parsed)) {
+              const validJobs = parsed.filter(job => 
+                job.id && 
+                typeof job.id === 'string' && 
+                job.workflow && 
+                ['moneyprinter', 'brainrot'].includes(job.workflow)
+              )
+              if (validJobs.length !== parsed.length) {
+                devLog(`JobManager: Cleaned ${parsed.length - validJobs.length} malformed jobs from localStorage`)
+                localStorage.setItem(key, JSON.stringify(validJobs))
+              }
+            }
+          } else {
+            // Legacy job references - validate the job ID format
+            const parsed = JSON.parse(data)
+            if (parsed?.jobId && typeof parsed.jobId === 'string') {
+              // If it looks like a UUID, keep it for validation, otherwise remove
+              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+              if (!uuidRegex.test(parsed.jobId)) {
+                devLog(`JobManager: Removing invalid legacy job ID format: ${parsed.jobId}`)
+                localStorage.removeItem(key)
+              }
+            }
+          }
+        }
+      } catch (e) {
+        devLog(`JobManager: Error cleaning localStorage key ${key}:`, e)
+        localStorage.removeItem(key) // Remove corrupted data
+      }
+    })
+    
+    // Validate all current jobs
+    await this.batchValidateJobs()
+    
+    devLog('JobManager: Force cleanup completed')
   }
 
   destroy() {

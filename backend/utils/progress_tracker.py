@@ -91,6 +91,9 @@ class ProgressTracker:
         self.estimated_completion_time: Optional[float] = None
         self.callbacks: List[Callable] = []
         self.lock = threading.Lock()
+        
+        # Log tracking
+        self.logs: List[Dict[str, Any]] = []
 
         # Performance tracking
         self.performance_metrics = {
@@ -245,6 +248,7 @@ class ProgressTracker:
                 'estimated_completion_time': self.estimated_completion_time,
                 'estimated_remaining_time': self._calculate_remaining_time(),
                 'steps': [step.to_dict() for step in self.steps],
+                'logs': self.logs,
                 'performance_metrics': self.performance_metrics
             }
 
@@ -256,6 +260,31 @@ class ProgressTracker:
             callback: Function to call with progress updates
         """
         self.callbacks.append(callback)
+
+    def add_log(self, message: str, level: str = "info", source: str = "progress"):
+        """
+        Add a log message to the tracker.
+
+        Args:
+            message: Log message
+            level: Log level (info, warning, error, debug)
+            source: Source of the log message
+        """
+        with self.lock:
+            log_entry = {
+                'timestamp': time.time(),
+                'level': level,
+                'source': source,
+                'message': message
+            }
+            self.logs.append(log_entry)
+            
+            # Keep only last 1000 log entries
+            if len(self.logs) > 1000:
+                self.logs = self.logs[-1000:]
+
+            # Notify callbacks
+            self._notify_callbacks()
 
     def record_performance_metric(self, metric_type: str, value: Any):
         """
@@ -329,7 +358,25 @@ class ProgressTracker:
 
     def _notify_callbacks(self):
         """Notify all registered callbacks of progress updates."""
-        progress_info = self.get_current_progress()
+        # Build progress info directly since we're already inside the lock context
+        # Avoid calling get_current_progress() which would try to acquire the lock again
+        current_step = None
+        if self.steps and self.current_step_index < len(self.steps):
+            current_step = self.steps[self.current_step_index]
+
+        progress_info = {
+            'job_id': self.job_id,
+            'overall_progress': self.overall_progress,
+            'current_step': current_step.to_dict() if current_step else None,
+            'completed_steps': self.completed_steps,
+            'total_steps': self.total_steps,
+            'elapsed_time': time.time() - self.started_at,
+            'estimated_completion_time': self.estimated_completion_time,
+            'estimated_remaining_time': self._calculate_remaining_time(),
+            'steps': [step.to_dict() for step in self.steps],
+            'logs': self.logs,
+            'performance_metrics': self.performance_metrics
+        }
 
         for callback in self.callbacks:
             try:

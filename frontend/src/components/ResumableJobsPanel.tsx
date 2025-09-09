@@ -37,11 +37,14 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
         setResumableJobs(prev => prev.filter(job => job.id !== jobId))
         onJobResumed?.(jobId)
       } else {
-        // Show error or refresh the list
+        // Show error message for now since job resumption isn't fully implemented
+        alert('Job resumption is not yet implemented. Please create a new job instead.')
+        // Refresh the list in case anything changed
         await loadResumableJobs()
       }
     } catch (error) {
       console.error('Failed to resume job:', error)
+      alert('Failed to resume job. Please try again or create a new job.')
     } finally {
       setResumingJobs(prev => {
         const next = new Set(prev)
@@ -153,14 +156,18 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
                     <Button
                       size="sm"
                       onClick={() => handleResumeJob(job.id)}
-                      disabled={resumingJobs.has(job.id)}
+                      disabled={resumingJobs.has(job.id) || Boolean(job.error?.includes('Server restarted'))}
+                      title={job.error?.includes('Server restarted') ? 
+                        'Jobs cancelled due to server restart cannot be resumed' : 
+                        'Resume this job from where it left off'
+                      }
                     >
                       {resumingJobs.has(job.id) ? (
                         <FaRedo className="h-4 w-4 mr-2 animate-spin" />
                       ) : (
                                                   <FaPlay className="h-4 w-4 mr-2" />
                       )}
-                      Resume
+                      {job.error?.includes('Server restarted') ? 'Cannot Resume' : 'Resume'}
                     </Button>
                   </div>
                 </div>
@@ -174,21 +181,21 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
                         <span className="font-medium">Last completed:</span>
                         <br />
                         <span className="text-muted-foreground">
-                          {job.resumeInfo.lastCompletedStep.replace(/_/g, ' ')}
+                          {job.resumeInfo?.lastCompletedStep?.replace(/_/g, ' ') || 'Unknown'}
                         </span>
                       </div>
                       <div>
                         <span className="font-medium">Progress:</span>
                         <br />
                         <span className="text-muted-foreground">
-                          {job.resumeInfo.completedSteps} steps completed
+                          {job.resumeInfo?.completedSteps || 0} steps completed
                         </span>
                       </div>
                       <div>
                         <span className="font-medium">Next step:</span>
                         <br />
                         <span className="text-muted-foreground">
-                          {job.resumeInfo.nextStep.replace(/_/g, ' ')}
+                          {job.resumeInfo?.nextStep?.replace(/_/g, ' ') || 'Unknown'}
                         </span>
                       </div>
                     </div>
@@ -197,9 +204,14 @@ export default function ResumableJobsPanel({ jobManager, onJobResumed }: Resumab
                   {job.error && (
                     <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                       <FaExclamationTriangle className="h-4 w-4 text-red-600" />
-                      <span className="text-red-800 text-sm">
+                      <div className="text-red-800 text-sm">
                         <strong>Error:</strong> {job.error}
-                      </span>
+                        {job.error.includes('Server restarted') && (
+                          <div className="mt-1 text-xs text-red-600">
+                            <em>Note: Jobs cancelled due to server restart cannot be resumed. Please create a new job.</em>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                   

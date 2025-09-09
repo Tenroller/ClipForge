@@ -8,7 +8,7 @@ scattered environment variable usage throughout the application.
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
-from logging_config import get_logger
+from ..logging_config import get_logger
 
 logger = get_logger("config")
 
@@ -25,7 +25,7 @@ class Config:
     def _load_defaults(self):
         """Load default configuration values."""
         # Path configurations
-        from utils.paths import get_project_root, get_output_path, get_temp_path, get_backend_path
+        from ..utils.paths import get_project_root, get_output_path, get_temp_path, get_backend_path
         project_root = get_project_root()
 
         self._defaults = {
@@ -46,11 +46,10 @@ class Config:
             'videohelper_temp_max_age_hours': 24,
             'videohelper_streaming_cleanup_hours': 1,
 
-            # Database
+            # Database (PostgreSQL only)
             'database_url': 'postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper',
-            'database_path': str(project_root / 'jobs.db'),
-            'videohelper_db_pool_size': 5,
-            'videohelper_db_pool_timeout': 30,
+            'videohelper_db_pool_size': 10,
+            'videohelper_db_pool_timeout': 60,
 
             # WebSocket
             'videohelper_ws_max_age_hours': 1,
@@ -87,7 +86,7 @@ class Config:
         # Try to load .env file first
         try:
             from dotenv import load_dotenv
-            from utils.paths import get_project_root
+            from ..utils.paths import get_project_root
             project_root = get_project_root()
             env_path = project_root / ".env"
             if env_path.exists():
@@ -108,7 +107,6 @@ class Config:
             'VIDEOHELPER_TEMP_MAX_AGE_HOURS': 'videohelper_temp_max_age_hours',
             'VIDEOHELPER_STREAMING_CLEANUP_HOURS': 'videohelper_streaming_cleanup_hours',
             'DATABASE_URL': 'database_url',
-            'DATABASE_PATH': 'database_path',
             'VIDEOHELPER_DB_POOL_SIZE': 'videohelper_db_pool_size',
             'VIDEOHELPER_DB_POOL_TIMEOUT': 'videohelper_db_pool_timeout',
             'VIDEOHELPER_WS_MAX_AGE_HOURS': 'videohelper_ws_max_age_hours',
@@ -236,20 +234,10 @@ class Config:
         if not any(ai_keys):
             issues.append("No AI API key set (GOOGLE_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY required)")
 
-        # Check database configuration - only warn if both are explicitly set from env vars
-        # Don't warn if one is default and one is from .env (that's normal usage)
+        # Check PostgreSQL database configuration
         db_url = self.get('database_url')
-        db_path = self.get('database_path')
-        default_db_url = self._defaults.get('database_url')
-        default_db_path = self._defaults.get('database_path')
-
-        # Only warn if DATABASE_URL was explicitly set in environment (not just the default)
-        # and DATABASE_PATH is also set (either from env or different from default)
-        env_db_url = os.getenv('DATABASE_URL')
-        env_db_path = os.getenv('DATABASE_PATH')
-
-        if env_db_url and (env_db_path or db_path != default_db_path):
-            issues.append("Both DATABASE_URL and DATABASE_PATH set - using DATABASE_URL")
+        if not db_url or not db_url.startswith('postgresql://'):
+            issues.append("DATABASE_URL must be set to a valid PostgreSQL connection string (postgresql://user:password@host:port/database)")
 
         return {
             'valid': len(issues) == 0,

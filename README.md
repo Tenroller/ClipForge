@@ -87,7 +87,7 @@ ai-video-generator/
 │   ├── modal_gpu_functions.py# GPU-accelerated processing functions
 │   ├── modal_service.py      # Cloud GPU service layer
 │   ├── modal_integration.py  # Sync wrappers for existing code
-│   ├── database.py           # SQLite/PostgreSQL job persistence
+│   ├── database.py           # PostgreSQL job persistence (MANDATORY)
 │   ├── caching.py            # Multi-level caching system
 │   ├── metrics.py            # Prometheus metrics collection
 │   ├── job_queue_unified.py  # Unified job queue system
@@ -97,7 +97,8 @@ ai-video-generator/
 ├── docker/                   # Dockerfiles and compose
 │   ├── Dockerfile.backend
 │   ├── Dockerfile.frontend
-│   └── docker-compose.yml
+│   ├── docker-compose.yml
+│   └── init-db.sql           # PostgreSQL database initialization
 ├── .github/workflows/        # CI/CD automation
 ├── deploy_modal.py           # Modal deployment script
 ├── MODAL_GPU_SETUP.md        # Cloud GPU setup guide
@@ -127,6 +128,10 @@ docker compose -f docker/docker-compose.yml up --build
 #### Prerequisites
 - **Python 3.10+** with pip
 - **Node.js 18+** with npm
+- **PostgreSQL 15+** (MANDATORY - for job persistence)
+  - macOS: `brew install postgresql`
+  - Ubuntu/Debian: `sudo apt install postgresql postgresql-contrib`
+  - Windows: Download from [PostgreSQL website](https://www.postgresql.org/download/)
 - **FFmpeg** (for video processing)
 - **espeak-ng** (for TTS generation)
   - macOS: `brew install espeak-ng`
@@ -166,6 +171,25 @@ source .venv/bin/activate  # Linux/macOS
 
 # Install dependencies
 pip install -r ../requirements.txt
+
+# Set up PostgreSQL database
+# Option 1: Using Docker (recommended)
+docker run -d \
+  --name videohelper_postgres \
+  -e POSTGRES_DB=videohelper \
+  -e POSTGRES_USER=videohelper_user \
+  -e POSTGRES_PASSWORD=videohelper_password \
+  -p 5432:5432 \
+  postgres:15-alpine
+
+# Option 2: Using local PostgreSQL installation
+createdb videohelper
+createuser videohelper_user
+psql -c "ALTER USER videohelper_user PASSWORD 'videohelper_password';"
+psql -c "GRANT ALL PRIVILEGES ON DATABASE videohelper TO videohelper_user;"
+
+# Configure environment
+export DATABASE_URL="postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper"
 
 # Start the server
 uvicorn app:app --host 0.0.0.0 --port 8080 --reload
@@ -216,7 +240,11 @@ See `MODAL_GPU_SETUP.md` for detailed configuration and cost information.
 Create a `.env` file in the project root (canonical location). The backend also supports optional overrides from `backend/.env` and `backend/vendors/moneyprinter/.env` if present.
 
 ```bash
-# === Required for Video Generation ===
+# === REQUIRED ===
+# PostgreSQL Database (MANDATORY)
+DATABASE_URL=postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper
+
+# AI Service Keys (at least one required)
 PEXELS_API_KEY=your_pexels_api_key
 GOOGLE_API_KEY=your_google_api_key
 # OR
@@ -391,9 +419,21 @@ curl http://localhost:8080/api/cache/stats
 
 ### Common Issues
 
+#### Database Connection Issues
+```bash
+# Check PostgreSQL connectivity
+psql postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper -c "SELECT version();"
+
+# Check database tables
+psql postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper -c "\dt"
+
+# View recent jobs
+psql postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper -c "SELECT id, status, workflow, created_at FROM jobs ORDER BY created_at DESC LIMIT 5;"
+```
+
 #### Video Generation Fails
 ```bash
-# Check API keys
+# Check API keys and database
 curl http://localhost:8080/api/health
 
 # Verify FFmpeg installation
@@ -413,6 +453,9 @@ curl http://localhost:8080/api/cache/stats
 
 # Optimize cache settings
 curl -X POST http://localhost:8080/api/cache/clear
+
+# Check PostgreSQL performance
+psql postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper -c "SELECT * FROM pg_stat_activity;"
 ```
 
 #### Redis Connection Issues
@@ -448,12 +491,31 @@ pytest tests/test_models.py       # Data validation
 
 ### Scaling Guidelines
 
-| Concurrent Jobs | RAM Required | CPU Cores | Redis Memory |
-|----------------|--------------|-----------|--------------|
-| 1-5 jobs | 4GB | 2 cores | 512MB |
-| 5-20 jobs | 8GB | 4 cores | 1GB |
-| 20-50 jobs | 16GB | 8 cores | 2GB |
-| 50+ jobs | 32GB+ | 16+ cores | 4GB+ |
+| Concurrent Jobs | RAM Required | CPU Cores | PostgreSQL Memory | Redis Memory |
+|----------------|--------------|-----------|-------------------|--------------|
+| 1-5 jobs | 4GB | 2 cores | 1GB | 512MB |
+| 5-20 jobs | 8GB | 4 cores | 2GB | 1GB |
+| 20-50 jobs | 16GB | 8 cores | 4GB | 2GB |
+| 50+ jobs | 32GB+ | 16+ cores | 8GB+ | 4GB+ |
+
+### PostgreSQL Optimization
+
+For production deployments, consider these PostgreSQL optimizations:
+
+```sql
+-- Increase connection pool size
+ALTER SYSTEM SET max_connections = 200;
+
+-- Optimize for the workload
+ALTER SYSTEM SET shared_buffers = '256MB';
+ALTER SYSTEM SET effective_cache_size = '1GB';
+ALTER SYSTEM SET work_mem = '4MB';
+ALTER SYSTEM SET maintenance_work_mem = '64MB';
+
+-- Enable query logging for monitoring
+ALTER SYSTEM SET log_statement = 'ddl';
+ALTER SYSTEM SET log_duration = on;
+```
 
 ## 🤝 Contributing
 

@@ -8,6 +8,8 @@ import CompilationsPage from './pages/CompilationsPage'
 import ActivityPage from './pages/ActivityPage'
 import DownloadsPage from './pages/DownloadsPage'
 import CleanupPage from './pages/CleanupPage'
+import VideosPage from './pages/VideosPage'
+import JobMonitoringPage from './pages/JobMonitoringPage'
 import NewLandingPage from './components/NewLandingPage'
 import SidebarRouter from './components/SidebarRouter'
 import { useJobManager } from './hooks/useJobManager'
@@ -97,6 +99,12 @@ function AppContent() {
 												<p className="section-subtitle text-[11px]">Create from existing videos</p>
 											</>
 										} />
+										<Route path="/videos" element={
+											<>
+												<h1 className="section-title text-lg">Video Gallery</h1>
+												<p className="section-subtitle text-[11px]">View all generated videos</p>
+											</>
+										} />
 										<Route path="/activity" element={
 											<>
 												<h1 className="section-title text-lg">Recent Activity</h1>
@@ -137,9 +145,11 @@ function AppContent() {
 						<Routes>
 							<Route path="/creator" element={<CreatorPage />} />
 							<Route path="/compilations" element={<CompilationsPage />} />
+							<Route path="/videos" element={<VideosPage />} />
 							<Route path="/activity" element={<ActivityPage />} />
 							<Route path="/downloads" element={<DownloadsPage />} />
 							<Route path="/cleanup" element={<CleanupPage />} />
+							<Route path="/job/:jobId" element={<JobMonitoringPage />} />
 						</Routes>
 					</div>
 				</main>

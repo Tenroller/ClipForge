@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/components/ui/card'
 import { Badge } from '@/components/components/ui/badge'
 import { Button } from '@/components/components/ui/button'
-import { FaEye, FaRedo, FaSpinner } from 'react-icons/fa'
+import { FaEye, FaRedo, FaSpinner, FaChartLine } from 'react-icons/fa'
 import { listJobs, remakeJob, type JobRecord } from '@/lib/api'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
+import { useNavigate } from 'react-router-dom'
 import ResultPanel from '@/components/ResultPanel'
 import ResumableJobsPanel from '@/components/ResumableJobsPanel'
 
@@ -21,6 +22,7 @@ export default function ActivityPage() {
   const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
   const [remakingJobs, setRemakingJobs] = useState<Set<string>>(new Set())
   const jobManager = useJobManager()
+  const navigate = useNavigate()
 
   useEffect(() => {
     // Fetch server jobs from API
@@ -142,6 +144,19 @@ export default function ActivityPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant={j.status === 'done' ? 'default' : j.status === 'error' ? 'destructive' : 'secondary'}>{j.status}</Badge>
+                      
+                      {/* Monitor button for all jobs */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/job/${j.id}`)}
+                        className="h-7 px-2 text-xs"
+                        title="Monitor job progress"
+                      >
+                        <FaChartLine className="size-3 mr-1" />
+                        Monitor
+                      </Button>
+                      
                       {j.status === 'done' && j.previewUrl && (
                         <Button
                           variant="default"

@@ -106,72 +106,88 @@ class WindowsSafeConsoleHandler(logging.StreamHandler):
 
 
 def setup_logging() -> logging.Logger:
-    """Setup application logging with console and file handlers."""
+    """Setup unified application logging with console and single comprehensive file handler."""
     # Always use the root logs directory
     root_dir = Path(__file__).resolve().parents[1]
     log_dir = root_dir / "logs"
     log_dir.mkdir(exist_ok=True)
-    
+
     # Get root logger
     logger = logging.getLogger("video_generator")
-    logger.setLevel(logging.INFO)
-    
+    logger.setLevel(logging.DEBUG)  # Set to DEBUG to capture all levels
+
     # Clear existing handlers
     logger.handlers.clear()
-    
+
+    # Create unified formatter for all logs
+    unified_formatter = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)8s] %(name)s - %(module)s:%(funcName)s:%(lineno)d - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
     # Console handler with Windows-safe Unicode handling
     if sys.platform == "win32":
         console_handler = WindowsSafeConsoleHandler(sys.stdout)
     else:
         console_handler = logging.StreamHandler(sys.stdout)
-    
-    console_handler.setLevel(logging.INFO)
+
+    console_handler.setLevel(logging.INFO)  # Console shows INFO and above
     console_formatter = ColoredConsoleFormatter(
-        fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        fmt="%(asctime)s [%(levelname)8s] %(name)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S"
     )
     console_handler.setFormatter(console_formatter)
     logger.addHandler(console_handler)
-    
-    # File handler with rotation and UTF-8 encoding
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "app.log",
-        maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=5,
+
+    # Single unified file handler - captures ALL logs (DEBUG and above)
+    unified_file_handler = logging.handlers.RotatingFileHandler(
+        log_dir / "video_generator.log",
+        maxBytes=50 * 1024 * 1024,  # 50MB - larger for comprehensive logging
+        backupCount=10,  # Keep more backups for debugging
         encoding='utf-8'  # Explicitly set UTF-8 encoding
     )
-    file_handler.setLevel(logging.DEBUG)
-    file_formatter = logging.Formatter(
-        fmt="%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(funcName)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
-    
-    # JSON handler for structured logging (if enabled)
+    unified_file_handler.setLevel(logging.DEBUG)  # File captures everything
+    unified_file_handler.setFormatter(unified_formatter)
+    logger.addHandler(unified_file_handler)
+
+    # JSON handler for structured logging (if enabled) - also unified
     if os.getenv("ENABLE_JSON_LOGGING", "").lower() == "true":
         json_handler = logging.handlers.RotatingFileHandler(
-            log_dir / "app.json.log",
-            maxBytes=10 * 1024 * 1024,  # 10MB
+            log_dir / "video_generator.json.log",
+            maxBytes=25 * 1024 * 1024,  # 25MB
             backupCount=5,
-            encoding='utf-8'  # Explicitly set UTF-8 encoding
+            encoding='utf-8'
         )
-        json_handler.setLevel(logging.INFO)
+        json_handler.setLevel(logging.DEBUG)  # Capture all structured logs
         json_handler.setFormatter(JSONFormatter())
         logger.addHandler(json_handler)
-    
-    # Error-only handler
-    error_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "errors.log",
-        maxBytes=5 * 1024 * 1024,  # 5MB
-        backupCount=3,
-        encoding='utf-8'  # Explicitly set UTF-8 encoding
-    )
-    error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(file_formatter)
-    logger.addHandler(error_handler)
-    
+
+    # Create child loggers for specific components
+    _setup_child_loggers(logger, unified_file_handler, unified_formatter)
+
     return logger
+
+
+def _setup_child_loggers(parent_logger: logging.Logger, unified_handler: logging.Handler, formatter: logging.Formatter):
+    """Setup child loggers for specific components that inherit the unified logging."""
+    child_loggers = [
+        "video_generator.api",
+        "video_generator.generation",
+        "video_generator.job_queue",
+        "video_generator.database",
+        "video_generator.metrics",
+        "video_generator.websocket",
+        "video_generator.cache",
+        "video_generator.ffmpeg",
+        "video_generator.ai_videos",
+        "video_generator.brainrot"
+    ]
+
+    for logger_name in child_loggers:
+        child_logger = logging.getLogger(logger_name)
+        child_logger.setLevel(logging.DEBUG)
+        # Child loggers will inherit handlers from parent, so no need to add handlers explicitly
+        # unless we want different formatting or levels
 
 
 def get_logger(name: str = "video_generator") -> logging.Logger:
@@ -179,36 +195,204 @@ def get_logger(name: str = "video_generator") -> logging.Logger:
     return logging.getLogger(name)
 
 
-def log_request(logger: logging.Logger, method: str, path: str, 
-                status_code: int, duration: float, user_ip: str = "") -> None:
-    """Log HTTP request with timing."""
-    logger.info(
-        f"{method} {path} - {status_code} - {duration:.3f}s",
+def log_request(logger: logging.Logger, method: str, path: str,
+                status_code: int, duration: float, user_ip: str = "",
+                request_size: int = 0, response_size: int = 0,
+                user_agent: str = "", request_id: str = "") -> None:
+    """Log HTTP request with comprehensive details."""
+    # Determine log level based on status code
+    if status_code >= 500:
+        log_level = logging.ERROR
+        log_method = logger.error
+    elif status_code >= 400:
+        log_level = logging.WARNING
+        log_method = logger.warning
+    else:
+        log_level = logging.INFO
+        log_method = logger.info
+
+    # Create detailed message
+    message = f"HTTP {method} {path} -> {status_code} ({duration:.3f}s)"
+    if request_size > 0:
+        message += f" | Req: {request_size} bytes"
+    if response_size > 0:
+        message += f" | Resp: {response_size} bytes"
+    if user_ip:
+        message += f" | IP: {user_ip}"
+
+    log_method(
+        message,
         extra={
+            "request_id": request_id,
             "user_ip": user_ip,
             "duration": duration,
             "status_code": status_code,
             "method": method,
-            "path": path
+            "path": path,
+            "request_size": request_size,
+            "response_size": response_size,
+            "user_agent": user_agent[:200] if user_agent else "",  # Truncate long user agents
+            "http_request": True
         }
     )
 
 
-def log_job_event(logger: logging.Logger, job_id: str, workflow: str, 
+def log_job_event(logger: logging.Logger, job_id: str, workflow: str,
                   event: str, **kwargs) -> None:
-    """Log job-related events."""
+    """Log job-related events with enhanced details."""
     message = f"Job {job_id} ({workflow}): {event}"
-    if kwargs:
-        details = ", ".join(f"{k}={v}" for k, v in kwargs.items())
-        message += f" - {details}"
-    
-    logger.info(
+
+    # Add important details to message
+    important_details = []
+    if "status" in kwargs:
+        important_details.append(f"status={kwargs['status']}")
+    if "progress" in kwargs:
+        important_details.append(f"progress={kwargs['progress']}%")
+    if "duration" in kwargs:
+        important_details.append(f"duration={kwargs['duration']:.2f}s")
+    if "error" in kwargs:
+        important_details.append(f"error={kwargs['error']}")
+
+    if important_details:
+        message += f" [{', '.join(important_details)}]"
+
+    # Determine log level based on event type
+    if event in ["failed", "error", "cancelled"]:
+        log_method = logger.error
+    elif event in ["completed", "finished"]:
+        log_method = logger.info
+    elif event in ["started", "queued", "running"]:
+        log_method = logger.info
+    else:
+        log_method = logger.debug
+
+    log_method(
         message,
         extra={
             "job_id": job_id,
             "workflow": workflow,
             "event": event,
+            "job_event": True,
             **kwargs
+        }
+    )
+
+
+def log_generation_step(logger: logging.Logger, job_id: str, workflow: str,
+                       step: str, status: str = "started", **kwargs) -> None:
+    """Log video generation process steps with detailed information."""
+    message = f"Generation {job_id} ({workflow}): Step '{step}' - {status}"
+
+    # Add step-specific details
+    step_details = []
+    if "duration" in kwargs:
+        step_details.append(f"{kwargs['duration']:.2f}s")
+    if "file_count" in kwargs:
+        step_details.append(f"{kwargs['file_count']} files")
+    if "file_size" in kwargs:
+        step_details.append(f"{kwargs['file_size'] / (1024*1024):.1f}MB")
+    if "model" in kwargs:
+        step_details.append(f"model={kwargs['model']}")
+    if "voice" in kwargs:
+        step_details.append(f"voice={kwargs['voice']}")
+
+    if step_details:
+        message += f" ({', '.join(step_details)})"
+
+    # Determine log level
+    if status in ["failed", "error"]:
+        log_method = logger.error
+    elif status in ["completed", "success"]:
+        log_method = logger.info
+    elif status == "warning":
+        log_method = logger.warning
+    else:
+        log_method = logger.debug
+
+    log_method(
+        message,
+        extra={
+            "job_id": job_id,
+            "workflow": workflow,
+            "step": step,
+            "step_status": status,
+            "generation_step": True,
+            **kwargs
+        }
+    )
+
+
+def log_api_call(logger: logging.Logger, service: str, endpoint: str,
+                 method: str = "GET", status_code: int = 0,
+                 duration: float = 0.0, **kwargs) -> None:
+    """Log external API calls."""
+    message = f"API Call: {service} {method} {endpoint}"
+
+    if status_code > 0:
+        message += f" -> {status_code}"
+    if duration > 0:
+        message += f" ({duration:.3f}s)"
+
+    # Determine log level based on status
+    if status_code >= 500 or status_code == 0:
+        log_method = logger.error if status_code >= 500 else logger.warning
+    elif status_code >= 400:
+        log_method = logger.warning
+    else:
+        log_method = logger.debug
+
+    log_method(
+        message,
+        extra={
+            "api_service": service,
+            "api_endpoint": endpoint,
+            "api_method": method,
+            "api_status_code": status_code,
+            "api_duration": duration,
+            "external_api": True,
+            **kwargs
+        }
+    )
+
+
+def log_file_operation(logger: logging.Logger, operation: str, file_path: str,
+                      file_size: int = 0, duration: float = 0.0, **kwargs) -> None:
+    """Log file operations with details."""
+    message = f"File {operation}: {file_path}"
+
+    if file_size > 0:
+        message += f" ({file_size / (1024*1024):.1f}MB)"
+    if duration > 0:
+        message += f" ({duration:.3f}s)"
+
+    logger.debug(
+        message,
+        extra={
+            "file_operation": operation,
+            "file_path": file_path,
+            "file_size": file_size,
+            "operation_duration": duration,
+            "file_operation_event": True,
+            **kwargs
+        }
+    )
+
+
+def log_performance_metric(logger: logging.Logger, metric_name: str,
+                          value: float, unit: str = "", **tags) -> None:
+    """Log performance metrics."""
+    message = f"Performance: {metric_name} = {value}"
+    if unit:
+        message += f" {unit}"
+
+    logger.info(
+        message,
+        extra={
+            "metric_name": metric_name,
+            "metric_value": value,
+            "metric_unit": unit,
+            "performance_metric": True,
+            **tags
         }
     )
 

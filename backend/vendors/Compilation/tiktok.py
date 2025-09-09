@@ -18,15 +18,18 @@ from PIL import Image
 import numpy as np
 from .processor import CatVideoProcessor
 import torch
+import sys
+import os
+
+# Add the backend directory to the Python path
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+from utils.ffmpeg_utils import setup_ffmpeg_environment
 
 
 class TikTokVideoCreator:
     def __init__(self, output_dir="final_videos", ffmpeg_path=None):
-        # FFmpeg 7+ compatibility fixes
-        if "FFMPEG_BINARY" not in os.environ:
-            os.environ["FFMPEG_BINARY"] = r'C:\ffmpeg\bin\ffmpeg.exe'
-        if "FFPROBE_BINARY" not in os.environ:
-            os.environ["FFPROBE_BINARY"] = r'C:\ffmpeg\bin\ffprobe.exe'
+        # FFmpeg 7+ compatibility fixes - cross-platform
+        setup_ffmpeg_environment()
         
         # Set FFmpeg 7+ compatibility flags
         os.environ["FFMPEG_7_COMPAT"] = "1"

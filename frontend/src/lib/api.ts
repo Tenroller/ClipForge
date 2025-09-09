@@ -119,7 +119,12 @@ export type TempFileStats = {
     path: string
     file_count: number
     total_size_mb: number
-    files: Array<{
+    exists?: boolean
+    retention_hours?: number
+    max_size_mb?: number
+    last_cleanup?: string
+    oldest_file_age_hours?: number | null
+    files?: Array<{
       name: string
       size_mb: number
       modified: string

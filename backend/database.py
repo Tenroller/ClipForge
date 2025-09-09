@@ -12,50 +12,67 @@ from typing import Dict, Any, Optional, List
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func
-from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.exc import SQLAlchemyError
 
 # Import configuration
-from config import get_config
+from .config import get_config
 
-# Database configuration
+# Database configuration (PostgreSQL only)
 config = get_config()
-DB_URL = config.get('database_url', 'postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper')
+DB_URL = config.get('database_url')
 
-# SQLAlchemy setup
+# SQLAlchemy setup for PostgreSQL
 Base = declarative_base()
 engine = create_engine(
     DB_URL,
     poolclass=QueuePool,
-    pool_size=config.get_int('videohelper_db_pool_size', 5),
-    pool_timeout=config.get_int('videohelper_db_pool_timeout', 30),
+    pool_size=config.get_int('videohelper_db_pool_size', 10),
+    pool_timeout=config.get_int('videohelper_db_pool_timeout', 60),
+    max_overflow=20,
     pool_pre_ping=True,
-    echo=config.get_bool('debug_mode', False)
+    echo=config.get_bool('debug_mode', False),
+    # PostgreSQL-specific optimizations
+    connect_args={
+        "options": "-c timezone=utc",
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5
+    }
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-# SQLAlchemy Model
+# SQLAlchemy Model optimized for PostgreSQL
 class Job(Base):
-    """Job model for SQLAlchemy."""
+    """Job model for PostgreSQL."""
     __tablename__ = "jobs"
 
-    id = Column(String, primary_key=True, index=True)
-    status = Column(String, nullable=False, index=True)
+    # Primary key - using String for job IDs but with PostgreSQL optimizations
+    id = Column(String, primary_key=True)
+    status = Column(String, nullable=False)
     step = Column(String)
-    workflow = Column(String, index=True)
-    user_id = Column(String, index=True)
-    request_data = Column(JSONB)
-    result_data = Column(JSONB)
+    workflow = Column(String)
+    user_id = Column(String)
+    request_data = Column(JSON)
+    result_data = Column(JSON)
     error_message = Column(Text)
-    logs = Column(JSONB, default=list)
-    resume_data = Column(JSONB)
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), index=True)
+    logs = Column(JSON, default=list)
+    resume_data = Column(JSON)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
     started_at = Column(TIMESTAMP(timezone=True))
     duration_seconds = Column(Integer)
+
+    # PostgreSQL-specific indexes for better query performance
+    __table_args__ = (
+        Index('ix_jobs_status_created', 'status', 'created_at'),
+        Index('ix_jobs_workflow_status', 'workflow', 'status'),
+        Index('ix_jobs_user_id_created', 'user_id', 'created_at'),
+        Index('ix_jobs_created_at', 'created_at'),
+    )
 
 
 class JobStore:
@@ -245,7 +262,7 @@ def cleanup_job_store():
 
 
 def migrate_from_json(json_file: Path, job_store: Optional[JobStore] = None) -> int:
-    """Migrate existing JSON job data to database."""
+    """Migrate existing JSON job data to PostgreSQL database."""
     if job_store is None:
         job_store = get_job_store()
 
@@ -267,7 +284,7 @@ def migrate_from_json(json_file: Path, job_store: Optional[JobStore] = None) -> 
                 continue
 
             # Create job with available data
-            workflow = "unknown"  # Can't determine from JSON
+            workflow = job_data.get("workflow", "unknown")  # Use actual workflow if available
             request_data = job_data.get("request_data", {})
 
             job_store.create_job(job_id, workflow, request_data)
@@ -284,6 +301,10 @@ def migrate_from_json(json_file: Path, job_store: Optional[JobStore] = None) -> 
                 update_fields["error"] = job_data["error"]
             if "logs" in job_data:
                 update_fields["logs"] = job_data["logs"]
+            if "user_id" in job_data:
+                update_fields["user_id"] = job_data["user_id"]
+            if "resume_data" in job_data:
+                update_fields["resume_data"] = job_data["resume_data"]
 
             if update_fields:
                 job_store.update_job(job_id, **update_fields)
@@ -292,5 +313,6 @@ def migrate_from_json(json_file: Path, job_store: Optional[JobStore] = None) -> 
 
         return migrated
 
-    except Exception:
+    except Exception as e:
+        print(f"Migration failed: {e}")
         return 0

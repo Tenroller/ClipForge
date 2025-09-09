@@ -50,3 +50,10 @@ jobs.db
 /backend/vendors/AIvideos/subtitles
 /backend/vendors/AIvideos/__pycache__
 /backend/utils/__pycache__
+/backend/api/routes/__pycache__
+/backend/core/__pycache__
+/backend/middleware/__pycache__
+/backend/models/__pycache__
+/backend/services/__pycache__
+/backend/api/__pycache__
+/debug_frames
