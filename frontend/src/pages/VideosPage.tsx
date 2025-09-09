@@ -203,6 +203,37 @@ export default function VideosPage() {
     })
   }
 
+  // Generate thumbnail for a specific job
+  const generateThumbnailForJob = async (jobId: string) => {
+    try {
+      const response = await fetch(`${API}/api/thumbnails/generate/${jobId}`, {
+        method: 'POST'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to generate thumbnail: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      
+      toast({
+        title: 'Thumbnail Generated',
+        description: `Generated ${result.generated_thumbnails} thumbnails for job ${jobId}`
+      })
+      
+      // Refresh the videos list
+      loadVideos(true)
+      
+    } catch (error) {
+      console.error('Failed to generate thumbnail:', error)
+      toast({
+        title: 'Error',
+        description: 'Failed to generate thumbnail. Please try again.',
+        variant: 'destructive'
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -364,9 +395,34 @@ export default function VideosPage() {
                 <CardContent className="p-0">
                   {/* Video Preview */}
                   <div className="relative aspect-video bg-muted rounded-t-lg overflow-hidden">
+                    {video.thumbnail_url ? (
+                      <img
+                        src={`${API}${video.thumbnail_url}`}
+                        alt={`Thumbnail for ${video.filename}`}
+                        className="w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-105"
+                        onClick={() => setSelectedVideo(video)}
+                        onError={(e) => {
+                          // Fallback to video element if thumbnail fails to load
+                          const target = e.target as HTMLImageElement;
+                          const parent = target.parentElement;
+                          if (parent) {
+                            target.style.display = 'none';
+                            const videoElement = parent.querySelector('video');
+                            if (videoElement) {
+                              videoElement.style.display = 'block';
+                            }
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-300 flex items-center justify-center">
+                        <FaVideo className="size-12 text-gray-400" />
+                      </div>
+                    )}
+                    
                     <video
-                      className="w-full h-full object-cover cursor-pointer"
-                      poster="/api/placeholder/400/225"
+                      className={`w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-105 ${video.thumbnail_url ? 'hidden' : ''}`}
+                      poster={video.thumbnail_url ? `${API}${video.thumbnail_url}` : undefined}
                       preload="metadata"
                       onClick={() => setSelectedVideo(video)}
                     >
@@ -445,6 +501,17 @@ export default function VideosPage() {
                         <FaEye className="size-3 mr-1" />
                         Preview
                       </Button>
+                      
+                      {!video.thumbnail_url && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => generateThumbnailForJob(video.job_id)}
+                          title="Generate thumbnail"
+                        >
+                          <FaVideo className="size-3" />
+                        </Button>
+                      )}
                       
                       <Button
                         size="sm"

@@ -52,3 +52,27 @@ def cancel_job(job_id: str):
     if not job_service.cancel_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found or cannot be cancelled")
     return {"status": "cancelled", "jobId": job_id}
+
+
+@router.delete("/jobs/{job_id}", summary="Delete Job")
+def delete_job(job_id: str):
+    """Delete a job from the database."""
+    if not job_service.delete_job(job_id):
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"status": "deleted", "jobId": job_id}
+
+
+@router.post("/jobs/cleanup", summary="Cleanup Jobs")
+def cleanup_jobs(
+    older_than_days: int = 7,
+    statuses: Optional[list[str]] = None
+):
+    """Cleanup old jobs based on age and status."""
+    if statuses is None:
+        statuses = ["done", "error", "cancelled"]
+    
+    result = job_service.cleanup_jobs(older_than_days, statuses)
+    return {
+        "cleaned_up": result["cleaned_count"],
+        "details": result["details"]
+    }

@@ -230,16 +230,23 @@ async def lifespan(app: FastAPI):
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
 
+    # Start background tasks
     broadcaster_task = asyncio.create_task(_broadcast_loop())
+    websocket_monitor_task = asyncio.create_task(_websocket_monitor_loop())
+    
     try:
         yield
     finally:
+        # Cancel background tasks
         broadcaster_task.cancel()
-        # In Python 3.12+ asyncio.CancelledError may not inherit from Exception
+        websocket_monitor_task.cancel()
+        
+        # Wait for tasks to complete with timeout
+        tasks_to_wait = [broadcaster_task, websocket_monitor_task]
         try:
-            await asyncio.wait_for(broadcaster_task, timeout=5.0)
+            await asyncio.wait_for(asyncio.gather(*tasks_to_wait, return_exceptions=True), timeout=5.0)
         except asyncio.TimeoutError:
-            logger.warning("Broadcaster task timeout during shutdown")
+            logger.warning("Background tasks timeout during shutdown")
         except Exception:
             # Expected when cancelling
             pass
@@ -275,6 +282,32 @@ async def lifespan(app: FastAPI):
             await _cleanup_websockets()
         except Exception as e:
             logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+
+
+async def _websocket_monitor_loop():
+    """Background task to monitor and cleanup WebSocket connections."""
+    from ..utils.websocket_manager import get_websocket_manager
+    
+    ws_manager = get_websocket_manager()
+    
+    while True:
+        try:
+            # Run cleanup check every 30 seconds
+            await asyncio.sleep(30)
+            await ws_manager.cleanup_stale_connections()
+            
+            # Log stats every 5 minutes
+            current_time = time.time()
+            if int(current_time) % 300 == 0:  # Every 5 minutes
+                stats = ws_manager.get_connection_stats()
+                logger.info(f"WebSocket stats: {stats['total_connections']} connections, {stats['jobs_with_connections']} jobs")
+                
+        except asyncio.CancelledError:
+            logger.info("WebSocket monitor loop cancelled")
+            break
+        except Exception as e:
+            logger.error(f"WebSocket monitor error: {e}")
+            await asyncio.sleep(30)  # Wait before retrying
 
 
 # Module-level exports for use in other parts of the application

@@ -31,6 +31,75 @@ class JobManagementService:
         self._update_job(job_id, status="cancelled")
         return True
     
+    def delete_job(self, job_id: str) -> bool:
+        """Delete a job from the database."""
+        try:
+            # First try to cancel if it's still running
+            if self.job_queue.cancel_job(job_id):
+                time.sleep(0.1)  # Brief pause to let cancellation complete
+            
+            # Delete from database
+            return self.job_store.delete_job(job_id)
+        except Exception as e:
+            from ..logging_config import get_logger
+            logger = get_logger("job_management")
+            logger.error(f"Failed to delete job {job_id}: {e}")
+            return False
+    
+    def cleanup_jobs(self, older_than_days: int = 7, statuses: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Cleanup old jobs based on age and status."""
+        if statuses is None:
+            statuses = ["done", "error", "cancelled"]
+        
+        try:
+            from datetime import datetime, timezone, timedelta
+            
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+            all_jobs = self.job_store.list_jobs(limit=1000)  # Get a large batch
+            
+            jobs_to_delete = []
+            for job in all_jobs:
+                if job.get('status') in statuses:
+                    # Check if job is older than cutoff
+                    job_date = job.get('created_at')
+                    if job_date:
+                        if isinstance(job_date, str):
+                            try:
+                                job_date = datetime.fromisoformat(job_date.replace('Z', '+00:00'))
+                            except ValueError:
+                                continue
+                        elif isinstance(job_date, datetime):
+                            if job_date.tzinfo is None:
+                                job_date = job_date.replace(tzinfo=timezone.utc)
+                        
+                        if job_date < cutoff_date:
+                            jobs_to_delete.append(job['id'])
+            
+            # Delete the jobs
+            deleted_count = 0
+            details = []
+            for job_id in jobs_to_delete:
+                if self.delete_job(job_id):
+                    deleted_count += 1
+                    details.append(f"Deleted job {job_id}")
+                else:
+                    details.append(f"Failed to delete job {job_id}")
+            
+            return {
+                "cleaned_count": deleted_count,
+                "total_candidates": len(jobs_to_delete),
+                "details": details
+            }
+            
+        except Exception as e:
+            from ..utils.error_handling import handle_error
+            error_info = handle_error(e, {'operation': 'cleanup_jobs'})
+            return {
+                "cleaned_count": 0,
+                "total_candidates": 0,
+                "details": [f"Error during cleanup: {error_info['error']['message']}"]
+            }
+    
     def get_job_logs(self, job_id: str) -> Dict[str, Any]:
         """Get comprehensive logs for a specific job."""
         job = self.job_store.get_job(job_id)

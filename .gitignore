@@ -57,3 +57,5 @@ jobs.db
 /backend/services/__pycache__
 /backend/api/__pycache__
 /debug_frames
+*.m4a
+/backend/cache

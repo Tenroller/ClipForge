@@ -217,6 +217,17 @@ class JobStore:
             session.commit()
             return result
 
+    def delete_job(self, job_id: str) -> bool:
+        """Delete a single job by ID."""
+        with self._get_session() as session:
+            job = session.query(Job).filter(Job.id == job_id).first()
+            if not job:
+                return False
+            
+            session.delete(job)
+            session.commit()
+            return True
+
     def get_stats(self) -> Dict[str, Any]:
         """Get job statistics."""
         from datetime import datetime, timedelta, timezone

@@ -127,12 +127,21 @@ class WebSocketConnectionManager:
                 try:
                     # Try to close the connection gracefully
                     if hasattr(websocket, 'close'):
-                        await asyncio.wait_for(websocket.close(), timeout=5.0)
-                    logger.debug(f"Closed stale WebSocket connection for job {job_id}")
+                        try:
+                            await asyncio.wait_for(websocket.close(), timeout=5.0)
+                            logger.debug(f"Closed stale WebSocket connection for job {job_id}")
+                        except RuntimeError as e:
+                            if "attached to a different loop" in str(e):
+                                logger.debug(f"Stale WebSocket for job {job_id} attached to different loop, forcing removal")
+                                # Don't attempt to close, just remove from tracking
+                            else:
+                                logger.warning(f"Runtime error closing stale WebSocket connection: {e}")
+                        except Exception as e:
+                            logger.warning(f"Failed to close stale WebSocket connection: {e}")
                 except Exception as e:
-                    logger.warning(f"Failed to close stale WebSocket connection: {e}")
+                    logger.warning(f"Error processing stale WebSocket connection: {e}")
 
-                # Remove from our tracking
+                # Remove from our tracking regardless of close success
                 self.remove_connection(job_id, websocket)
                 cleanup_count += 1
 
@@ -160,17 +169,26 @@ class WebSocketConnectionManager:
                         logger.warning(f"WebSocket cleanup timeout reached after {cleanup_count} connections")
                         return cleanup_count
 
-                    # Try to close gracefully
+                    # Try to close gracefully with better error handling
                     if hasattr(websocket, 'close'):
-                        await asyncio.wait_for(websocket.close(), timeout=2.0)
-                        logger.debug(f"Closed WebSocket connection for job {job_id}")
+                        try:
+                            await asyncio.wait_for(websocket.close(), timeout=2.0)
+                            logger.debug(f"Closed WebSocket connection for job {job_id}")
+                        except asyncio.TimeoutError:
+                            logger.warning(f"Timeout closing WebSocket connection for job {job_id}")
+                        except RuntimeError as e:
+                            if "attached to a different loop" in str(e):
+                                logger.debug(f"WebSocket for job {job_id} attached to different loop, forcing removal")
+                                # Don't attempt to close, just remove from tracking
+                            else:
+                                logger.warning(f"Runtime error closing WebSocket connection for job {job_id}: {e}")
+                        except Exception as e:
+                            logger.warning(f"Error closing WebSocket connection for job {job_id}: {e}")
 
-                except asyncio.TimeoutError:
-                    logger.warning(f"Timeout closing WebSocket connection for job {job_id}")
                 except Exception as e:
-                    logger.warning(f"Error closing WebSocket connection for job {job_id}: {e}")
+                    logger.warning(f"Error processing WebSocket connection for job {job_id}: {e}")
 
-                # Remove from our tracking
+                # Remove from our tracking regardless of close success
                 self.remove_connection(job_id, websocket)
                 cleanup_count += 1
 
@@ -202,15 +220,21 @@ class WebSocketConnectionManager:
         """Background monitoring worker."""
         while self.monitoring_active:
             try:
-                # Create event loop for async cleanup
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-
-                # Run cleanup check
-                cleanup_task = loop.create_task(self.cleanup_stale_connections())
-                loop.run_until_complete(cleanup_task)
-
-                loop.close()
+                # Try to get the main event loop to schedule cleanup
+                try:
+                    from ..core.lifespan import MAIN_LOOP
+                    if MAIN_LOOP and not MAIN_LOOP.is_closed():
+                        # Schedule cleanup on the main loop
+                        future = asyncio.run_coroutine_threadsafe(
+                            self.cleanup_stale_connections(), 
+                            MAIN_LOOP
+                        )
+                        # Wait for completion with timeout
+                        future.result(timeout=30.0)
+                    else:
+                        logger.debug("Main loop not available, skipping WebSocket cleanup")
+                except Exception as e:
+                    logger.debug(f"Could not schedule cleanup on main loop: {e}")
 
                 # Log stats periodically
                 if int(time.time()) % 300 == 0:  # Every 5 minutes
@@ -244,8 +268,9 @@ def get_websocket_manager() -> WebSocketConnectionManager:
 def init_websocket_manager():
     """Initialize the WebSocket manager with monitoring."""
     manager = get_websocket_manager()
-    manager.start_monitoring()
-    logger.info("WebSocket manager initialized")
+    # Note: Monitoring is now handled by the main event loop in lifespan.py
+    # No need to start a separate background thread
+    logger.info("WebSocket manager initialized (monitoring handled by main event loop)")
 
 
 async def cleanup_websocket_connections(timeout: float = 10.0):
@@ -258,14 +283,24 @@ def cleanup_websocket_connections_sync(timeout: float = 10.0):
     """Clean up all WebSocket connections (sync version for cleanup)."""
     try:
         manager = get_websocket_manager()
-        # Create event loop for sync context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-
-        cleanup_task = loop.create_task(manager.cleanup_all_connections(timeout))
-        result = loop.run_until_complete(cleanup_task)
-        loop.close()
-        return result
+        
+        # Try to use the main event loop if available
+        try:
+            from ..core.lifespan import MAIN_LOOP
+            if MAIN_LOOP and not MAIN_LOOP.is_closed():
+                # Schedule cleanup on the main loop
+                future = asyncio.run_coroutine_threadsafe(
+                    manager.cleanup_all_connections(timeout), 
+                    MAIN_LOOP
+                )
+                return future.result(timeout=timeout + 5.0)
+            else:
+                logger.warning("Main loop not available for sync cleanup")
+                return 0
+        except Exception as e:
+            logger.warning(f"Could not schedule sync cleanup on main loop: {e}")
+            return 0
+            
     except Exception as e:
         logger.error(f"Failed to cleanup WebSocket connections: {e}")
         return 0

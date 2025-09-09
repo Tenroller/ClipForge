@@ -291,6 +291,7 @@ class JobManager {
       try {
         const res = await fetch(`${this.apiBase}/api/jobs/${id}`)
         if (res.status === 404) {
+          devLog(`JobManager: Job ${id} not found (404)`)
           // If this is the last attempt, consider job doesn't exist
           if (attempt === maxRetries - 1) {
             return false
@@ -299,8 +300,14 @@ class JobManager {
           await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)))
           continue
         }
+        if (res.status === 410) {
+          // Job was deleted/expired
+          devLog(`JobManager: Job ${id} was deleted (410)`)
+          return false
+        }
         return res.ok
       } catch (error) {
+        devLog(`JobManager: Network error validating job ${id} (attempt ${attempt + 1}):`, error)
         // Network error - if this is the last attempt, assume job might exist
         if (attempt === maxRetries - 1) {
           devLog(`JobManager: Network error validating job ${id}, assuming it might exist`)
@@ -454,6 +461,19 @@ class JobManager {
     // Disconnect if job is terminal
     if (['done', 'error', 'cancelled'].includes(updatedJob.status)) {
       this.disconnectJob(id)
+      
+      // For cancelled jobs, we can remove them immediately from storage
+      // since they won't be resumable and just clutter the UI
+      if (updatedJob.status === 'cancelled') {
+        devLog(`JobManager: Job ${id} was cancelled, scheduling removal`)
+        // Remove after a short delay to allow UI to show the cancellation
+        setTimeout(() => {
+          if (this.jobs.get(id)?.status === 'cancelled') {
+            devLog(`JobManager: Removing cancelled job ${id} from storage`)
+            this.removeJob(id)
+          }
+        }, 5000) // 5 second delay
+      }
     }
   }
 
