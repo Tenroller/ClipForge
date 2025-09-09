@@ -18,7 +18,9 @@ import {
   FaBrain,
   FaEye,
   FaShare,
-  FaTrash
+  FaTrash,
+  FaUpload,
+  FaCheck
 } from 'react-icons/fa'
 import { cn } from '@/components/lib/utils'
 
@@ -40,6 +42,7 @@ interface Video {
   video_type: 'ai_generated' | 'compilation'
   compilation_type?: string
   compilation_num?: number
+  posted?: boolean
 }
 
 interface VideoStats {
@@ -75,6 +78,7 @@ export default function VideosPage() {
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
+  const [postingVideos, setPostingVideos] = useState<Set<string>>(new Set())
   
   const { toast } = useToast()
   const limit = 20
@@ -230,6 +234,57 @@ export default function VideosPage() {
         title: 'Error',
         description: 'Failed to generate thumbnail. Please try again.',
         variant: 'destructive'
+      })
+    }
+  }
+
+  // Post video to webhook
+  const handlePostVideo = async (video: Video) => {
+    try {
+      setPostingVideos(prev => new Set(prev).add(video.id))
+      
+      const response = await fetch(`${API}/api/videos/post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          video_id: video.id,
+          job_id: video.job_id
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || `Failed to post video: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      
+      // Update the video in the local state
+      setVideos(prevVideos => 
+        prevVideos.map(v => 
+          v.id === video.id ? { ...v, posted: true } : v
+        )
+      )
+      
+      toast({
+        title: 'Video Posted',
+        description: `Successfully posted ${video.filename} to webhook`
+      })
+      
+    } catch (error) {
+      console.error('Failed to post video:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to post video. Please try again.',
+        variant: 'destructive'
+      })
+    } finally {
+      setPostingVideos(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(video.id)
+        return newSet
       })
     }
   }
@@ -445,6 +500,16 @@ export default function VideosPage() {
                       </Badge>
                     </div>
 
+                    {/* Posted Badge */}
+                    {video.posted && (
+                      <div className="absolute top-2 left-2 mt-8">
+                        <Badge variant="default" className="bg-green-600 hover:bg-green-700 flex items-center gap-1">
+                          <FaCheck className="size-3" />
+                          Posted
+                        </Badge>
+                      </div>
+                    )}
+
                     {/* Size Badge */}
                     <div className="absolute top-2 right-2">
                       <Badge variant="outline" className="bg-black/50 text-white border-white/20">
@@ -521,6 +586,36 @@ export default function VideosPage() {
                         <FaDownload className="size-3 mr-1" />
                         Download
                       </Button>
+                    </div>
+
+                    {/* Post Button */}
+                    <div className="mt-2">
+                      {video.posted ? (
+                        <div className="flex items-center justify-center gap-2 text-green-600 text-sm">
+                          <FaCheck className="size-3" />
+                          <span>Posted to Webhook</span>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="w-full"
+                          onClick={() => handlePostVideo(video)}
+                          disabled={postingVideos.has(video.id)}
+                        >
+                          {postingVideos.has(video.id) ? (
+                            <>
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                              Posting...
+                            </>
+                          ) : (
+                            <>
+                              <FaUpload className="size-3 mr-1" />
+                              Post to Webhook
+                            </>
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -642,6 +737,33 @@ export default function VideosPage() {
                       <FaShare className="size-4 mr-2" />
                       Copy Link
                     </Button>
+
+                    {/* Post to Webhook */}
+                    {selectedVideo.posted ? (
+                      <div className="w-full p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-center gap-2 text-green-700">
+                        <FaCheck className="size-4" />
+                        <span className="font-medium">Posted to Webhook</span>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="default"
+                        className="w-full"
+                        onClick={() => handlePostVideo(selectedVideo)}
+                        disabled={postingVideos.has(selectedVideo.id)}
+                      >
+                        {postingVideos.has(selectedVideo.id) ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Posting to Webhook...
+                          </>
+                        ) : (
+                          <>
+                            <FaUpload className="size-4 mr-2" />
+                            Post to Webhook
+                          </>
+                        )}
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

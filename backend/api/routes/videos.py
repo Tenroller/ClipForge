@@ -6,9 +6,11 @@ from typing import Dict, Any, Optional, List
 from pathlib import Path
 import os
 import time
+import requests
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from ...database import get_job_store
 from ...logging_config import get_logger
@@ -23,6 +25,12 @@ job_store = get_job_store()
 
 # Get thumbnail service
 thumbnail_service = get_thumbnail_service()
+
+
+class PostVideoRequest(BaseModel):
+    """Request model for posting a video to webhook"""
+    video_id: str
+    job_id: str
 
 
 def _is_allowed_path(file_path: Path) -> bool:
@@ -166,7 +174,8 @@ def scan_orphaned_videos() -> List[Dict[str, Any]]:
                     "video_type": video_type,
                     "compilation_type": compilation_type,
                     "compilation_num": compilation_num,
-                    "is_orphaned": True  # Flag to indicate this is an orphaned video
+                    "is_orphaned": True,  # Flag to indicate this is an orphaned video
+                    "posted": False  # Orphaned videos are never posted
                 }
                 
                 orphaned_videos.append(video_info)
@@ -243,7 +252,8 @@ def list_all_videos(
                             "thumbnail_url": thumbnail_service.get_thumbnail_url(video_path),
                             "subtitles_path": job_result.get("subtitles"),
                             "video_type": "ai_generated",
-                            "is_orphaned": False
+                            "is_orphaned": False,
+                            "posted": job_result.get("posted", False)
                         }
                         
                         videos.append(video_info)
@@ -277,7 +287,8 @@ def list_all_videos(
                                 "compilation_type": video_data.get("compilation_type", "Unknown"),
                                 "compilation_num": video_data.get("compilation_num"),
                                 "video_type": "compilation",
-                                "is_orphaned": False
+                                "is_orphaned": False,
+                                "posted": video_data.get("posted", False)
                             }
                             
                             videos.append(video_info)
@@ -607,3 +618,114 @@ def cleanup_thumbnails(max_age_days: int = 30):
     except Exception as e:
         logger.error(f"Failed to cleanup thumbnails: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to cleanup thumbnails: {e}")
+
+
+@router.post("/videos/post", summary="Post Video to Webhook")
+def post_video_to_webhook(request: PostVideoRequest):
+    """
+    Post a video to the specified webhook and mark it as posted.
+    
+    Args:
+        request: Contains video_id and job_id to identify the video to post
+    """
+    try:
+        # Get the job
+        job = job_store.get_job(request.job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        job_result = job.get("result", {})
+        if not job_result:
+            raise HTTPException(status_code=400, detail="Job has no results")
+        
+        job_workflow = job.get("workflow", "unknown")
+        video_path = None
+        video_data = None
+        
+        # Find the video in the job result
+        if job_workflow == "moneyprinter" and "output" in job_result:
+            # For moneyprinter, there's only one video
+            if request.video_id == f"{request.job_id}_main":
+                video_path = job_result["output"]
+                if not video_path or not Path(video_path).exists():
+                    raise HTTPException(status_code=404, detail="Video file not found")
+        
+        elif job_workflow == "brainrot" and "generated_videos" in job_result:
+            # For brainrot, search through generated videos
+            generated_videos = job_result.get("generated_videos", [])
+            for video in generated_videos:
+                video_id = f"{request.job_id}_{video.get('compilation_num', 'unknown')}_{video.get('variation', 'unknown')}"
+                if video_id == request.video_id:
+                    video_path = video.get("path")
+                    video_data = video
+                    break
+            
+            if not video_path or not Path(video_path).exists():
+                raise HTTPException(status_code=404, detail="Video file not found")
+        
+        else:
+            raise HTTPException(status_code=400, detail="Invalid workflow or no videos found")
+        
+        # Ensure video_path is not None
+        if not video_path:
+            raise HTTPException(status_code=404, detail="Video file not found")
+        
+        video_file_path = Path(video_path)
+        
+        # Check if video is already posted
+        if job_workflow == "moneyprinter":
+            if job_result.get("posted", False):
+                raise HTTPException(status_code=400, detail="Video already posted")
+        elif job_workflow == "brainrot" and video_data:
+            if video_data.get("posted", False):
+                raise HTTPException(status_code=400, detail="Video already posted")
+        
+        # Post video to webhook
+        webhook_url = "https://n8n.dight.app/webhook-test/29ad5d4d-0fd0-4eb7-a8e1-8f782c38b3d4"
+        
+        try:
+            with open(video_file_path, 'rb') as video_file:
+                files = {
+                    'video': (video_file_path.name, video_file, 'video/mp4')
+                }
+                
+                # Add metadata as form data
+                data = {
+                    'video_id': request.video_id,
+                    'job_id': request.job_id,
+                    'filename': video_file_path.name,
+                    'workflow': job_workflow
+                }
+                
+                response = requests.post(webhook_url, files=files, data=data, timeout=30)
+                response.raise_for_status()
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to post video to webhook: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to post video to webhook: {str(e)}")
+        
+        # Update the job result to mark video as posted
+        if job_workflow == "moneyprinter":
+            job_result["posted"] = True
+        elif job_workflow == "brainrot" and video_data:
+            video_data["posted"] = True
+        
+        # Save the updated job result
+        job_store.update_job(request.job_id, result=job_result)
+        
+        logger.info(f"Successfully posted video {request.video_id} to webhook")
+        
+        return {
+            "video_id": request.video_id,
+            "job_id": request.job_id,
+            "posted": True,
+            "webhook_response_status": response.status_code,
+            "message": f"Video {request.video_id} successfully posted to webhook"
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"Failed to post video {request.video_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to post video: {str(e)}")

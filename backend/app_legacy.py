@@ -2099,7 +2099,8 @@ def list_all_videos(
                             "download_url": f"/api/download?path={Path(video_path).resolve()}",
                             "thumbnail_url": None,  # Could be implemented later
                             "subtitles_path": job_result.get("subtitles"),
-                            "video_type": "ai_generated"
+                            "video_type": "ai_generated",
+                            "posted": job_result.get("posted", False)
                         }
                         
                         if processed_count >= offset:
@@ -2133,7 +2134,8 @@ def list_all_videos(
                                 "thumbnail_url": None,  # Could be implemented later
                                 "compilation_type": video_data.get("compilation_type", "Unknown"),
                                 "compilation_num": video_data.get("compilation_num"),
-                                "video_type": "compilation"
+                                "video_type": "compilation",
+                                "posted": video_data.get("posted", False)
                             }
                             
                             if processed_count >= offset:
