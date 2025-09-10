@@ -5,6 +5,7 @@ import random
 import logging
 import zipfile
 import requests
+from typing import Tuple, Dict, Any, Optional
 
 from termcolor import colored
 
@@ -130,4 +131,104 @@ def check_env_vars() -> None:
     except Exception as e:
         logger.error(f"Error occurred while checking environment variables: {str(e)}")
         sys.exit(1)
+
+
+def get_video_info(video_path: str) -> Optional[Dict[str, Any]]:
+    """
+    Get video information using ffprobe.
+    
+    Args:
+        video_path (str): Path to the video file
+        
+    Returns:
+        Dict with video info or None if failed
+    """
+    try:
+        import subprocess
+        
+        result = subprocess.run([
+            'ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', 
+            '-show_format', video_path
+        ], capture_output=True, text=True, timeout=30)
+        
+        if result.returncode == 0:
+            info = json.loads(result.stdout)
+            
+            # Find video stream
+            for stream in info.get('streams', []):
+                if stream.get('codec_type') == 'video':
+                    return {
+                        'width': stream.get('width', 0),
+                        'height': stream.get('height', 0),
+                        'duration': float(stream.get('duration', 0)),
+                        'fps': eval(stream.get('r_frame_rate', '0/1')),
+                        'codec': stream.get('codec_name', ''),
+                        'bitrate': int(info.get('format', {}).get('bit_rate', 0))
+                    }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting video info for {video_path}: {e}")
+        return None
+
+
+def determine_optimal_resolution(input_video_path: str) -> Tuple[int, int]:
+    """
+    Determine optimal output resolution based on input video aspect ratio.
+    
+    Args:
+        input_video_path (str): Path to the input video
+        
+    Returns:
+        Tuple of (width, height) for optimal output resolution
+    """
+    try:
+        video_info = get_video_info(input_video_path)
+        
+        if not video_info:
+            logger.warning(f"Could not get video info for {input_video_path}, defaulting to 1920x1080")
+            return (1920, 1080)  # Default to horizontal
+        
+        width = video_info.get('width', 1920)
+        height = video_info.get('height', 1080)
+        
+        if width == 0 or height == 0:
+            logger.warning(f"Invalid dimensions {width}x{height}, defaulting to 1920x1080")
+            return (1920, 1080)
+        
+        aspect_ratio = width / height
+        
+        logger.info(f"Input video: {width}x{height}, aspect ratio: {aspect_ratio:.3f}")
+        
+        # Determine optimal output resolution based on aspect ratio
+        if aspect_ratio > 1.5:  # Horizontal (16:9, 21:9, etc.)
+            optimal_resolution = (1920, 1080)  # HD horizontal
+            logger.info("Detected horizontal video -> 1920x1080 output")
+        elif aspect_ratio < 0.7:  # Vertical (9:16, 9:21, etc.)
+            optimal_resolution = (1080, 1920)  # HD vertical
+            logger.info("Detected vertical video -> 1080x1920 output")
+        else:  # Square-ish (1:1, 4:3, 3:4, etc.)
+            optimal_resolution = (1080, 1080)  # Square
+            logger.info("Detected square/square-ish video -> 1080x1080 output")
+        
+        return optimal_resolution
+        
+    except Exception as e:
+        logger.error(f"Error determining optimal resolution for {input_video_path}: {e}")
+        return (1920, 1080)  # Default fallback
+
+
+def get_target_aspect_ratio(target_resolution: Tuple[int, int]) -> float:
+    """
+    Get target aspect ratio from resolution tuple.
+    
+    Args:
+        target_resolution: Tuple of (width, height)
+        
+    Returns:
+        Aspect ratio as float
+    """
+    width, height = target_resolution
+    return width / height if height > 0 else 16/9
 

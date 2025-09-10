@@ -449,12 +449,12 @@ export default function VideosPage() {
               <Card key={video.id} className="group hover:shadow-lg transition-all duration-200">
                 <CardContent className="p-0">
                   {/* Video Preview */}
-                  <div className="relative aspect-video bg-muted rounded-t-lg overflow-hidden">
+                  <div className="relative aspect-video bg-muted rounded-t-lg overflow-hidden group-hover:bg-muted/80 transition-colors">
                     {video.thumbnail_url ? (
                       <img
                         src={`${API}${video.thumbnail_url}`}
                         alt={`Thumbnail for ${video.filename}`}
-                        className="w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-105"
+                        className="w-full h-full object-contain cursor-pointer transition-transform group-hover:scale-105"
                         onClick={() => setSelectedVideo(video)}
                         onError={(e) => {
                           // Fallback to video element if thumbnail fails to load
@@ -476,7 +476,7 @@ export default function VideosPage() {
                     )}
                     
                     <video
-                      className={`w-full h-full object-cover cursor-pointer transition-transform group-hover:scale-105 ${video.thumbnail_url ? 'hidden' : ''}`}
+                      className={`w-full h-full object-contain cursor-pointer transition-transform group-hover:scale-105 ${video.thumbnail_url ? 'hidden' : ''}`}
                       poster={video.thumbnail_url ? `${API}${video.thumbnail_url}` : undefined}
                       preload="metadata"
                       onClick={() => setSelectedVideo(video)}
@@ -656,9 +656,9 @@ export default function VideosPage() {
             
             <div className="space-y-4">
               {/* Video Player */}
-              <div className="aspect-video bg-black rounded-lg overflow-hidden">
+              <div className="bg-black rounded-lg overflow-hidden flex items-center justify-center min-h-[300px] max-h-[70vh]">
                 <video
-                  className="w-full h-full"
+                  className="max-w-full max-h-full"
                   controls
                   autoPlay
                   src={`${API}${selectedVideo.download_url}`}

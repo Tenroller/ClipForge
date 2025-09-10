@@ -101,13 +101,26 @@ def get_next_video_number(output_dir):
     
     return max(numbers) + 1 if numbers else 1
 
-def create_video(video_path, text, output_path=None, title=None):
+def create_video(video_path, text, output_path=None, title=None, target_resolution=None):
     """
-    Creates a 1080x1920 video with HTML-rendered text at the top and a 1:1 video below.
+    Creates a video with HTML-rendered text at the top and a video below.
     Optionally includes a title overlay at the very top.
+    Resolution is determined dynamically based on input video aspect ratio.
     """
-    W, H = 1080, 1920
-    BACKGROUND_COLOR = (255, 255, 255)  # White
+    # Use dynamic resolution if provided, otherwise detect from video
+    if target_resolution:
+        W, H = target_resolution
+    else:
+        from .config import TikYouConfig
+        config = TikYouConfig()
+        config.set_dynamic_resolution(video_path)
+        W, H = config.video.width, config.video.height
+    
+    # Use appropriate background color based on aspect ratio
+    if W > H:  # Horizontal
+        BACKGROUND_COLOR = (0, 0, 0)  # Black for horizontal videos
+    else:  # Vertical or square
+        BACKGROUND_COLOR = (255, 255, 255)  # White for vertical/square videos
 
     # Create output directory and generate filename
     final_videos_dir = os.getenv("VIDEOHELPER_OUTPUT_DIR", "final_videos")
@@ -119,7 +132,12 @@ def create_video(video_path, text, output_path=None, title=None):
 
     # Load the input video
     video_clip = VideoFileClip(video_path, audio=True)
-    video_clip = video_clip.resized(width=W)
+    
+    # Resize video appropriately based on aspect ratio
+    if W > H:  # Horizontal layout - fill most of the frame
+        video_clip = video_clip.resized(width=W, height=H)  # Fill entire frame
+    else:  # Vertical layout - traditional template style
+        video_clip = video_clip.resized(width=W)  # Resize by width as before
 
     # Create the text layout using HTML + CSS - smaller height for more compact layout
     renderer = TextToImageRenderer()
@@ -137,10 +155,13 @@ def create_video(video_path, text, output_path=None, title=None):
     # Create a white background clip
     background = ColorClip(size=(W, H), color=BACKGROUND_COLOR, duration=video_clip.duration)
 
-    # Calculate positions for a more compact layout
-    # Position content more towards the center/middle of the frame
-    text_y_position = 450  # Move text down significantly 
-    video_y_position = 650  # Position video in the middle area of the frame
+    # Calculate positions based on layout type
+    if W > H:  # Horizontal layout - overlay text on video
+        text_y_position = 50   # Position text at top
+        video_y_position = 0   # Video fills entire frame
+    else:  # Vertical layout - traditional template style
+        text_y_position = 450  # Move text down significantly 
+        video_y_position = 650  # Position video in the middle area of the frame
     
     # Set positions for the clips
     text_clip = text_clip.with_position(('center', text_y_position))  # type: ignore

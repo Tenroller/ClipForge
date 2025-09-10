@@ -27,6 +27,9 @@ from tqdm import tqdm
 import torch
 import time
 import uuid
+import concurrent.futures
+import hashlib
+import subprocess
 
 # Initialize logger for this module
 logger = logging.getLogger("video_generator.compilation")
@@ -113,6 +116,15 @@ class TikYouGenerator:
         self.max_workers = min(multiprocessing.cpu_count(), 4)  # Limit to 4 workers max
         self.tracker = tracker  # Add tracker support
         
+        # Performance optimization caches
+        self.clip_cache = {}  # Cache for processed vertical clips
+        self.encoding_cache = {}  # Cache for encoding parameters
+        self.scene_analysis_cache = {}  # Cache for scene detection results
+        self.video_metadata_cache = {}  # Cache for video metadata
+        self.temp_dir = self._setup_temp_directory()
+        self.cleanup_interval = 50  # Clean temp files every 50 compilations
+        self.compilation_counter = 0
+        
         # Initialize TTS generator for enhanced video variations
         try:
             # Import TTSGenerator here to handle import errors gracefully
@@ -140,8 +152,10 @@ class TikYouGenerator:
         self.initial_memory = psutil.virtual_memory().percent
         print(f"💾 Initial memory usage: {self.initial_memory:.1f}%")
         
-        # Check for GPU availability
+        # Check for GPU availability and optimize accordingly
         self.has_gpu = torch.cuda.is_available()
+        self.encoding_params = self._get_optimized_encoding_params()
+        
         if self.has_gpu:
             print("🎮 GPU acceleration available!")
             # Get GPU memory info
@@ -152,10 +166,10 @@ class TikYouGenerator:
             # Adjust workers based on GPU memory
             self.max_workers = min(self.max_workers, max(1, int(gpu_mem / 2)))  # 2GB per worker
             print(f"   - Using {self.max_workers} workers based on GPU memory")
-            print(f"   - GPU Encoding: h264_nvenc codec will be used")
+            print(f"   - GPU Encoding: {self.encoding_params['codec']} codec will be used")
         else:
             print("💻 Using CPU processing")
-            print(f"   - CPU Encoding: libx264 codec will be used")
+            print(f"   - CPU Encoding: {self.encoding_params['codec']} codec will be used")
             print(f"   - CPU Workers: {self.max_workers}")
         
         # Create output directory
@@ -174,8 +188,379 @@ class TikYouGenerator:
             else:
                 logger.info(f"{component}: {message}")
     
+    def _setup_temp_directory(self):
+        """Set up optimized temporary directory for processing"""
+        import tempfile
+        
+        # Try to use faster SSD temp directory if available
+        temp_locations = ["/tmp", tempfile.gettempdir()]
+        
+        for temp_loc in temp_locations:
+            if os.path.exists(temp_loc):
+                try:
+                    temp_dir = tempfile.mkdtemp(prefix="brainrot_", dir=temp_loc)
+                    print(f"📁 Using temp directory: {temp_dir}")
+                    return temp_dir
+                except:
+                    continue
+        
+        # Fallback to default
+        temp_dir = tempfile.mkdtemp(prefix="brainrot_")
+        print(f"📁 Using temp directory: {temp_dir}")
+        return temp_dir
+    
+    def _get_optimized_encoding_params(self):
+        """Get optimized encoding parameters based on available hardware"""
+        params = {
+            'codec': 'libx264',
+            'ffmpeg_params': [
+                '-preset', 'veryfast',
+                '-crf', '23',
+                '-movflags', '+faststart',
+                '-tune', 'fastdecode'
+            ]
+        }
+        
+        # Check for hardware acceleration
+        if self.has_gpu:
+            # Check for NVIDIA GPU encoding support
+            try:
+                result = subprocess.run(['nvidia-smi'], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    params = {
+                        'codec': 'h264_nvenc',
+                        'ffmpeg_params': [
+                            '-preset', 'p4',  # Fastest NVENC preset
+                            '-tune', 'hq',
+                            '-rc', 'vbr',
+                            '-cq', '23',
+                            '-b:v', '0',
+                            '-maxrate', '10M',
+                            '-bufsize', '20M'
+                        ]
+                    }
+                    print("🎮 NVIDIA GPU encoding detected")
+            except:
+                pass
+        
+        return params
+    
+    def _cleanup_temp_files(self):
+        """Periodic cleanup of temporary files"""
+        try:
+            current_time = time.time()
+            cleanup_threshold = 3600  # 1 hour
+            
+            for root, dirs, files in os.walk(self.temp_dir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        if current_time - os.path.getmtime(file_path) > cleanup_threshold:
+                            os.remove(file_path)
+                    except:
+                        pass  # Ignore errors for files in use
+        except Exception as e:
+            logger.warning(f"Temp cleanup failed: {e}")
+    
+    def _preprocess_clips_batch(self, video_clips, batch_size=None):
+        """Pre-process clips in parallel batches for better performance"""
+        if batch_size is None:
+            batch_size = min(self.max_workers, 4)
+        
+        processed_clips = []
+        clips_to_process = [clip for clip in video_clips if clip['duration'] >= 3.0]
+        
+        print(f"🔄 Pre-processing {len(clips_to_process)} clips in batches of {batch_size}")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=batch_size) as executor:
+            # Submit all conversion tasks
+            future_to_clip = {}
+            for clip in clips_to_process:
+                if clip['orientation'] in ['horizontal', 'square']:
+                    future = executor.submit(self._convert_clip_with_cache, clip['path'])
+                    future_to_clip[future] = clip
+                else:
+                    # Vertical clips don't need conversion
+                    processed_clips.append(clip)
+            
+            # Collect results
+            for future in concurrent.futures.as_completed(future_to_clip):
+                original_clip = future_to_clip[future]
+                try:
+                    vertical_path = future.result()
+                    if vertical_path:
+                        processed_clip = original_clip.copy()
+                        processed_clip['vertical_path'] = vertical_path
+                        processed_clips.append(processed_clip)
+                    else:
+                        # Keep original clip if conversion failed
+                        processed_clips.append(original_clip)
+                except Exception as e:
+                    logger.warning(f"Failed to process clip {original_clip['path']}: {e}")
+                    # Keep original clip even if conversion failed
+                    processed_clips.append(original_clip)
+        
+        print(f"✅ Pre-processing completed: {len(processed_clips)} clips ready")
+        return processed_clips
+    
+    def _get_video_cache_key(self, youtube_url):
+        """Generate cache key for video based on URL and video metadata"""
+        try:
+            video_id = self.extract_video_id(youtube_url)
+            # Include video ID and current date to handle video updates
+            cache_key = f"{video_id}_{time.strftime('%Y%m%d')}"
+            return hashlib.md5(cache_key.encode()).hexdigest()
+        except:
+            return None
+    
+    def _cache_scene_analysis(self, video_path, analysis_result):
+        """Cache scene analysis results for faster re-processing"""
+        try:
+            # Use file size and modification time as cache key
+            stat = os.stat(video_path)
+            cache_key = f"{video_path}_{stat.st_size}_{stat.st_mtime}"
+            cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+            self.scene_analysis_cache[cache_hash] = analysis_result
+            return cache_hash
+        except Exception as e:
+            logger.warning(f"Failed to cache scene analysis: {e}")
+            return None
+    
+    def _get_cached_scene_analysis(self, video_path):
+        """Retrieve cached scene analysis if available"""
+        try:
+            stat = os.stat(video_path)
+            cache_key = f"{video_path}_{stat.st_size}_{stat.st_mtime}"
+            cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+            return self.scene_analysis_cache.get(cache_hash)
+        except:
+            return None
+    
+    def _convert_clip_with_cache(self, video_path):
+        """Convert horizontal video to vertical format with caching"""
+        # Generate cache key from file path and modification time
+        try:
+            cache_key = f"{video_path}_{os.path.getmtime(video_path)}"
+            cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+            
+            if cache_hash in self.clip_cache:
+                cached_path = self.clip_cache[cache_hash]
+                if os.path.exists(cached_path):
+                    return cached_path
+            
+            # Convert the clip
+            vertical_path = self.create_vertical_clip_from_horizontal(video_path)
+            
+            # Cache the result
+            if vertical_path:
+                self.clip_cache[cache_hash] = vertical_path
+                
+            return vertical_path
+        except Exception as e:
+            logger.warning(f"Clip conversion with cache failed for {video_path}: {e}")
+            return None
+        """Convert horizontal video to vertical format with caching"""
+        # Generate cache key from file path and modification time
+        try:
+            cache_key = f"{video_path}_{os.path.getmtime(video_path)}"
+            cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+            
+            if cache_hash in self.clip_cache:
+                cached_path = self.clip_cache[cache_hash]
+                if os.path.exists(cached_path):
+                    return cached_path
+            
+            # Convert the clip
+            vertical_path = self.create_vertical_clip_from_horizontal(video_path)
+            
+            # Cache the result
+            if vertical_path:
+                self.clip_cache[cache_hash] = vertical_path
+                
+            return vertical_path
+        except Exception as e:
+            logger.warning(f"Clip conversion with cache failed for {video_path}: {e}")
+            return None
+    
+    def _analyze_content_complexity(self, video_clips):
+        """Analyze content complexity to optimize encoding parameters"""
+        complexity_metrics = {
+            'high_motion_clips': 0,
+            'total_resolution': 0,
+            'avg_duration': 0,
+            'complexity_score': 'medium'
+        }
+        
+        if not video_clips:
+            return complexity_metrics
+        
+        total_duration = sum(clip['duration'] for clip in video_clips)
+        complexity_metrics['avg_duration'] = total_duration / len(video_clips)
+        
+        # Simple heuristics for complexity
+        for clip in video_clips:
+            # High resolution indicates potentially complex content
+            if hasattr(clip, 'resolution'):
+                width, height = clip.get('resolution', (1920, 1080))
+                complexity_metrics['total_resolution'] += width * height
+            
+            # Long clips might have more motion
+            if clip['duration'] > 30:
+                complexity_metrics['high_motion_clips'] += 1
+        
+        # Determine complexity score
+        avg_resolution = complexity_metrics['total_resolution'] / len(video_clips) if video_clips else 0
+        high_motion_ratio = complexity_metrics['high_motion_clips'] / len(video_clips)
+        
+        if avg_resolution > 1920 * 1080 or high_motion_ratio > 0.5:
+            complexity_metrics['complexity_score'] = 'high'
+        elif avg_resolution < 1280 * 720 and high_motion_ratio < 0.2:
+            complexity_metrics['complexity_score'] = 'low'
+        
+        return complexity_metrics
+    
+    def _get_adaptive_encoding_params(self, complexity_metrics, base_params):
+        """Get encoding parameters adapted to content complexity"""
+        adaptive_params = base_params.copy()
+        
+        complexity = complexity_metrics['complexity_score']
+        
+        if complexity == 'high':
+            # High complexity content needs more bitrate
+            current_bitrate = int(adaptive_params['bitrate'].replace('k', ''))
+            adaptive_params['bitrate'] = f"{int(current_bitrate * 1.3)}k"
+            
+            if self.encoding_params['codec'] == 'libx264':
+                # Use slower preset for better quality on complex content
+                adaptive_params['quality_preset'] = 'medium'
+            
+        elif complexity == 'low':
+            # Low complexity can use lower bitrate and faster preset
+            current_bitrate = int(adaptive_params['bitrate'].replace('k', ''))
+            adaptive_params['bitrate'] = f"{int(current_bitrate * 0.8)}k"
+            
+            if self.encoding_params['codec'] == 'libx264':
+                adaptive_params['quality_preset'] = 'fast'
+        
+        return adaptive_params
+    
+    def _create_compilation_worker(self, selected_clips, video_id, compilation_num, clip_usage):
+        """Worker function for parallel compilation creation"""
+        try:
+            # Periodic cleanup
+            if self.compilation_counter % self.cleanup_interval == 0:
+                self._cleanup_temp_files()
+            
+            self.compilation_counter += 1
+            
+            # Create compilation
+            base_output_path = os.path.join(self.output_dir, f"{video_id}_compilation_{compilation_num}")
+            variations_result = self.create_all_compilation_variations(
+                selected_clips, base_output_path, video_id, compilation_num
+            )
+            
+            # Update clip usage (thread-safe)
+            if variations_result['successful_count'] > 0:
+                for clip in selected_clips:
+                    clip_usage[clip['path']] += 1
+            
+            return {
+                'success': variations_result['successful_count'] > 0,
+                'variations_result': variations_result,
+                'compilation_num': compilation_num
+            }
+            
+        except Exception as e:
+            logger.error(f"Compilation worker {compilation_num} failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'compilation_num': compilation_num
+            }
+        """Worker function for parallel compilation creation"""
+        try:
+            # Periodic cleanup
+            if self.compilation_counter % self.cleanup_interval == 0:
+                self._cleanup_temp_files()
+            
+            self.compilation_counter += 1
+            
+            # Create compilation
+            base_output_path = os.path.join(self.output_dir, f"{video_id}_compilation_{compilation_num}")
+            variations_result = self.create_all_compilation_variations(
+                selected_clips, base_output_path, video_id, compilation_num
+            )
+            
+            # Update clip usage (thread-safe)
+            if variations_result['successful_count'] > 0:
+                for clip in selected_clips:
+                    clip_usage[clip['path']] += 1
+            
+            return {
+                'success': variations_result['successful_count'] > 0,
+                'variations_result': variations_result,
+                'compilation_num': compilation_num
+            }
+            
+        except Exception as e:
+            logger.error(f"Compilation worker {compilation_num} failed: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'compilation_num': compilation_num
+            }
+    
+    def _optimize_audio_processing(self, clip):
+        """Optimize audio processing for better performance"""
+        try:
+            if clip.audio is None:
+                return clip
+            
+            # Check if audio needs normalization or optimization
+            audio = clip.audio
+            
+            # Simple audio optimization: ensure consistent sample rate
+            if hasattr(audio, 'fps') and audio.fps != 44100:
+                # Resample to standard 44.1kHz if needed
+                audio = audio.with_fps(44100)
+                clip = clip.with_audio(audio)
+            
+            return clip
+        except Exception as e:
+            logger.warning(f"Audio optimization failed: {e}")
+            return clip
+    
+    def _get_optimal_worker_count(self):
+        """Calculate optimal worker count based on system resources"""
+        cpu_count = multiprocessing.cpu_count()
+        memory_gb = psutil.virtual_memory().total / (1024**3)
+        
+        # Base worker count on CPU and memory
+        optimal_workers = min(cpu_count, int(memory_gb / 2))  # 2GB per worker
+        
+        # Adjust for GPU
+        if self.has_gpu:
+            try:
+                gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                gpu_workers = max(1, int(gpu_mem_gb / 4))  # 4GB per GPU worker
+                optimal_workers = min(optimal_workers, gpu_workers)
+            except:
+                pass
+        
+        # Safety limits
+        return max(1, min(optimal_workers, 6))  # Never exceed 6 workers
     
     def _check_memory_usage(self):
+        """Check current memory usage and trigger cleanup if needed"""
+        current_memory = psutil.virtual_memory().percent
+        if current_memory > self.memory_threshold * 100:
+            print(f"⚠️  High memory usage detected: {current_memory:.1f}%")
+            print("   - Triggering garbage collection...")
+            gc.collect()
+            if self.has_gpu:
+                torch.cuda.empty_cache()
+            return True
+        return False
         """Check current memory usage and trigger cleanup if needed"""
         current_memory = psutil.virtual_memory().percent
         if current_memory > self.memory_threshold * 100:
@@ -268,7 +653,7 @@ class TikYouGenerator:
         
         raise ValueError(f"Could not extract video ID from URL: {youtube_url}")
     
-    def _process_clip_for_compilation(self, clip_path, target_resolution=(1080, 1920)):
+    def _process_clip_for_compilation(self, clip_path, target_resolution=None):
         """
         Load, resize, and process a single clip for compilation.
         If the clip is low resolution, it will be placed on a blurred background
@@ -288,6 +673,14 @@ class TikYouGenerator:
                 return None
 
             w, h = clip.size
+            
+            # Use dynamic target resolution if not provided
+            if target_resolution is None:
+                from .config import TikYouConfig
+                config = TikYouConfig()
+                config.set_dynamic_resolution(clip_path)
+                target_resolution = (config.video.width, config.video.height)
+            
             target_w, target_h = target_resolution
             print(f"        🎯 Target resolution: {target_w}x{target_h}")
 
@@ -434,10 +827,22 @@ class TikYouGenerator:
             print(f"ℹ️  No pillarboxes detected or cropping not needed")
             self._log("No pillarboxes detected or cropping not needed", "info", "process_single_video")
         
-        # Analyze the video for scenes
+        # Analyze the video for scenes (with caching)
         self._log("Analyzing video for scenes", "info", "process_single_video")
         print(f"🔍 Analyzing video for scenes...")
-        analysis = self.processor.analyze_video_scenes(video_path, threshold=sensitivity, method=method)
+        
+        # Try to get cached analysis first
+        cached_analysis = self._get_cached_scene_analysis(video_path)
+        if cached_analysis:
+            print(f"✅ Using cached scene analysis")
+            self._log("Using cached scene analysis", "info", "process_single_video")
+            analysis = cached_analysis
+        else:
+            print(f"🔄 Performing new scene analysis...")
+            analysis = self.processor.analyze_video_scenes(video_path, threshold=sensitivity, method=method)
+            # Cache the results
+            self._cache_scene_analysis(video_path, analysis)
+            self._log("Scene analysis completed and cached", "info", "process_single_video")
         
         is_compilation = analysis['is_compilation']
         scenes = analysis['scenes']
@@ -587,14 +992,9 @@ class TikYouGenerator:
         """Convert horizontal video to vertical format with optimized encoding"""
         output_path = None  # Initialize to avoid scope issues
         try:
-            # Use absolute path to avoid working directory issues
-            # Get the backend directory (parent of vendors)
-            backend_dir = Path(__file__).resolve().parent.parent.parent.parent
-            temp_vertical_dir = backend_dir / "temp_vertical"
-            os.makedirs(temp_vertical_dir, exist_ok=True)
-            
+            # Use the optimized temp directory
             video_name = os.path.splitext(os.path.basename(video_path))[0]
-            output_path = os.path.join(str(temp_vertical_dir), f"{video_name}_vertical.mp4")
+            output_path = os.path.join(self.temp_dir, f"{video_name}_vertical.mp4")
             
             # If vertical version already exists, return its path
             if os.path.exists(output_path):
@@ -607,16 +1007,16 @@ class TikYouGenerator:
             video_clip = VideoFileClip(video_path, audio=True)
             original_duration = video_clip.duration
             
-            # IMPROVED: Higher bitrates for better quality
+            # Enhanced bitrates for better quality based on source
             if video_clip.w * video_clip.h > 1920 * 1080:  # High resolution source
-                bitrate = '6000k'  # Increased from 3000k
-                audio_bitrate = '256k'  # Increased from 192k
+                bitrate = '8000k'  # Increased significantly
+                audio_bitrate = '256k'
             elif original_duration > 60:  # Long video
-                bitrate = '5000k'  # Increased from 2500k
-                audio_bitrate = '192k'  # Increased from 160k
+                bitrate = '6000k'  # Increased
+                audio_bitrate = '192k'
             else:  # Standard quality
-                bitrate = '4000k'  # Increased from 2000k
-                audio_bitrate = '192k'  # Increased from 128k
+                bitrate = '5000k'  # Increased
+                audio_bitrate = '192k'
             
             video_clip = video_clip.with_effects([vfx.Resize(width=W)])
             background = ColorClip(size=(W, H), color=BACKGROUND_COLOR, duration=video_clip.duration)
@@ -629,44 +1029,36 @@ class TikYouGenerator:
             final_clip.duration = video_clip.duration
             final_clip.audio = video_clip.audio
 
-            # Enhanced encoding settings with GPU support and adaptive quality
+            # Use optimized encoding parameters
             encoding_params = {
-                'codec': 'h264_nvenc' if self.has_gpu else 'libx264',
+                'codec': self.encoding_params['codec'],
                 'audio_codec': 'aac',
-                'preset': 'p3' if self.has_gpu else 'slow',  # IMPROVED: Better quality presets
                 'threads': self.max_workers,
                 'fps': 30,
                 'bitrate': bitrate,
                 'audio_bitrate': audio_bitrate,
                 'write_logfile': False,
                 'logger': None,
-                'ffmpeg_params': [
-                    '-movflags', 'faststart',
-                    '-pix_fmt', 'yuv420p',  # Ensure compatibility
-                    '-profile:v', 'high',   # H.264 high profile for better compression
-                    '-level', '4.1',         # H.264 level for mobile compatibility
-                    '-avoid_negative_ts', 'make_zero',  # FIX: Prevent negative timestamps
-                    '-fflags', '+genpts',  # FIX: Generate presentation timestamps
-                    '-start_at_zero',  # FIX: Ensure output starts at zero
+                'ffmpeg_params': self.encoding_params['ffmpeg_params'] + [
+                    '-avoid_negative_ts', 'make_zero',
+                    '-fflags', '+genpts',
+                    '-start_at_zero',
+                    '-pix_fmt', 'yuv420p',
+                    '-profile:v', 'high',
+                    '-level', '4.1'
                 ]
             }
 
-            # Log encoding mode
-            codec_name = 'h264_nvenc (GPU)' if self.has_gpu else 'libx264 (CPU)'
-            preset_name = 'p3 (GPU)' if self.has_gpu else 'slow (CPU)'
-            print(f"🎬 Converting {video_name}: {codec_name}, preset={preset_name}, bitrate={bitrate}")
-
-            if self.has_gpu:
-                # GPU encoding parameters are handled automatically by h264_nvenc
-                print(f"   - GPU Options: Using NVENC hardware acceleration")
+            # Add quality settings based on codec
+            if self.encoding_params['codec'] == 'h264_nvenc':
+                print(f"🎬 Converting {video_name}: GPU NVENC, bitrate={bitrate}")
             else:
-                # CPU-specific optimizations with IMPROVED quality settings
                 encoding_params['ffmpeg_params'].extend([
-                    '-crf', '20',  # IMPROVED: Lower CRF for better quality (was 23)
+                    '-crf', '20',  # Better quality
                     '-maxrate', bitrate,
                     '-bufsize', str(int(bitrate.replace('k', '')) * 2) + 'k'
                 ])
-                print(f"   - CPU Options: crf=20, maxrate={bitrate}, bufsize={str(int(bitrate.replace('k', '')) * 2)}k")
+                print(f"🎬 Converting {video_name}: CPU x264, crf=20, bitrate={bitrate}")
 
             final_clip.write_videofile(output_path, **encoding_params)
             
@@ -674,7 +1066,7 @@ class TikYouGenerator:
             final_clip.close()
 
             # Verify output file was created successfully
-            if not os.path.exists(output_path) or os.path.getsize(output_path) < 1024:  # Less than 1KB
+            if not os.path.exists(output_path) or os.path.getsize(output_path) < 1024:
                 print(f"⚠️  Warning: Output file seems invalid for {video_name}")
                 return None
 
@@ -847,7 +1239,7 @@ class TikYouGenerator:
             adaptive_params = self._adapt_processing_parameters(len(final_clips), final_compilation.duration)
             
             # Use GPU encoding if available, otherwise use CPU with quality flags
-            codec = 'h264_nvenc' if self.has_gpu else 'libx264'
+            codec = self.encoding_params['codec']
             ffmpeg_params = [
                 '-movflags', 'faststart',
                 '-pix_fmt', 'yuv420p',
@@ -856,10 +1248,10 @@ class TikYouGenerator:
                 '-avoid_negative_ts', 'make_zero',  # FIX: Prevent negative timestamps
                 '-fflags', '+genpts',  # FIX: Generate presentation timestamps
                 '-start_at_zero',  # FIX: Ensure output starts at zero
-            ]
+            ] + self.encoding_params['ffmpeg_params']
             
             # Log final compilation encoding mode
-            codec_name = 'h264_nvenc (GPU)' if self.has_gpu else 'libx264 (CPU)'
+            codec_name = self.encoding_params['codec']
             print(f"      🎬 Encoding configuration:")
             print(f"         - Codec: {codec_name}")
             print(f"         - Preset: {adaptive_params['quality_preset']}")
@@ -867,15 +1259,15 @@ class TikYouGenerator:
             print(f"         - Workers: {self.max_workers}")
             
             # Add CPU-specific quality flags if not using GPU
-            if not self.has_gpu:
+            if codec == 'libx264':
                 ffmpeg_params.extend([
-                    '-crf', '20',  # IMPROVED: Lower CRF for better quality (was 22)
+                    '-crf', '20',  # Better quality
                     '-maxrate', adaptive_params['bitrate'],
                     '-bufsize', str(int(adaptive_params['bitrate'].replace('k', '')) * 2) + 'k'
                 ])
-                print(f"         - CPU Options: crf=20, maxrate={adaptive_params['bitrate']}, bufsize={str(int(adaptive_params['bitrate'].replace('k', '')) * 2)}k")
+                print(f"         - CPU Options: crf=20, maxrate={adaptive_params['bitrate']}")
             else:
-                print(f"         - GPU Options: Using NVENC hardware acceleration")
+                print(f"         - GPU Options: Using hardware acceleration")
 
             print(f"      🎬 Starting video encoding...")
             print(f"         - This may take several minutes depending on video length and system performance")
@@ -1102,18 +1494,33 @@ class TikYouGenerator:
             print("❌ No video clips were processed. Exiting.")
             return performance_stats
 
-        # 2. Categorize clips and prepare for generation
+        # 2. Categorize clips and prepare for generation with pre-processing
         print(f"\n{'='*50}")
-        print(f"PHASE 2: Clip Analysis & Categorization")
+        print(f"PHASE 2: Clip Analysis, Categorization & Pre-processing")
         print(f"{'='*50}")
         
         phase_start = time.time()
         categorized_clips = self.categorize_clips(video_clips)
-        all_clips = [clip for clips in categorized_clips.values() for clip in clips if clip['duration'] >= 3.0]
+        
+        # Analyze content complexity for adaptive encoding
+        print(f"🧠 Analyzing content complexity for optimal encoding...")
+        complexity_metrics = self._analyze_content_complexity(video_clips)
+        print(f"   - Content complexity: {complexity_metrics['complexity_score']}")
+        print(f"   - Average clip duration: {complexity_metrics['avg_duration']:.1f}s")
+        print(f"   - High motion clips: {complexity_metrics['high_motion_clips']}")
+        
+        # Pre-process clips in parallel batches for better performance
+        print(f"🚀 Starting parallel clip pre-processing...")
+        all_clips_raw = [clip for clips in categorized_clips.values() for clip in clips if clip['duration'] >= 3.0]
+        
+        # Pre-process clips that need conversion
+        all_clips = self._preprocess_clips_batch(all_clips_raw)
+        
         performance_stats['total_clips_processed'] = len(all_clips)
         performance_stats['processing_time'] = time.time() - phase_start
+        performance_stats['complexity_metrics'] = complexity_metrics
         
-        self._log(f"Categorized {len(all_clips)} clips (>=3s duration)", "info", "generate_tikyou_videos")
+        self._log(f"Categorized and pre-processed {len(all_clips)} clips (>=3s duration)", "info", "generate_tikyou_videos")
         
         if not all_clips:
             self._log("No clips long enough to be used in compilations", "error", "generate_tikyou_videos")
@@ -1198,10 +1605,15 @@ class TikYouGenerator:
                 print(f"   ⏱️  Total set creation time: {compilation_time:.1f}s")
 
         else:
-            self._log("Generating as many compilation sets as possible", "info", "generate_tikyou_videos")
+            self._log("Generating as many compilation sets as possible with simplified parallel processing", "info", "generate_tikyou_videos")
             print("🎯 Generating as many compilation sets as possible...")
+            
+            # Simplified approach: Generate one at a time but with optimizations
             compilation_num = 1
-            while True:
+            consecutive_failures = 0
+            max_consecutive_failures = 3
+            
+            while consecutive_failures < max_consecutive_failures:
                 compilation_start = time.time()
                 print(f"\n{'='*80}")
                 print(f"COMPILATION SET {compilation_num} (Unlimited Mode)")
@@ -1209,16 +1621,31 @@ class TikYouGenerator:
                 
                 self._log(f"Starting compilation set {compilation_num} (unlimited mode)", "info", "generate_tikyou_videos")
                 
-                # Update peak memory usage
+                # Update peak memory usage and check if we need to pause
                 current_memory = psutil.virtual_memory().percent
                 performance_stats['peak_memory_usage'] = max(performance_stats['peak_memory_usage'], current_memory)
+                
+                if self._check_memory_usage():
+                    print("   - Pausing for memory cleanup...")
+                    time.sleep(2)
                 
                 selected_clips = self._select_clips_with_constraints(all_clips, clip_usage, max_reuse, min_duration, max_duration)
                 
                 if not selected_clips:
-                    self._log("No more valid compilations can be created with remaining clips", "info", "generate_tikyou_videos")
-                    print("✅ No more valid compilations can be created with the remaining clips.")
-                    break
+                    consecutive_failures += 1
+                    print(f"⚠️  Could not create compilation {compilation_num} with the given constraints. Failure {consecutive_failures}/{max_consecutive_failures}")
+                    self._log(f"Failed to create compilation {compilation_num}, failure {consecutive_failures}/{max_consecutive_failures}", "warning", "generate_tikyou_videos")
+                    
+                    if consecutive_failures >= max_consecutive_failures:
+                        print("✅ No more valid compilations can be created with the remaining clips.")
+                        self._log("Maximum consecutive failures reached, stopping generation", "info", "generate_tikyou_videos")
+                        break
+                    else:
+                        compilation_num += 1
+                        continue
+                
+                # Reset consecutive failures since we found valid clips
+                consecutive_failures = 0
                 
                 # Update usage
                 for clip in selected_clips:
@@ -1226,53 +1653,82 @@ class TikYouGenerator:
                 
                 # Create all variations
                 base_output_path = os.path.join(self.output_dir, f"{video_id}_compilation_{compilation_num}")
-                variations_result = self.create_all_compilation_variations(
-                    selected_clips, base_output_path, video_id, compilation_num
-                )
                 
-                # Update statistics
-                if variations_result['successful_count'] > 0:
-                    created_count += 1
-                    performance_stats['successful_compilations'] += 1
+                try:
+                    variations_result = self.create_all_compilation_variations(
+                        selected_clips, base_output_path, video_id, compilation_num
+                    )
                     
-                    # Track individual variations
-                    if variations_result['normal']:
-                        performance_stats['normal_variations'] += 1
-                    if variations_result['tts']:
-                        performance_stats['tts_variations'] += 1
-                    
-                    performance_stats['total_variations'] += variations_result['successful_count']
-                    
-                    # Track output file sizes
-                    total_set_size = 0
-                    for variation_name, path in [('normal', variations_result['normal']), 
-                                               ('tts', variations_result['tts'])]:
-                        if path and os.path.exists(path):
-                            file_size = os.path.getsize(path) / (1024 * 1024)  # MB
-                            total_set_size += file_size
-                            print(f"   📦 {variation_name.capitalize()} variation: {file_size:.1f}MB")
-                    
-                    performance_stats['total_output_size'] += total_set_size
-                    print(f"   📦 Total set size: {total_set_size:.1f}MB")
-                    self._log(f"Compilation set {compilation_num} completed: {variations_result['successful_count']} variations, {total_set_size:.1f}MB", "info", "generate_tikyou_videos")
-                else:
+                    # Update statistics
+                    if variations_result['successful_count'] > 0:
+                        created_count += 1
+                        performance_stats['successful_compilations'] += 1
+                        
+                        # Track individual variations
+                        if variations_result['normal']:
+                            performance_stats['normal_variations'] += 1
+                        if variations_result['tts']:
+                            performance_stats['tts_variations'] += 1
+                        
+                        performance_stats['total_variations'] += variations_result['successful_count']
+                        
+                        # Track output file sizes
+                        total_set_size = 0
+                        for variation_name, path in [('normal', variations_result['normal']), 
+                                                   ('tts', variations_result['tts'])]:
+                            if path and os.path.exists(path):
+                                file_size = os.path.getsize(path) / (1024 * 1024)  # MB
+                                total_set_size += file_size
+                                print(f"   📦 {variation_name.capitalize()} variation: {file_size:.1f}MB")
+                        
+                        performance_stats['total_output_size'] += total_set_size
+                        print(f"   📦 Total set size: {total_set_size:.1f}MB")
+                        self._log(f"Compilation set {compilation_num} completed: {variations_result['successful_count']} variations, {total_set_size:.1f}MB", "info", "generate_tikyou_videos")
+                    else:
+                        performance_stats['failed_compilations'] += 1
+                        consecutive_failures += 1
+                        self._log(f"Compilation set {compilation_num} failed", "error", "generate_tikyou_videos")
+                        
+                except Exception as e:
                     performance_stats['failed_compilations'] += 1
-                    self._log(f"Compilation set {compilation_num} failed", "error", "generate_tikyou_videos")
+                    consecutive_failures += 1
+                    print(f"❌ Error creating compilation {compilation_num}: {e}")
+                    self._log(f"Error creating compilation {compilation_num}: {e}", "error", "generate_tikyou_videos")
                 
                 compilation_time = time.time() - compilation_start
                 print(f"   ⏱️  Total set creation time: {compilation_time:.1f}s")
+                
                 compilation_num += 1
+                
+                # Periodic cleanup every 10 compilations
+                if compilation_num % 10 == 0:
+                    print(f"🧹 Performing periodic cleanup...")
+                    self._cleanup_temp_files()
+                    gc.collect()
+                    if self.has_gpu:
+                        torch.cuda.empty_cache()
 
         performance_stats['generation_time'] = time.time() - generation_start
         total_time = time.time() - start_time
 
         # Cleanup temp directory
-        # Get the backend directory (parent of vendors)
+        print("\n🧹 Cleaning up temporary files...")
+        try:
+            if os.path.isdir(self.temp_dir):
+                shutil.rmtree(self.temp_dir)
+                print("✅ Temporary files cleaned up successfully")
+        except Exception as e:
+            print(f"⚠️ Warning: Could not clean up temp directory: {e}")
+        
+        # Also cleanup the old temp_vertical directory if it exists
         backend_dir = Path(__file__).resolve().parent.parent.parent.parent
         temp_vertical_dir = backend_dir / "temp_vertical"
         if os.path.isdir(temp_vertical_dir):
-            print("\n🧹 Cleaning up temporary files...")
-            shutil.rmtree(temp_vertical_dir)
+            try:
+                shutil.rmtree(temp_vertical_dir)
+                print("✅ Legacy temp directory cleaned up")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not clean up legacy temp directory: {e}")
 
         # Performance Summary
         print(f"\n{'='*60}")
@@ -1287,6 +1743,14 @@ class TikYouGenerator:
         print(f"      - TTS intro compilations: {performance_stats['tts_variations']}")
         print(f"   📦 Total output size: {performance_stats['total_output_size']:.1f}MB")
         print(f"   💾 Peak memory usage: {performance_stats['peak_memory_usage']:.1f}%")
+        print(f"   🚀 Optimization features used:")
+        print(f"      - Sequential processing: ✅ Yes (reliable)")
+        print(f"      - Hardware acceleration: {'✅ GPU' if self.has_gpu else '💻 CPU'}")
+        print(f"      - Clip caching: ✅ Yes ({len(self.clip_cache)} cached)")
+        print(f"      - Scene analysis caching: ✅ Yes ({len(self.scene_analysis_cache)} cached)")
+        print(f"      - Optimized temp directory: ✅ Yes")
+        print(f"      - Memory management: ✅ Yes")
+        print(f"      - Content complexity analysis: ✅ Yes")
         print(f"\n⏱️  TIMING BREAKDOWN:")
         print(f"   📥 Download & Processing: {performance_stats['download_time']:.1f}s")
         print(f"   🔍 Analysis & Categorization: {performance_stats['processing_time']:.1f}s")

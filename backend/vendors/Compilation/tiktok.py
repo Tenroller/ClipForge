@@ -419,8 +419,22 @@ class TikTokVideoCreator:
             # Concatenate all clips
             final_video = concatenate_videoclips(clips, method="compose")
             
-            # Ensure final video is exactly 1080x1920
-            final_video = final_video.resized(width=1080, height=1920)
+            # Determine optimal resolution from first video
+            if selected_videos:
+                first_video_path = selected_videos[0].get('path')
+                if first_video_path:
+                    from .config import TikYouConfig
+                    config = TikYouConfig()
+                    config.set_dynamic_resolution(first_video_path)
+                    target_width, target_height = config.video.width, config.video.height
+                    print(f"Using dynamic resolution: {target_width}x{target_height}")
+                else:
+                    target_width, target_height = 1080, 1920
+            else:
+                target_width, target_height = 1080, 1920
+            
+            # Ensure final video matches target resolution
+            final_video = final_video.resized(width=target_width, height=target_height)
             
             # Write the final video
             print(f"Writing final compilation to: {output_path}")

@@ -59,3 +59,4 @@ jobs.db
 /debug_frames
 *.m4a
 /backend/cache
+/backend/venv

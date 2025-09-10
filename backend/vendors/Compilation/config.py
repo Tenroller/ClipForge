@@ -156,8 +156,8 @@ class TikYouConfig:
     
     def __init__(self, config_file: Optional[str] = None):
         """Initialize configuration, optionally loading from file"""
-        # Initialize all configuration sections
-        self.video = VideoResolution(width=1080, height=1920)
+        # Initialize all configuration sections with dynamic resolution support
+        self.video = VideoResolution(width=1080, height=1920)  # Default, will be overridden dynamically
         self.encoding = EncodingConfig()
         self.processing = ProcessingConfig()
         self.ui = UIConfig()
@@ -198,6 +198,54 @@ class TikYouConfig:
             if output_dir_override:
                 self.paths.output_dir = output_dir_override
     
+    def set_dynamic_resolution(self, input_video_path: str):
+        """Set video resolution based on input video aspect ratio"""
+        try:
+            import subprocess
+            import json
+            
+            # Get video info using ffprobe
+            result = subprocess.run([
+                'ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', 
+                '-show_format', input_video_path
+            ], capture_output=True, text=True, timeout=30)
+            
+            if result.returncode == 0:
+                info = json.loads(result.stdout)
+                
+                # Find video stream
+                for stream in info.get('streams', []):
+                    if stream.get('codec_type') == 'video':
+                        width = stream.get('width', 1920)
+                        height = stream.get('height', 1080)
+                        
+                        if width > 0 and height > 0:
+                            aspect_ratio = width / height
+                            
+                            if aspect_ratio > 1.5:  # Horizontal
+                                self.video.width = 1920
+                                self.video.height = 1080
+                                print(f"Detected horizontal video -> 1920x1080 output")
+                            elif aspect_ratio < 0.7:  # Vertical
+                                self.video.width = 1080
+                                self.video.height = 1920
+                                print(f"Detected vertical video -> 1080x1920 output")
+                            else:  # Square-ish
+                                self.video.width = 1080
+                                self.video.height = 1080
+                                print(f"Detected square video -> 1080x1080 output")
+                            
+                            return
+            
+            print("Could not detect video aspect ratio, using default 1920x1080")
+            self.video.width = 1920
+            self.video.height = 1080
+            
+        except Exception as e:
+            print(f"Error detecting video aspect ratio: {e}, using default 1920x1080")
+            self.video.width = 1920
+            self.video.height = 1080
+
     def load_from_file(self, config_file: str):
         """Load configuration from a JSON or YAML file"""
         # TODO: Implement file loading

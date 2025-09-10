@@ -17,6 +17,7 @@ logger = get_logger("video_generator.ai_videos")
 
 
 from typing import List, Dict, Optional, Union, Any, cast, Tuple
+from .utils import determine_optimal_resolution, get_target_aspect_ratio
 from moviepy import (
     VideoFileClip,
     AudioFileClip,
@@ -481,7 +482,7 @@ def generate_subtitles(audio_path: str, sentences: List[str], audio_clips: List[
     return subtitles_path
 
 
-def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration: int, threads: int, use_gpu: bool = True, use_streaming: bool = False) -> str:
+def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration: int, threads: int, use_gpu: bool = True, use_streaming: bool = False, target_resolution: Optional[Tuple[int, int]] = None) -> str:
     """
     Combines a list of videos into one video and returns the path to the combined video.
 
@@ -548,11 +549,15 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
                 clip = clip.with_fps(30)
 
                 # Handle different aspect ratios and sizes more robustly
-                # Target aspect ratio is 9:16 (0.5625)
-                current_aspect = clip.w / clip.h
-                target_aspect = 9 / 16  # 0.5625
+                # Use dynamic target resolution if provided, otherwise detect from first video
+                if target_resolution is None:
+                    target_resolution = determine_optimal_resolution(video_paths[0])
                 
-                print(f"Processing clip: {clip.w}x{clip.h}, aspect: {current_aspect:.4f}, target: {target_aspect:.4f}")
+                target_width, target_height = target_resolution
+                target_aspect = get_target_aspect_ratio(target_resolution)
+                current_aspect = clip.w / clip.h
+                
+                print(f"Processing clip: {clip.w}x{clip.h}, aspect: {current_aspect:.4f}, target: {target_aspect:.4f} ({target_width}x{target_height})")
                 
                 if abs(current_aspect - target_aspect) > 0.01:  # Need aspect ratio adjustment
                     if current_aspect < target_aspect:
@@ -580,9 +585,9 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
                                 y_center=clip.h / 2
                             )])
                 
-                # Resize to target dimensions (1080x1920) - ensure even dimensions
-                target_width = 1080  # Already even
-                target_height = 1920  # Already even
+                # Resize to target dimensions - ensure even dimensions
+                target_width = target_width if target_width % 2 == 0 else target_width - 1
+                target_height = target_height if target_height % 2 == 0 else target_height - 1
                 clip = clip.with_effects([vfx.Resize(width=target_width, height=target_height)])
 
                 # Limit clip duration if needed
@@ -732,7 +737,7 @@ def create_fallback_subtitle_clip(subtitles_path: str, video_size: Tuple[int, in
 
 
 
-def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str, threads: int, subtitles_position: str, text_color: str, use_gpu: bool = True) -> str:
+def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str, threads: int, subtitles_position: str, text_color: str, use_gpu: bool = True, target_resolution: Optional[Tuple[int, int]] = None) -> str:
     """
     This function creates the final video, with subtitles and audio.
 
@@ -1051,7 +1056,12 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
                 
         except Exception as e:
             print(colored(f"[warn] Error getting clip dimensions: {e}", "yellow"))
-            w, h, sw, sh = 1080, 1920, int(1080 * 0.8), int(1920 * 0.08)
+            # Use target resolution if provided, otherwise default
+            if target_resolution:
+                w, h = target_resolution
+            else:
+                w, h = 1080, 1920  # Default fallback
+            sw, sh = int(w * 0.8), int(h * 0.08)
 
         if pos_mode == 'pct':
             # pct anchors are CENTER of subtitle box, expressed in percentages

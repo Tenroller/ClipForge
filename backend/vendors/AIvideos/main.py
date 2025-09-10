@@ -272,13 +272,16 @@ def generate():
             print(colored(f"[-] Error generating subtitles: {e}", "red"))
             subtitles_path = None
 
-        # Concatenate videos
+        # Concatenate videos with dynamic aspect ratio detection
         temp_audio = AudioFileClip(tts_path)
-        combined_video_path = combine_videos(video_paths, temp_audio.duration, 5, n_threads or 2, use_gpu)
+        # Determine optimal resolution from the first video
+        from .utils import determine_optimal_resolution
+        target_resolution = determine_optimal_resolution(video_paths[0]) if video_paths else (1920, 1080)
+        combined_video_path = combine_videos(video_paths, temp_audio.duration, 5, n_threads or 2, use_gpu, target_resolution=target_resolution)
 
         # Put everything together
         try:
-            final_video_path = generate_video(combined_video_path, tts_path, subtitles_path or "", n_threads or 2, subtitles_position, text_color or "#FFFF00", use_gpu)
+            final_video_path = generate_video(combined_video_path, tts_path, subtitles_path or "", n_threads or 2, subtitles_position, text_color or "#FFFF00", use_gpu, target_resolution=target_resolution)
         except Exception as e:
             print(colored(f"[-] Error generating final video: {e}", "red"))
             final_video_path = None

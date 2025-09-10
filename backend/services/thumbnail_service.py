@@ -93,8 +93,23 @@ class ThumbnailService:
                     
                     image = Image.fromarray(frame)
                     
-                    # Resize to reasonable thumbnail size (320x180 for 16:9)
-                    image.thumbnail((320, 180), Image.Resampling.LANCZOS)
+                    # Get original dimensions to preserve aspect ratio
+                    original_width, original_height = image.size
+                    aspect_ratio = original_width / original_height
+                    
+                    # Set max dimensions while preserving aspect ratio
+                    max_width = 320
+                    max_height = 320
+                    
+                    if aspect_ratio > 1:  # Horizontal video
+                        new_width = max_width
+                        new_height = int(max_width / aspect_ratio)
+                    else:  # Vertical or square video
+                        new_height = max_height
+                        new_width = int(max_height * aspect_ratio)
+                    
+                    # Resize preserving aspect ratio
+                    image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
                     
                     # Save as JPEG
                     image.save(str(thumbnail_path), "JPEG", quality=85, optimize=True)
@@ -133,6 +148,31 @@ class ThumbnailService:
             logger.error(f"Failed to generate thumbnail URL for {video_path}: {e}")
             return None
     
+    def clear_all_thumbnails(self) -> int:
+        """
+        Remove all thumbnail files to force regeneration.
+        
+        Returns:
+            Number of files removed
+        """
+        try:
+            removed_count = 0
+            
+            for thumbnail_file in self.cache_dir.glob("*.jpg"):
+                try:
+                    thumbnail_file.unlink()
+                    removed_count += 1
+                    logger.debug(f"Removed thumbnail: {thumbnail_file}")
+                except Exception as e:
+                    logger.warning(f"Failed to remove thumbnail {thumbnail_file}: {e}")
+            
+            logger.info(f"Cleared {removed_count} thumbnails from cache")
+            return removed_count
+            
+        except Exception as e:
+            logger.error(f"Failed to clear thumbnails: {e}")
+            return 0
+
     def cleanup_old_thumbnails(self, max_age_days: int = 30) -> int:
         """
         Remove thumbnail files older than specified days.

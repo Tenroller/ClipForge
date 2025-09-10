@@ -34,6 +34,9 @@ class AppConfig:
     sentry_traces_sample_rate: float = 0.0
     sentry_profiles_sample_rate: float = 0.0
     
+    # Webhook settings
+    webhook_url: Optional[str] = None
+    
     @classmethod
     def from_env(cls) -> "AppConfig":
         """Create configuration from environment variables."""
@@ -68,4 +71,5 @@ class AppConfig:
             sentry_dsn=os.getenv("SENTRY_DSN"),
             sentry_traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
             sentry_profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0")),
+            webhook_url=os.getenv("WEBHOOK_URL"),
         )
