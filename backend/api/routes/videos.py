@@ -16,6 +16,7 @@ from ...database import get_job_store
 from ...logging_config import get_logger
 from ...utils.paths import get_output_path, get_project_root
 from ...services.thumbnail_service import get_thumbnail_service
+from ...services.video_service import get_video_service
 from ...core.config import AppConfig
 
 router = APIRouter()
@@ -26,6 +27,9 @@ job_store = get_job_store()
 
 # Get thumbnail service
 thumbnail_service = get_thumbnail_service()
+
+# Get video service
+video_service = get_video_service()
 
 
 class PostVideoRequest(BaseModel):
@@ -87,6 +91,8 @@ def scan_orphaned_videos() -> List[Dict[str, Any]]:
     try:
         # Get all job IDs from database for tracking
         all_jobs = job_store.list_jobs(limit=10000)  # Get all jobs
+        if all_jobs is None:
+            all_jobs = []
         tracked_job_ids = {job["id"] for job in all_jobs}
         
         # Recursively find all .mp4 files in output directory
@@ -344,6 +350,7 @@ def get_video_stats() -> Dict[str, Any]:
         
         # Handle case where jobs could be None
         if jobs is None:
+            logger.warning("Jobs list is None, setting to empty list")
             jobs = []
         
         stats = {
@@ -400,11 +407,16 @@ def get_video_stats() -> Dict[str, Any]:
         
         # Add orphaned videos to stats
         logger.info("Getting orphaned videos")
-        orphaned_videos = scan_orphaned_videos()
-        logger.info(f"Got orphaned videos: {type(orphaned_videos)}, length: {len(orphaned_videos) if orphaned_videos else 'None'}")
-        
-        # Handle case where orphaned_videos could be None
-        if orphaned_videos is None:
+        try:
+            orphaned_videos = scan_orphaned_videos()
+            logger.info(f"Got orphaned videos: {type(orphaned_videos)}, length: {len(orphaned_videos) if orphaned_videos else 'None'}")
+            
+            # Handle case where orphaned_videos could be None
+            if orphaned_videos is None:
+                logger.warning("Orphaned videos is None, setting to empty list")
+                orphaned_videos = []
+        except Exception as e:
+            logger.error(f"Failed to scan orphaned videos: {e}")
             orphaned_videos = []
             
         for video in orphaned_videos:
@@ -654,20 +666,21 @@ def post_video_to_webhook(request: PostVideoRequest):
         request: Contains video_id and job_id to identify the video to post
     """
     try:
-        # Get the job
+        # Get the job (if it exists)
         job = job_store.get_job(request.job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
-        
-        job_result = job.get("result", {})
-        job_workflow = job.get("workflow", "unknown")
+        job_result = job.get("result", {}) if job else {}
+        job_workflow = job.get("workflow", "unknown") if job else "unknown"
         video_path = None
         video_data = None
         is_orphaned_video = request.video_id.startswith("orphaned_")
         
-        # Handle orphaned videos - videos that exist as files but aren't tracked in job results
-        if is_orphaned_video or not job_result:
-            logger.info(f"Handling orphaned video: {request.video_id}")
+        # If no job exists, treat as orphaned video and continue with file-based approach
+        if not job:
+            logger.info(f"Job {request.job_id} not found in database, treating video {request.video_id} as orphaned")
+        
+        # Handle orphaned videos or videos without job results
+        if is_orphaned_video or not job_result or not job:
+            logger.info(f"Handling orphaned/missing job video: {request.video_id}")
             
             # For orphaned videos, try to find the file directly in the output directory
             output_dir = get_output_path()
@@ -692,11 +705,26 @@ def post_video_to_webhook(request: PostVideoRequest):
             if not video_path:
                 job_output_dir = output_dir / request.job_id
                 if job_output_dir.exists():
-                    # For non-orphaned videos without results, try to find any video in the job directory
+                    # For videos without results, try to find any video in the job directory
                     video_files = list(job_output_dir.rglob("*.mp4"))
                     if video_files:
                         video_path = str(video_files[0])  # Use the first video found
                         logger.info(f"Found video file for job without results: {video_path}")
+                        
+                        # Try to detect workflow from file path
+                        if not job:
+                            path_str = str(video_files[0]).lower()
+                            if "brainrot" in path_str or "compilation" in path_str:
+                                job_workflow = "brainrot"
+                            elif "moneyprinter" in path_str or "ai_generated" in path_str:
+                                job_workflow = "moneyprinter"
+                            else:
+                                # Check parent directory names for clues
+                                parent_dirs = [p.name.lower() for p in video_files[0].parents]
+                                if any("brainrot" in p or "compilation" in p for p in parent_dirs):
+                                    job_workflow = "brainrot"
+                                elif any("moneyprinter" in p or "ai" in p for p in parent_dirs):
+                                    job_workflow = "moneyprinter"
             
             if not video_path or not Path(video_path).exists():
                 raise HTTPException(status_code=404, detail="Video file not found")
@@ -733,21 +761,12 @@ def post_video_to_webhook(request: PostVideoRequest):
         
         video_file_path = Path(video_path)
         
-        # Check if video is already posted
-        if is_orphaned_video:
-            # For orphaned videos, we can't track posted status in job results
-            # Skip the posted check for now - could be enhanced later with separate tracking
-            pass
-        elif job_workflow == "moneyprinter":
-            if job_result.get("posted", False):
-                raise HTTPException(status_code=400, detail="Video already posted")
-        elif job_workflow == "brainrot" and video_data:
-            if video_data.get("posted", False):
-                raise HTTPException(status_code=400, detail="Video already posted")
+        # Note: Videos can be re-posted to webhook multiple times
+        # We still track the posted status but don't prevent re-posting
         
         # Post video to webhook
         config = AppConfig.from_env()
-        webhook_url = config.webhook_url or "https://n8n.dight.app/webhook-test/29ad5d4d-0fd0-4eb7-a8e1-8f782c38b3d4"
+        webhook_url = config.webhook_url or "https://n8n.dight.app/webhook/29ad5d4d-0fd0-4eb7-a8e1-8f782c38b3d4"
         webhook_success = False
         webhook_error = None
         
@@ -787,7 +806,7 @@ def post_video_to_webhook(request: PostVideoRequest):
             if not webhook_success:
                 logger.warning(f"Video {request.video_id} processed but webhook posting failed: {webhook_error}")
         
-        # Update the job result to mark video as posted
+        # Update the job result to mark video as posted (legacy system)
         if is_orphaned_video:
             # For orphaned videos, we can't update job results since they don't exist
             # The video will still be posted to the webhook successfully
@@ -798,6 +817,21 @@ def post_video_to_webhook(request: PostVideoRequest):
         elif job_workflow == "brainrot" and video_data:
             video_data["posted"] = True
             job_store.update_job(request.job_id, result=job_result)
+        
+        # Also try to mark as posted in the new video tracking system
+        try:
+            # Try to find the video in the new tracking system by file path
+            if video_path:
+                managed_videos = video_service.list_videos(limit=1000)  # Get all videos to search
+                for managed_video in managed_videos:
+                    if managed_video["file_path"] == str(Path(video_path).resolve()):
+                        success = video_service.mark_video_posted(managed_video["id"])
+                        if success:
+                            logger.info(f"Also marked video {managed_video['id']} as posted in new tracking system")
+                        break
+        except Exception as e:
+            logger.debug(f"Could not update posted status in new video tracking system: {e}")
+            # Don't fail the request if the new system has issues
         
         if webhook_success:
             logger.info(f"Successfully posted video {request.video_id} to webhook")

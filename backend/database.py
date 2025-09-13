@@ -11,28 +11,28 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func
+from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func, Boolean, Float
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.exc import SQLAlchemyError
 
 # Import configuration
-from .config import get_config
+from .core.config import AppConfig
 
 # Database configuration (PostgreSQL only)
-config = get_config()
-DB_URL = config.get('database_url')
+config = AppConfig.from_env()
+DB_URL = config.database_url
 
 # SQLAlchemy setup for PostgreSQL
 Base = declarative_base()
 engine = create_engine(
     DB_URL,
     poolclass=QueuePool,
-    pool_size=config.get_int('videohelper_db_pool_size', 10),
-    pool_timeout=config.get_int('videohelper_db_pool_timeout', 60),
+    pool_size=config.videohelper_db_pool_size,
+    pool_timeout=config.videohelper_db_pool_timeout,
     max_overflow=20,
     pool_pre_ping=True,
-    echo=config.get_bool('debug_mode', False),
+    echo=config.debug_mode,
     # PostgreSQL-specific optimizations
     connect_args={
         "options": "-c timezone=utc",
@@ -72,6 +72,51 @@ class Job(Base):
         Index('ix_jobs_workflow_status', 'workflow', 'status'),
         Index('ix_jobs_user_id_created', 'user_id', 'created_at'),
         Index('ix_jobs_created_at', 'created_at'),
+    )
+
+
+class Video(Base):
+    """Video model for tracking generated videos."""
+    __tablename__ = "videos"
+
+    # Primary key - unique video ID
+    id = Column(String, primary_key=True)
+    
+    # Video metadata
+    filename = Column(String, nullable=False)
+    file_path = Column(Text, nullable=False)  # Full path to video file
+    size_bytes = Column(Integer)
+    duration_seconds = Column(Float)
+    
+    # Video categorization
+    workflow = Column(String, nullable=False)  # moneyprinter, brainrot, etc.
+    video_type = Column(String)  # ai_generated, compilation, etc.
+    
+    # Brainrot-specific fields
+    compilation_type = Column(String)  # normal, tts, etc.
+    compilation_num = Column(Integer)
+    
+    # Job association
+    job_id = Column(String, nullable=False)
+    
+    # Status tracking
+    posted = Column(Boolean, default=False, nullable=False)
+    posted_at = Column(TIMESTAMP(timezone=True))
+    
+    # Additional metadata
+    video_metadata = Column(JSON)  # For storing additional video-specific data
+    
+    # Timestamps
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    # PostgreSQL-specific indexes for better query performance
+    __table_args__ = (
+        Index('ix_videos_job_id', 'job_id'),
+        Index('ix_videos_workflow', 'workflow'),
+        Index('ix_videos_posted', 'posted'),
+        Index('ix_videos_created_at', 'created_at'),
+        Index('ix_videos_workflow_posted', 'workflow', 'posted'),
     )
 
 
@@ -249,6 +294,162 @@ class JobStore:
                 "total_jobs": total,
                 "by_status": by_status,
                 "recent_24h": recent
+            }
+
+    # Video management methods
+    def create_video(self, video_id: str, filename: str, file_path: str, job_id: str, 
+                     workflow: str, video_type: str = None, size_bytes: int = None, 
+                     duration_seconds: float = None, compilation_type: str = None, 
+                     compilation_num: int = None, metadata: Dict[str, Any] = None) -> None:
+        """Create a new video record."""
+        with self._get_session() as session:
+            video = Video(
+                id=video_id,
+                filename=filename,
+                file_path=file_path,
+                job_id=job_id,
+                workflow=workflow,
+                video_type=video_type,
+                size_bytes=size_bytes,
+                duration_seconds=duration_seconds,
+                compilation_type=compilation_type,
+                compilation_num=compilation_num,
+                video_metadata=metadata or {},
+                posted=False
+            )
+            session.add(video)
+            session.commit()
+
+    def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """Get video by ID."""
+        with self._get_session() as session:
+            video = session.query(Video).filter(Video.id == video_id).first()
+            
+            if not video:
+                return None
+            
+            return {
+                "id": video.id,
+                "filename": video.filename,
+                "file_path": video.file_path,
+                "job_id": video.job_id,
+                "workflow": video.workflow,
+                "video_type": video.video_type,
+                "size_bytes": video.size_bytes,
+                "duration_seconds": video.duration_seconds,
+                "compilation_type": video.compilation_type,
+                "compilation_num": video.compilation_num,
+                "posted": video.posted,
+                "posted_at": video.posted_at.isoformat() if video.posted_at else None,
+                "metadata": video.video_metadata or {},
+                "created_at": video.created_at.isoformat() if video.created_at else None,
+                "updated_at": video.updated_at.isoformat() if video.updated_at else None
+            }
+
+    def update_video(self, video_id: str, **fields: Any) -> bool:
+        """Update video fields."""
+        if not fields:
+            return False
+
+        with self._get_session() as session:
+            video = session.query(Video).filter(Video.id == video_id).first()
+            if not video:
+                return False
+
+            for field, value in fields.items():
+                if field == "posted" and value and not video.posted_at:
+                    # Set posted_at timestamp when marking as posted
+                    setattr(video, 'posted_at', func.now())
+                elif field == "metadata":
+                    # Map metadata to video_metadata column
+                    setattr(video, 'video_metadata', value)
+                elif hasattr(video, field):
+                    setattr(video, field, value)
+
+            session.commit()
+            return True
+
+    def list_videos(self, limit: int = 100, offset: int = 0, workflow: Optional[str] = None, 
+                    posted: Optional[bool] = None, job_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List videos with optional filtering."""
+        with self._get_session() as session:
+            query = session.query(Video)
+
+            if workflow:
+                query = query.filter(Video.workflow == workflow)
+            if posted is not None:
+                query = query.filter(Video.posted == posted)
+            if job_id:
+                query = query.filter(Video.job_id == job_id)
+
+            videos = query.order_by(Video.created_at.desc()).offset(offset).limit(limit).all()
+
+            video_list = []
+            for video in videos:
+                video_dict = {
+                    "id": video.id,
+                    "filename": video.filename,
+                    "file_path": video.file_path,
+                    "job_id": video.job_id,
+                    "workflow": video.workflow,
+                    "video_type": video.video_type,
+                    "size_bytes": video.size_bytes,
+                    "duration_seconds": video.duration_seconds,
+                    "compilation_type": video.compilation_type,
+                    "compilation_num": video.compilation_num,
+                    "posted": video.posted,
+                    "posted_at": video.posted_at.isoformat() if video.posted_at else None,
+                    "metadata": video.video_metadata or {},
+                    "created_at": video.created_at.isoformat() if video.created_at else None,
+                    "updated_at": video.updated_at.isoformat() if video.updated_at else None
+                }
+                video_list.append(video_dict)
+
+            return video_list
+
+    def delete_video(self, video_id: str) -> bool:
+        """Delete a video record by ID."""
+        with self._get_session() as session:
+            video = session.query(Video).filter(Video.id == video_id).first()
+            if not video:
+                return False
+            
+            session.delete(video)
+            session.commit()
+            return True
+
+    def get_video_stats(self) -> Dict[str, Any]:
+        """Get video statistics."""
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import func
+
+        with self._get_session() as session:
+            # Total videos
+            total = session.query(func.count(Video.id)).scalar()
+
+            # Videos by workflow
+            workflow_counts = session.query(Video.workflow, func.count(Video.id)).group_by(Video.workflow).all()
+            by_workflow = {workflow: count for workflow, count in workflow_counts}
+
+            # Videos by posted status
+            posted_count = session.query(func.count(Video.id)).filter(Video.posted == True).scalar()
+            unposted_count = session.query(func.count(Video.id)).filter(Video.posted == False).scalar()
+
+            # Recent videos (last 24 hours)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(hours=24)
+            recent = session.query(func.count(Video.id)).filter(Video.created_at > cutoff_date).scalar()
+
+            # Total size
+            total_size = session.query(func.sum(Video.size_bytes)).scalar() or 0
+
+            return {
+                "total_videos": total,
+                "by_workflow": by_workflow,
+                "posted_count": posted_count,
+                "unposted_count": unposted_count,
+                "recent_24h": recent,
+                "total_size_bytes": total_size,
+                "total_size_mb": round(total_size / (1024 * 1024), 2) if total_size else 0
             }
 
 

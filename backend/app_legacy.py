@@ -51,7 +51,7 @@ from .utils.error_handling import handle_error, create_error_response, Processin
 
 
 # Use centralized configuration and path management
-from .config import get_config
+from .core.config import AppConfig
 from .utils.paths import get_project_root, get_output_path, get_backend_path
 
 ROOT = get_project_root()
@@ -665,8 +665,8 @@ WS_SUBSCRIBERS: Dict[str, set] = defaultdict(set)
 ASYNC_QUEUE: "asyncio.Queue[tuple[str, Dict[str, Any]]]" = asyncio.Queue()
 MAIN_LOOP: "asyncio.AbstractEventLoop | None" = None
 # Use centralized configuration
-config = get_config()
-max_concurrent_jobs = config.get_int('videohelper_max_concurrent_jobs', 2)
+config = AppConfig.from_env()
+max_concurrent_jobs = config.max_concurrent_jobs
 JOB_SEMAPHORE = threading.Semaphore(max(1, max_concurrent_jobs))
 # Backwards-compat in tests that patch `app.JOBS`
 JOBS: Dict[str, Dict[str, Any]] = {}
@@ -2323,7 +2323,7 @@ async def get_database_stats():
 
     # Database size not available for PostgreSQL
     # Connection pool info from global engine configuration
-    config = get_config()
+    config = AppConfig.from_env()
 
     return {
         "database_stats": stats,

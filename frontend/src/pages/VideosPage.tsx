@@ -20,7 +20,11 @@ import {
   FaShare,
   FaTrash,
   FaUpload,
-  FaCheck
+  FaCheck,
+  FaDatabase,
+  FaExclamationTriangle,
+  FaCog,
+  FaPlus
 } from 'react-icons/fa'
 import { cn } from '@/components/lib/utils'
 
@@ -31,7 +35,8 @@ interface Video {
   job_id: string
   workflow: 'moneyprinter' | 'brainrot'
   filename: string
-  path: string
+  path?: string // Legacy field
+  file_path?: string // New field
   size_bytes: number
   size_mb: number
   created_at: string
@@ -43,6 +48,15 @@ interface Video {
   compilation_type?: string
   compilation_num?: number
   posted?: boolean
+  posted_at?: string // New field for tracking when posted
+  metadata?: Record<string, any> // New field for additional data
+  file_exists?: boolean // New field to check if file still exists
+  is_orphaned?: boolean // Legacy field for orphaned videos
+}
+
+interface ManagedVideo extends Video {
+  // Additional fields specific to managed videos
+  updated_at?: string
 }
 
 interface VideoStats {
@@ -73,12 +87,16 @@ export default function VideosPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [workflowFilter, setWorkflowFilter] = useState<string>('all')
+  const [postedFilter, setPostedFilter] = useState<string>('all') // New filter for posted status
   const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
   const [offset, setOffset] = useState(0)
   const [hasMore, setHasMore] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
   const [postingVideos, setPostingVideos] = useState<Set<string>>(new Set())
+  const [useNewSystem, setUseNewSystem] = useState(false) // Toggle between legacy and new system
+  const [syncingVideos, setSyncingVideos] = useState(false) // Loading state for sync operations
+  const [showSyncPanel, setShowSyncPanel] = useState(false) // Show sync controls
   
   const { toast } = useToast()
   const limit = 20
@@ -105,7 +123,15 @@ export default function VideosPage() {
         params.append('workflow', workflowFilter)
       }
 
-      const response = await fetch(`${API}/api/videos/all?${params}`)
+      // Add posted filter for new system
+      if (useNewSystem && postedFilter !== 'all') {
+        params.append('posted', postedFilter === 'posted' ? 'true' : 'false')
+      }
+
+      // Choose endpoint based on system
+      const endpoint = useNewSystem ? '/api/videos/managed' : '/api/videos/all'
+      const response = await fetch(`${API}${endpoint}?${params}`)
+      
       if (!response.ok) {
         throw new Error(`Failed to load videos: ${response.statusText}`)
       }
@@ -137,7 +163,8 @@ export default function VideosPage() {
   // Load stats
   const loadStats = async () => {
     try {
-      const response = await fetch(`${API}/api/videos/stats`)
+      const endpoint = useNewSystem ? '/api/videos/stats/managed' : '/api/videos/stats'
+      const response = await fetch(`${API}${endpoint}`)
       if (!response.ok) {
         throw new Error(`Failed to load stats: ${response.statusText}`)
       }
@@ -145,6 +172,93 @@ export default function VideosPage() {
       setStats(data)
     } catch (error) {
       console.error('Failed to load stats:', error)
+      // Set default stats to prevent undefined access
+      setStats({
+        total_videos: 0,
+        total_size_mb: 0,
+        workflows: {
+          moneyprinter: { count: 0, size_mb: 0 },
+          brainrot: { count: 0, size_mb: 0 }
+        },
+        video_types: {
+          ai_generated: { count: 0, size_mb: 0 },
+          compilation: { count: 0, size_mb: 0 }
+        }
+      })
+    }
+  }
+
+  // Sync videos from job results to new system
+  const syncVideosFromJobs = async () => {
+    try {
+      setSyncingVideos(true)
+      const response = await fetch(`${API}/api/videos/sync/from-jobs`, {
+        method: 'POST'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to sync videos: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      
+      toast({
+        title: 'Videos Synced',
+        description: `Successfully synced ${result.registered_videos} videos from ${result.processed_jobs} jobs.`
+      })
+      
+      // Refresh if using new system
+      if (useNewSystem) {
+        loadVideos(true)
+        loadStats()
+      }
+      
+    } catch (error) {
+      console.error('Failed to sync videos:', error)
+      toast({
+        title: 'Sync Failed',
+        description: error instanceof Error ? error.message : 'Failed to sync videos from jobs.',
+        variant: 'destructive'
+      })
+    } finally {
+      setSyncingVideos(false)
+    }
+  }
+
+  // Scan and register orphaned videos
+  const syncOrphanedVideos = async () => {
+    try {
+      setSyncingVideos(true)
+      const response = await fetch(`${API}/api/videos/sync/orphaned`, {
+        method: 'POST'
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Failed to sync orphaned videos: ${response.statusText}`)
+      }
+      
+      const result = await response.json()
+      
+      toast({
+        title: 'Orphaned Videos Synced',
+        description: `Registered ${result.registered_videos} orphaned videos from ${result.scanned_files} files.`
+      })
+      
+      // Refresh if using new system
+      if (useNewSystem) {
+        loadVideos(true)
+        loadStats()
+      }
+      
+    } catch (error) {
+      console.error('Failed to sync orphaned videos:', error)
+      toast({
+        title: 'Sync Failed',
+        description: error instanceof Error ? error.message : 'Failed to sync orphaned videos.',
+        variant: 'destructive'
+      })
+    } finally {
+      setSyncingVideos(false)
     }
   }
 
@@ -152,7 +266,7 @@ export default function VideosPage() {
   useEffect(() => {
     loadVideos(true)
     loadStats()
-  }, [workflowFilter, sortBy, sortOrder])
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, useNewSystem])
 
   // Filter videos by search term
   const filteredVideos = videos.filter(video =>
@@ -195,7 +309,10 @@ export default function VideosPage() {
   // Handle video download
   const handleDownload = (video: Video) => {
     const link = document.createElement('a')
-    link.href = `${API}${video.download_url}`
+    // Handle both old and new path formats
+    const downloadPath = video.file_path || video.path
+    const downloadUrl = video.download_url || `/api/download?path=${encodeURIComponent(downloadPath || '')}`
+    link.href = `${API}${downloadUrl}`
     link.download = video.filename
     document.body.appendChild(link)
     link.click()
@@ -243,16 +360,26 @@ export default function VideosPage() {
     try {
       setPostingVideos(prev => new Set(prev).add(video.id))
       
-      const response = await fetch(`${API}/api/videos/post`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          video_id: video.id,
-          job_id: video.job_id
+      let response
+      
+      if (useNewSystem) {
+        // Use new managed video posting endpoint
+        response = await fetch(`${API}/api/videos/managed/${video.id}/mark-posted`, {
+          method: 'POST'
         })
-      })
+      } else {
+        // Use legacy posting endpoint
+        response = await fetch(`${API}/api/videos/post`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            video_id: video.id,
+            job_id: video.job_id
+          })
+        })
+      }
       
       if (!response.ok) {
         const errorData = await response.json()
@@ -261,16 +388,22 @@ export default function VideosPage() {
       
       const result = await response.json()
       
+      const wasAlreadyPosted = video.posted
+      
       // Update the video in the local state
       setVideos(prevVideos => 
         prevVideos.map(v => 
-          v.id === video.id ? { ...v, posted: true } : v
+          v.id === video.id ? { 
+            ...v, 
+            posted: true, 
+            posted_at: new Date().toISOString() 
+          } : v
         )
       )
       
       toast({
-        title: 'Video Posted',
-        description: `Successfully posted ${video.filename} to webhook`
+        title: wasAlreadyPosted ? 'Video Re-posted' : 'Video Posted',
+        description: `Successfully ${wasAlreadyPosted ? 're-posted' : 'posted'} ${video.filename} to webhook`
       })
       
     } catch (error) {
@@ -294,22 +427,126 @@ export default function VideosPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Video Gallery</h1>
+          <h1 className="text-2xl font-bold">
+            Video Gallery
+            {useNewSystem && (
+              <Badge variant="secondary" className="ml-2">
+                <FaDatabase className="size-3 mr-1" />
+                Managed
+              </Badge>
+            )}
+          </h1>
           <p className="text-muted-foreground">
-            View and manage all your generated videos
+            {useNewSystem 
+              ? 'View and manage videos tracked in the database'
+              : 'View and manage all your generated videos (legacy file scanning)'
+            }
           </p>
         </div>
-        <Button
-          onClick={() => {
-            loadVideos(true)
-            loadStats()
-          }}
-          className="w-fit"
-        >
-          <FaSyncAlt className="size-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowSyncPanel(!showSyncPanel)}
+            className="w-fit"
+          >
+            <FaCog className="size-4 mr-2" />
+            Manage
+          </Button>
+          <Button
+            onClick={() => {
+              loadVideos(true)
+              loadStats()
+            }}
+            className="w-fit"
+          >
+            <FaSyncAlt className="size-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
+
+      {/* System Toggle and Sync Panel */}
+      {showSyncPanel && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FaCog className="size-5" />
+              Video Management
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* System Toggle */}
+            <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+              <div>
+                <h3 className="font-semibold">Video Tracking System</h3>
+                <p className="text-sm text-muted-foreground">
+                  {useNewSystem 
+                    ? 'Using database-tracked videos with enhanced features'
+                    : 'Using legacy file system scanning'
+                  }
+                </p>
+              </div>
+              <Button
+                variant={useNewSystem ? "default" : "outline"}
+                onClick={() => setUseNewSystem(!useNewSystem)}
+              >
+                <FaDatabase className="size-4 mr-2" />
+                {useNewSystem ? 'Database Mode' : 'Switch to Database'}
+              </Button>
+            </div>
+
+            {/* Sync Controls */}
+            {useNewSystem && (
+              <div className="space-y-4">
+                <div className="border-t pt-4">
+                  <h3 className="font-semibold mb-2">Migration Tools</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Import existing videos into the new tracking system
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Button
+                      variant="outline"
+                      onClick={syncVideosFromJobs}
+                      disabled={syncingVideos}
+                      className="h-auto p-4 flex-col items-start"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <FaPlus className="size-4" />
+                        <span className="font-semibold">Sync from Jobs</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-left">
+                        Import videos from completed job results
+                      </p>
+                      {syncingVideos && (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mt-2"></div>
+                      )}
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      onClick={syncOrphanedVideos}
+                      disabled={syncingVideos}
+                      className="h-auto p-4 flex-col items-start"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <FaExclamationTriangle className="size-4" />
+                        <span className="font-semibold">Scan Orphaned</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground text-left">
+                        Find and register untracked video files
+                      </p>
+                      {syncingVideos && (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary mt-2"></div>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats Cards */}
       {stats && (
@@ -319,7 +556,7 @@ export default function VideosPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Videos</p>
-                  <p className="text-2xl font-bold">{stats.total_videos}</p>
+                  <p className="text-2xl font-bold">{stats?.total_videos || 0}</p>
                 </div>
                 <FaVideo className="size-8 text-primary" />
               </div>
@@ -331,7 +568,7 @@ export default function VideosPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Size</p>
-                  <p className="text-2xl font-bold">{stats.total_size_mb.toFixed(1)} MB</p>
+                  <p className="text-2xl font-bold">{(stats?.total_size_mb || 0).toFixed(1)} MB</p>
                 </div>
                 <FaHdd className="size-8 text-primary" />
               </div>
@@ -343,7 +580,7 @@ export default function VideosPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">AI Generated</p>
-                  <p className="text-2xl font-bold">{stats.video_types.ai_generated.count}</p>
+                  <p className="text-2xl font-bold">{stats?.video_types?.ai_generated?.count || 0}</p>
                 </div>
                 <FaFilm className="size-8 text-blue-500" />
               </div>
@@ -355,7 +592,7 @@ export default function VideosPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Compilations</p>
-                  <p className="text-2xl font-bold">{stats.video_types.compilation.count}</p>
+                  <p className="text-2xl font-bold">{stats?.video_types?.compilation?.count || 0}</p>
                 </div>
                 <FaBrain className="size-8 text-purple-500" />
               </div>
@@ -392,6 +629,20 @@ export default function VideosPage() {
                 <SelectItem value="brainrot">Compilations</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Posted Filter - only show for new system */}
+            {useNewSystem && (
+              <Select value={postedFilter} onValueChange={setPostedFilter}>
+                <SelectTrigger className="w-full sm:w-40">
+                  <SelectValue placeholder="Posted Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Videos</SelectItem>
+                  <SelectItem value="posted">Posted Only</SelectItem>
+                  <SelectItem value="unposted">Unposted Only</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
 
             {/* Sort By */}
             <Select value={sortBy} onValueChange={setSortBy}>
@@ -481,7 +732,7 @@ export default function VideosPage() {
                       preload="metadata"
                       onClick={() => setSelectedVideo(video)}
                     >
-                      <source src={`${API}${video.download_url}`} type="video/mp4" />
+                      <source src={`${API}${video.download_url || `/api/download?path=${encodeURIComponent((video.file_path || video.path) || '')}`}`} type="video/mp4" />
                     </video>
                     
                     {/* Play Overlay */}
@@ -590,31 +841,30 @@ export default function VideosPage() {
 
                     {/* Post Button */}
                     <div className="mt-2">
-                      {video.posted ? (
-                        <div className="flex items-center justify-center gap-2 text-green-600 text-sm">
-                          <FaCheck className="size-3" />
-                          <span>Posted to Webhook</span>
+                      <Button
+                        size="sm"
+                        variant={video.posted ? "outline" : "default"}
+                        className="w-full"
+                        onClick={() => handlePostVideo(video)}
+                        disabled={postingVideos.has(video.id)}
+                      >
+                        {postingVideos.has(video.id) ? (
+                          <>
+                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                            Posting...
+                          </>
+                        ) : (
+                          <>
+                            <FaUpload className="size-3 mr-1" />
+                            {video.posted ? "Re-post to Webhook" : "Post to Webhook"}
+                          </>
+                        )}
+                      </Button>
+                      {video.posted && (
+                        <div className="flex items-center justify-center gap-2 text-green-600 text-xs mt-1">
+                          <FaCheck className="size-2" />
+                          <span>Previously posted</span>
                         </div>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="default"
-                          className="w-full"
-                          onClick={() => handlePostVideo(video)}
-                          disabled={postingVideos.has(video.id)}
-                        >
-                          {postingVideos.has(video.id) ? (
-                            <>
-                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
-                              Posting...
-                            </>
-                          ) : (
-                            <>
-                              <FaUpload className="size-3 mr-1" />
-                              Post to Webhook
-                            </>
-                          )}
-                        </Button>
                       )}
                     </div>
                   </div>
@@ -661,7 +911,7 @@ export default function VideosPage() {
                   className="max-w-full max-h-full"
                   controls
                   autoPlay
-                  src={`${API}${selectedVideo.download_url}`}
+                  src={`${API}${selectedVideo.download_url || `/api/download?path=${encodeURIComponent((selectedVideo.file_path || selectedVideo.path) || '')}`}`}
                 />
               </div>
               
@@ -739,30 +989,29 @@ export default function VideosPage() {
                     </Button>
 
                     {/* Post to Webhook */}
-                    {selectedVideo.posted ? (
-                      <div className="w-full p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-center gap-2 text-green-700">
-                        <FaCheck className="size-4" />
-                        <span className="font-medium">Posted to Webhook</span>
+                    <Button
+                      variant={selectedVideo.posted ? "outline" : "default"}
+                      className="w-full"
+                      onClick={() => handlePostVideo(selectedVideo)}
+                      disabled={postingVideos.has(selectedVideo.id)}
+                    >
+                      {postingVideos.has(selectedVideo.id) ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                          Posting to Webhook...
+                        </>
+                      ) : (
+                        <>
+                          <FaUpload className="size-4 mr-2" />
+                          {selectedVideo.posted ? "Re-post to Webhook" : "Post to Webhook"}
+                        </>
+                      )}
+                    </Button>
+                    {selectedVideo.posted && (
+                      <div className="w-full p-2 bg-green-50 border border-green-200 rounded-lg flex items-center justify-center gap-2 text-green-700 text-sm">
+                        <FaCheck className="size-3" />
+                        <span>Previously posted to webhook</span>
                       </div>
-                    ) : (
-                      <Button
-                        variant="default"
-                        className="w-full"
-                        onClick={() => handlePostVideo(selectedVideo)}
-                        disabled={postingVideos.has(selectedVideo.id)}
-                      >
-                        {postingVideos.has(selectedVideo.id) ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Posting to Webhook...
-                          </>
-                        ) : (
-                          <>
-                            <FaUpload className="size-4 mr-2" />
-                            Post to Webhook
-                          </>
-                        )}
-                      </Button>
                     )}
                   </div>
                 </div>

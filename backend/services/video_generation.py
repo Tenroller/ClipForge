@@ -15,6 +15,7 @@ from ..database import get_job_store
 from ..job_queue_unified import get_job_queue, update_job_progress
 from ..utils.paths import get_output_path
 from ..utils.error_handling import handle_error
+from .video_service import get_video_service
 
 
 class VideoGenerationService:
@@ -168,6 +169,18 @@ def run_moneyprinter_job(job_id: str, req: MoneyPrinterRequest):
         # For now, mark as completed
         duration_seconds = int(time.time() - start_time)
         tracker.add_log(f"MoneyPrinter job completed in {duration_seconds} seconds", "info", "moneyprinter")
+        
+        # TODO: When full implementation is complete, register the generated video
+        # video_service = get_video_service()
+        # if output_video_path:
+        #     video_id = video_service.register_video(
+        #         job_id=job_id,
+        #         file_path=output_video_path,
+        #         workflow="moneyprinter",
+        #         video_type="ai_generated"
+        #     )
+        #     tracker.add_log(f"Registered video with ID: {video_id}", "info", "moneyprinter")
+        
         _update_job(job_id, status="done", duration_seconds=duration_seconds)
 
     except Exception as e:
@@ -251,9 +264,63 @@ def run_brainrot_job(job_id: str, req_dict: dict):
 
         _check_cancel(job_id)
         
+        # Register generated videos in the database
+        video_service = get_video_service()
+        registered_videos = []
+        
+        try:
+            # Find all generated videos in the job output directory
+            for video_file in job_output_dir.rglob("*.mp4"):
+                if video_file.is_file():
+                    try:
+                        # Extract compilation info from filename
+                        filename_lower = video_file.name.lower()
+                        compilation_type = None
+                        compilation_num = None
+                        
+                        if "_normal" in filename_lower:
+                            compilation_type = "normal"
+                        elif "_tts" in filename_lower:
+                            compilation_type = "tts"
+                        
+                        # Extract compilation number
+                        if "_compilation_" in filename_lower:
+                            parts = filename_lower.split("_compilation_")
+                            if len(parts) > 1:
+                                num_part = parts[1].split("_")[0]
+                                try:
+                                    compilation_num = int(num_part)
+                                except ValueError:
+                                    pass
+                        
+                        # Register the video
+                        video_id = video_service.register_video(
+                            job_id=job_id,
+                            file_path=str(video_file),
+                            workflow="brainrot",
+                            video_type="compilation",
+                            compilation_type=compilation_type,
+                            compilation_num=compilation_num,
+                            metadata={
+                                "youtube_url": req.youtubeUrl,
+                                "min_duration": req.minDuration,
+                                "max_duration": req.maxDuration,
+                                "unlimited": req.unlimited
+                            }
+                        )
+                        registered_videos.append(video_id)
+                        tracker.add_log(f"Registered video: {video_file.name} with ID: {video_id}", "info", "brainrot")
+                        
+                    except Exception as e:
+                        tracker.add_log(f"Failed to register video {video_file.name}: {str(e)}", "warning", "brainrot")
+                        
+        except Exception as e:
+            tracker.add_log(f"Error during video registration: {str(e)}", "warning", "brainrot")
+        
         # Final update
         duration_seconds = int(time.time() - start_time)
         tracker.add_log(f"Brainrot job completed successfully in {duration_seconds} seconds", "info", "brainrot")
+        tracker.add_log(f"Registered {len(registered_videos)} videos in database", "info", "brainrot")
         _update_job(job_id, status="done", duration_seconds=duration_seconds)
 
     except Exception as e:
