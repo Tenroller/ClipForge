@@ -70,7 +70,7 @@ class VideoService:
             # Try to get duration if moviepy is available
             duration_seconds = None
             try:
-                from moviepy.editor import VideoFileClip
+                from moviepy import VideoFileClip
                 with VideoFileClip(str(file_path_obj)) as clip:
                     duration_seconds = clip.duration
             except Exception as e:

@@ -702,7 +702,7 @@ class TikYouGenerator:
                 if w > clip_max_w or h > clip_max_h:
                     ratio = min(clip_max_w/w, clip_max_h/h)
                     print(f"        📏 Resizing clip by ratio: {ratio:.3f}")
-                    clip = clip.with_effects([vfx.Resize(ratio)])
+                    clip = clip.resized(ratio)
                 else:
                     print(f"        📏 No resize needed, clip fits within bounds")
                 
@@ -732,11 +732,21 @@ class TikYouGenerator:
                     if aspect_ratio > target_aspect_ratio: # Wider than target
                         print(f"        📏 Clip is wider than target, resizing and cropping...")
                         clip = clip.with_effects([vfx.Resize(height=target_h)])
-                        clip = clip.with_effects([vfx.Crop(x_center=clip.w / 2, y_center=clip.h / 2, width=target_w, height=target_h)])  # type: ignore[attr-defined]
+                        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
+                        x1 = (clip.w - target_w) // 2
+                        y1 = (clip.h - target_h) // 2
+                        x2 = x1 + target_w
+                        y2 = y1 + target_h
+                        clip = clip.with_effects([vfx.Crop(x1, y1, x2, y2)])
                     else: # Taller than target
                         print(f"        📏 Clip is taller than target, resizing and cropping...")
                         clip = clip.with_effects([vfx.Resize(width=target_w)])
-                        clip = clip.with_effects([vfx.Crop(x_center=clip.w / 2, y_center=clip.h / 2, width=target_w, height=target_h)])  # type: ignore[attr-defined]
+                        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
+                        x1 = (clip.w - target_w) // 2
+                        y1 = (clip.h - target_h) // 2
+                        x2 = x1 + target_w
+                        y2 = y1 + target_h
+                        clip = clip.with_effects([vfx.Crop(x1, y1, x2, y2)])
                 else:
                     print(f"        📏 Aspect ratios match, simple resize...")
                     clip = clip.with_effects([vfx.Resize(width=target_w, height=target_h)])
@@ -1122,7 +1132,7 @@ class TikYouGenerator:
             if fits_916:
                 # Video fits 9:16, just resize it to fill the frame
                 print(f"   ✅ Video fits 9:16 aspect ratio, using full frame")
-                final_clip = video_clip.resized(newsize=(target_w, target_h))
+                final_clip = video_clip.resized((target_w, target_h))
             else:
                 # Video doesn't fit, create blurred pillarbox
                 print(f"   🔄 Video aspect ratio {current_ratio:.3f} doesn't fit 9:16, creating blurred pillarbox")
@@ -1130,23 +1140,20 @@ class TikYouGenerator:
                 # Scale video to fit height while maintaining aspect ratio
                 scale_factor = target_h / video_clip.h
                 scaled_w = int(video_clip.w * scale_factor)
-                scaled_clip = video_clip.resized(width=scaled_w, height=target_h)
+                scaled_clip = video_clip.resized((scaled_w, target_h))
                 
                 # Create blurred background version
                 # Scale the original to fill the entire frame (will be cropped)
                 bg_scale_factor = target_w / video_clip.w
-                bg_clip = video_clip.resized(width=target_w, height=int(video_clip.h * bg_scale_factor))
+                bg_clip = video_clip.resized((target_w, int(video_clip.h * bg_scale_factor)))
                 
-                # Apply blur to background
-                try:
-                    bg_clip = bg_clip.with_effects([vfx.GaussianBlur(sigma=15)])
-                    print(f"   ✅ Applied GaussianBlur to background")
-                except Exception as e:
-                    print(f"   ⚠️ GaussianBlur failed ({e}), using resize blur fallback")
-                    # Fallback: Create blur effect by downscaling and upscaling
-                    blur_factor = 0.1  # Scale down to 10% then back up
-                    temp_w, temp_h = int(bg_clip.w * blur_factor), int(bg_clip.h * blur_factor)
-                    bg_clip = bg_clip.resized((temp_w, temp_h)).resized((target_w, target_h))
+                # Apply blur to background using resize method (v2 compatible)
+                # GaussianBlur is not available in MoviePy v2, so we use resize blur
+                print(f"   🔄 Applying blur effect using resize method")
+                blur_factor = 0.15  # Scale down to 15% then back up for better quality
+                temp_w, temp_h = max(1, int(bg_clip.w * blur_factor)), max(1, int(bg_clip.h * blur_factor))
+                bg_clip = bg_clip.resized((temp_w, temp_h)).resized((target_w, target_h))
+                print(f"   ✅ Applied resize blur effect to background")
                 
                 # Center the background clip vertically
                 bg_clip = bg_clip.with_position("center")
@@ -1562,7 +1569,7 @@ class TikYouGenerator:
             
             print(f"      🎬 Starting video encoding...")
             print(f"         - Codec: {codec}")
-            print(f"         - Preset: {adaptive_params['preset']}")
+            print(f"         - Preset: {adaptive_params['quality_preset']}")
             print(f"         - Bitrate: {adaptive_params['bitrate']}")
             
             final_compilation.write_videofile(
@@ -1574,8 +1581,8 @@ class TikYouGenerator:
                 temp_audiofile=unique_audio_temp,
                 remove_temp=True,
                 fps=30,
-                preset=adaptive_params['preset'],
-                threads=adaptive_params['threads'],
+                preset=adaptive_params['quality_preset'],
+                threads=self.max_workers,
                 logger="bar",
                 ffmpeg_params=ffmpeg_params,
             )

@@ -566,24 +566,24 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
                         # Ensure even height for H.264 compatibility
                         new_height = new_height if new_height % 2 == 0 else new_height - 1
                         if new_height < clip.h and new_height > 0:
-                            clip = clip.with_effects([vfx.Crop(
-                                width=clip.w, 
-                                height=new_height,
-                                x_center=clip.w / 2, 
-                                y_center=clip.h / 2
-                            )])
+                            # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
+                            x1 = 0
+                            y1 = (clip.h - new_height) // 2
+                            x2 = clip.w
+                            y2 = y1 + new_height
+                            clip = clip.with_effects([vfx.Crop(x1, y1, x2, y2)])
                     else:
                         # Clip is too wide, crop width  
                         new_width = round(clip.h * target_aspect)
                         # Ensure even width for H.264 compatibility
                         new_width = new_width if new_width % 2 == 0 else new_width - 1
                         if new_width < clip.w and new_width > 0:
-                            clip = clip.with_effects([vfx.Crop(
-                                width=new_width,
-                                height=clip.h,
-                                x_center=clip.w / 2, 
-                                y_center=clip.h / 2
-                            )])
+                            # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
+                            x1 = (clip.w - new_width) // 2
+                            y1 = 0
+                            x2 = x1 + new_width
+                            y2 = clip.h
+                            clip = clip.with_effects([vfx.Crop(x1, y1, x2, y2)])
                 
                 # Resize to target dimensions - ensure even dimensions
                 target_width = target_width if target_width % 2 == 0 else target_width - 1

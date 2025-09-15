@@ -212,10 +212,12 @@ class ClipProcessor:
         resized_clip = clip.with_effects([vfx.Resize(height=target_h)])  # type: ignore
         # Get dimensions after resize
         resized_w, resized_h = resized_clip.size  # type: ignore
-        return resized_clip.with_effects([
-            vfx.Crop(x_center=resized_w / 2, y_center=resized_h / 2,
-                  width=target_w, height=target_h)
-        ])  # type: ignore
+        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
+        x1 = (resized_w - target_w) // 2
+        y1 = (resized_h - target_h) // 2
+        x2 = x1 + target_w
+        y2 = y1 + target_h
+        return resized_clip.with_effects([vfx.Crop(x1, y1, x2, y2)])  # type: ignore
     
     def _resize_and_crop_tall_clip(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Resize and crop a tall clip"""
@@ -225,10 +227,12 @@ class ClipProcessor:
         resized_clip = clip.with_effects([vfx.Resize(width=target_w)])  # type: ignore
         # Get dimensions after resize
         resized_w, resized_h = resized_clip.size  # type: ignore
-        return resized_clip.with_effects([
-            vfx.Crop(x_center=resized_w / 2, y_center=resized_h / 2,
-                  width=target_w, height=target_h)
-        ])  # type: ignore
+        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
+        x1 = (resized_w - target_w) // 2
+        y1 = (resized_h - target_h) // 2
+        x2 = x1 + target_w
+        y2 = y1 + target_h
+        return resized_clip.with_effects([vfx.Crop(x1, y1, x2, y2)])  # type: ignore
     
     def _ensure_audio_track(self, clip: VideoClip) -> VideoClip:
         """Ensure clip has an audio track, add silent one if missing"""
