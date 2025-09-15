@@ -120,6 +120,10 @@ class BrainrotRequest(BaseModel):
     maxDuration: int = Field(default=110, ge=10, le=3600)
     maxReuse: int = Field(default=3, ge=1)
     unlimited: bool = Field(default=False)
+    
+    # New variation options
+    generateNoBackground: bool = Field(default=True, description="Generate third variation without white background")
+    blurredPillarboxThreshold: float = Field(default=0.1, ge=0.05, le=0.5, description="Aspect ratio tolerance for 9:16 format (0.5625)")
 
     @field_validator('youtubeUrl')
     @classmethod

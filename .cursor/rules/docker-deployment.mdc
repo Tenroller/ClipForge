@@ -1,64 +1,188 @@
 ---
-alwaysApply: false
-description: Docker deployment and containerization guide
+description: "Docker deployment and containerization patterns"
 ---
 
-# Docker Deployment Guide
+# Docker Deployment & Containerization
 
-## Container Setup
+## 🐳 Docker Architecture
+
+### Container Structure
+The application uses a multi-container architecture with Docker Compose:
+
+- **Backend Container**: FastAPI application with Python dependencies
+- **Frontend Container**: React application served by Nginx
+- **PostgreSQL Container**: Database for job persistence
+- **Redis Container**: Caching and job queue (optional but recommended)
+
+### Docker Files Location
+- **Backend**: [docker/Dockerfile.backend](mdc:docker/Dockerfile.backend)
+- **Frontend**: [docker/Dockerfile.frontend](mdc:docker/Dockerfile.frontend)  
+- **Compose**: [docker/docker-compose.yml](mdc:docker/docker-compose.yml)
+- **Database Init**: [docker/init-db.sql](mdc:docker/init-db.sql)
+
+## 🚀 Quick Deployment
+
+### Production Deployment
+```bash
+# Clone repository
+git clone https://github.com/your-repo/ai-video-generator.git
+cd ai-video-generator
+
+# Start all services
+docker compose -f docker/docker-compose.yml up --build -d
+
+# Access services
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:8080
+# Database: localhost:5432
+# Redis: localhost:6379
+```
+
+### Development Deployment
+```bash
+# Start with development overrides
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up --build
+
+# Or start individual services
+docker compose -f docker/docker-compose.yml up postgres redis -d
+# Then run backend/frontend locally for development
+```
+
+## 🔧 Environment Configuration
+
+### Required Environment Variables
+Create `.env` file in project root:
+
+```bash
+# === REQUIRED ===
+# Database (PostgreSQL)
+DATABASE_URL=postgresql://videohelper_user:videohelper_password@postgres:5432/videohelper
+
+# API Keys (at least one AI key required)
+PEXELS_API_KEY=your_pexels_api_key
+GOOGLE_API_KEY=your_google_api_key
+# OR
+GEMINI_API_KEY=your_gemini_api_key
+
+# === OPTIONAL ===
+# Security
+API_KEY=your_secret_api_key
+CORS_ALLOW_ORIGINS=*
+
+# Redis (for enhanced performance)
+REDIS_URL=redis://redis:6379/0
+
+# Performance
+MAX_CONCURRENT_JOBS=4
+VIDEOHELPER_MAX_CONCURRENT_JOBS=4
+
+# Monitoring
+ENABLE_METRICS=true
+METRICS_PORT=9090
+SENTRY_DSN=your_sentry_dsn
+
+# Storage
+VIDEOHELPER_OUTPUT_DIR=/app/output
+CACHE_DIR=/app/cache
+MAX_CACHE_SIZE_GB=10
+```
+
+### Docker Compose Environment
+The compose file uses environment variable substitution:
+
+```yaml
+# docker/docker-compose.yml
+services:
+  backend:
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-postgresql://videohelper_user:videohelper_password@postgres:5432/videohelper}
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - API_KEY=${API_KEY}
+```
+
+## 📦 Container Configuration
 
 ### Backend Container
 ```dockerfile
-# Dockerfile.backend
-FROM python:3.11-slim
-WORKDIR /app
+# docker/Dockerfile.backend
+FROM python:3.10-slim
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    espeak-ng \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Application code
+WORKDIR /app
 COPY backend/ ./backend/
-EXPOSE 8080
+COPY . .
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/api/health || exit 1
+
+# Run application
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8080"]
 ```
 
 ### Frontend Container
 ```dockerfile
-# Dockerfile.frontend
-FROM node:18-alpine
+# docker/Dockerfile.frontend
+FROM node:18-alpine as builder
+
 WORKDIR /app
 COPY frontend/package*.json ./
-RUN npm install
-COPY frontend/ ./
+RUN npm ci --only=production
+
+COPY frontend/ .
 RUN npm run build
+
+# Production stage
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY docker/nginx.conf /etc/nginx/nginx.conf
+
 EXPOSE 80
-CMD ["npm", "run", "preview"]
+CMD ["nginx", "-g", "daemon off;"]
 ```
 
-## Docker Commands
-
-### Building Images
-```bash
-# Backend
-docker build -f docker/Dockerfile.backend -t ai-video-backend .
-
-# Frontend
-docker build -f docker/Dockerfile.frontend \
-  --build-arg VITE_API_BASE=http://localhost:8080 \
-  -t ai-video-frontend .
-```
-
-### Running Containers
-```bash
-# Backend
-docker run -p 8080:8080 ai-video-backend
-
-# Frontend
-docker run -p 5173:80 ai-video-frontend
-```
-
-### Docker Compose
+### Database Container
 ```yaml
-# docker/docker-compose.yml
+# PostgreSQL with initialization
+postgres:
+  image: postgres:15-alpine
+  environment:
+    POSTGRES_DB: videohelper
+    POSTGRES_USER: videohelper_user  
+    POSTGRES_PASSWORD: videohelper_password
+  volumes:
+    - postgres_data:/var/lib/postgresql/data
+    - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+  ports:
+    - "5432:5432"
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U videohelper_user -d videohelper"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+```
+
+## 🔄 Service Orchestration
+
+### Complete Docker Compose
+```yaml
 version: '3.8'
+
 services:
+  # Backend API
   backend:
     build:
       context: ..
@@ -66,10 +190,28 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - VIDEOHELPER_OUTPUT_DIR=/app/output
+      - DATABASE_URL=postgresql://videohelper_user:videohelper_password@postgres:5432/videohelper
+      - REDIS_URL=redis://redis:6379/0
+      - PEXELS_API_KEY=${PEXELS_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
     volumes:
-      - ./output:/app/output
+      - ../output:/app/output
+      - ../cache:/app/cache
+      - ../logs:/app/logs
+      - ../temp:/app/temp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
+  # Frontend UI  
   frontend:
     build:
       context: ..
@@ -78,41 +220,319 @@ services:
       - "5173:80"
     environment:
       - VITE_API_BASE=http://localhost:8080
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: videohelper
+      POSTGRES_USER: videohelper_user
+      POSTGRES_PASSWORD: videohelper_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U videohelper_user -d videohelper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
 ```
 
-## Environment Configuration
+## 📊 Monitoring & Health Checks
 
-### Required Environment Variables
+### Health Check Configuration
+```yaml
+# Health checks for all services
+services:
+  backend:
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  postgres:
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U videohelper_user -d videohelper"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+```
+
+### Monitoring Stack (Optional)
+Add Prometheus and Grafana for monitoring:
+
+```yaml
+# Additional monitoring services
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+```
+
+## 🔒 Security Configuration
+
+### Production Security
+```yaml
+# Production security settings
+services:
+  backend:
+    environment:
+      - API_KEY=${API_KEY}  # Set strong API key
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}  # Set strong JWT secret
+      - RATE_LIMIT_PER_MINUTE=60
+      - CORS_ALLOW_ORIGINS=https://yourdomain.com
+    # Remove debug volumes in production
+    # volumes: []
+
+  postgres:
+    environment:
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}  # Use strong password
+    # Don't expose port in production
+    # ports: []
+
+  redis:
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+```
+
+### SSL/TLS Configuration
+```yaml
+# Add reverse proxy with SSL
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - backend
+      - frontend
+```
+
+## 📈 Scaling Configuration
+
+### Horizontal Scaling
+```yaml
+# Scale backend services
+services:
+  backend:
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # Load balancer
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx-lb.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - backend
+```
+
+### Resource Limits
+```yaml
+# Resource management
+services:
+  backend:
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+        reservations:
+          cpus: '2'  
+          memory: 4G
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+```
+
+## 🛠️ Development Workflow
+
+### Development Override
+Create `docker/docker-compose.dev.yml`:
+
+```yaml
+# Development overrides
+version: '3.8'
+
+services:
+  backend:
+    volumes:
+      - ../backend:/app/backend:ro
+    environment:
+      - DEBUG_MODE=true
+      - LOG_LEVEL=DEBUG
+      - RELOAD=true
+    command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+
+  frontend:
+    volumes:
+      - ../frontend/src:/app/src:ro
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+```
+
+### Development Commands
 ```bash
-# Backend environment
-PEXELS_API_KEY=your_pexels_key
-GOOGLE_API_KEY=your_google_key
-API_KEY=optional_api_key
-CORS_ALLOW_ORIGINS=*
-RATE_LIMIT_PER_MINUTE=60
+# Start development environment
+docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.yml up
 
-# Frontend environment
-VITE_API_BASE=http://localhost:8080
+# View logs
+docker compose logs -f backend
+docker compose logs -f frontend
+
+# Execute commands in containers
+docker compose exec backend python -c "print('Hello')"
+docker compose exec postgres psql -U videohelper_user -d videohelper
+
+# Rebuild specific service
+docker compose build backend
+docker compose up -d backend
 ```
 
-### Volume Mounts
-- `/app/output` - Generated video storage
-- `/app/logs` - Application logs
-- `/app/cache` - Cache directory
+## 🔧 Troubleshooting
 
-## Production Considerations
+### Common Issues
 
-### Security
-- Set `API_KEY` for endpoint protection
-- Configure `CORS_ALLOW_ORIGINS` appropriately
-- Use secure API keys for external services
+#### Database Connection Issues
+```bash
+# Check database connectivity
+docker compose exec backend python -c "
+from backend.database import get_job_store
+store = get_job_store()
+print('Database connected successfully')
+"
 
-### Performance
-- Configure appropriate rate limits
-- Set up proper logging and monitoring
-- Consider GPU acceleration for video processing
+# Check database tables
+docker compose exec postgres psql -U videohelper_user -d videohelper -c "\dt"
+```
 
-### Networking
-- Backend on port 8080
-- Frontend on port 80 (container) / 5173 (host)
-- WebSocket connections for real-time updates
+#### Permission Issues
+```bash
+# Fix volume permissions
+sudo chown -R $USER:$USER output/ cache/ logs/
+
+# Or use Docker user mapping
+services:
+  backend:
+    user: "${UID}:${GID}"
+```
+
+#### Memory Issues
+```bash
+# Monitor container resource usage
+docker stats
+
+# Increase container limits
+services:
+  backend:
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+```
+
+### Debugging Commands
+```bash
+# View container logs
+docker compose logs -f --tail=100 backend
+
+# Execute shell in container
+docker compose exec backend bash
+
+# Check service health
+docker compose ps
+docker compose exec backend curl http://localhost:8080/api/health
+
+# Monitor resource usage
+docker compose exec backend htop
+```
+
+## 🚀 Production Deployment
+
+### Production Checklist
+- [ ] Set strong passwords for all services
+- [ ] Configure SSL/TLS certificates
+- [ ] Set up proper backup strategy
+- [ ] Configure log rotation
+- [ ] Set up monitoring and alerting
+- [ ] Test disaster recovery procedures
+- [ ] Configure firewall rules
+- [ ] Set up regular security updates
+
+### Backup Strategy
+```bash
+# Database backup
+docker compose exec postgres pg_dump -U videohelper_user videohelper > backup.sql
+
+# Volume backup
+docker run --rm -v ai-video-generator_postgres_data:/data -v $(pwd):/backup alpine tar czf /backup/postgres_backup.tar.gz /data
+```
+
+### Update Strategy
+```bash
+# Rolling update
+docker compose pull
+docker compose up -d --no-deps backend
+docker compose up -d --no-deps frontend
+```
+
+Always test deployments in a staging environment before production deployment.

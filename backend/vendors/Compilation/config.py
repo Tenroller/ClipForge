@@ -74,8 +74,8 @@ class ProcessingConfig:
     high_memory_threshold: float = 80.0
     
     # Scene detection
-    default_scene_sensitivity: float = 30.0
-    min_scene_duration: float = 1.0
+    default_scene_sensitivity: float = 17.0
+    min_scene_duration: float = 3
     
     # Clip constraints
     min_clip_duration: float = 1.0

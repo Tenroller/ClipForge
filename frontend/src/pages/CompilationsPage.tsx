@@ -5,7 +5,7 @@ import { Input } from '@/components/components/ui/input'
 import { Label } from '@/components/components/ui/label'
 import { Button } from '@/components/components/ui/button'
 import { Switch } from '@/components/components/ui/switch'
-import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip } from 'react-icons/fa'
+import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip, FaVideo } from 'react-icons/fa'
 import ResultPanel from '@/components/ResultPanel'
 import JobStartedNotification from '@/components/JobStartedNotification'
 import { useJobManager } from '@/hooks/useJobManager'
@@ -27,6 +27,8 @@ export default function CompilationsPage() {
   const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
   const [useGpu, setUseGpu] = useState(true)
   const [isUnlimited, setIsUnlimited] = useState(false)
+  const [generateNoBackground, setGenerateNoBackground] = useState(true)
+  const [blurredPillarboxThreshold, setBlurredPillarboxThreshold] = useState([0.1])
 
   const jobManager = useJobManager()
 
@@ -61,6 +63,8 @@ export default function CompilationsPage() {
       maxDuration: Number(form.get('maxDuration') || 40),
       maxReuse: Number(form.get('maxReuse') || 3),
       unlimited: isUnlimited,
+      generateNoBackground: generateNoBackground,
+      blurredPillarboxThreshold: blurredPillarboxThreshold[0],
     }
 
     if (!payload.youtubeUrl) {
@@ -308,6 +312,61 @@ export default function CompilationsPage() {
                     </div>
                   </div>
 
+                  {/* No-Background Variation Controls */}
+                  <div className="space-y-4 p-4 rounded-lg border bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20">
+                    <h3 className="text-sm font-semibold flex items-center gap-2">
+                      <FaVideo className="size-4 text-purple-600" />
+                      No-Background Variation Settings
+                    </h3>
+                    
+                    {/* Generate No-Background Toggle */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <Label htmlFor="generateNoBackground" className="font-medium">
+                            Generate No-Background Version
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Creates a third variation without white background - pure video or blurred pillarbox
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        id="generateNoBackground"
+                        checked={generateNoBackground}
+                        onCheckedChange={setGenerateNoBackground}
+                      />
+                    </div>
+
+                    {/* Aspect Ratio Threshold Slider */}
+                    {generateNoBackground && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="aspectRatioThreshold" className="font-medium">
+                            9:16 Aspect Ratio Tolerance
+                          </Label>
+                          <span className="text-xs font-mono bg-muted px-2 py-1 rounded">
+                            {blurredPillarboxThreshold[0].toFixed(2)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          id="aspectRatioThreshold"
+                          min={0.05}
+                          max={0.5}
+                          step={0.01}
+                          value={blurredPillarboxThreshold[0]}
+                          onChange={(e) => setBlurredPillarboxThreshold([parseFloat(e.target.value)])}
+                          className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Lower values = stricter 9:16 requirement (more blurred backgrounds), 
+                          Higher values = more tolerance (fewer blurred backgrounds)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Local GPU Toggle */}
                   <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
                     <div className="flex items-center gap-3">
@@ -393,16 +452,27 @@ export default function CompilationsPage() {
                       <span className="text-xs font-medium text-purple-600 dark:text-purple-400">3</span>
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">Optimize Format</p>
-                      <p>Format videos for social media platforms like TikTok and Instagram</p>
+                      <p className="font-medium text-foreground">Generate Variations</p>
+                      <p>Create up to 3 different versions: normal, TTS intro, and no-background</p>
                     </div>
                   </div>
                 </div>
                 
-                <div className="mt-6 p-3 rounded-lg bg-muted/50 border">
-                  <p className="text-xs text-muted-foreground">
-                    <strong>Tip:</strong> Use longer source videos (10+ minutes) for better compilation variety
-                  </p>
+                <div className="mt-6 space-y-3">
+                  <div className="p-3 rounded-lg bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-900/20 border">
+                    <p className="text-xs font-medium text-foreground mb-1">🎬 Video Variations:</p>
+                    <ul className="text-xs text-muted-foreground space-y-1">
+                      <li>• <strong>Normal:</strong> Traditional layout with white background</li>
+                      <li>• <strong>TTS Intro:</strong> AI-generated introduction speech</li>
+                      <li>• <strong>No-Background:</strong> Pure video or blurred pillarbox effect</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-3 rounded-lg bg-muted/50 border">
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Tip:</strong> Use longer source videos (10+ minutes) for better compilation variety
+                    </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -412,3 +482,4 @@ export default function CompilationsPage() {
     </div>
   )
 }
+

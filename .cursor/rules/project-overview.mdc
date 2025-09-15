@@ -1,39 +1,116 @@
 ---
 alwaysApply: true
-description: AI Video Generator project overview and entry points
+description: "AI Video Generator project overview and architecture"
 ---
 
-# AI Video Generator – Project Overview
+# AI Video Generator - Project Overview
 
-## Architecture
-This is a full-stack AI video generation application with:
-- **Backend**: FastAPI (Python) serving REST/WebSocket APIs
-- **Frontend**: React + Vite + TypeScript + Tailwind + shadcn/ui
-- **Video Engines**: MoneyPrinter and Brainrot video generation systems
+This is an enterprise-grade AI video generation platform with dual workflows, cloud GPU acceleration, and comprehensive monitoring capabilities.
 
-## Entry Points
-- **Backend Main**: [backend/app.py](mdc:backend/app.py) - FastAPI application
-- **Frontend Main**: [frontend/src/main.tsx](mdc:frontend/src/main.tsx) - React app entry
-- **Frontend App**: [frontend/src/App.tsx](mdc:frontend/src/App.tsx) - Main React component
+## 🏗️ Core Architecture
 
-## Key Directories
-- `backend/` - Python FastAPI backend
-- `frontend/` - React frontend application
-- `backend/vendors/moneyprinter/` - MoneyPrinter video generation engine
-- `backend/vendors/brainrot/` - Brainrot video generation engine
-- `output/` - Generated video files storage
-- `logs/` - Application logs
+### Backend Structure (FastAPI + Python)
+- **Entry Point**: [backend/main.py](mdc:backend/main.py) - Application startup
+- **Core App**: [backend/app.py](mdc:backend/app.py) - FastAPI application factory
+- **Configuration**: [backend/core/config.py](mdc:backend/core/config.py) - Environment-based config management
+- **Database**: [backend/database.py](mdc:backend/database.py) - PostgreSQL job persistence (MANDATORY)
+- **Job Queue**: [backend/job_queue_unified.py](mdc:job_queue_unified.py) - Unified job processing system
 
-## Development Commands
-- **Full stack**: `./start.sh` - Launches both backend (8080) and frontend (5173)
-- **Backend only**: `uvicorn app:app --host 0.0.0.0 --port 8080 --reload` in `backend/`
-- **Frontend only**: `npm run dev` in `frontend/`
-- **Tests**: `pytest` in `backend/`
+### Frontend Structure (React + TypeScript + Tailwind)
+- **Entry Point**: [frontend/src/main.tsx](mdc:frontend/src/main.tsx) - React application entry
+- **Main App**: [frontend/src/App.tsx](mdc:frontend/src/App.tsx) - Routing and layout
+- **Components**: [frontend/src/components/](mdc:frontend/src/components/) - Reusable UI components
+- **Pages**: [frontend/src/pages/](mdc:frontend/src/pages/) - Main application pages
 
-## Environment Variables
-- `VIDEOHELPER_OUTPUT_DIR` - Output directory (defaults to `output/`)
-- `API_KEY` - Optional API key for endpoint protection
-- `PEXELS_API_KEY` - Required for MoneyPrinter video search
-- `GOOGLE_API_KEY`/`GEMINI_API_KEY` - Required for AI text generation
-- `CORS_ALLOW_ORIGINS` - CORS configuration
-- `RATE_LIMIT_PER_MINUTE` - Rate limiting per IP
+## 🎬 Video Generation Workflows
+
+### 1. MoneyPrinter Flow
+- **Purpose**: AI script generation + stock footage + subtitles + optional music
+- **Backend**: [backend/vendors/AIvideos/](mdc:backend/vendors/AIvideos/) - Core implementation
+- **API Endpoint**: `/api/moneyprinter/generate`
+- **Process**: Subject → AI Script → Search Terms → Stock Videos → TTS → Subtitles → Composition
+
+### 2. Brainrot Flow  
+- **Purpose**: TikTok-style compilation videos from YouTube URLs
+- **Backend**: [backend/vendors/Compilation/](mdc:backend/vendors/Compilation/) - Core implementation
+- **API Endpoint**: `/api/brainrot/generate`
+- **Process**: YouTube URL → Download → Scene Detection → Splitting → Compilation Creation
+
+## 🔧 Key Services
+
+### Service Layer Pattern
+- **Video Generation**: [backend/services/video_generation.py](mdc:backend/services/video_generation.py)
+- **Job Management**: [backend/services/job_management.py](mdc:backend/services/job_management.py)  
+- **Thumbnail Service**: [backend/services/thumbnail_service.py](mdc:backend/services/thumbnail_service.py)
+- **Video Service**: [backend/services/video_service.py](mdc:backend/services/video_service.py)
+
+### API Routes Organization
+- **Health**: [backend/api/routes/health.py](mdc:backend/api/routes/health.py)
+- **Video Generation**: [backend/api/routes/video_generation.py](mdc:backend/api/routes/video_generation.py)
+- **Job Management**: [backend/api/routes/job_management.py](mdc:backend/api/routes/job_management.py)
+- **System Management**: [backend/api/routes/system.py](mdc:backend/api/routes/system.py)
+- **WebSocket**: [backend/api/routes/websocket.py](mdc:backend/api/routes/websocket.py)
+
+## 🚀 Enterprise Features
+
+### Cloud GPU Acceleration
+- **Modal Integration**: Cloud GPU processing with L40S/A100/H100
+- **Hybrid Processing**: Automatic fallback to local processing
+- **Cost Optimization**: Pay-per-use GPU time
+
+### Monitoring & Observability
+- **Metrics**: [backend/metrics.py](mdc:backend/metrics.py) - Prometheus metrics
+- **Logging**: [backend/logging_config.py](mdc:backend/logging_config.py) - Structured logging
+- **Error Handling**: [backend/utils/error_handling.py](mdc:backend/utils/error_handling.py) - Standardized errors
+
+### Performance & Scaling
+- **Caching**: Multi-level caching (Memory/Redis/File)
+- **Job Queue**: Redis-based with worker distribution
+- **Batch Processing**: Bulk video generation support
+- **Database**: PostgreSQL with connection pooling
+
+## 📁 Key Directories
+
+### Backend Utilities
+- **Utils**: [backend/utils/](mdc:backend/utils/) - Core utilities and helpers
+- **Middleware**: [backend/middleware/](mdc:backend/middleware/) - Custom FastAPI middleware
+- **Models**: [backend/models/](mdc:backend/models/) - Pydantic request/response models
+
+### Frontend Structure  
+- **Components**: [frontend/src/components/](mdc:frontend/src/components/) - UI components with shadcn/ui
+- **Hooks**: [frontend/src/hooks/](mdc:frontend/src/hooks/) - Custom React hooks
+- **Pages**: [frontend/src/pages/](mdc:frontend/src/pages/) - Application pages
+
+## 🔐 Security & Configuration
+
+### Environment Configuration
+- **Main Config**: [.env](mdc:.env) - Primary environment variables
+- **Required Keys**: PEXELS_API_KEY, GOOGLE_API_KEY/GEMINI_API_KEY
+- **Database**: PostgreSQL connection (MANDATORY)
+- **Authentication**: JWT-based with configurable expiration
+
+### API Security
+- **Optional API Key**: X-API-Key header protection
+- **Rate Limiting**: Configurable per-IP limits
+- **CORS**: Configurable origins for frontend access
+
+## 🐳 Deployment
+
+### Docker Support
+- **Backend**: [docker/Dockerfile.backend](mdc:docker/Dockerfile.backend)
+- **Frontend**: [docker/Dockerfile.frontend](mdc:docker/Dockerfile.frontend)
+- **Compose**: [docker/docker-compose.yml](mdc:docker/docker-compose.yml) - Full stack deployment
+
+### Development Setup
+1. **Backend**: `cd backend && uvicorn app:app --host 0.0.0.0 --port 8080 --reload`
+2. **Frontend**: `cd frontend && npm run dev`
+3. **Database**: PostgreSQL required for job persistence
+
+## 📊 Monitoring Endpoints
+
+- **Health Check**: `GET /api/health` - System status
+- **Metrics**: `GET /api/metrics` - Prometheus format
+- **Job Status**: `GET /api/jobs/{id}` - Individual job progress
+- **WebSocket**: `/ws` - Real-time updates
+
+Always refer to the README.md for the most current setup and deployment instructions.

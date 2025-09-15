@@ -1,68 +1,450 @@
 ---
-globs: *.tsx,*.ts
-description: Frontend development patterns and conventions
+globs: frontend/**/*.{ts,tsx,js,jsx}
+description: "Frontend development patterns with React, TypeScript, and Tailwind CSS"
 ---
 
-# Frontend Development Guide
+# Frontend Development Guidelines
 
-## Tech Stack
-- **Framework**: React 18 with TypeScript
-- **Build Tool**: Vite
-- **Styling**: Tailwind CSS + shadcn/ui components
-- **State Management**: React hooks + custom hooks
-- **API Client**: Custom API layer with job management
+## 🏗️ Architecture Overview
 
-## Key Components Structure
+### Tech Stack
+- **Framework**: React 18.2.0 with TypeScript 5.6.3
+- **Routing**: React Router DOM 6.26.2
+- **Styling**: Tailwind CSS with shadcn/ui components
+- **Build Tool**: Vite 7.1.5
+- **Icons**: Lucide React + React Icons
+
+### Project Structure
 ```
 frontend/src/
-├── components/           # Main components
-│   ├── components/ui/   # shadcn/ui components
-│   ├── Sidebar.tsx      # Main navigation
-│   ├── ResultPanel.tsx  # Job results display
-│   └── MultiJobPanel.tsx # Multi-job management
-├── hooks/
-│   ├── useJobManager.ts # Job state management
-│   └── use-toast.ts     # Toast notifications
-├── lib/
-│   ├── api.ts          # API client functions
-│   ├── jobManager.ts   # Job management utilities
-│   └── ui.ts           # UI utilities
-└── pages/              # Route-based pages
+├── components/          # Reusable UI components
+├── pages/              # Application pages/routes
+├── hooks/              # Custom React hooks
+├── lib/                # Utility libraries
+├── App.tsx             # Main application component
+└── main.tsx            # Application entry point
 ```
 
-## Important Components
-- **SidebarRouter**: Main navigation and routing logic
-- **useJobManager**: Custom hook for managing video generation jobs
-- **MultiJobPanel**: Handles multiple concurrent jobs
-- **ResultPanel**: Displays job results and progress
-- **GeneratedVideosPanel**: Shows completed videos
+## 🎨 UI Component Patterns
 
-## API Integration Patterns
-```typescript
-// Use the custom API client
-import { apiClient } from '@/lib/api';
+### shadcn/ui Integration
+Use the established shadcn/ui component library from [frontend/src/components/components/ui/](mdc:frontend/src/components/components/ui/):
 
-// Example: Generate video
-const response = await apiClient.generateVideo({
-  prompt: "Create a video about cats",
-  voice: "alloy"
-});
+```tsx
+import { Button } from '@/components/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/components/ui/card'
+import { Progress } from '@/components/components/ui/progress'
+
+// Example usage
+<Button variant="default" size="lg">
+  Generate Video
+</Button>
+
+<Card>
+  <CardHeader>
+    <CardTitle>Video Generation</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <Progress value={progress} className="w-full" />
+  </CardContent>
+</Card>
 ```
 
-## Job Management
-- Jobs are managed via WebSocket connections for real-time updates
-- Use `useJobManager` hook for consistent job state handling
-- Support for batch operations and job cancellation
-- Automatic retry logic for failed jobs
+### Component Structure
+Follow this pattern for all React components:
 
-## State Management
-- Prefer React hooks over external state libraries
-- Use `useJobManager` for job-related state
-- Local component state for UI-specific state
-- Context providers for shared application state
+```tsx
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/components/ui/button'
+import { useJobManager } from '@/hooks/useJobManager'
 
-## Styling Conventions
-- Use Tailwind CSS classes for styling
-- Leverage shadcn/ui components for consistent UI
-- Follow component composition patterns
-- Use CSS variables for theme customization
+interface ComponentProps {
+  title: string
+  onComplete?: () => void
+}
+
+export default function MyComponent({ title, onComplete }: ComponentProps) {
+  const [loading, setLoading] = useState(false)
+  const jobManager = useJobManager()
+
+  const handleAction = async () => {
+    setLoading(true)
+    try {
+      // Component logic
+      await performAction()
+      onComplete?.()
+    } catch (error) {
+      console.error('Action failed:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold">{title}</h2>
+      <Button 
+        onClick={handleAction} 
+        disabled={loading}
+        className="w-full"
+      >
+        {loading ? 'Processing...' : 'Start Action'}
+      </Button>
+    </div>
+  )
+}
+```
+
+## 🎯 State Management
+
+### Job Management Hook
+Use the centralized job manager from [frontend/src/hooks/useJobManager.ts](mdc:frontend/src/hooks/useJobManager.ts):
+
+```tsx
+import { useJobManager } from '@/hooks/useJobManager'
+
+function VideoCreator() {
+  const jobManager = useJobManager()
+  
+  // Get active jobs
+  const activeJobs = jobManager.getActiveJobs()
+  
+  // Start a new job
+  const handleGenerate = async (params: VideoParams) => {
+    const response = await fetch('/api/moneyprinter/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    })
+    
+    const { job_id } = await response.json()
+    jobManager.startTracking(job_id)
+  }
+  
+  return (
+    <div>
+      {activeJobs.map(job => (
+        <JobProgress key={job.id} job={job} />
+      ))}
+    </div>
+  )
+}
+```
+
+### Local State Management
+Use React hooks for component-level state:
+
+```tsx
+import { useState, useCallback } from 'react'
+
+function FormComponent() {
+  const [formData, setFormData] = useState({
+    subject: '',
+    voice: 'af_bella',
+    aiModel: 'gemini-2.0-flash'
+  })
+  
+  const updateField = useCallback((field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }, [])
+  
+  return (
+    // Form JSX
+  )
+}
+```
+
+## 🎨 Styling Guidelines
+
+### Tailwind CSS Patterns
+Follow the established design system:
+
+```tsx
+// Layout containers
+<div className="container-page fade-in max-w-[1760px]">
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {/* Content */}
+  </div>
+</div>
+
+// Cards and sections
+<div className="bg-card/40 backdrop-blur-xl rounded-xl border border-border/30 p-6">
+  <h3 className="section-title text-lg mb-4">Section Title</h3>
+  <p className="section-subtitle text-sm text-muted-foreground">
+    Section description
+  </p>
+</div>
+
+// Status indicators
+<div className="flex items-center gap-2">
+  <div className="size-2 rounded-full bg-green-500 animate-pulse"></div>
+  <span className="text-xs font-medium text-muted-foreground">
+    Status: Active
+  </span>
+</div>
+```
+
+### Custom CSS Classes
+Use the established custom classes from [frontend/src/styles.css](mdc:frontend/src/styles.css):
+
+```tsx
+// Page containers
+<div className="container-page">
+  <div className="fade-in">
+    {/* Animated content */}
+  </div>
+</div>
+
+// Section titles
+<h1 className="section-title">Main Title</h1>
+<p className="section-subtitle">Subtitle text</p>
+
+// Form styling
+<div className="form-group">
+  <label className="form-label">Field Label</label>
+  <input className="form-input" />
+</div>
+```
+
+## 🔄 API Integration
+
+### API Configuration
+Use the environment-based API configuration from [frontend/src/App.tsx](mdc:frontend/src/App.tsx):
+
+```tsx
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+
+// API calls
+const response = await fetch(`${API}/api/endpoint`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': apiKey // if required
+  },
+  body: JSON.stringify(data)
+})
+```
+
+### Error Handling
+Implement consistent error handling:
+
+```tsx
+import { toast } from 'sonner'
+
+async function apiCall() {
+  try {
+    const response = await fetch('/api/endpoint')
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+    }
+    
+    const data = await response.json()
+    
+    if (!data.success) {
+      throw new Error(data.error?.message || 'Operation failed')
+    }
+    
+    return data
+  } catch (error) {
+    console.error('API call failed:', error)
+    toast.error(error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  }
+}
+```
+
+## 🔌 Real-time Updates
+
+### WebSocket Integration
+Implement WebSocket connections for real-time job updates:
+
+```tsx
+import { useEffect, useRef } from 'react'
+
+function useWebSocket(jobId: string, onUpdate: (data: any) => void) {
+  const wsRef = useRef<WebSocket | null>(null)
+  
+  useEffect(() => {
+    if (!jobId) return
+    
+    const ws = new WebSocket(`ws://localhost:8080/ws`)
+    wsRef.current = ws
+    
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe', job_id: jobId }))
+    }
+    
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      onUpdate(data)
+    }
+    
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+    
+    return () => {
+      ws.close()
+    }
+  }, [jobId, onUpdate])
+  
+  return wsRef.current
+}
+```
+
+## 📱 Responsive Design
+
+### Mobile-First Approach
+Design for mobile first, then enhance for desktop:
+
+```tsx
+<div className="
+  flex flex-col gap-4 p-4
+  lg:flex-row lg:gap-6 lg:p-6
+  xl:gap-8 xl:p-8
+">
+  {/* Mobile: stacked, Desktop: side-by-side */}
+</div>
+
+// Mobile sidebar
+<div className="lg:hidden fixed inset-0 z-50 bg-background/80 backdrop-blur-sm">
+  <SidebarRouter
+    isCollapsed={false}
+    onToggleCollapse={() => setShowMobileSidebar(false)}
+    className="w-64"
+  />
+</div>
+```
+
+### Breakpoint Usage
+Follow Tailwind's breakpoint system:
+- `sm:` - 640px and up
+- `md:` - 768px and up  
+- `lg:` - 1024px and up
+- `xl:` - 1280px and up
+
+## 🧪 Component Testing
+
+### Testing Patterns
+Test components with user interactions:
+
+```tsx
+import { render, screen, fireEvent } from '@testing-library/react'
+import { BrowserRouter } from 'react-router-dom'
+import MyComponent from './MyComponent'
+
+function renderWithRouter(component: React.ReactElement) {
+  return render(
+    <BrowserRouter>
+      {component}
+    </BrowserRouter>
+  )
+}
+
+test('component handles user interaction', async () => {
+  renderWithRouter(<MyComponent title="Test" />)
+  
+  const button = screen.getByRole('button', { name: /start action/i })
+  fireEvent.click(button)
+  
+  expect(screen.getByText(/processing/i)).toBeInTheDocument()
+})
+```
+
+## 🎭 Theme Support
+
+### Dark/Light Mode
+Use the theme toggle from [frontend/src/components/ThemeToggle.tsx](mdc:frontend/src/components/ThemeToggle.tsx):
+
+```tsx
+import ThemeToggle from '@/components/ThemeToggle'
+
+// In your layout
+<div className="flex items-center gap-3">
+  <ThemeToggle />
+</div>
+
+// Theme-aware styling
+<div className="bg-background text-foreground border-border">
+  <div className="bg-card text-card-foreground">
+    Theme-aware content
+  </div>
+</div>
+```
+
+## 🔧 Development Tools
+
+### TypeScript Configuration
+Follow the established TypeScript config in [frontend/tsconfig.json](mdc:frontend/tsconfig.json):
+
+```tsx
+// Use proper typing
+interface JobStatus {
+  id: string
+  status: 'queued' | 'processing' | 'completed' | 'failed'
+  progress: number
+  message?: string
+}
+
+// Avoid 'any' - use proper types
+const handleJobUpdate = (job: JobStatus) => {
+  // Typed implementation
+}
+```
+
+### Import Aliases
+Use the configured path aliases:
+
+```tsx
+// Use @ alias for src/
+import { Button } from '@/components/components/ui/button'
+import { useJobManager } from '@/hooks/useJobManager'
+import { cn } from '@/lib/utils'
+```
+
+## 🚀 Performance Optimization
+
+### Code Splitting
+Use React.lazy for route-based code splitting:
+
+```tsx
+import { lazy, Suspense } from 'react'
+
+const CreatorPage = lazy(() => import('./pages/CreatorPage'))
+const CompilationsPage = lazy(() => import('./pages/CompilationsPage'))
+
+function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Routes>
+        <Route path="/creator" element={<CreatorPage />} />
+        <Route path="/compilations" element={<CompilationsPage />} />
+      </Routes>
+    </Suspense>
+  )
+}
+```
+
+### Memo and Callbacks
+Use React.memo and useCallback for expensive operations:
+
+```tsx
+import { memo, useCallback, useMemo } from 'react'
+
+const ExpensiveComponent = memo(({ data, onUpdate }) => {
+  const processedData = useMemo(() => {
+    return data.map(item => processItem(item))
+  }, [data])
+  
+  const handleUpdate = useCallback((id: string) => {
+    onUpdate(id)
+  }, [onUpdate])
+  
+  return (
+    // Component JSX
+  )
+})
+```
+
+Always follow these patterns for consistency and maintainability across the frontend codebase.

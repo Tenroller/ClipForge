@@ -237,7 +237,7 @@ def run_brainrot_job(job_id: str, req_dict: dict):
         output_dir_str = str(job_output_dir.resolve())
         tracker.add_log(f"Created output directory: {job_output_dir}", "info", "brainrot")
 
-        generator = TikYouGenerator(output_dir=output_dir_str, tracker=tracker)
+        generator = TikYouGenerator(output_dir=output_dir_str, tracker=tracker, request=req)
         tracker.add_log("Initialized TikYou generator", "info", "brainrot")
         
         video_clips = generator.process_single_video(req.youtubeUrl)
@@ -282,6 +282,8 @@ def run_brainrot_job(job_id: str, req_dict: dict):
                             compilation_type = "normal"
                         elif "_tts" in filename_lower:
                             compilation_type = "tts"
+                        elif "_no_bg" in filename_lower:
+                            compilation_type = "no_background"
                         
                         # Extract compilation number
                         if "_compilation_" in filename_lower:

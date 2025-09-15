@@ -95,7 +95,7 @@ def convert_clip_worker(args):
     return None
 
 class TikYouGenerator:
-    def __init__(self, output_dir="final_videos", ffmpeg_path=None, tracker=None):
+    def __init__(self, output_dir="final_videos", ffmpeg_path=None, tracker=None, request=None):
         # FFMPEG 7+ compatibility fix for moviepy - cross-platform
         
         # Add the backend directory to the Python path
@@ -115,6 +115,7 @@ class TikYouGenerator:
         self.creator = TikTokVideoCreator(output_dir=output_dir, ffmpeg_path=ffmpeg_path)
         self.max_workers = min(multiprocessing.cpu_count(), 4)  # Limit to 4 workers max
         self.tracker = tracker  # Add tracker support
+        self.request = request  # Store request for variation configuration
         
         # Performance optimization caches
         self.clip_cache = {}  # Cache for processed vertical clips
@@ -1081,6 +1082,152 @@ class TikYouGenerator:
                     pass
             return None
     
+    def _fits_916_aspect_ratio(self, video_path, threshold=0.1):
+        """Check if video fits 9:16 aspect ratio within threshold"""
+        try:
+            video = VideoFileClip(video_path)
+            aspect_ratio = video.w / video.h
+            target_ratio = 9 / 16  # 0.5625
+            
+            # Check if within threshold
+            ratio_difference = abs(aspect_ratio - target_ratio)
+            fits = ratio_difference <= threshold
+            
+            video.close()
+            return fits, aspect_ratio
+            
+        except Exception as e:
+            print(f"❌ Error checking aspect ratio for {video_path}: {e}")
+            return False, 0
+    
+    def create_no_background_clip(self, video_path, target_resolution=(1080, 1920)):
+        """Create a no-background version of the clip - just video or blurred pillarbox"""
+        print(f"   🔧 Creating no-background clip from: {os.path.basename(video_path)}")
+        output_path = None
+        try:
+            video_name = os.path.splitext(os.path.basename(video_path))[0]
+            output_path = os.path.join(self.temp_dir, f"{video_name}_no_bg.mp4")
+            
+            # If no-background version already exists, return its path
+            if os.path.exists(output_path):
+                return output_path
+            
+            target_w, target_h = target_resolution
+            video_clip = VideoFileClip(video_path, audio=True)
+            
+            # Check if video fits 9:16 aspect ratio
+            threshold = getattr(self.request, 'blurredPillarboxThreshold', 0.1) if self.request else 0.1
+            fits_916, current_ratio = self._fits_916_aspect_ratio(video_path, threshold)
+            
+            if fits_916:
+                # Video fits 9:16, just resize it to fill the frame
+                print(f"   ✅ Video fits 9:16 aspect ratio, using full frame")
+                final_clip = video_clip.resized(newsize=(target_w, target_h))
+            else:
+                # Video doesn't fit, create blurred pillarbox
+                print(f"   🔄 Video aspect ratio {current_ratio:.3f} doesn't fit 9:16, creating blurred pillarbox")
+                
+                # Scale video to fit height while maintaining aspect ratio
+                scale_factor = target_h / video_clip.h
+                scaled_w = int(video_clip.w * scale_factor)
+                scaled_clip = video_clip.resized(width=scaled_w, height=target_h)
+                
+                # Create blurred background version
+                # Scale the original to fill the entire frame (will be cropped)
+                bg_scale_factor = target_w / video_clip.w
+                bg_clip = video_clip.resized(width=target_w, height=int(video_clip.h * bg_scale_factor))
+                
+                # Apply blur to background
+                try:
+                    bg_clip = bg_clip.with_effects([vfx.GaussianBlur(sigma=15)])
+                    print(f"   ✅ Applied GaussianBlur to background")
+                except Exception as e:
+                    print(f"   ⚠️ GaussianBlur failed ({e}), using resize blur fallback")
+                    # Fallback: Create blur effect by downscaling and upscaling
+                    blur_factor = 0.1  # Scale down to 10% then back up
+                    temp_w, temp_h = int(bg_clip.w * blur_factor), int(bg_clip.h * blur_factor)
+                    bg_clip = bg_clip.resized((temp_w, temp_h)).resized((target_w, target_h))
+                
+                # Center the background clip vertically
+                bg_clip = bg_clip.with_position("center")
+                
+                # Position the main video in center
+                main_clip = scaled_clip.with_position("center")
+                
+                # Composite: blurred background + main video
+                final_clip = CompositeVideoClip([bg_clip, main_clip], size=(target_w, target_h))
+            
+            final_clip.duration = video_clip.duration
+            final_clip.audio = video_clip.audio
+            
+            # Enhanced bitrates for better quality
+            if video_clip.w * video_clip.h > 1920 * 1080:
+                bitrate = '8000k'
+                audio_bitrate = '256k'
+            elif video_clip.duration > 60:
+                bitrate = '6000k'
+                audio_bitrate = '192k'
+            else:
+                bitrate = '5000k'
+                audio_bitrate = '192k'
+            
+            # Use optimized encoding parameters
+            codec = 'h264_nvenc' if (hasattr(self, 'has_gpu') and self.has_gpu) else 'libx264'
+            ffmpeg_params = [
+                '-movflags', 'faststart',
+                '-pix_fmt', 'yuv420p',
+                '-profile:v', 'high',
+                '-level', '4.1',
+            ]
+            
+            preset = 'p3' if (hasattr(self, 'has_gpu') and self.has_gpu) else 'slow'
+            
+            # Create unique temp audio file
+            temp_audio_file = os.path.join(self.temp_dir, f"{uuid.uuid4().hex}_temp_audio.wav")
+            
+            final_clip.write_videofile(
+                output_path,
+                codec=codec,
+                audio_codec='aac',
+                bitrate=bitrate,
+                audio_bitrate=audio_bitrate,
+                temp_audiofile=temp_audio_file,
+                remove_temp=True,
+                fps=30,
+                preset=preset,
+                threads=self.max_workers,
+                logger=None,
+                ffmpeg_params=ffmpeg_params,
+            )
+            
+            # Clean up
+            video_clip.close()
+            final_clip.close()
+            
+            # Cleanup temp audio file if it still exists
+            if os.path.exists(temp_audio_file):
+                try:
+                    os.remove(temp_audio_file)
+                except:
+                    pass
+            
+            # Validate output
+            if not os.path.exists(output_path) or os.path.getsize(output_path) < 1024:
+                print(f"⚠️  Warning: No-background output file seems invalid for {video_name}")
+                return None
+            
+            return output_path
+            
+        except Exception as e:
+            print(f"❌ Error creating no-background clip: {e}")
+            # Clean up partial file
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except:
+                    pass
+            return None
+    
     def create_single_compilation(self, selected_clips, output_path, compilation_num):
         """Create one compilation from a list of selected clips"""
         print(f"\n🎬 Creating compilation #{compilation_num}...")
@@ -1330,12 +1477,151 @@ class TikYouGenerator:
             
         return output_path
     
+    def create_no_background_compilation(self, selected_clips, output_path, compilation_num):
+        """Create a compilation using no-background clips (no white background, no text overlay)"""
+        print(f"\n🎬 Creating no-background compilation #{compilation_num}...")
+        print(f"   📊 Input: {len(selected_clips)} clips selected")
+        print(f"   🎯 Target resolution: 1080x1920")
+        print(f"   📁 Output path: {output_path}")
+        
+        # Track processing start time
+        start_time = time.time()
+        final_clips = []
+        
+        try:
+            # Convert each clip to no-background format
+            for i, clip_info in enumerate(selected_clips):
+                clip_name = os.path.basename(clip_info['path'])
+                
+                print(f"   📽️  Processing clip {i+1}/{len(selected_clips)}: {clip_name}")
+                
+                # Convert to no-background format
+                no_bg_path = self.create_no_background_clip(clip_info['path'])
+                if not no_bg_path:
+                    print(f"      ❌ Failed to create no-background version of {clip_name}")
+                    continue
+                
+                print(f"      ✅ No-background clip created: {os.path.basename(no_bg_path)}")
+                
+                # Load the no-background clip
+                try:
+                    clip = VideoFileClip(no_bg_path, audio=True)
+                    # Ensure correct duration
+                    if hasattr(clip_info, 'duration'):
+                        clip = clip.with_duration(clip_info['duration'])
+                    final_clips.append(clip)
+                except Exception as e:
+                    print(f"      ❌ Error loading no-background clip: {e}")
+                    continue
+            
+            if not final_clips:
+                print(f"   ❌ No valid clips for compilation")
+                return None
+            
+            print(f"   📋 Successfully processed {len(final_clips)}/{len(selected_clips)} clips")
+            
+            # Create the final compilation by concatenating clips
+            print(f"   🔗 Concatenating clips...")
+            final_compilation = concatenate_videoclips(final_clips, method="compose")
+            
+            # Log compilation info
+            print(f"   ✅ Compilation created successfully!")
+            print(f"      📁 Output file: {output_path}")
+            print(f"      📊 Compilation duration: {final_compilation.duration:.1f}s")
+            
+            # Check system resources before encoding
+            current_memory = psutil.virtual_memory().percent
+            available_disk = psutil.disk_usage(os.path.dirname(output_path)).free / (1024**3)  # GB
+            print(f"      💻 System resources before encoding:")
+            print(f"         - Memory usage: {current_memory:.1f}%")
+            print(f"         - Available disk space: {available_disk:.1f}GB")
+            
+            if current_memory > 90:
+                print(f"         ⚠️ High memory usage detected!")
+            if available_disk < 1.0:
+                print(f"         ⚠️ Low disk space detected!")
+            
+            # Encoding parameters
+            unique_audio_temp = f"temp-audio-{uuid.uuid4().hex}.m4a"
+            adaptive_params = self._adapt_processing_parameters(len(final_clips), final_compilation.duration)
+            
+            # Use the same codec determination as normal compilation
+            codec = self.encoding_params['codec']
+            ffmpeg_params = [
+                '-movflags', 'faststart',
+                '-pix_fmt', 'yuv420p',
+            ] + self.encoding_params['ffmpeg_params']
+            
+            # Add CPU-specific quality flags if not using GPU
+            if codec == 'libx264':
+                ffmpeg_params.extend([
+                    '-crf', '20',  # Better quality
+                    '-maxrate', adaptive_params['bitrate'],
+                    '-bufsize', str(int(adaptive_params['bitrate'].replace('k', '')) * 2) + 'k'
+                ])
+            
+            print(f"      🎬 Starting video encoding...")
+            print(f"         - Codec: {codec}")
+            print(f"         - Preset: {adaptive_params['preset']}")
+            print(f"         - Bitrate: {adaptive_params['bitrate']}")
+            
+            final_compilation.write_videofile(
+                output_path,
+                codec=codec,
+                audio_codec='aac',
+                bitrate=adaptive_params['bitrate'],
+                audio_bitrate=adaptive_params.get('audio_bitrate', '192k'),
+                temp_audiofile=unique_audio_temp,
+                remove_temp=True,
+                fps=30,
+                preset=adaptive_params['preset'],
+                threads=adaptive_params['threads'],
+                logger="bar",
+                ffmpeg_params=ffmpeg_params,
+            )
+            
+            processing_time = time.time() - start_time
+            print(f"      ⏱️ Processing time: {processing_time:.1f}s")
+            print(f"      ✅ No-background compilation encoding completed!")
+            
+        except Exception as e:
+            print(f"   ❌ Error writing no-background compilation #{compilation_num}: {e}")
+            print(f"      💡 This could be due to:")
+            print(f"         - Insufficient disk space")
+            print(f"         - FFmpeg encoding issues") 
+            print(f"         - Memory constraints")
+            print(f"         - File permission issues")
+            return None
+        finally:
+            # Cleanup memory
+            print(f"      🧹 Cleaning up memory...")
+            if 'final_compilation' in locals():
+                final_compilation.close()
+            for clip in final_clips:
+                clip.close()
+            gc.collect()
+            if self.has_gpu:
+                torch.cuda.empty_cache()
+            print(f"      ✅ Memory cleanup completed")
+        
+        # Verify the output file was created successfully
+        if os.path.exists(output_path):
+            file_size = os.path.getsize(output_path) / (1024 * 1024)  # Convert to MB
+            print(f"   ✅ Successfully created no-background compilation: {os.path.basename(output_path)}")
+            print(f"      📦 File size: {file_size:.1f}MB")
+            print(f"      📁 Full path: {output_path}")
+        else:
+            print(f"   ❌ No-background output file was not created: {output_path}")
+            return None
+            
+        return output_path
+    
     def create_all_compilation_variations(self, selected_clips, base_output_path, video_id, compilation_num):
         """
-        Create all 3 variations of a compilation:
-        1. Normal compilation
-        2. TTS intro compilation  
-        3. Heavily edited compilation
+        Create all variations of a compilation:
+        1. Normal compilation (with white background)
+        2. TTS intro compilation (with white background + TTS intro)
+        3. No-background compilation (no white background, pure video/blurred pillarbox)
         
         Args:
             selected_clips (list): List of selected video clips
@@ -1349,6 +1635,7 @@ class TikYouGenerator:
         results = {
             'normal': None,
             'tts': None,
+            'no_background': None,
             'successful_count': 0,
             'total_count': 0
         }
@@ -1366,7 +1653,7 @@ class TikYouGenerator:
         print(f"      - Available disk space: {available_disk:.1f}GB")
         
         # 1. Create Normal Compilation
-        print(f"\n   📹 Variation 1/2: Normal Compilation")
+        print(f"\n   📹 Variation 1/3: Normal Compilation")
         normal_path = f"{base_output_path}_normal.mp4"
         results['total_count'] += 1
         
@@ -1388,7 +1675,7 @@ class TikYouGenerator:
         
         # 2. Create TTS Intro Compilation (if enabled)
         if self.tts_enabled and self.tts_generator:
-            print(f"\n   🎙️ Variation 2/2: TTS Intro Compilation")
+            print(f"\n   🎙️ Variation 2/3: TTS Intro Compilation")
             tts_path = f"{base_output_path}_tts.mp4"
             results['total_count'] += 1
             
@@ -1408,10 +1695,34 @@ class TikYouGenerator:
                 print(f"         - Memory constraints")
                 print(f"         - FFmpeg encoding issues")
         else:
-            print(f"\n   ⏭️ Variation 2/2: TTS Intro Compilation (SKIPPED - not available)")
+            print(f"\n   ⏭️ Variation 2/3: TTS Intro Compilation (SKIPPED - not available)")
         
-        # 3. Heavily Edited Compilation (REMOVED)
-        print(f"\n   ⏭️ Variation 3/3: Heavily Edited Compilation (REMOVED - no longer generated)")
+        # 3. Create No-Background Compilation (if enabled)
+        should_generate_no_bg = getattr(self.request, 'generateNoBackground', True) if self.request else True
+        print(f"   🔍 Debug: request={self.request}, should_generate_no_bg={should_generate_no_bg}")
+        if should_generate_no_bg:
+            print(f"\n   🎯 Variation 3/3: No-Background Compilation")
+            no_bg_path = f"{base_output_path}_no_bg.mp4"
+            results['total_count'] += 1
+            
+            try:
+                print(f"   🎬 Starting no-background compilation creation...")
+                no_bg_result = self.create_no_background_compilation(selected_clips, no_bg_path, compilation_num)
+                if no_bg_result:
+                    results['no_background'] = no_bg_result
+                    results['successful_count'] += 1
+                    print(f"   ✅ No-background compilation created: {os.path.basename(no_bg_path)}")
+                else:
+                    print(f"   ❌ No-background compilation failed")
+            except Exception as e:
+                print(f"   ❌ No-background compilation error: {e}")
+                print(f"      💡 This could be due to:")
+                print(f"         - Aspect ratio detection issues")
+                print(f"         - Video processing problems")
+                print(f"         - Memory constraints")
+                print(f"         - FFmpeg encoding issues")
+        else:
+            print(f"\n   ⏭️ Variation 3/3: No-Background Compilation (SKIPPED - disabled in request)")
         
         print(f"\n   📊 Compilation {compilation_num} Summary:")
         print(f"      ✅ Successful variations: {results['successful_count']}/{results['total_count']}")
@@ -1582,17 +1893,20 @@ class TikYouGenerator:
                         performance_stats['normal_variations'] += 1
                     if variations_result['tts']:
                         performance_stats['tts_variations'] += 1
+                    if variations_result.get('no_background'):
+                        performance_stats['no_background_variations'] = performance_stats.get('no_background_variations', 0) + 1
                     
                     performance_stats['total_variations'] += variations_result['successful_count']
                     
                     # Track output file sizes
                     total_set_size = 0
                     for variation_name, path in [('normal', variations_result['normal']), 
-                                               ('tts', variations_result['tts'])]:
+                                               ('tts', variations_result['tts']),
+                                               ('no_background', variations_result.get('no_background'))]:
                         if path and os.path.exists(path):
                             file_size = os.path.getsize(path) / (1024 * 1024)  # MB
                             total_set_size += file_size
-                            print(f"   📦 {variation_name.capitalize()} variation: {file_size:.1f}MB")
+                            print(f"   📦 {variation_name.replace('_', ' ').capitalize()} variation: {file_size:.1f}MB")
                     
                     performance_stats['total_output_size'] += total_set_size
                     print(f"   📦 Total set size: {total_set_size:.1f}MB")
@@ -1669,17 +1983,20 @@ class TikYouGenerator:
                             performance_stats['normal_variations'] += 1
                         if variations_result['tts']:
                             performance_stats['tts_variations'] += 1
+                        if variations_result.get('no_background'):
+                            performance_stats['no_background_variations'] = performance_stats.get('no_background_variations', 0) + 1
                         
                         performance_stats['total_variations'] += variations_result['successful_count']
                         
                         # Track output file sizes
                         total_set_size = 0
                         for variation_name, path in [('normal', variations_result['normal']), 
-                                                   ('tts', variations_result['tts'])]:
+                                                   ('tts', variations_result['tts']),
+                                                   ('no_background', variations_result.get('no_background'))]:
                             if path and os.path.exists(path):
                                 file_size = os.path.getsize(path) / (1024 * 1024)  # MB
                                 total_set_size += file_size
-                                print(f"   📦 {variation_name.capitalize()} variation: {file_size:.1f}MB")
+                                print(f"   📦 {variation_name.replace('_', ' ').capitalize()} variation: {file_size:.1f}MB")
                         
                         performance_stats['total_output_size'] += total_set_size
                         print(f"   📦 Total set size: {total_set_size:.1f}MB")
@@ -1827,10 +2144,12 @@ class TikYouGenerator:
                     performance_stats['normal_variations'] += 1
                 if variations_result['tts']:
                     performance_stats['tts_variations'] += 1
+                if variations_result.get('no_background'):
+                    performance_stats['no_background_variations'] = performance_stats.get('no_background_variations', 0) + 1
                 performance_stats['total_variations'] += variations_result['successful_count']
                 
                 total_set_size = 0
-                for variation_name, path in [('normal', variations_result['normal']), ('tts', variations_result['tts'])]:
+                for variation_name, path in [('normal', variations_result['normal']), ('tts', variations_result['tts']), ('no_background', variations_result.get('no_background'))]:
                     if path and os.path.exists(path):
                         file_size = os.path.getsize(path) / (1024 * 1024)
                         total_set_size += file_size

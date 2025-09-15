@@ -1,145 +1,320 @@
 ---
-alwaysApply: false
-description: Video generation engines (MoneyPrinter and Brainrot) usage guide
+description: "Video generation engines: MoneyPrinter and Brainrot workflows"
 ---
 
 # Video Generation Engines
 
-## MoneyPrinter Engine
+## 🎬 Overview
 
-### Overview
-MoneyPrinter creates professional-looking videos with:
-- Stock video footage from Pexels
-- AI-generated scripts and narration
-- Automated subtitle generation
-- Multiple subtitle styles (enhanced, word-highlight, whisper)
+The AI Video Generator supports two distinct video generation workflows, each optimized for different content types and use cases.
 
-### Key Components
-Located in `backend/vendors/moneyprinter/`:
-- `main.py` - Main generation pipeline
-- `video.py` - Video editing and composition
-- `search.py` - Stock footage search
-- `gpt.py` - Script generation
-- `tiktokvoice.py` - Text-to-speech
+## 💰 MoneyPrinter Workflow
 
-### Subtitle Systems
-- `enhanced_subtitles.py` - Advanced subtitle rendering
-- `optimized_subtitle_integration.py` - Performance optimization
-- `whisper_enhanced_subtitles.py` - Whisper AI integration
-- `word_highlight_subtitles.py` - Word-by-word highlighting
-- `stable_ts_enhanced_subtitles.py` - Timestamp synchronization
+### Purpose
+AI-powered video generation with script creation, stock footage, and text-to-speech synthesis.
 
-### API Usage
+### Location
+- **Core Engine**: [backend/vendors/AIvideos/](mdc:backend/vendors/AIvideos/)
+- **Main Script**: [backend/vendors/AIvideos/main.py](mdc:backend/vendors/AIvideos/main.py)
+- **API Integration**: [backend/api/routes/video_generation.py](mdc:backend/api/routes/video_generation.py)
+
+### Workflow Steps
+
+1. **Environment Validation**
+   - Check required API keys (PEXELS, GOOGLE/GEMINI)
+   - Validate TTS voice availability
+   - Verify FFmpeg installation
+
+2. **AI Script Generation**
+   - Use Gemini/Google AI for content creation
+   - Generate engaging video script based on subject
+   - Extract key themes and concepts
+
+3. **Search Terms Extraction**
+   - Parse generated script for visual concepts
+   - Create search terms for stock footage
+   - Optimize for Pexels API queries
+
+4. **Stock Footage Download**
+   - Query Pexels API for relevant videos
+   - Download high-quality stock footage
+   - Filter by duration and quality metrics
+
+5. **Text-to-Speech Generation**
+   - Convert script to audio using selected voice
+   - Support for multiple TTS engines (Kokoro, etc.)
+   - Audio optimization and normalization
+
+6. **Subtitle Generation**
+   - Create synchronized subtitles from script
+   - Support TikTok-style and traditional formats
+   - Customizable fonts and positioning
+
+7. **Video Composition**
+   - Combine stock footage with audio
+   - Add subtitles with proper timing
+   - Apply transitions and effects
+   - Export final MP4 video
+
+### Configuration Parameters
 ```python
-POST /api/moneyprinter/generate
 {
-  "prompt": "Create a video about artificial intelligence",
-  "voice": "alloy",
-  "music": "inspiring",
-  "subtitle_style": "enhanced"
+    "videoSubject": "Amazing space discoveries",
+    "aiModel": "gemini-2.0-flash",  # or "google-ai"
+    "voice": "af_bella",            # TTS voice selection
+    "paragraphNumber": 2,           # Script length
+    "useMusic": true,               # Background music
+    "useTikTokSubtitles": true,     # Subtitle style
+    "subtitleFont": "bold",         # Font selection
+    "imageSearchTerms": "space",    # Custom search terms
+    "videoLength": 60               # Target duration
 }
 ```
 
-## Brainrot Engine
-
-### Overview
-Brainrot creates TikTok-style videos with:
-- Dynamic title generation
-- Fast-paced editing
-- Trendy visual effects
-- Playlist compilation support
-
-### Key Components
-Located in `backend/vendors/brainrot/tikyou_video_generator/`:
-- `generator.py` - Main video generation
-- `generator_refactored.py` - Refactored version
-- `tts_generator.py` - Text-to-speech processing
-- `title_generator.py` - Dynamic titles
-
-### API Usage
+### Integration Example
 ```python
-POST /api/brainrot/generate
+# In backend/api/routes/video_generation.py
+@router.post("/moneyprinter/generate")
+def moneyprinter_generate(req: MoneyPrinterRequest):
+    job_id = str(uuid.uuid4())
+    
+    # Submit to job queue
+    job_queue.submit_job(job_id, "moneyprinter", req.dict())
+    
+    return {"job_id": job_id, "status": "queued"}
+```
+
+## 🧠 Brainrot Workflow
+
+### Purpose
+TikTok-style compilation videos from existing YouTube content with automated scene detection and splitting.
+
+### Location
+- **Core Engine**: [backend/vendors/Compilation/](mdc:backend/vendors/Compilation/)
+- **Main Generator**: [backend/vendors/Compilation/generator_refactored.py](mdc:backend/vendors/Compilation/generator_refactored.py)
+- **Video Processor**: [backend/vendors/Compilation/cat_video_processor.py](mdc:backend/vendors/Compilation/cat_video_processor.py)
+
+### Workflow Steps
+
+1. **YouTube Video Processing**
+   - Download video using yt-dlp
+   - Extract video metadata and properties
+   - Quality assessment and format validation
+
+2. **Pillarbox Detection & Removal**
+   - Detect black bars (pillarboxing) in video
+   - Automatic cropping to remove letterboxing
+   - Aspect ratio optimization for mobile viewing
+
+3. **Scene Detection & Analysis**
+   - Analyze video for scene changes
+   - Detect compilation vs single-scene content
+   - Calculate optimal split points
+
+4. **Video Splitting**
+   - Split compilation videos into individual clips
+   - Maintain quality during segmentation
+   - Generate clip metadata and timing
+
+5. **Compilation Creation**
+   - Create multiple TikTok-style compilations
+   - Randomize clip order and selection
+   - Apply mobile-optimized formatting
+
+6. **Output Optimization**
+   - Export in TikTok-compatible formats
+   - Generate multiple compilation variants
+   - Create thumbnails and previews
+
+### Configuration Parameters
+```python
 {
-  "topic": "Viral dance trends",
-  "duration": 30,
-  "style": "trendy"
-}
-
-POST /api/brainrot/playlist
-{
-  "videos": ["video1.mp4", "video2.mp4"],
-  "transitions": "smooth"
+    "youtubeUrl": "https://youtube.com/watch?v=VIDEO_ID",
+    "numCompilations": 5,           # Number of compilations to create
+    "minDuration": 20,              # Minimum clip duration (seconds)
+    "maxDuration": 40,              # Maximum clip duration (seconds)
+    "cropMode": "auto",             # Cropping strategy
+    "sceneThreshold": 30.0,         # Scene detection sensitivity
+    "qualityFilter": "720p"         # Minimum quality requirement
 }
 ```
 
-## Video Processing Features
+### Advanced Features
 
-### Common Capabilities
-- **Resolution**: Multiple output resolutions
-- **Format**: MP4 with optimized encoding
-- **Audio**: Background music + voiceover
-- **Subtitles**: Multiple styles and languages
-- **Effects**: Transitions, overlays, text effects
-
-### Output Structure
+#### Scene Detection Algorithm
+```python
+# In cat_video_processor.py
+def analyze_video_scenes(self, video_path: str, threshold: float = 30.0):
+    """
+    Analyze video for scene detection using multiple algorithms:
+    - Frame difference analysis
+    - Color histogram comparison  
+    - Motion vector analysis
+    - Audio level changes
+    """
+    scenes = []
+    # Scene detection logic
+    return {
+        'is_compilation': len(scenes) > 1,
+        'scenes': scenes,
+        'confidence': confidence_score
+    }
 ```
-output/
-├── moneyprinter_{job_id}.mp4    # MoneyPrinter videos
-├── {video_id}_compilation_{n}.mp4  # Brainrot compilations
-├── {video_id}/                    # Source video directory
-│   ├── {video_id}.mp4            # Original video
-│   └── {video_id}_cropped.mp4     # Processed video
+
+#### Pillarbox Detection
+```python
+def detect_pillarbox(self, video_path: str):
+    """
+    Detect and measure pillarbox/letterbox borders:
+    - Edge detection for black bars
+    - Histogram analysis for border detection
+    - Automatic crop rectangle calculation
+    """
+    crop_params = self._calculate_crop_parameters(video_path)
+    return crop_params
 ```
 
-## Configuration Options
+### Integration Example
+```python
+# In backend/api/routes/video_generation.py
+@router.post("/brainrot/generate") 
+def brainrot_generate(req: BrainrotRequest):
+    job_id = str(uuid.uuid4())
+    
+    # Validate YouTube URL
+    if not self._is_valid_youtube_url(req.youtubeUrl):
+        raise HTTPException(400, "Invalid YouTube URL")
+    
+    # Submit to job queue
+    job_queue.submit_job(job_id, "brainrot", req.dict())
+    
+    return {"job_id": job_id, "status": "queued"}
+```
 
-### Voice Options
-Available voices depend on TTS provider:
-- OpenAI voices: alloy, echo, fable, onyx, nova, shimmer
-- Custom voices through TikTok integration
+## 🔧 Shared Infrastructure
 
-### Music Options
-- Built-in music library
-- Custom audio file upload
-- Genre-based selection
+### Job Processing System
+Both workflows use the unified job processing system:
 
-### Subtitle Styles
-- `enhanced` - Professional subtitles with styling
-- `whisper` - AI-generated accurate subtitles
-- `word_highlight` - Word-by-word highlighting
-- `simple` - Basic subtitle overlay
+```python
+# In backend/job_queue_unified.py
+class UnifiedJobQueue:
+    def submit_job(self, job_id: str, workflow: str, parameters: dict):
+        """Submit job to appropriate workflow processor."""
+        if workflow == "moneyprinter":
+            self._process_moneyprinter_job(job_id, parameters)
+        elif workflow == "brainrot":
+            self._process_brainrot_job(job_id, parameters)
+```
 
-## Performance Considerations
+### Progress Tracking
+Real-time progress updates for both workflows:
 
-### Resource Requirements
-- **CPU**: Multi-core recommended for video processing
-- **RAM**: 8GB+ for concurrent jobs
-- **Storage**: Fast SSD for temporary files
-- **GPU**: Optional for accelerated encoding
+```python
+def update_job_progress(job_id: str, progress: int, message: str):
+    """Update job progress and notify WebSocket clients."""
+    job_store.update_job_progress(job_id, progress, message)
+    websocket_manager.broadcast_job_update(job_id, progress, message)
+```
 
-### Optimization Tips
-- Process videos sequentially to avoid resource contention
-- Use appropriate video resolutions for target platforms
-- Enable caching for repeated assets
-- Monitor GPU utilization via `/api/gpu-info`
+### Error Handling
+Standardized error handling across both engines:
 
-## Error Handling
+```python
+from backend.utils.error_handling import handle_error, VideoHelperError
 
-### Common Issues
-- **API Key Errors**: Verify Pexels/Google API keys
-- **TTS Failures**: Check voice availability
-- **Video Processing**: Check disk space and permissions
-- **Memory Issues**: Reduce concurrent jobs
+try:
+    # Video processing operation
+    result = process_video(parameters)
+except Exception as e:
+    error_response = handle_error(e, context={"job_id": job_id, "workflow": workflow})
+    update_job_progress(job_id, -1, f"Failed: {error_response['error']['message']}")
+```
 
-### Debugging
+## 🎯 Output Formats
+
+### MoneyPrinter Output
+- **Video**: MP4 with H.264 encoding
+- **Audio**: AAC, 44.1kHz, stereo
+- **Subtitles**: Embedded or SRT file
+- **Thumbnails**: Multiple sizes (320x180, 160x90, 80x45)
+- **Metadata**: JSON with generation parameters
+
+### Brainrot Output
+- **Compilations**: Multiple MP4 files (TikTok format: 9:16 aspect ratio)
+- **Individual Clips**: Segmented source clips
+- **Thumbnails**: Preview images for each compilation
+- **Analysis Data**: Scene detection results and statistics
+
+## 🚀 Performance Optimization
+
+### GPU Acceleration
+Both workflows support GPU acceleration:
+
+```python
+# GPU memory management
+from backend.utils.gpu_manager import GPUManager
+
+gpu_manager = GPUManager()
+if gpu_manager.is_available():
+    # Use GPU-accelerated processing
+    result = gpu_process_video(video_path)
+else:
+    # Fallback to CPU processing
+    result = cpu_process_video(video_path)
+```
+
+### Caching Strategy
+- **Script Cache**: AI-generated scripts cached by subject
+- **Stock Footage Cache**: Downloaded videos cached by search terms
+- **Processing Cache**: Intermediate processing results cached
+
+### Parallel Processing
+```python
+# Concurrent processing for batch operations
+from concurrent.futures import ThreadPoolExecutor
+
+with ThreadPoolExecutor(max_workers=config.max_concurrent_jobs) as executor:
+    futures = [
+        executor.submit(process_video, job_params)
+        for job_params in batch_jobs
+    ]
+```
+
+## 🔍 Debugging & Monitoring
+
+### Debug Output
+Enable debug mode for detailed processing logs:
+
 ```bash
-# Check job status
-GET /api/jobs/{job_id}
+# Environment variable
+DEBUG_MODE=true
 
-# View detailed logs
-tail -f logs/backend.log
-
-# Check system resources
-GET /api/gpu-info
-GET /api/metrics
+# Generates debug frames and processing logs
+# Output in debug_frames/ directory
 ```
+
+### Performance Metrics
+Track processing performance:
+
+```python
+# Metrics collection
+processing_time = time.time() - start_time
+metrics.record_processing_time(workflow, processing_time)
+metrics.increment_job_counter(workflow, status)
+```
+
+### Resource Monitoring
+Monitor system resources during processing:
+
+```python
+# Memory and GPU monitoring
+resource_stats = {
+    "memory_usage": get_memory_usage(),
+    "gpu_usage": get_gpu_usage(),
+    "disk_space": get_disk_space(),
+    "processing_time": processing_time
+}
+```
+
+Both video generation engines are designed for reliability, scalability, and high-quality output. They integrate seamlessly with the unified job processing system and provide comprehensive monitoring and error handling capabilities.

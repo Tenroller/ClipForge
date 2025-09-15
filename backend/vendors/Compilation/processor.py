@@ -1599,7 +1599,7 @@ class CatVideoProcessor:
             print(f"Error splitting video with ffmpeg: {e}")
             return False
 
-    def analyze_video_scenes(self, video_path, threshold: float = 27, method: str = 'scenedetect'):
+    def analyze_video_scenes(self, video_path, threshold: float = 17.0, method: str = 'scenedetect'):
         """
         Analyze video for scenes and classification in a single pass
         Returns dict with scenes, is_compilation, and other metadata
@@ -1611,7 +1611,7 @@ class CatVideoProcessor:
         """
         if method.lower() == 'moviepy':
             # Use moviepy detection with appropriate threshold conversion
-            moviepy_threshold = int(threshold) if threshold != 30.0 else 10
+            moviepy_threshold = int(threshold) if threshold != 17.0 else 10
             return self.analyze_video_scenes_moviepy(video_path, moviepy_threshold)
         
         # Default to scenedetect method
