@@ -672,7 +672,7 @@ JOB_SEMAPHORE = threading.Semaphore(max(1, max_concurrent_jobs))
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 # Simple optional in-memory rate limiter (per minute)
-RATE_LIMIT_PER_MIN = config.get_int('rate_limit_per_minute', 0)
+RATE_LIMIT_PER_MIN = getattr(config, 'rate_limit_per_minute', 0)
 RATE_LIMIT_BUCKETS: Dict[str, deque] = defaultdict(deque)  # key: f"{bucket}:{ip}"
 RATE_LIMIT_LOCK = threading.Lock()
 
@@ -1774,6 +1774,11 @@ def _get_next_step_for_workflow(workflow: str, last_step: str) -> str:
 
 @app.get("/api/jobs/{job_id}")
 def job_status(job_id: str):
+    # 410 handling for purged jobs
+    purged_reason = job_store.is_purged(job_id)
+    if purged_reason:
+        raise HTTPException(status_code=410, detail=f"Job was removed: {purged_reason}")
+
     job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -1861,6 +1866,20 @@ def cancel_job(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found or cannot be cancelled")
     _update_job(job_id, status="cancelled")
     return {"status": "cancelled", "jobId": job_id}
+
+
+@app.post("/api/jobs/{job_id}/purge", tags=["Job Management"], summary="Purge (delete) a job and create tombstone")
+def purge_job(job_id: str):
+    purged_reason = "Purged by request"
+    if job_store.purge_job(job_id, purged_reason):
+        return {"status": "purged", "jobId": job_id, "reason": purged_reason}
+    raise HTTPException(status_code=404, detail="Job not found")
+
+
+@app.post("/api/jobs/cleanup/manual", tags=["Job Management"], summary="Run manual stale job expiration")
+def manual_cleanup():
+    result = job_store.expire_stale_jobs()
+    return {"status": "ok", "expired": result}
 
 class PlaylistBatchRequest(BaseModel):
     playlistUrl: str
@@ -2011,286 +2030,42 @@ def download_file(path: str):
     return FileResponse(str(file_path), filename=file_path.name, media_type=media_type)
 
 
-@app.get("/api/list-videos")
-def list_videos(dir: str):
-    """List mp4 videos inside a directory under the allowed output roots.
-
-    Returns a JSON object: { "files": [{"path": str, "name": str, "size": int, "mtime": float}] }
-    """
-    directory = Path(dir)
-    if not directory.exists() or not directory.is_dir():
-        raise HTTPException(status_code=404, detail="Directory not found")
-    if not _is_allowed_path(directory):
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    files = []
-    try:
-        for p in sorted(directory.glob("*.mp4")):
-            try:
-                stat = p.stat()
-                files.append({
-                    "path": str(p.resolve()),
-                    "name": p.name,
-                    "size": stat.st_size,
-                    "mtime": stat.st_mtime,
-                })
-            except Exception:
-                continue
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list videos: {e}")
-
-    return {"files": files}
+## Removed deprecated /api/list-videos endpoint. Use /api/videos/managed instead.
 
 
-@app.get("/api/videos/all", tags=["Video Management"], summary="List All Generated Videos")
-def list_all_videos(
-    limit: int = 100,
-    offset: int = 0,
-    workflow: Optional[str] = None,
-    status: Optional[str] = None,
-    sort_by: str = "created_at",
-    sort_order: str = "desc"
-) -> Dict[str, Any]:
-    """
-    List all generated videos across all jobs with metadata.
-    
-    Returns videos with job information, file details, and download URLs.
-    """
-    try:
-        # Get jobs with completed videos
-        valid_statuses = ["done"] if status is None else [status] if status == "done" else []
-        jobs = job_store.list_jobs(limit=limit*2, status="done")  # Get more to account for filtering
-        
-        if workflow:
-            jobs = [job for job in jobs if job.get("workflow") == workflow]
-        
-        videos = []
-        processed_count = 0
-        
-        for job in jobs:
-            if processed_count >= offset + limit:
-                break
-                
-            job_result = job.get("result", {})
-            if not job_result:
-                continue
-                
-            job_id = job["id"]
-            job_workflow = job.get("workflow", "unknown")
-            created_at = job.get("created_at")
-            duration_seconds = job.get("duration_seconds")
-            
-            # Handle MoneyPrinter workflow (single video)
-            if job_workflow == "moneyprinter" and "output" in job_result:
-                video_path = job_result["output"]
-                if video_path and Path(video_path).exists():
-                    try:
-                        stat = Path(video_path).stat()
-                        video_info = {
-                            "id": f"{job_id}_main",
-                            "job_id": job_id,
-                            "workflow": job_workflow,
-                            "filename": Path(video_path).name,
-                            "path": video_path,
-                            "size_bytes": stat.st_size,
-                            "size_mb": round(stat.st_size / (1024 * 1024), 2),
-                            "created_at": created_at,
-                            "duration_seconds": duration_seconds,
-                            "download_url": f"/api/download?path={Path(video_path).resolve()}",
-                            "thumbnail_url": None,  # Could be implemented later
-                            "subtitles_path": job_result.get("subtitles"),
-                            "video_type": "ai_generated",
-                            "posted": job_result.get("posted", False)
-                        }
-                        
-                        if processed_count >= offset:
-                            videos.append(video_info)
-                        processed_count += 1
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed to process video {video_path}: {e}")
-            
-            # Handle Brainrot workflow (multiple videos)
-            elif job_workflow == "brainrot" and "generated_videos" in job_result:
-                generated_videos = job_result.get("generated_videos", [])
-                for video_data in generated_videos:
-                    if processed_count >= offset + limit:
-                        break
-                        
-                    video_path = video_data.get("path")
-                    if video_path and Path(video_path).exists():
-                        try:
-                            video_info = {
-                                "id": f"{job_id}_{video_data.get('compilation_num', 'unknown')}_{video_data.get('variation', 'unknown')}",
-                                "job_id": job_id,
-                                "workflow": job_workflow,
-                                "filename": video_data.get("filename", Path(video_path).name),
-                                "path": video_path,
-                                "size_bytes": video_data.get("size_bytes", 0),
-                                "size_mb": video_data.get("size_mb", 0),
-                                "created_at": created_at,
-                                "duration_seconds": duration_seconds,
-                                "download_url": video_data.get("download_url", f"/api/download?path={Path(video_path).resolve()}"),
-                                "thumbnail_url": None,  # Could be implemented later
-                                "compilation_type": video_data.get("compilation_type", "Unknown"),
-                                "compilation_num": video_data.get("compilation_num"),
-                                "video_type": "compilation",
-                                "posted": video_data.get("posted", False)
-                            }
-                            
-                            if processed_count >= offset:
-                                videos.append(video_info)
-                            processed_count += 1
-                            
-                        except Exception as e:
-                            logger.warning(f"Failed to process video {video_path}: {e}")
-        
-        # Sort videos
-        sort_key = sort_by if sort_by in ["created_at", "size_mb", "filename"] else "created_at"
-        reverse_sort = sort_order.lower() == "desc"
-        
-        videos.sort(key=lambda x: x.get(sort_key, ""), reverse=reverse_sort)
-        
-        # Apply pagination
-        paginated_videos = videos[offset:offset + limit] if offset < len(videos) else []
-        
-        return {
-            "videos": paginated_videos,
-            "total": len(videos),
-            "offset": offset,
-            "limit": limit,
-            "has_more": offset + limit < len(videos)
-        }
-        
-    except Exception as e:
-        logger.error(f"Failed to list all videos: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list videos: {e}")
+## Removed deprecated /api/videos/all endpoint. Use /api/videos/managed or related managed endpoints instead.
 
 
 @app.get("/api/videos/stats", tags=["Video Management"], summary="Get Video Statistics")
 def get_video_stats() -> Dict[str, Any]:
-    """Get statistics about all generated videos."""
+    """Delegate video stats retrieval to the new videos route implementation."""
     try:
-        jobs = job_store.list_jobs(limit=1000, status="done")
-        
-        stats = {
-            "total_videos": 0,
-            "total_size_mb": 0,
-            "workflows": {
-                "moneyprinter": {"count": 0, "size_mb": 0},
-                "brainrot": {"count": 0, "size_mb": 0}
-            },
-            "video_types": {
-                "ai_generated": {"count": 0, "size_mb": 0},
-                "compilation": {"count": 0, "size_mb": 0}
-            }
-        }
-        
-        for job in jobs:
-            job_result = job.get("result", {})
-            job_workflow = job.get("workflow", "unknown")
-            
-            if job_workflow == "moneyprinter" and "output" in job_result:
-                video_path = job_result["output"]
-                if video_path and Path(video_path).exists():
-                    try:
-                        size_mb = Path(video_path).stat().st_size / (1024 * 1024)
-                        stats["total_videos"] += 1
-                        stats["total_size_mb"] += size_mb
-                        stats["workflows"]["moneyprinter"]["count"] += 1
-                        stats["workflows"]["moneyprinter"]["size_mb"] += size_mb
-                        stats["video_types"]["ai_generated"]["count"] += 1
-                        stats["video_types"]["ai_generated"]["size_mb"] += size_mb
-                    except Exception:
-                        continue
-                        
-            elif job_workflow == "brainrot" and "generated_videos" in job_result:
-                generated_videos = job_result.get("generated_videos", [])
-                for video_data in generated_videos:
-                    video_path = video_data.get("path")
-                    if video_path and Path(video_path).exists():
-                        try:
-                            size_mb = video_data.get("size_mb", 0)
-                            stats["total_videos"] += 1
-                            stats["total_size_mb"] += size_mb
-                            stats["workflows"]["brainrot"]["count"] += 1
-                            stats["workflows"]["brainrot"]["size_mb"] += size_mb
-                            stats["video_types"]["compilation"]["count"] += 1
-                            stats["video_types"]["compilation"]["size_mb"] += size_mb
-                        except Exception:
-                            continue
-        
-        # Round sizes
-        stats["total_size_mb"] = round(stats["total_size_mb"], 2)
-        for workflow_stats in stats["workflows"].values():
-            workflow_stats["size_mb"] = round(workflow_stats["size_mb"], 2)
-        for type_stats in stats["video_types"].values():
-            type_stats["size_mb"] = round(type_stats["size_mb"], 2)
-        
-        return stats
-        
-    except Exception as e:
-        logger.error(f"Failed to get video stats: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get video stats: {e}")
+        from backend.api.routes import videos as videos_routes
+        # videos_routes.get_video_stats is a sync function returning a dict
+        return videos_routes.get_video_stats()
+    except Exception:
+        # Bubble up to allow FastAPI to produce a 500 and log details
+        raise
 
 
 @app.post("/api/cleanup/temp-files", tags=["Maintenance"], summary="Clean up temporary files")
 async def cleanup_temp_files():
-    """Clean up all temporary files from the application using the automatic temp manager.
-
-    Returns a JSON object with cleanup statistics for each directory.
-    """
-    from utils.file_management import get_temp_manager
-
-    manager = get_temp_manager()
-    results = manager.cleanup_all(force=True)
-
-    # Aggregate results
-    total_files = sum(r.get('files_removed', 0) for r in results.values())
-    total_space = sum(r.get('space_freed_mb', 0) for r in results.values())
-    all_errors = []
-    for dir_results in results.values():
-        all_errors.extend(dir_results.get('errors', []))
-
-    result = {
-        "deleted_files": total_files,
-        "freed_space_mb": round(total_space, 2),
-        "directories_cleaned": list(results.keys()),
-        "errors": all_errors,
-        "directory_details": results
-    }
-
-    logger.info(f"Manual temp file cleanup completed: {total_files} files deleted, {total_space:.2f} MB freed")
-
-    return result
+    """Delegate temporary files cleanup to the new system route implementation."""
+    try:
+        from backend.api.routes import system as system_routes
+        return system_routes.cleanup_temp_files()
+    except Exception:
+        raise
 
 
 @app.get("/api/cleanup/temp-files/stats", tags=["Maintenance"], summary="Get temporary files statistics")
 async def get_temp_files_stats():
-    """Get statistics about temporary files in the application using the temp manager.
-
-    Returns a JSON object with temp file statistics for all registered directories.
-    """
-    from utils.file_management import get_temp_manager
-
-    manager = get_temp_manager()
-    stats = manager.get_stats()
-
-    # Aggregate totals
-    total_files = sum(dir_stats.get('file_count', 0) for dir_stats in stats.values() if 'file_count' in dir_stats)
-    total_size = sum(dir_stats.get('total_size_mb', 0) for dir_stats in stats.values() if 'total_size_mb' in dir_stats)
-
-    result = {
-        "directories": list(stats.values()),
-        "total_files": total_files,
-        "total_size_mb": round(total_size, 2),
-        "manager_stats": {
-            "registered_directories": len(stats),
-            "background_cleanup_active": True  # Always active now
-        }
-    }
-
-    return result
+    """Delegate temp file stats retrieval to the new system route implementation."""
+    try:
+        from backend.api.routes import system as system_routes
+        return system_routes.get_temp_files_stats()
+    except Exception:
+        raise
 
 
 @app.get("/api/websocket/stats", tags=["Monitoring"], summary="Get WebSocket connection statistics")
@@ -2329,9 +2104,9 @@ async def get_database_stats():
         "database_stats": stats,
         "database_size_mb": 0,  # Not available for PostgreSQL
         "connection_pool": {
-            "pool_size": config.get_int('videohelper_db_pool_size', 5),
+            "pool_size": getattr(config, 'videohelper_db_pool_size', 5),
             "active_connections": 0,  # Not tracked in JobStore
-            "pool_timeout_seconds": config.get_int('videohelper_db_pool_timeout', 30)
+            "pool_timeout_seconds": getattr(config, 'videohelper_db_pool_timeout', 30)
         }
     }
 

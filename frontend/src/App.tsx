@@ -25,7 +25,7 @@ function AppContent() {
 
 	// Get active job count for the sidebar
 	const jobManager = useJobManager()
-	const activeJobCount = jobManager.getActiveJobs().length
+	const activeJobCount = jobManager.getActiveJobs().filter(j => j.workflow === 'moneyprinter').length
 
 	const onGetStarted = () => {
 		navigate('/creator')

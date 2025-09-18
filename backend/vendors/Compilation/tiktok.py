@@ -276,6 +276,17 @@ class TikTokVideoCreator:
             video_clip = video_clip.resized(width=W)
             background = ColorClip(size=(W, H), color=BACKGROUND_COLOR, duration=video_clip.duration)
             
+            # Apply rounded corners to the video before positioning
+            try:
+                from .video_effects import apply_rounded_corners_simple
+                corner_radius = 30  # Configurable corner radius
+                video_clip = apply_rounded_corners_simple(video_clip, corner_radius)
+                print(f"        ✨ Applied rounded corners (radius: {corner_radius}px)")
+            except Exception as e:
+                print(f"        ⚠️  Warning: Could not apply rounded corners: {e}")
+                # Continue without rounded corners if there's an error
+                pass
+            
             # Position video in the middle area of the frame
             video_y_position = 650
             video_clip = video_clip.with_position(('center', video_y_position))  # type: ignore
@@ -357,6 +368,7 @@ class TikTokVideoCreator:
                 video_type = video_info['type']
                 print(f"[COMPILATION] Using video for clip {i+1}: {video_path} (orientation: {orientation}, type: {video_type})")
                 
+                clip = None
                 try:
                     if orientation == 'horizontal':
                         # Convert horizontal to vertical using template
@@ -402,7 +414,7 @@ class TikTokVideoCreator:
                     print(f"   Skipping corrupted/problematic video and continuing...")
                     # Clean up any partially created clip
                     try:
-                        if 'clip' in locals():
+                        if clip is not None:
                             clip.close()
                     except:
                         pass

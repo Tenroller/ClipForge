@@ -3,6 +3,22 @@ import JobManager, { type ManagedJob } from '@/lib/jobManager'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
+export interface UseJobManagerReturn {
+  jobs: ManagedJob[]
+  initialized: boolean
+  addJob: (id: string, workflow: 'moneyprinter' | 'brainrot', payload?: any) => void
+  removeJob: (id: string) => void
+  clearCompletedJobs: () => void
+  getJob: (id: string) => ManagedJob | undefined
+  hasActiveJobs: () => boolean
+  getActiveJobs: () => ManagedJob[]
+  validateAllJobs: () => Promise<number>
+  cleanupLegacyJobs: () => Promise<void>
+  getResumableJobs: () => Promise<ManagedJob[]>
+  forceCleanup: () => Promise<void>
+  fetchJobLineage: (id: string, options?: { force?: boolean }) => Promise<{ ancestors: any[]; descendants: any[] }>
+}
+
 // Development-only logging
 const devLog = (message: string, ...args: any[]) => {
   if (import.meta.env.DEV) {
@@ -23,7 +39,7 @@ function getJobManagerInstance(): JobManager {
   return jobManagerInstance
 }
 
-export function useJobManager() {
+export function useJobManager(): UseJobManagerReturn {
   const [jobs, setJobs] = useState<ManagedJob[]>([])
   const [initialized, setInitialized] = useState(false)
   const listenerRef = useRef<((job: ManagedJob) => void) | null>(null)
@@ -146,6 +162,11 @@ export function useJobManager() {
     setJobs(jobManager.getAllJobs())
   }
 
+  const fetchJobLineage = async (id: string, options?: { force?: boolean }): Promise<{ ancestors: any[]; descendants: any[] }> => {
+    const jobManager = getJobManagerInstance()
+    return jobManager.fetchJobLineage(id, options)
+  }
+
   return {
     jobs,
     initialized,
@@ -159,5 +180,6 @@ export function useJobManager() {
     cleanupLegacyJobs,
     getResumableJobs,
     forceCleanup,
+    fetchJobLineage,
   }
 }

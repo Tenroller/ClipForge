@@ -115,8 +115,9 @@ class UnifiedJobQueue:
             return
             
         try:
-            # Get all jobs with running status from database
+            # Get running and queued jobs
             running_jobs = self.job_store.list_jobs(limit=1000, status="running")
+            queued_jobs = self.job_store.list_jobs(limit=1000, status="queued")
             orphaned_count = 0
             hung_count = 0
             
@@ -169,8 +170,38 @@ class UnifiedJobQueue:
                     
                     logger.warning(f"Marked orphaned job {job_id} as cancelled")
             
-            if orphaned_count > 0:
+            # Cancel stale queued jobs that never started (older than 2 hours)
+            stale_threshold_seconds = int(os.getenv("VIDEOHELPER_STALE_QUEUED_SECONDS", str(2 * 3600)))
+            stale_count = 0
+            for job_data in queued_jobs:
+                created_at = job_data.get('created_at')
+                job_id = job_data.get('id')
+                if not created_at or not job_id:
+                    continue
+                try:
+                    ts = created_at
+                    if ts.endswith('Z'):
+                        ts = ts[:-1] + '+00:00'
+                    ctime = datetime.fromisoformat(ts)
+                    if ctime.tzinfo is None:
+                        ctime = ctime.replace(tzinfo=timezone.utc)
+                    age = (current_time - ctime).total_seconds()
+                    if age > stale_threshold_seconds:
+                        self.job_store.update_job(
+                            job_id,
+                            status="cancelled",
+                            error="Server restart: queued job stale (auto-cancel)",
+                            ended_at=current_time.isoformat(),
+                            duration_seconds=0
+                        )
+                        stale_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to parse created_at for queued job {job_id}: {e}")
+
+            if orphaned_count > 0 or stale_count > 0:
                 logger.warning(f"Found and cancelled {orphaned_count} orphaned jobs on startup ({hung_count} were hung for >4h)")
+                if stale_count > 0:
+                    logger.warning(f"Also cancelled {stale_count} stale queued jobs (> {stale_threshold_seconds/3600:.1f}h old)")
                 if hung_count > 0:
                     logger.warning(f"Consider investigating why {hung_count} jobs were running for over 4 hours")
             else:
@@ -261,10 +292,14 @@ class UnifiedJobQueue:
                     serializable_args = self._make_serializable(args)
                     serializable_kwargs = self._make_serializable(kwargs)
 
+                    # Persist original function name so we can resume accurately later
                     self.job_store.create_job(
                         job_id,
                         workflow,
-                        {"args": serializable_args, "kwargs": serializable_kwargs, "priority": priority.name},
+                        {"func": getattr(func, '__name__', 'unknown'),
+                         "args": serializable_args,
+                         "kwargs": serializable_kwargs,
+                         "priority": priority.name},
                         user_id
                     )
                 except Exception as e:
@@ -306,7 +341,8 @@ class UnifiedJobQueue:
                                     job_id,
                                     status="cancelled",
                                     error="cancelled",
-                                    duration_seconds=int(job.duration or 0)
+                                    duration_seconds=int(job.duration or 0),
+                                    ended_at=job.completed_at.isoformat() if job.completed_at else None
                                 )
                             except Exception as e:
                                 logger.error(f"Failed to update cancelled job {job_id} in database: {e}")
@@ -553,7 +589,8 @@ class UnifiedJobQueue:
                         job_id,
                         status="completed",
                         result_data=result,
-                        duration_seconds=int(job.duration or 0)
+                        duration_seconds=int(job.duration or 0),
+                        ended_at=job.completed_at.isoformat() if job.completed_at else None
                     )
                 except Exception as e:
                     logger.error(f"Failed to update completed job {job_id} in database: {e}")
@@ -573,7 +610,8 @@ class UnifiedJobQueue:
                         job_id,
                         status="failed",
                         error_message="Job timed out",
-                        duration_seconds=int(job.duration or 0)
+                        duration_seconds=int(job.duration or 0),
+                        ended_at=job.completed_at.isoformat() if job.completed_at else None
                     )
                 except Exception as e:
                     logger.error(f"Failed to update timed out job {job_id} in database: {e}")
@@ -593,7 +631,8 @@ class UnifiedJobQueue:
                         job_id,
                         status="failed",
                         error_message=str(e),
-                        duration_seconds=int(job.duration or 0)
+                        duration_seconds=int(job.duration or 0),
+                        ended_at=job.completed_at.isoformat() if job.completed_at else None
                     )
                 except Exception as e2:
                     logger.error(f"Failed to update failed job {job_id} in database: {e2}")

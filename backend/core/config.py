@@ -27,6 +27,7 @@ class AppConfig:
     
     # Job processing
     max_concurrent_jobs: int = 2
+    max_resume_attempts: int = 5  # Maximum allowed attempts (original=1 + resumes)
     
     # Sentry monitoring
     sentry_dsn: Optional[str] = None
@@ -153,6 +154,7 @@ class AppConfig:
             
             # Job processing
             max_concurrent_jobs=get_int("VIDEOHELPER_MAX_CONCURRENT_JOBS", 2),
+            max_resume_attempts=get_int("VIDEOHELPER_MAX_RESUME_ATTEMPTS", 5),
             
             # Sentry monitoring
             sentry_dsn=os.getenv("SENTRY_DSN"),

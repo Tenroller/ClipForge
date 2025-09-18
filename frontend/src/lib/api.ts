@@ -56,13 +56,38 @@ export async function remakeJob(jobId: string): Promise<{
   return await res.json()
 }
 
-export type ListedFile = { path: string; name: string; size: number; mtime: number }
+// Managed video helpers (legacy list-videos endpoints fully removed)
 
-export async function listVideos(dir: string): Promise<ListedFile[]> {
-  const res = await apiFetch(`${API_BASE}/api/list-videos?dir=${encodeURIComponent(dir)}`)
-  if (!res.ok) return []
-  const data = await res.json()
-  return Array.isArray(data?.files) ? data.files : []
+// --- New Managed Video helpers (replacement for legacy list-videos scans) ---
+export interface ManagedVideoRecord {
+  id: string
+  job_id: string
+  workflow: string
+  file_path: string
+  created_at: string
+  size_bytes?: number
+  download_url?: string
+  posted?: boolean
+}
+
+export async function listManagedVideosByJob(jobId: string, limit = 50): Promise<ManagedVideoRecord[]> {
+  try {
+    const res = await apiFetch(`${API_BASE}/api/videos/managed?job_id=${encodeURIComponent(jobId)}&limit=${limit}`)
+    if (!res.ok) return []
+    const data = await res.json()
+    return Array.isArray(data?.videos) ? data.videos : []
+  } catch {
+    return []
+  }
+}
+
+// Convenience: get first (latest) managed video for a job
+export async function getLatestManagedVideo(jobId: string): Promise<ManagedVideoRecord | null> {
+  const videos = await listManagedVideosByJob(jobId, 5)
+  if (!videos.length) return null
+  // Sort by created_at desc just in case backend didn't
+  videos.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  return videos[0]
 }
 
 export function downloadUrl(path: string): string {

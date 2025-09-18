@@ -94,7 +94,7 @@ export default function VideosPage() {
   const [hasMore, setHasMore] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
   const [postingVideos, setPostingVideos] = useState<Set<string>>(new Set())
-  const [useNewSystem, setUseNewSystem] = useState(false) // Toggle between legacy and new system
+  // Managed system is now mandatory (legacy scanning removed)
   const [syncingVideos, setSyncingVideos] = useState(false) // Loading state for sync operations
   const [showSyncPanel, setShowSyncPanel] = useState(false) // Show sync controls
   
@@ -124,12 +124,12 @@ export default function VideosPage() {
       }
 
       // Add posted filter for new system
-      if (useNewSystem && postedFilter !== 'all') {
+      if (postedFilter !== 'all') {
         params.append('posted', postedFilter === 'posted' ? 'true' : 'false')
       }
 
       // Choose endpoint based on system
-      const endpoint = useNewSystem ? '/api/videos/managed' : '/api/videos/all'
+  const endpoint = '/api/videos/managed'
       const response = await fetch(`${API}${endpoint}?${params}`)
       
       if (!response.ok) {
@@ -163,7 +163,7 @@ export default function VideosPage() {
   // Load stats
   const loadStats = async () => {
     try {
-      const endpoint = useNewSystem ? '/api/videos/stats/managed' : '/api/videos/stats'
+  const endpoint = '/api/videos/stats/managed'
       const response = await fetch(`${API}${endpoint}`)
       if (!response.ok) {
         throw new Error(`Failed to load stats: ${response.statusText}`)
@@ -207,11 +207,9 @@ export default function VideosPage() {
         description: `Successfully synced ${result.registered_videos} videos from ${result.processed_jobs} jobs.`
       })
       
-      // Refresh if using new system
-      if (useNewSystem) {
-        loadVideos(true)
-        loadStats()
-      }
+      // Refresh (managed system)
+      loadVideos(true)
+      loadStats()
       
     } catch (error) {
       console.error('Failed to sync videos:', error)
@@ -244,11 +242,8 @@ export default function VideosPage() {
         description: `Registered ${result.registered_videos} orphaned videos from ${result.scanned_files} files.`
       })
       
-      // Refresh if using new system
-      if (useNewSystem) {
-        loadVideos(true)
-        loadStats()
-      }
+      loadVideos(true)
+      loadStats()
       
     } catch (error) {
       console.error('Failed to sync orphaned videos:', error)
@@ -266,7 +261,7 @@ export default function VideosPage() {
   useEffect(() => {
     loadVideos(true)
     loadStats()
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, useNewSystem])
+  }, [workflowFilter, postedFilter, sortBy, sortOrder])
 
   // Filter videos by search term
   const filteredVideos = videos.filter(video =>
@@ -360,26 +355,16 @@ export default function VideosPage() {
     try {
       setPostingVideos(prev => new Set(prev).add(video.id))
       
-      let response
-      
-      if (useNewSystem) {
-        // Use new managed video posting endpoint
-        response = await fetch(`${API}/api/videos/managed/${video.id}/mark-posted`, {
-          method: 'POST'
+      const response = await fetch(`${API}/api/videos/post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          video_id: video.id,
+          job_id: video.job_id
         })
-      } else {
-        // Use legacy posting endpoint
-        response = await fetch(`${API}/api/videos/post`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            video_id: video.id,
-            job_id: video.job_id
-          })
-        })
-      }
+      })
       
       if (!response.ok) {
         const errorData = await response.json()
@@ -389,6 +374,7 @@ export default function VideosPage() {
       const result = await response.json()
       
       const wasAlreadyPosted = video.posted
+      const webhookSuccess = result.webhook_success
       
       // Update the video in the local state
       setVideos(prevVideos => 
@@ -402,8 +388,10 @@ export default function VideosPage() {
       )
       
       toast({
-        title: wasAlreadyPosted ? 'Video Re-posted' : 'Video Posted',
-        description: `Successfully ${wasAlreadyPosted ? 're-posted' : 'posted'} ${video.filename} to webhook`
+        title: webhookSuccess ? (wasAlreadyPosted ? 'Video Re-posted' : 'Video Posted') : 'Video Marked as Posted',
+        description: webhookSuccess 
+          ? `Successfully ${wasAlreadyPosted ? 're-posted' : 'posted'} ${video.filename} to webhook`
+          : `Video ${video.filename} marked as posted but webhook posting failed: ${result.webhook_error || 'Unknown error'}`
       })
       
     } catch (error) {
@@ -429,19 +417,11 @@ export default function VideosPage() {
         <div>
           <h1 className="text-2xl font-bold">
             Video Gallery
-            {useNewSystem && (
-              <Badge variant="secondary" className="ml-2">
-                <FaDatabase className="size-3 mr-1" />
-                Managed
-              </Badge>
-            )}
+            <Badge variant="secondary" className="ml-2">
+              <FaDatabase className="size-3 mr-1" /> Managed
+            </Badge>
           </h1>
-          <p className="text-muted-foreground">
-            {useNewSystem 
-              ? 'View and manage videos tracked in the database'
-              : 'View and manage all your generated videos (legacy file scanning)'
-            }
-          </p>
+          <p className="text-muted-foreground">View and manage videos tracked in the database</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -475,28 +455,17 @@ export default function VideosPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* System Toggle */}
+            {/* Managed system status */}
             <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
               <div>
                 <h3 className="font-semibold">Video Tracking System</h3>
-                <p className="text-sm text-muted-foreground">
-                  {useNewSystem 
-                    ? 'Using database-tracked videos with enhanced features'
-                    : 'Using legacy file system scanning'
-                  }
-                </p>
+                <p className="text-sm text-muted-foreground">Using database-tracked videos with enhanced features (legacy scanning removed)</p>
               </div>
-              <Button
-                variant={useNewSystem ? "default" : "outline"}
-                onClick={() => setUseNewSystem(!useNewSystem)}
-              >
-                <FaDatabase className="size-4 mr-2" />
-                {useNewSystem ? 'Database Mode' : 'Switch to Database'}
-              </Button>
+              <Badge variant="secondary" className="flex items-center gap-1"><FaDatabase className="size-4" /> Managed</Badge>
             </div>
 
             {/* Sync Controls */}
-            {useNewSystem && (
+            {true && (
               <div className="space-y-4">
                 <div className="border-t pt-4">
                   <h3 className="font-semibold mb-2">Migration Tools</h3>
@@ -630,19 +599,17 @@ export default function VideosPage() {
               </SelectContent>
             </Select>
 
-            {/* Posted Filter - only show for new system */}
-            {useNewSystem && (
-              <Select value={postedFilter} onValueChange={setPostedFilter}>
-                <SelectTrigger className="w-full sm:w-40">
-                  <SelectValue placeholder="Posted Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Videos</SelectItem>
-                  <SelectItem value="posted">Posted Only</SelectItem>
-                  <SelectItem value="unposted">Unposted Only</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
+            {/* Posted Filter */}
+            <Select value={postedFilter} onValueChange={setPostedFilter}>
+              <SelectTrigger className="w-full sm:w-40">
+                <SelectValue placeholder="Posted Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Videos</SelectItem>
+                <SelectItem value="posted">Posted Only</SelectItem>
+                <SelectItem value="unposted">Unposted Only</SelectItem>
+              </SelectContent>
+            </Select>
 
             {/* Sort By */}
             <Select value={sortBy} onValueChange={setSortBy}>

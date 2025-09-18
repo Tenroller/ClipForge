@@ -130,294 +130,42 @@ class CatVideoProcessor:
         
         return True
     
-    def download_video(self, video_id, max_retries=3):
-        """Download a video from YouTube using yt-dlp with improved error handling and YouTube compatibility"""
-        logger.info(f"Starting YouTube video download for: {video_id}")
-        download_start = time.time()
-        
-        # Create specific directory for this video
-        video_output_dir = os.path.join(self.output_dir, video_id)
-        os.makedirs(video_output_dir, exist_ok=True)
-        
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-        output_template = os.path.join(video_output_dir, f"{video_id}.%(ext)s")
-        
-        for attempt in range(max_retries):
+    def download_video(self, video_id, max_retries=5):
+        """Download a video using the unified youtube utility (simplified).
+
+        Returns: (video_path, title) or (None, None) on failure to preserve legacy interface.
+        Increased max_retries to 5 for better handling of problematic videos.
+        """
+        logger.info(f"Starting YouTube video download for: {video_id} (unified)")
+        try:
             try:
-                logger.debug(f"YouTube download attempt {attempt + 1} of {max_retries} for video: {video_id}")
-                attempt_start = time.time()
-                
-                # Enhanced yt-dlp options to handle YouTube's recent changes
-                ydl_opts = {
-                    # Explicitly prioritize high quality formats
-                    'format': (
-                        'bestvideo[height>=1080][ext=mp4]+bestaudio[ext=m4a]/'  # 1080p+ MP4 video with M4A audio
-                        'bestvideo[height>=1080]+bestaudio/'   # 1080p+ video with any audio
-                        'bestvideo[height>=720][ext=mp4]+bestaudio[ext=m4a]/'   # 720p+ MP4 video with M4A audio
-                        'bestvideo[height>=720]+bestaudio/'    # 720p+ video with any audio
-                        'best[height>=1080]/'                  # Combined file 1080p+
-                        'best[height>=720]/'                   # Combined file 720p+
-                        'best[ext=mp4]/'                       # Best MP4 format
-                        'best'                                 # Final fallback
-                    ),
-                    'outtmpl': output_template,
-                    'noplaylist': True,
-                    'extractaudio': False,
-                    'quiet': False,
-                    'no_warnings': False,
-                    'writeinfojson': True,  # Write info to debug quality selection
-                    'listformats': True,    # List all available formats before downloading
-                    'overwrites': True,     # Force overwrite existing files to get higher quality
-                    'writesubtitles': False,
-                    'writeautomaticsub': False,
-                    'ratelimit': 2000 * 1024,  # Higher rate limit for better quality downloads
-                    'sleep_interval': 0.5,     # Reduced sleep interval for faster downloads
-                    'retries': 5,
-                    'fragment_retries': 10,
-                    'retry_sleep': 'linear=1:5',
-                    
-                    # Quality-focused options
-                    'prefer_free_formats': False,  # Don't prefer free formats over better quality
-                    'prefer_insecure': False,
-                    'merge_output_format': 'mp4',  # Ensure final output is MP4
-                    'postprocessor_args': {
-                        'ffmpeg': [
-                            '-c:v', 'copy',    # Copy video codec when possible (no re-encoding)
-                            '-c:a', 'copy',    # Copy audio codec when possible
-                            '-avoid_negative_ts', 'make_zero'  # Fix timing issues
-                        ]
-                    },
-                    
-                    # Enhanced headers and user agent
-                    'http_headers': {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.5',
-                        'Accept-Encoding': 'gzip, deflate',
-                        'DNT': '1',
-                        'Connection': 'keep-alive',
-                        'Upgrade-Insecure-Requests': '1',
-                    },
-                    
-                    # Use default YouTube extractor settings for better compatibility
-                    
-                    # Additional options for stability
-                    'ignoreerrors': False,
-                    'no_color': False,
-                    'extract_flat': False,
-                    'writethumbnail': False,
-                    'simulate': False,
-                    'listformats': False,
-                    'prefer_ffmpeg': True,
-                    'keepvideo': False,
-                    'socket_timeout': 30,
-                    'source_address': None,
-                    'force_ipv4': False,
-                    'force_ipv6': False,
-                    'cn_verification_proxy': None,
-                    'geo_verification_proxy': None,
-                    'geo_bypass': True,
-                    'geo_bypass_country': None,
-                    'geo_bypass_ip_block': None,
-                    'file_access_retries': 3,
-                    'skip_unavailable_fragments': True,
-                    'concurrent_fragment_downloads': 1,
-                    'buffersize': 1024,
-                    'noresizebuffer': False,
-                    'http_chunk_size': None,
-                    'external_downloader': None,
-                    'hls_use_mpegts': None,
-                    'hls_prefer_native': None,
-                    'hls_prefer_ffmpeg': None,
-                    'hls_split_discontinuity': False,
-                    'playlist_items': None,
-                    'playlistreverse': False,
-                    'playlistrandom': False,
-                    'matchtitle': None,
-                    'rejecttitle': None,
-                    'max_downloads': None,
-                    'min_filesize': None,
-                    'max_filesize': None,
-                    'date': None,
-                    'datebefore': None,
-                    'dateafter': None,
-                    'min_views': None,
-                    'max_views': None,
-                    'match_filter': None,
-                    'age_limit': None,
-                    'download_archive': None,
-                    'break_on_existing': False,
-                    'break_on_reject': False,
-                    'cookiefile': None,
-                    'cookiesfrombrowser': None,
-                    'nocheckcertificate': False,
-                    'prefer_insecure': False,
-                    'proxy': None,
-                    'cachedir': None,
-                    'verbose': False,
-                    'dump_single_json': False,
-                    'dump_json': False,
-                    'force_json': False,
-                    'print_json': False,
-                    'force_write_download_archive': False,
-                    'simulate': False,
-                    'skip_download': False,
-                    'geturl': False,
-                    'gettitle': False,
-                    'getid': False,
-                    'getthumbnail': False,
-                    'getdescription': False,
-                    'getduration': False,
-                    'getfilename': False,
-                    'getformat': False,
-                    'dumpjson': False,
-                    'dumpsingle': False,
-                    'print_traffic': False,
-                    'call_home': False,
-                    'ffmpeg_location': self.ffmpeg_path,
-                }
-                
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # Get video info first to check if video is accessible
-                    try:
-                        info = ydl.extract_info(video_url, download=False)
-                        
-                        if not info:
-                            print(f"Warning: No info found for this video ({video_id})")
-                            return None, None
-                        
-                        # Check video properties
-                        video_title = info.get('title', 'Unknown')
-                        duration = info.get('duration', 0)
-                      
-                        is_live = info.get('is_live', False)
-                        availability = info.get('availability', 'unknown')
-                        
-                        print(f"Video title: {video_title}")
-                        print(f"Duration: {duration} seconds ({duration/60:.1f} minutes)")
-                        print(f"Availability: {availability}")
-                        
-                        # Check for problematic videos
-                        if availability in ['private', 'premium_only', 'subscriber_only', 'needs_auth']:
-                            print(f"Video is not publicly available: {availability}")
-                            return None, None
-                    
-                        if is_live:
-                            print(f"Skipping live video: {video_title}")
-                            return None, None
-                        
-                        if availability != 'public':
-                            print(f"Skipping private/unavailable video: {video_title} ({availability})")
-                            return None, None
+                from backend.utils.youtube import download_video as unified_download, YouTubeDownloadError
+            except Exception:
+                # Fallback: dynamic path injection for direct execution contexts
+                import sys as _sys
+                from pathlib import Path as _Path
+                backend_dir = _Path(__file__).resolve().parent.parent.parent.parent
+                if str(backend_dir) not in _sys.path:
+                    _sys.path.insert(0, str(backend_dir))
+                from backend.utils.youtube import download_video as unified_download, YouTubeDownloadError  # type: ignore
+
+            output_dir = os.path.join(self.output_dir, video_id)
+            url = f"https://www.youtube.com/watch?v={video_id}"
+            result = unified_download(url, output_dir, max_retries=max_retries)
+            # Basic quality/log context
+            if result.resolution:
+                w, h = result.resolution
+                print(f"✅ Downloaded {video_id}: {w}x{h}, duration={result.duration or 'unknown'}s")
+            return result.video_path, result.title
+        except Exception as e:
+            # Handle both YouTubeDownloadError and other exceptions
+            if "YouTubeDownloadError" in str(type(e)):
+                print(f"Download failed for {video_id}: {e}")
+            else:
+                print(f"Unexpected download error for {video_id}: {e}")
+            return None, None
                         
                       
-                      
-                        
-                        # Check if formats are available and log quality info
-                        formats = info.get('formats', [])
-                        if not formats:
-                            print("Warning: No formats found for this video")
-                            return None, None
-                        
-                        # Log available quality information
-                        if formats:
-                            # Filter out None heights and get the max
-                            valid_heights = [f.get('height', 0) for f in formats if f.get('height') is not None and isinstance(f.get('height'), (int, float))]
-                            best_height = max(valid_heights) if valid_heights else 0
-                            print(f"📺 Best available quality: {best_height}p")
-                            
-                            # Count quality tiers
-                            quality_counts = {}
-                            for f in formats:
-                                height = f.get('height', 0)
-                                # Ensure height is a number before comparison
-                                if height is not None and isinstance(height, (int, float)):
-                                    if height >= 2160:
-                                        quality_counts['4K'] = quality_counts.get('4K', 0) + 1
-                                    elif height >= 1440:
-                                        quality_counts['1440p'] = quality_counts.get('1440p', 0) + 1
-                                    elif height >= 1080:
-                                        quality_counts['1080p'] = quality_counts.get('1080p', 0) + 1
-                                    elif height >= 720:
-                                        quality_counts['720p'] = quality_counts.get('720p', 0) + 1
-                            
-                            if quality_counts:
-                                quality_summary = ', '.join([f"{k}: {v} formats" for k, v in quality_counts.items()])
-                                print(f"📊 Quality tiers available: {quality_summary}")
-                        
-                        # Proceed with download
-                        print("🔥 Downloading highest quality available...")
-                        ydl.download([video_url])
-                        
-                        # Find the downloaded file
-                        downloaded_files = []
-                        for file in os.listdir(video_output_dir):
-                            if file.startswith(video_id) and file.endswith(('.mp4', '.mkv', '.webm', '.avi')):
-                                downloaded_files.append(os.path.join(video_output_dir, file))
-                        
-                        if not downloaded_files:
-                            print(f"No video file found after download in {video_output_dir}")
-                            continue
-                        
-                        # Use the first downloaded video file
-                        video_path = downloaded_files[0]
-                        print(f"Downloaded: {video_path}")
-                        
-                        # Debug: Show actual video quality information
-                        video_info_actual = self.get_video_info(video_path)
-                        if video_info_actual:
-                            file_size_mb = os.path.getsize(video_path) / (1024 * 1024)
-                            bitrate_mbps = (file_size_mb * 8) / (duration / 60) if duration > 0 else 0
-                            print(f"📊 Downloaded video quality:")
-                            print(f"   - Resolution: {video_info_actual.get('width', 'unknown')}x{video_info_actual.get('height', 'unknown')}")
-                            print(f"   - Duration: {duration:.1f} seconds ({duration/60:.1f} minutes)")
-                            print(f"   - File size: {file_size_mb:.1f} MB")
-                            print(f"   - Estimated bitrate: {bitrate_mbps:.2f} Mbps")
-                            
-                            # Warn if quality seems low
-                            video_height = video_info_actual.get('height', 0)
-                            if video_height is not None and isinstance(video_height, (int, float)):
-                                if video_height < 480:
-                                    print(f"⚠️  WARNING: Video resolution is below 480p - very low quality!")
-                                elif bitrate_mbps < 1.0:
-                                    print(f"⚠️  WARNING: Video bitrate is below 1 Mbps - low quality for this duration!")
-                        
-                        # Check if info.json was created for format debugging
-                        info_json_path = os.path.join(video_output_dir, f"{video_id}.info.json")
-                        if os.path.exists(info_json_path):
-                            try:
-                                import json
-                                with open(info_json_path, 'r', encoding='utf-8') as f:
-                                    info_data = json.load(f)
-                                format_id = info_data.get('format_id', 'unknown')
-                                format_note = info_data.get('format_note', 'unknown')
-                                vcodec = info_data.get('vcodec', 'unknown')
-                                acodec = info_data.get('acodec', 'unknown')
-                                print(f"📋 Format details: {format_id} ({format_note}) - Video: {vcodec}, Audio: {acodec}")
-                                
-                                # Clean up info file
-                                os.remove(info_json_path)
-                            except Exception as e:
-                                print(f"Could not read format info: {e}")
-                        
-                        return video_path, video_title
-                        
-                    except yt_dlp.utils.DownloadError as e:
-                        print(f"Download error for {video_id}: {e}")
-                        if "Private video" in str(e) or "Video unavailable" in str(e):
-                            return None, None
-                        # Fall through to retry for other errors
-                    
-            except Exception as e:
-                print(f"An error occurred during download attempt {attempt + 1}: {e}")
-            
-            # Wait before retrying
-            sleep_time = 2 ** attempt
-            print(f"Waiting {sleep_time} seconds before retrying...")
-            time.sleep(sleep_time)
-            
-        print(f"Failed to download video {video_id} after {max_retries} retries.")
-        return None, None
     
     def is_compilation_video(self, video_path, method: str = 'scenedetect'):
         """
@@ -785,19 +533,28 @@ class CatVideoProcessor:
             vertical_edges = np.sum(edges, axis=0)
             
             # Find first and last significant edge positions
-            edge_threshold = np.max(vertical_edges) * 0.1
+            # Use higher threshold to avoid false positives from scene content
+            edge_threshold = np.max(vertical_edges) * 0.3  # Increased from 0.1 to 0.3
             
-            # Find left boundary
+            # Find left boundary - look for sustained edge activity
             left_boundary = 0
-            for x in range(width // 3):
-                if vertical_edges[x] > edge_threshold:
+            for x in range(width // 4):  # Look in outer 25% instead of 33%
+                # Check if there's sustained edge activity in a small window
+                window_start = max(0, x - 5)
+                window_end = min(width, x + 5)
+                window_activity = np.mean(vertical_edges[window_start:window_end])
+                if window_activity > edge_threshold:
                     left_boundary = x
                     break
             
-            # Find right boundary
+            # Find right boundary - look for sustained edge activity
             right_boundary = width - 1
-            for x in range(width - 1, width * 2 // 3, -1):
-                if vertical_edges[x] > edge_threshold:
+            for x in range(width - 1, width * 3 // 4, -1):  # Look in outer 25% instead of 33%
+                # Check if there's sustained edge activity in a small window
+                window_start = max(0, x - 5)
+                window_end = min(width, x + 5)
+                window_activity = np.mean(vertical_edges[window_start:window_end])
+                if window_activity > edge_threshold:
                     right_boundary = x
                     break
             
@@ -1408,10 +1165,10 @@ class CatVideoProcessor:
             if left_crop >= width or right_crop >= width:
                 print(f"[Crop Detection] Crop values too large: left={left_crop}, right={right_crop}, width={width}")
                 return video_path
-            if left_crop + right_crop >= width * 0.8:
+            if left_crop + right_crop >= width * 0.5:  # Reduced from 0.8 to 0.5
                 print(f"[Crop Detection] Would crop too much content ({left_crop + right_crop}px of {width}px)")
                 return video_path
-            min_crop_threshold = max(width * 0.02, 20)
+            min_crop_threshold = max(width * 0.05, 30)  # Increased from 0.02/20 to 0.05/30
             total_crop = left_crop + right_crop
             print(f"[Crop Detection] Total crop: {total_crop}px, threshold: {min_crop_threshold*2:.1f}px")
             if total_crop < min_crop_threshold * 2:
@@ -1420,10 +1177,10 @@ class CatVideoProcessor:
             new_aspect_ratio = crop_width / height
             original_aspect_ratio = width / height
             print(f"[Crop Detection] Aspect ratios: original={original_aspect_ratio:.2f}, new={new_aspect_ratio:.2f}")
-            if new_aspect_ratio >= original_aspect_ratio * 0.9:
+            if new_aspect_ratio >= original_aspect_ratio * 0.8:  # Increased from 0.9 to 0.8 - require more significant improvement
                 print(f"[Crop Detection] Not enough improvement in aspect ratio")
                 return video_path
-            if new_aspect_ratio > 1.8:
+            if new_aspect_ratio > 1.5:  # Reduced from 1.8 to 1.5 - be more strict about wide videos
                 print(f"[Crop Detection] Still too wide after cropping (ratio: {new_aspect_ratio:.2f})")
                 return video_path
             print(f"[Crop Detection] ✓ Cropping approved: {width}x{height} -> {crop_width}x{height}")

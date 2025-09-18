@@ -182,12 +182,6 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
         return {"subject": "Amazing facts about animals"}
 
 
-@router.post("/moneyprinter/suggest-subject", summary="Suggest Subject (Alias)")
-def suggest_subject_alias(req: SuggestSubjectRequest) -> Dict[str, str]:
-    """Alias for /api/AIvideos/suggest-subject for frontend compatibility."""
-    return suggest_subject(req)
-
-
 @router.get("/AIvideos/models", summary="List AI Models")
 def list_models() -> Dict[str, list]:
     """List available Gemini models using API discovery."""
@@ -202,12 +196,6 @@ def list_models() -> Dict[str, list]:
     except Exception as e:
         logger.error(f"Failed to list models: {e}")
         return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
-
-
-@router.get("/models", summary="List AI Models (Alias)")
-def list_models_alias() -> Dict[str, list]:
-    """Alias for /api/AIvideos/models for frontend compatibility."""
-    return list_models()
 
 
 @router.get("/AIvideos/gpu-info")

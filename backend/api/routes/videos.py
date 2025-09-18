@@ -4,7 +4,6 @@ Video management and listing endpoints.
 
 from typing import Dict, Any, Optional, List
 from pathlib import Path
-import os
 import time
 import requests
 
@@ -18,6 +17,7 @@ from ...utils.paths import get_output_path, get_project_root
 from ...services.thumbnail_service import get_thumbnail_service
 from ...services.video_service import get_video_service
 from ...core.config import AppConfig
+from ...utils.paths import get_output_path, get_project_root
 
 router = APIRouter()
 logger = get_logger("videos")
@@ -30,7 +30,6 @@ thumbnail_service = get_thumbnail_service()
 
 # Get video service
 video_service = get_video_service()
-
 
 class PostVideoRequest(BaseModel):
     """Request model for posting a video to webhook"""
@@ -204,139 +203,40 @@ def scan_orphaned_videos() -> List[Dict[str, Any]]:
     return orphaned_videos
 
 
-@router.get("/videos/all", summary="List All Generated Videos")
-def list_all_videos(
-    limit: int = 100,
-    offset: int = 0,
-    workflow: Optional[str] = None,
-    status: Optional[str] = None,
-    sort_by: str = "created_at",
-    sort_order: str = "desc",
-    include_orphaned: bool = True
-) -> Dict[str, Any]:
-    """
-    List all generated videos across all jobs with metadata.
-    
-    Returns videos with job information, file details, and download URLs.
-    Also includes orphaned videos found in the output directory that aren't properly tracked.
+@router.get("/list-videos", summary="Legacy: list videos (compat)")
+def legacy_list_videos(dir: Optional[str] = None) -> Dict[str, Any]:
+    """Legacy compatibility endpoint used by older clients/tests.
+
+    Returns a simple JSON with files and dir keys similar to older API.
     """
     try:
-        videos = []
-        
-        # Get videos from job database
-        valid_statuses = ["done"] if status is None else [status] if status == "done" else []
-        jobs = job_store.list_jobs(limit=limit*5, status="done")  # Get more to account for filtering
-        
-        if workflow:
-            jobs = [job for job in jobs if job.get("workflow") == workflow]
-        
-        processed_count = 0
-        
-        for job in jobs:
-            if processed_count >= offset + limit:
-                break
-                
-            job_result = job.get("result", {})
-            if not job_result:
-                continue
-                
-            job_id = job["id"]
-            job_workflow = job.get("workflow", "unknown")
-            created_at = job.get("created_at")
-            duration_seconds = job.get("duration_seconds")
-            
-            # Handle MoneyPrinter workflow (single video)
-            if job_workflow == "moneyprinter" and "output" in job_result:
-                video_path = job_result["output"]
-                if video_path and Path(video_path).exists():
-                    try:
-                        stat = Path(video_path).stat()
-                        video_info = {
-                            "id": f"{job_id}_main",
-                            "job_id": job_id,
-                            "workflow": job_workflow,
-                            "filename": Path(video_path).name,
-                            "path": video_path,
-                            "size_bytes": stat.st_size,
-                            "size_mb": round(stat.st_size / (1024 * 1024), 2),
-                            "created_at": created_at,
-                            "duration_seconds": duration_seconds,
-                            "download_url": f"/api/download?path={Path(video_path).resolve()}",
-                            "thumbnail_url": thumbnail_service.get_thumbnail_url(video_path),
-                            "subtitles_path": job_result.get("subtitles"),
-                            "video_type": "ai_generated",
-                            "is_orphaned": False,
-                            "posted": job_result.get("posted", False)
-                        }
-                        
-                        videos.append(video_info)
-                        processed_count += 1
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed to process video {video_path}: {e}")
-            
-            # Handle Brainrot workflow (multiple videos)
-            elif job_workflow == "brainrot" and "generated_videos" in job_result:
-                generated_videos = job_result.get("generated_videos", [])
-                for video_data in generated_videos:
-                    if processed_count >= offset + limit:
-                        break
-                        
-                    video_path = video_data.get("path")
-                    if video_path and Path(video_path).exists():
-                        try:
-                            video_info = {
-                                "id": f"{job_id}_{video_data.get('compilation_num', 'unknown')}_{video_data.get('variation', 'unknown')}",
-                                "job_id": job_id,
-                                "workflow": job_workflow,
-                                "filename": video_data.get("filename", Path(video_path).name),
-                                "path": video_path,
-                                "size_bytes": video_data.get("size_bytes", 0),
-                                "size_mb": video_data.get("size_mb", 0),
-                                "created_at": created_at,
-                                "duration_seconds": duration_seconds,
-                                "download_url": video_data.get("download_url", f"/api/download?path={Path(video_path).resolve()}"),
-                                "thumbnail_url": thumbnail_service.get_thumbnail_url(video_path),
-                                "compilation_type": video_data.get("compilation_type", "Unknown"),
-                                "compilation_num": video_data.get("compilation_num"),
-                                "video_type": "compilation",
-                                "is_orphaned": False,
-                                "posted": video_data.get("posted", False)
-                            }
-                            
-                            videos.append(video_info)
-                            processed_count += 1
-                            
-                        except Exception as e:
-                            logger.warning(f"Failed to process video {video_path}: {e}")
-        
-        # Add orphaned videos if requested
-        if include_orphaned:
-            orphaned_videos = scan_orphaned_videos()
-            if workflow:
-                orphaned_videos = [v for v in orphaned_videos if v.get("workflow") == workflow]
-            videos.extend(orphaned_videos)
-        
-        # Sort videos
-        sort_key = sort_by if sort_by in ["created_at", "size_mb", "filename"] else "created_at"
-        reverse_sort = sort_order.lower() == "desc"
-        
-        videos.sort(key=lambda x: x.get(sort_key, ""), reverse=reverse_sort)
-        
-        # Apply pagination
-        paginated_videos = videos[offset:offset + limit] if offset < len(videos) else []
-        
-        return {
-            "videos": paginated_videos,
-            "total": len(videos),
-            "offset": offset,
-            "limit": limit,
-            "has_more": offset + limit < len(videos)
-        }
-        
+        output_dir = get_output_path()
+        # If dir query param provided, attempt to resolve but keep safe
+        target_dir = Path(dir) if dir else output_dir
+
+        # Only allow listing within allowed roots
+        if not _is_allowed_path(target_dir):
+            # Match existing behavior: 403 or 404 is acceptable; use 404 here
+            raise HTTPException(status_code=404, detail="Directory not allowed")
+
+        files = []
+        if target_dir.exists() and target_dir.is_dir():
+            for p in target_dir.iterdir():
+                files.append({
+                    "name": p.name,
+                    "is_dir": p.is_dir(),
+                    "path": str(p)
+                })
+
+        return {"files": files, "dir": str(target_dir)}
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to list all videos: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list videos: {e}")
+        logger.warning(f"Legacy list-videos failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+## Removed legacy /videos/all endpoint. Use /api/videos/managed for database-tracked videos.
 
 
 @router.get("/videos/stats", summary="Get Video Statistics")
@@ -345,12 +245,15 @@ def get_video_stats() -> Dict[str, Any]:
     try:
         # Get stats from tracked jobs
         logger.info("Getting job stats - starting")
-        jobs = job_store.list_jobs(limit=1000, status="done")
-        logger.info(f"Got jobs list: {type(jobs)}, length: {len(jobs) if jobs else 'None'}")
-        
-        # Handle case where jobs could be None
-        if jobs is None:
-            logger.warning("Jobs list is None, setting to empty list")
+        try:
+            jobs = job_store.list_jobs(limit=1000, status="done")
+            logger.info(f"Got jobs list: {type(jobs)}, length: {len(jobs) if jobs else 'None'}")
+            if jobs is None:
+                logger.warning("Jobs list is None, setting to empty list")
+                jobs = []
+        except Exception as db_err:
+            logger.error(f"Error fetching jobs from job_store: {db_err}")
+            # Fall back to empty jobs list; continue gathering orphaned video stats
             jobs = []
         
         stats = {
@@ -408,13 +311,8 @@ def get_video_stats() -> Dict[str, Any]:
         # Add orphaned videos to stats
         logger.info("Getting orphaned videos")
         try:
-            orphaned_videos = scan_orphaned_videos()
-            logger.info(f"Got orphaned videos: {type(orphaned_videos)}, length: {len(orphaned_videos) if orphaned_videos else 'None'}")
-            
-            # Handle case where orphaned_videos could be None
-            if orphaned_videos is None:
-                logger.warning("Orphaned videos is None, setting to empty list")
-                orphaned_videos = []
+            orphaned_videos = scan_orphaned_videos() or []
+            logger.info(f"Got orphaned videos: {type(orphaned_videos)}, length: {len(orphaned_videos)}")
         except Exception as e:
             logger.error(f"Failed to scan orphaned videos: {e}")
             orphaned_videos = []

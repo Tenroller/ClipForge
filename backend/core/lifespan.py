@@ -151,6 +151,22 @@ async def _broadcast_loop():
             await asyncio.sleep(1)
 
 
+async def _job_expiration_loop():
+    """Periodic loop to expire stale jobs in the database."""
+    job_store = get_job_store()
+    interval_seconds = 300  # 5 minutes
+    while True:
+        try:
+            result = job_store.expire_stale_jobs()
+            if result.get("running_expired") or result.get("queued_expired"):
+                logger.info(
+                    f"Expired stale jobs: running={result['running_expired']} queued={result['queued_expired']}"
+                )
+        except Exception as e:
+            logger.error(f"Job expiration loop error: {e}")
+        await asyncio.sleep(interval_seconds)
+
+
 async def _broadcast_job_update(job_id: str, payload: Dict[str, Any]):
     """Broadcast job update to all WebSocket subscribers for this job."""
     from ..utils.websocket_manager import get_websocket_manager
@@ -233,6 +249,7 @@ async def lifespan(app: FastAPI):
     # Start background tasks
     broadcaster_task = asyncio.create_task(_broadcast_loop())
     websocket_monitor_task = asyncio.create_task(_websocket_monitor_loop())
+    expiration_task = asyncio.create_task(_job_expiration_loop())
     
     try:
         yield
@@ -240,9 +257,10 @@ async def lifespan(app: FastAPI):
         # Cancel background tasks
         broadcaster_task.cancel()
         websocket_monitor_task.cancel()
+        expiration_task.cancel()
         
         # Wait for tasks to complete with timeout
-        tasks_to_wait = [broadcaster_task, websocket_monitor_task]
+        tasks_to_wait = [broadcaster_task, websocket_monitor_task, expiration_task]
         try:
             await asyncio.wait_for(asyncio.gather(*tasks_to_wait, return_exceptions=True), timeout=5.0)
         except asyncio.TimeoutError:

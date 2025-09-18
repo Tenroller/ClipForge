@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from ...database import get_job_store
 from ...logging_config import get_logger
 from ...services.video_service import get_video_service
+from ...services.thumbnail_service import get_thumbnail_service
 
 router = APIRouter()
 logger = get_logger("video_management")
@@ -18,6 +19,7 @@ logger = get_logger("video_management")
 # Get services
 job_store = get_job_store()
 video_service = get_video_service()
+thumbnail_service = get_thumbnail_service()
 
 
 class UpdateVideoRequest(BaseModel):
@@ -49,13 +51,36 @@ def list_managed_videos(
     as opposed to the legacy endpoint that scans files dynamically.
     """
     try:
-        videos = video_service.list_videos(
-            limit=limit,
-            offset=offset,
-            workflow=workflow,
-            posted=posted,
-            job_id=job_id
-        )
+        # Build kwargs and avoid passing None for parameters that expect a str
+        _list_kwargs = {
+            "limit": limit,
+            "offset": offset,
+            "workflow": workflow,
+            "posted": posted,
+            "job_id": job_id,
+        }
+        # Filter out None values so we don't pass Optional[str] where str is required
+        _list_kwargs = {k: v for k, v in _list_kwargs.items() if v is not None}
+
+        videos = video_service.list_videos(**_list_kwargs)
+
+        # Safety filter: exclude source/raw files incorrectly registered in the past
+        # Keep only final MoneyPrinter outputs and Brainrot compilations
+        def is_final_output(v: Dict[str, Any]) -> bool:
+            workflow = v.get("workflow")
+            video_type = v.get("video_type")
+            filename = str(v.get("filename", "")).lower()
+            # Never show obvious sources
+            banned_markers = ["source", "download", "cropped", "raw"]
+            if any(marker in filename for marker in banned_markers):
+                return False
+            if workflow == "moneyprinter" and video_type == "ai_generated":
+                return True
+            if workflow == "brainrot" and video_type == "compilation":
+                return True
+            return False
+
+        videos = [v for v in videos if is_final_output(v)]
         
         # Add download URLs and enhance the response
         for video in videos:
@@ -63,6 +88,9 @@ def list_managed_videos(
             
             # Check if file still exists
             video["file_exists"] = Path(video["file_path"]).exists()
+            
+            # Add thumbnail URL
+            video["thumbnail_url"] = thumbnail_service.get_thumbnail_url(video["file_path"])
             
             # Calculate size in MB for display
             if video.get("size_bytes"):
@@ -95,6 +123,7 @@ def get_video_details(video_id: str) -> Dict[str, Any]:
         # Enhance the response
         video["download_url"] = f"/api/download?path={video['file_path']}"
         video["file_exists"] = Path(video["file_path"]).exists()
+        video["thumbnail_url"] = thumbnail_service.get_thumbnail_url(video["file_path"])
         
         if video.get("size_bytes"):
             video["size_mb"] = round(video["size_bytes"] / (1024 * 1024), 2)
@@ -138,8 +167,17 @@ def update_video(video_id: str, request: UpdateVideoRequest) -> Dict[str, Any]:
         
         # Return updated video
         updated_video = video_service.get_video(video_id)
-        updated_video["download_url"] = f"/api/download?path={updated_video['file_path']}"
-        updated_video["file_exists"] = Path(updated_video["file_path"]).exists()
+        if not updated_video:
+            logger.error(f"Updated video {video_id} not found after update")
+            raise HTTPException(status_code=500, detail="Updated video not found")
+        
+        file_path = updated_video.get("file_path")
+        if file_path:
+            updated_video["download_url"] = f"/api/download?path={file_path}"
+            updated_video["file_exists"] = Path(file_path).exists()
+        else:
+            updated_video["download_url"] = None
+            updated_video["file_exists"] = False
         
         if updated_video.get("size_bytes"):
             updated_video["size_mb"] = round(updated_video["size_bytes"] / (1024 * 1024), 2)
@@ -181,12 +219,16 @@ def get_unposted_videos(
 ) -> Dict[str, Any]:
     """Get videos that haven't been posted yet."""
     try:
-        videos = video_service.get_unposted_videos(workflow=workflow, limit=limit)
+        if workflow is not None:
+            videos = video_service.get_unposted_videos(workflow=workflow, limit=limit)
+        else:
+            videos = video_service.get_unposted_videos(limit=limit)
         
         # Enhance the response
         for video in videos:
             video["download_url"] = f"/api/download?path={video['file_path']}"
             video["file_exists"] = Path(video["file_path"]).exists()
+            video["thumbnail_url"] = thumbnail_service.get_thumbnail_url(video["file_path"])
             
             if video.get("size_bytes"):
                 video["size_mb"] = round(video["size_bytes"] / (1024 * 1024), 2)

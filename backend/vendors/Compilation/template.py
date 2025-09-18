@@ -138,6 +138,18 @@ def create_video(video_path, text, output_path=None, title=None, target_resoluti
         video_clip = video_clip.resized(width=W, height=H)  # Fill entire frame
     else:  # Vertical layout - traditional template style
         video_clip = video_clip.resized(width=W)  # Resize by width as before
+        
+        # Apply rounded corners for vertical layout with white background
+        if BACKGROUND_COLOR == (255, 255, 255):  # Only for white background
+            try:
+                from .video_effects import apply_rounded_corners_simple
+                corner_radius = 25  # Template corner radius
+                video_clip = apply_rounded_corners_simple(video_clip, corner_radius)
+                print(f"        ✨ Applied rounded corners to template video (radius: {corner_radius}px)")
+            except Exception as e:
+                print(f"        ⚠️  Warning: Could not apply rounded corners: {e}")
+                # Continue without rounded corners if there's an error
+                pass
 
     # Create the text layout using HTML + CSS - smaller height for more compact layout
     renderer = TextToImageRenderer()

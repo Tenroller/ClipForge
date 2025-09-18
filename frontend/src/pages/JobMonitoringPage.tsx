@@ -22,6 +22,7 @@ import { formatDuration } from '@/lib/formatDuration'
 import { toast } from 'sonner'
 import { useJobManager } from '@/hooks/useJobManager'
 import { type ManagedJob } from '@/lib/jobManager'
+import JobLineagePanel from '@/components/JobLineagePanel'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
@@ -99,47 +100,35 @@ export default function JobMonitoringPage() {
   const { jobId } = useParams<{ jobId: string }>()
   const navigate = useNavigate()
   const jobManager = useJobManager()
-  
   const [job, setJob] = useState<ManagedJob | null>(null)
   const [logs, setLogs] = useState<JobLogs | null>(null)
   const [loading, setLoading] = useState(true)
   const [logsLoading, setLogsLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
 
-  // Get job from jobManager first, then fetch from API if needed
+  // Initial fetch
   useEffect(() => {
     if (!jobId) return
-
-    // Try to get job from jobManager first
-    const managedJob = jobManager.getJob(jobId)
-    if (managedJob) {
-      setJob(managedJob)
+    const existing = jobManager.getJob(jobId)
+    if (existing) {
+      setJob(existing)
       setLoading(false)
     } else {
-      // Fetch from API
       fetchJobDetails()
     }
-
-    // Fetch logs regardless
     fetchJobLogs()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId])
 
-  // Auto-refresh for active jobs
+  // Auto refresh logs
   useEffect(() => {
-    if (!autoRefresh || !job || ['done', 'error', 'cancelled'].includes(job.status)) {
-      return
-    }
-
-    const interval = setInterval(() => {
-      fetchJobLogs()
-    }, 2000) // Refresh every 2 seconds for active jobs
-
+    if (!autoRefresh || !job || ['done', 'error', 'cancelled'].includes(job.status)) return
+    const interval = setInterval(() => fetchJobLogs(), 2000)
     return () => clearInterval(interval)
   }, [autoRefresh, job?.status])
 
   const fetchJobDetails = async () => {
     if (!jobId) return
-
     try {
       const response = await fetch(`${API_BASE}/api/jobs/${jobId}`)
       if (!response.ok) {
@@ -150,10 +139,7 @@ export default function JobMonitoringPage() {
         }
         throw new Error(`HTTP ${response.status}`)
       }
-
       const jobData = await response.json()
-      
-      // Convert to ManagedJob format
       const managedJob: ManagedJob = {
         id: jobData.id,
         workflow: jobData.workflow || 'unknown',
@@ -441,56 +427,59 @@ export default function JobMonitoringPage() {
         </Card>
       </div>
 
-      {/* Logs Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Job Logs</span>
-            <div className="flex items-center gap-2">
-              {logsLoading && <FaSpinner className="size-4 animate-spin" />}
-              <Badge variant="secondary">
-                {logs?.total_logs || 0} entries
-              </Badge>
-            </div>
-          </CardTitle>
-          <CardDescription>
-            Real-time logs from the job execution and backend processing
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px] w-full rounded border bg-muted/20 p-4 overflow-auto">
-            {logs?.logs && logs.logs.length > 0 ? (
-              <div className="space-y-2">
-                {logs.logs.map((log, index) => (
-                  <div key={index} className="text-sm font-mono">
-                    <div className={`inline-block px-2 py-1 rounded text-xs font-semibold mr-2 ${getLevelColor(log.level)}`}>
-                      {log.level.toUpperCase()}
+      {/* Lineage + Logs */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <JobLineagePanel jobId={job.id} jobManager={jobManager} />
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <span>Job Logs</span>
+              <div className="flex items-center gap-2">
+                {logsLoading && <FaSpinner className="size-4 animate-spin" />}
+                <Badge variant="secondary">
+                  {logs?.total_logs || 0} entries
+                </Badge>
+              </div>
+            </CardTitle>
+            <CardDescription>
+              Real-time logs from the job execution and backend processing
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[400px] w-full rounded border bg-muted/20 p-4 overflow-auto">
+              {logs?.logs && logs.logs.length > 0 ? (
+                <div className="space-y-2">
+                  {logs.logs.map((log, index) => (
+                    <div key={index} className="text-sm font-mono">
+                      <div className={`inline-block px-2 py-1 rounded text-xs font-semibold mr-2 ${getLevelColor(log.level)}`}>
+                        {log.level.toUpperCase()}
+                      </div>
+                      <span className="text-muted-foreground mr-2">
+                        [{formatTimestamp(log.timestamp)}]
+                      </span>
+                      <span className="text-xs text-muted-foreground mr-2">
+                        ({log.source})
+                      </span>
+                      <span>{log.message}</span>
                     </div>
-                    <span className="text-muted-foreground mr-2">
-                      [{formatTimestamp(log.timestamp)}]
-                    </span>
-                    <span className="text-xs text-muted-foreground mr-2">
-                      ({log.source})
-                    </span>
-                    <span>{log.message}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                {logsLoading ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <FaSpinner className="size-4 animate-spin" />
-                    <span>Loading logs...</span>
-                  </div>
-                ) : (
-                  <span>No logs available for this job</span>
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  {logsLoading ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <FaSpinner className="size-4 animate-spin" />
+                      <span>Loading logs...</span>
+                    </div>
+                  ) : (
+                    <span>No logs available for this job</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

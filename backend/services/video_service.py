@@ -273,33 +273,59 @@ class VideoService:
                     
                     # Determine video type and workflow from filename
                     filename_lower = video_file.name.lower()
-                    if "compilation" in filename_lower:
-                        workflow = "brainrot"
-                        video_type = "compilation"
-                        
-                        # Extract compilation info
-                        compilation_type = None
-                        compilation_num = None
-                        
-                        if "_normal" in filename_lower:
-                            compilation_type = "normal"
-                        elif "_tts" in filename_lower:
-                            compilation_type = "tts"
-                        
-                        # Extract compilation number
-                        if "_compilation_" in filename_lower:
-                            parts = filename_lower.split("_compilation_")
-                            if len(parts) > 1:
-                                num_part = parts[1].split("_")[0]
-                                try:
-                                    compilation_num = int(num_part)
-                                except ValueError:
-                                    pass
+                    job_record = None
+                    try:
+                        job_record = self.job_store.get_job(potential_job_id)
+                    except Exception:
+                        job_record = None
+
+                    # Brainrot jobs: only register final compilations, never raw/source/cropped
+                    if (job_record and job_record.get("workflow") == "brainrot") or (not job_record):
+                        # If we can't positively identify MoneyPrinter, require explicit compilation naming
+                        if "compilation" in filename_lower:
+                            workflow = "brainrot"
+                            video_type = "compilation"
+
+                            # Extract compilation info
+                            compilation_type = None
+                            compilation_num = None
+
+                            if "_normal" in filename_lower:
+                                compilation_type = "normal"
+                            elif "_tts" in filename_lower:
+                                compilation_type = "tts"
+
+                            # Extract compilation number
+                            if "_compilation_" in filename_lower:
+                                parts = filename_lower.split("_compilation_")
+                                if len(parts) > 1:
+                                    num_part = parts[1].split("_")[0]
+                                    try:
+                                        compilation_num = int(num_part)
+                                    except ValueError:
+                                        pass
+                        else:
+                            # Skip non-compilation files to avoid registering source videos
+                            stats["skipped_videos"] += 1
+                            continue
                     else:
+                        # MoneyPrinter: single final output per job. If this file is the job result output, include; else skip.
                         workflow = "moneyprinter"
                         video_type = "ai_generated"
                         compilation_type = None
                         compilation_num = None
+                        try:
+                            job_result = (job_record or {}).get("result", {})
+                            job_output = job_result.get("output")
+                            if job_output:
+                                # Only register if this exact file is the final output
+                                if Path(job_output).resolve() != video_file.resolve():
+                                    stats["skipped_videos"] += 1
+                                    continue
+                        except Exception:
+                            # If we cannot verify, err on the side of skipping to avoid sources
+                            stats["skipped_videos"] += 1
+                            continue
                     
                     # Register the orphaned video
                     video_id = self.register_video(

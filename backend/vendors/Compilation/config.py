@@ -86,8 +86,8 @@ class ProcessingConfig:
     default_max_duration: int = 40
     
     # Low resolution handling
-    low_res_scale_factor: float = 0.9
-    low_res_fit_factor: float = 0.98
+    low_res_scale_factor: float = 0.5  # Only treat videos smaller than 50% as low-res
+    low_res_fit_factor: float = 0.9   # Scale low-res videos to 90% of target size
 
 
 @dataclass

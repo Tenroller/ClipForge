@@ -51,6 +51,40 @@ from .title_generator import TitleGenerator
 from .config import TikYouConfig
 from .logging_config import get_logger, get_performance_logger
 from .validation import InputValidator, validate_youtube_url, ensure_valid_or_raise
+try:  # Attempt normal import when running inside backend package
+    import importlib
+    _youtube_mod = importlib.import_module('backend.utils.youtube')  # type: ignore
+    util_extract_video_id = getattr(_youtube_mod, 'extract_video_id')
+    util_download_video = getattr(_youtube_mod, 'download_video')
+    _YouTubeDownloadError = getattr(_youtube_mod, 'YouTubeDownloadError')
+except Exception:  # pragma: no cover
+    # Fallback path adjustments for direct script execution
+    import sys as _sys
+    from pathlib import Path as _Path
+    backend_dir = _Path(__file__).resolve().parent.parent.parent.parent
+    if str(backend_dir) not in _sys.path:
+        _sys.path.insert(0, str(backend_dir))
+    try:
+        _youtube_mod = importlib.import_module('backend.utils.youtube')  # type: ignore
+        util_extract_video_id = getattr(_youtube_mod, 'extract_video_id')
+        util_download_video = getattr(_youtube_mod, 'download_video')
+        _YouTubeDownloadError = getattr(_youtube_mod, 'YouTubeDownloadError')
+    except Exception:
+        def util_extract_video_id(url: str) -> str:  # type: ignore
+            import re as _re
+            m = _re.search(r'(?:youtube\.com/(?:watch\?v=|embed/)|youtu\.be/)([^&\n?#]+)', url)
+            if not m:
+                raise ValueError(f"Could not extract video id from: {url}")
+            return m.group(1)
+        def util_download_video(url: str, output_dir: str):  # type: ignore
+            raise RuntimeError("youtube utility unavailable; cannot download video in standalone mode")
+        class _YouTubeDownloadError(RuntimeError):  # type: ignore
+            pass
+
+YouTubeDownloadError = _YouTubeDownloadError  # unify name locally
+
+# Provide a lightweight alias with relaxed typing to silence strict type expectations
+util_download_video_alias: Any = util_download_video  # type: ignore
 from .caching import get_video_analysis_cache
 from .data_models import (
     ClipInfo, VideoOrientation, SceneType, ProcessingStatus, CompilationType,
@@ -151,22 +185,21 @@ class ClipProcessor:
         
         # Resize clip to fit within bounds
         resized_clip = self._resize_clip_to_fit(clip, target_resolution)
-        
-        # Position clip at center
-        self.logger.video_processing("Positioning clip at center...")
+
+        # Position clip at center and composite
+        self.logger.video_processing("Positioning clip at center and compositing...")
         centered_clip = resized_clip.with_position("center")
-        
-        # Composite
-        self.logger.video_processing("Compositing clip over background...")
         final_clip = CompositeVideoClip([background, centered_clip], size=(target_w, target_h))
-        
+
         # Preserve audio
         if final_clip.audio is None and clip.audio is not None:
             self.logger.video_processing("Preserving original audio...")
-            # Convert AudioFileClip to CompositeAudioClip for compatibility
-            from moviepy import CompositeAudioClip
-            final_clip.audio = CompositeAudioClip([clip.audio])
-        
+            try:
+                from moviepy import CompositeAudioClip
+                final_clip.audio = CompositeAudioClip([clip.audio])
+            except Exception:
+                self.logger.debug("Failed to attach original audio to composite clip")
+
         return final_clip
     
     def _resize_clip_to_fit(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
@@ -180,7 +213,10 @@ class ClipProcessor:
         if w > clip_max_w or h > clip_max_h:
             ratio = min(clip_max_w/w, clip_max_h/h)
             self.logger.video_processing(f"Resizing clip by ratio: {ratio:.3f}")
-            return clip.with_effects([vfx.Resize(ratio)])  # type: ignore
+            try:
+                return clip.with_effects([vfx.Resize(ratio)])  # type: ignore
+            except Exception:
+                return clip
         else:
             self.logger.video_processing("No resize needed, clip fits within bounds")
             return clip
@@ -202,45 +238,75 @@ class ClipProcessor:
                 return self._resize_and_crop_tall_clip(clip, target_resolution)
         else:
             self.logger.video_processing("Aspect ratios match, simple resize...")
-            return clip.with_effects([vfx.Resize(width=target_w, height=target_h)])  # type: ignore
+            try:
+                return clip.with_effects([vfx.Resize(width=target_w, height=target_h)])  # type: ignore
+            except Exception:
+                return clip
     
     def _resize_and_crop_wide_clip(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Resize and crop a wide clip"""
         target_w, target_h = target_resolution
         self.logger.video_processing("Clip is wider than target, resizing and cropping...")
 
-        resized_clip = clip.with_effects([vfx.Resize(height=target_h)])  # type: ignore
+        try:
+            resized_clip = clip.with_effects([vfx.Resize(height=target_h)])  # type: ignore
+        except Exception:
+            resized_clip = clip
+
         # Get dimensions after resize
         resized_w, resized_h = resized_clip.size  # type: ignore
-        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
-        x1 = (resized_w - target_w) // 2
-        y1 = (resized_h - target_h) // 2
+        x1 = int((resized_w - target_w) // 2)
+        y1 = int((resized_h - target_h) // 2)
         x2 = x1 + target_w
         y2 = y1 + target_h
-        return resized_clip.with_effects([vfx.Crop(x1, y1, x2, y2)])  # type: ignore
+        try:
+            return resized_clip.with_effects([vfx.Crop(x1, y1, x2, y2)])  # type: ignore
+        except Exception:
+            try:
+                crop_fn = getattr(resized_clip, 'crop', None)
+                if callable(crop_fn):
+                    return crop_fn(x1=x1, y1=y1, x2=x2, y2=y2)  # type: ignore
+                return resized_clip  # type: ignore
+            except Exception:
+                return resized_clip  # type: ignore
     
     def _resize_and_crop_tall_clip(self, clip: VideoClip, target_resolution: Tuple[int, int]) -> VideoClip:
         """Resize and crop a tall clip"""
         target_w, target_h = target_resolution
         self.logger.video_processing("Clip is taller than target, resizing and cropping...")
 
-        resized_clip = clip.with_effects([vfx.Resize(width=target_w)])  # type: ignore
+        try:
+            resized_clip = clip.with_effects([vfx.Resize(width=target_w)])  # type: ignore
+        except Exception:
+            resized_clip = clip
+
         # Get dimensions after resize
         resized_w, resized_h = resized_clip.size  # type: ignore
-        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
-        x1 = (resized_w - target_w) // 2
-        y1 = (resized_h - target_h) // 2
+        x1 = int((resized_w - target_w) // 2)
+        y1 = int((resized_h - target_h) // 2)
         x2 = x1 + target_w
         y2 = y1 + target_h
-        return resized_clip.with_effects([vfx.Crop(x1, y1, x2, y2)])  # type: ignore
+        try:
+            return resized_clip.with_effects([vfx.Crop(x1, y1, x2, y2)])  # type: ignore
+        except Exception:
+            try:
+                crop_fn = getattr(resized_clip, 'crop', None)
+                if callable(crop_fn):
+                    return crop_fn(x1=x1, y1=y1, x2=x2, y2=y2)  # type: ignore
+                return resized_clip  # type: ignore
+            except Exception:
+                return resized_clip  # type: ignore
     
     def _ensure_audio_track(self, clip: VideoClip) -> VideoClip:
         """Ensure clip has an audio track, add silent one if missing"""
         if clip.audio is None:
             self.logger.video_processing("Clip has no audio, adding silent track")
-            from moviepy import AudioClip
-            silent_audio = AudioClip(lambda t: [0, 0], duration=clip.duration, fps=44100)
-            return clip.with_audio(silent_audio)
+            try:
+                from moviepy import AudioClip
+                silent_audio = AudioClip(lambda t: 0, duration=clip.duration, fps=44100)
+                return clip.with_audio(silent_audio)
+            except Exception:
+                return clip
         else:
             self.logger.video_processing("Audio track found and preserved")
             return clip
@@ -291,42 +357,35 @@ class VideoProcessor:
         return clips
     
     def _extract_video_id(self, youtube_url: str) -> str:
-        """Extract video ID from YouTube URL"""
-        patterns = [
-            r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)',
-            r'youtube\.com.*[?&]v=([^&\n?#]+)',
-        ]
-        
-        for pattern in patterns:
-            match = re.search(pattern, youtube_url)
-            if match:
-                video_id = match.group(1)
-                self.logger.video_processing(f"Extracted video ID: {video_id}")
-                return video_id
-        
-        raise ValidationError(
-            field_name="youtube_url",
-            field_value=youtube_url,
-            constraint="Must be a valid YouTube URL"
-        )
+        """Delegate video ID extraction to unified youtube utility."""
+        try:
+            video_id = util_extract_video_id(youtube_url)
+            self.logger.video_processing(f"Extracted video ID (utility): {video_id}")
+            return video_id
+        except Exception:
+            raise ValidationError(
+                field_name="youtube_url",
+                field_value=youtube_url,
+                constraint="Must be a valid YouTube URL"
+            )
     
     def _download_video(self, video_id: str) -> Optional[str]:
-        """Download video and return path"""
-        self.logger.video_processing("Downloading video...")
-        
+        """Download video and return path using unified youtube utility.
+
+        We receive a video_id, reconstruct a watch URL for stability.
+        """
+        self.logger.video_processing("Downloading video (utility)...")
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        output_dir = str(Path(self.config.paths.output_dir) / video_id)
         try:
-            download_result = self.processor.download_video(video_id)
-            
-            if not download_result or download_result[0] is None:
-                self.logger.error(f"Failed to download video {video_id}")
-                return None
-            
-            video_path, video_title = download_result
-            self.logger.video_processing(f"Downloaded: {video_path}")
-            return video_path
-            
+            result = util_download_video(url, output_dir)
+            self.logger.video_processing(f"Downloaded: {result.video_path}")
+            return result.video_path
+        except YouTubeDownloadError as e:
+            self.logger.error(f"YouTube download failed: {e}")
+            return None
         except Exception as e:
-            self.logger.error(f"Download failed for {video_id}: {e}")
+            self.logger.error(f"Unexpected download error: {e}")
             return None
     
     def _crop_pillarboxes(self, video_path: str) -> str:
@@ -474,6 +533,8 @@ class CompilationBuilder:
             status=ProcessingStatus.IN_PROGRESS
         )
         
+        compilation_clip = None  # predefine for finally block
+        final_clips = []  # predefine for finally block
         try:
             # Process clips
             final_clips = self._process_clips_for_compilation(request.clips, request.target_resolution)
@@ -513,11 +574,16 @@ class CompilationBuilder:
             
         finally:
             # Cleanup
-            if 'compilation_clip' in locals():
-                compilation_clip.close()
-            if 'final_clips' in locals():
-                for clip in final_clips:
+            try:
+                if compilation_clip is not None:
+                    compilation_clip.close()
+            except Exception:
+                pass
+            for clip in final_clips:
+                try:
                     clip.close()
+                except Exception:
+                    pass
             gc.collect()
         
         return result
@@ -530,7 +596,8 @@ class CompilationBuilder:
         
         with tqdm(total=len(clips), desc="Processing clips") as pbar:
             for i, clip_info in enumerate(clips):
-                self.logger.video_processing(f"Processing clip {i+1}/{len(clips)}: {clip_info.filename}")
+                # ClipInfo may not have `filename` attribute; use basename of path
+                self.logger.video_processing(f"Processing clip {i+1}/{len(clips)}: {os.path.basename(clip_info.path)}")
                 
                 processed_clip = self.clip_processor.process_clip_for_compilation(
                     clip_info.path, target_resolution

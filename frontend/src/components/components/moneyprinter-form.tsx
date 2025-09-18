@@ -146,7 +146,7 @@ export default function MoneyPrinterForm({
                         try {
                           setSuggesting(true)
                           const base = apiBase || ''
-                          const res = await fetch(`${base}/api/moneyprinter/suggest-subject`, {
+                          const res = await fetch(`${base}/api/AIvideos/suggest-subject`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ aiModel })

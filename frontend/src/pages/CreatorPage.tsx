@@ -61,7 +61,7 @@ export default function CreatorPage() {
     (async () => {
       try {
         const [m, v] = await Promise.all([
-          fetch(`${API}/api/models`).then(r => r.json()),
+          fetch(`${API}/api/AIvideos/models`).then(r => r.json()),
           fetch(`${API}/api/voices`).then(r => r.json()),
         ])
         if (Array.isArray(m?.models)) setModels(m.models)

@@ -1,0 +1,22 @@
+meta {
+  name: Post Video to Webhook
+  type: http
+  seq: 99
+}
+
+post {
+  url: http://0.0.0.0:8080/api/videos/post
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "video_id": "example_job_id_main",
+    "job_id": "example_job_id"
+  }
+}
+
+settings {
+  encodeUrl: true
+}

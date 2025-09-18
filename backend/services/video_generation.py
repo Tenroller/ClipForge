@@ -149,22 +149,73 @@ def run_moneyprinter_job(job_id: str, req: MoneyPrinterRequest):
 
         _check_cancel(job_id)
         
-        # Script generation
-        generation_logger.info(f"[AIvideos_generate] Job {job_id}: Step script_generation - model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
-        _update_job(job_id, step="script_generation")
-        update_job_progress(job_id, "script_generation", f"script_generation: model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
-        tracker.add_log(f"Generating script with {req.paragraphNumber} paragraphs using {req.aiModel}", "info", "moneyprinter")
-        
-        script = generate_script(req.videoSubject, req.paragraphNumber, req.aiModel, req.voice, req.customPrompt or "")
-        if not script:
-            tracker.add_log("Failed to generate script", "error", "moneyprinter")
-            raise RuntimeError("Failed to generate script")
-        
-        tracker.add_log(f"Script generated successfully ({len(script)} characters)", "info", "moneyprinter")
+        # Determine if this is a partial resume
+        start_step = None
+        try:
+            original = get_job_store().get_job(job_id)
+            if original and original.get("resume_data"):
+                start_step = original["resume_data"].get("start_step")
+                if start_step:
+                    tracker.add_log(f"Resuming MoneyPrinter workflow at step: {start_step}", "info", "moneyprinter")
+        except Exception:
+            pass
+
+        from ..utils import artifacts as _art
+        script: str | None = None
+        search_terms: list[str] | None = None
+
+        # Script generation (or load)
+        if not start_step or start_step == "script_generation":
+            generation_logger.info(f"[AIvideos_generate] Job {job_id}: Step script_generation - model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
+            _update_job(job_id, step="script_generation")
+            update_job_progress(job_id, "script_generation", f"script_generation: model={req.aiModel} voice={req.voice} paragraphs={req.paragraphNumber}")
+            tracker.add_log(f"Generating script with {req.paragraphNumber} paragraphs using {req.aiModel}", "info", "moneyprinter")
+            script = generate_script(req.videoSubject, req.paragraphNumber, req.aiModel, req.voice, req.customPrompt or "")
+            if not script:
+                tracker.add_log("Failed to generate script", "error", "moneyprinter")
+                raise RuntimeError("Failed to generate script")
+            tracker.add_log(f"Script generated successfully ({len(script)} characters)", "info", "moneyprinter")
+            try:
+                _art.persist_artifact(job_id, "script_generation", "script", {"text": script}, meta={"chars": len(script)})
+                tracker.add_log("Persisted script artifact", "info", "moneyprinter")
+            except Exception as _e:
+                tracker.add_log(f"Failed to persist script artifact: {_e}", "warning", "moneyprinter")
+        else:
+            cached = _art.load_artifact(job_id, "script_generation", "script")
+            if cached and isinstance(cached, dict):
+                script = cached.get("text")
+                tracker.add_log("Loaded cached script artifact", "info", "moneyprinter")
+            else:
+                tracker.add_log("No cached script artifact found; cannot resume from later step reliably", "warning", "moneyprinter")
+
+        # Search terms step placeholder (skipped if start_step beyond)
+        if script and (not start_step or start_step in ("script_generation", "search_terms")):
+            try:
+                _update_job(job_id, step="search_terms")
+                update_job_progress(job_id, "search_terms", "search_terms: generating search queries from script")
+                tracker.add_log("Generating search terms from script", "info", "moneyprinter")
+                search_terms = get_search_terms(script)  # type: ignore[arg-type]
+                if not isinstance(search_terms, list):
+                    search_terms = []
+                tracker.add_log(f"Generated {len(search_terms)} search terms", "info", "moneyprinter")
+                try:
+                    _art.persist_artifact(job_id, "search_terms", "terms", {"items": search_terms})
+                except Exception:
+                    pass
+            except Exception as _e:
+                tracker.add_log(f"Search term generation failed: {_e}", "warning", "moneyprinter")
+        elif start_step and start_step not in ("script_generation", "search_terms"):
+            cached_terms = _art.load_artifact(job_id, "search_terms", "terms")
+            if cached_terms and isinstance(cached_terms, dict):
+                search_terms = cached_terms.get("items")
+                if isinstance(search_terms, list):
+                    tracker.add_log(f"Loaded {len(search_terms)} cached search terms", "info", "moneyprinter")
+
+        # (Future) Additional steps: stock_download, tts, subtitles, compose_video will follow similar pattern
 
         # Continue with remaining steps...
         # TODO: Extract the full implementation from original app.py
-        tracker.add_log("Note: Full MoneyPrinter implementation still being migrated", "warning", "moneyprinter")
+        tracker.add_log("Note: Full MoneyPrinter implementation still being migrated (artifacts: script, search_terms)", "warning", "moneyprinter")
         
         # For now, mark as completed
         duration_seconds = int(time.time() - start_time)
@@ -220,6 +271,15 @@ def run_brainrot_job(job_id: str, req_dict: dict):
         # Convert dict back to BrainrotRequest
         req = BrainrotRequest(**req_dict)
 
+        # Check resume_data for partial continuation
+        job_store = get_job_store()
+        original = job_store.get_job(job_id)
+        start_step = None
+        if original and original.get("resume_data"):
+            start_step = original["resume_data"].get("start_step")
+        if start_step:
+            tracker.add_log(f"Resuming brainrot workflow at step: {start_step}", "info", "brainrot")
+
         # Record when job actually started processing
         _update_job(job_id, started_at=datetime.now(timezone.utc).isoformat())
         tracker.add_log(f"Starting brainrot compilation for URL: {req.youtubeUrl}", "info", "brainrot")
@@ -227,8 +287,9 @@ def run_brainrot_job(job_id: str, req_dict: dict):
         from ..vendors.Compilation.generator import TikYouGenerator
 
         _check_cancel(job_id)
-        _update_job(job_id, step="process_video")
-        tracker.add_log("Processing source video and extracting clips", "info", "brainrot")
+        if not start_step or start_step == "process_video":
+            _update_job(job_id, step="process_video")
+            tracker.add_log("Processing source video and extracting clips", "info", "brainrot")
 
         # Create job-specific output folder named with job UUID
         output_dir = get_output_path()
@@ -239,19 +300,41 @@ def run_brainrot_job(job_id: str, req_dict: dict):
 
         generator = TikYouGenerator(output_dir=output_dir_str, tracker=tracker, request=req)
         tracker.add_log("Initialized TikYou generator", "info", "brainrot")
-        
-        video_clips = generator.process_single_video(req.youtubeUrl)
-        if not video_clips:
-            tracker.add_log("No clips generated from source video", "error", "brainrot")
-            raise RuntimeError("No clips generated from source video")
-        
-        tracker.add_log(f"Successfully extracted {len(video_clips)} clips from source video", "info", "brainrot")
+
+        if not start_step or start_step == "process_video":
+            video_clips = generator.process_single_video(req.youtubeUrl)
+            if not video_clips:
+                tracker.add_log("No clips generated from source video", "error", "brainrot")
+                raise RuntimeError("No clips generated from source video")
+            tracker.add_log(f"Successfully extracted {len(video_clips)} clips from source video", "info", "brainrot")
+            # Persist clip manifest for potential resume
+            try:
+                from ..utils import artifacts as _art
+                manifest_payload = [
+                    {k: clip[k] for k in ("id", "path", "duration", "orientation", "type", "source_id") if k in clip}
+                    for clip in video_clips
+                ]
+                _art.persist_artifact(job_id, "process_video", "clips", manifest_payload, meta={"total": len(manifest_payload)})
+                tracker.add_log(f"Persisted clip manifest ({len(manifest_payload)} entries)", "info", "brainrot")
+            except Exception as _e:
+                tracker.add_log(f"Failed persisting clip manifest: {_e}", "warning", "brainrot")
+        else:
+            # Attempt to load clip manifest
+            from ..utils import artifacts as _art
+            loaded = _art.load_artifact(job_id, "process_video", "clips")
+            if loaded:
+                # Rehydrate minimal structure for downstream generator usage (expects list of dicts with keys used later)
+                video_clips = loaded  # type: ignore
+                tracker.add_log(f"Loaded {len(video_clips)} cached clips from artifact manifest", "info", "brainrot")
+            else:
+                tracker.add_log("No cached clip manifest found; continuing with empty clip list (may cause failure)", "warning", "brainrot")
+                video_clips = []
 
         _check_cancel(job_id)
         _update_job(job_id, step="generate_compilations")
         tracker.add_log("Generating compilation videos", "info", "brainrot")
 
-        # Generate videos with progress tracking
+        # Generate videos with progress tracking (may fail if video_clips empty on resume)
         generator.generate_tikyou_videos(
             req.youtubeUrl,
             num_compilations=None if req.unlimited else req.numCompilations,
@@ -301,8 +384,8 @@ def run_brainrot_job(job_id: str, req_dict: dict):
                             file_path=str(video_file),
                             workflow="brainrot",
                             video_type="compilation",
-                            compilation_type=compilation_type,
-                            compilation_num=compilation_num,
+                            compilation_type=compilation_type or "normal",
+                            compilation_num=compilation_num or 0,
                             metadata={
                                 "youtube_url": req.youtubeUrl,
                                 "min_duration": req.minDuration,

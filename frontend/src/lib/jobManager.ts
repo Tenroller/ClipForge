@@ -1,4 +1,4 @@
-import { downloadUrl } from './api'
+import { downloadUrl, getLatestManagedVideo } from './api'
 
 // Development-only logging
 const devLog = (message: string, ...args: any[]) => {
@@ -44,6 +44,7 @@ class JobManager {
   private connections = new Map<string, WebSocket>()
   private listeners = new Set<JobUpdateListener>()
   private apiBase: string
+  private lineageCache = new Map<string, { ancestors: any[]; descendants: any[]; fetchedAt: number }>()
 
   constructor(apiBase: string) {
     this.apiBase = apiBase
@@ -154,32 +155,39 @@ class JobManager {
 
   async resumeJob(id: string): Promise<boolean> {
     try {
-      // For now, job resumption isn't fully implemented
-      // TODO: Implement proper job resumption in the backend
-      console.warn('Job resumption is not yet implemented')
-      return false
-      
-      /*
-      const res = await fetch(`${this.apiBase}/api/jobs/${id}/resume`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-      
-      if (res.ok) {
-        // Add the job to active tracking if resume was successful
-        const jobData = await res.json()
-        if (jobData.id) {
-          this.addJob(jobData.id, jobData.workflow, jobData)
-        }
+      const res = await fetch(`${this.apiBase}/api/jobs/${id}/resume`, { method: 'POST' })
+      if (!res.ok) {
+        console.error('Resume failed', res.status)
+        return false
+      }
+      const data = await res.json()
+      if (data?.jobId && data?.workflow) {
+        // Register new job locally
+        this.addJob(data.jobId, data.workflow, { resumedFrom: id, resumeAttempt: data.resume_attempt })
         return true
       }
       return false
-      */
     } catch (e) {
       console.error('Failed to resume job:', e)
       return false
+    }
+  }
+
+  async fetchJobLineage(id: string, { force = false }: { force?: boolean } = {}): Promise<{ ancestors: any[]; descendants: any[] }> {
+    const cached = this.lineageCache.get(id)
+    if (cached && !force && Date.now() - cached.fetchedAt < 30_000) {
+      return { ancestors: cached.ancestors, descendants: cached.descendants }
+    }
+    try {
+      const res = await fetch(`${this.apiBase}/api/jobs/${id}/lineage`)
+      if (!res.ok) throw new Error(`Lineage fetch failed: ${res.status}`)
+      const data = await res.json()
+      const record = { ancestors: data.ancestors || [], descendants: data.descendants || [], fetchedAt: Date.now() }
+      this.lineageCache.set(id, record)
+      return { ancestors: record.ancestors, descendants: record.descendants }
+    } catch (e) {
+      console.error('Failed to fetch lineage', e)
+      return { ancestors: [], descendants: [] }
     }
   }
 
@@ -407,9 +415,24 @@ class JobManager {
         
         const data = await res.json()
         await this.updateJob(id, data)
+
+        // Stale detection: if job has been queued/running too long, mark as error locally
+        const polledJob = this.jobs.get(id)
+        if (polledJob && ['queued', 'running'].includes(polledJob.status)) {
+          const maxAgeMs = 6 * 60 * 60 * 1000 // 6 hours
+          const age = Date.now() - polledJob.createdAt
+          if (age > maxAgeMs) {
+            polledJob.status = 'error'
+            polledJob.error = 'Marked stale: exceeded 6h without completion'
+            this.jobs.set(id, polledJob)
+            this.notifyListeners(polledJob)
+            this.saveToLocalStorage()
+            return
+          }
+        }
         
-        const job = this.jobs.get(id)
-        if (job && ['done', 'error', 'cancelled'].includes(job.status)) {
+        const doneCheckJob = this.jobs.get(id)
+        if (doneCheckJob && ['done', 'error', 'cancelled'].includes(doneCheckJob.status)) {
           return // Stop polling
         }
         
@@ -481,16 +504,15 @@ class JobManager {
     if (!job.result) return undefined
 
     try {
+      // Prefer managed video record if available
+      const managed = await getLatestManagedVideo(job.id)
+      if (managed?.file_path) {
+        return downloadUrl(managed.file_path)
+      }
+
+      // Fallback: direct output path from job.result (legacy shape)
       if (typeof job.result.output === 'string') {
         return downloadUrl(job.result.output)
-      } else if (typeof job.result.output_dir === 'string') {
-        const listRes = await fetch(`${this.apiBase}/api/list-videos?dir=${encodeURIComponent(job.result.output_dir)}`)
-        const listJson = await listRes.json()
-        const files: Array<{ path: string; mtime: number }> = Array.isArray(listJson?.files) ? listJson.files : []
-        files.sort((a, b) => b.mtime - a.mtime)
-        if (files[0]?.path) {
-          return downloadUrl(files[0].path)
-        }
       }
     } catch (e) {
       console.error('Failed to generate preview URL:', e)

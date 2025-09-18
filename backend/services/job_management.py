@@ -45,6 +45,16 @@ class JobManagementService:
             logger = get_logger("job_management")
             logger.error(f"Failed to delete job {job_id}: {e}")
             return False
+
+    def purge_job(self, job_id: str, reason: str = "Purged by user") -> bool:
+        """Purge a job and record a tombstone so subsequent GET returns 410."""
+        try:
+            return self.job_store.purge_job(job_id, reason)
+        except Exception as e:
+            from ..logging_config import get_logger
+            logger = get_logger("job_management")
+            logger.error(f"Failed to purge job {job_id}: {e}")
+            return False
     
     def cleanup_jobs(self, older_than_days: int = 7, statuses: Optional[List[str]] = None) -> Dict[str, Any]:
         """Cleanup old jobs based on age and status."""
@@ -194,6 +204,9 @@ class JobManagementService:
                     # Add next step information
                     next_step = self._get_next_step_for_workflow(job['workflow'], job.get('step', ''))
                     job['next_step'] = next_step
+                    # Ensure resume attempt is present for UI / decisions
+                    if 'resume_attempt' not in job:
+                        job['resume_attempt'] = 1
                     resumable_jobs.append(job)
             
             return {

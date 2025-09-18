@@ -56,6 +56,7 @@ A comprehensive, production-ready platform for generating short-form videos thro
 - **MoneyPrinter Flow**: AI script generation + stock footage + subtitles + optional music
 - **Brainrot Flow**: TikTok-style compilation videos from YouTube URLs
 - **Unified Interface**: Single UI for both workflows with live progress tracking
+ - **Simplified YouTube Handling**: Centralized `backend/utils/youtube.py` utility (ID extraction & download) reduces duplicated yt-dlp logic
 
 ### 🚀 **Enterprise Capabilities**
 - **Cloud GPU Acceleration**: Modal integration for 10x faster processing with L40S/A100/H100 GPUs
@@ -160,6 +161,80 @@ pipeline = KPipeline(lang_code='a')
 for i, (gs, ps, audio) in enumerate(pipeline("Hello", voice='af_heart')):
     pass
 ```
+
+## ♻️ Job Resumption & Partial Continuation
+
+The system supports resuming failed or cancelled jobs with linkage metadata and (early) partial step continuation.
+
+### How It Works
+- Each job persists: function name, args, kwargs, priority.
+- Resume metadata columns: `resumed_from`, `resumed_to` (list), `resume_attempt`, plus per-job `resume_data` JSON (e.g. `{start_step: 'script_generation'}`).
+- `POST /api/jobs/{job_id}/resume` creates a new queued job if original status is `error` or `cancelled`.
+- The frontend now calls this endpoint from `JobManager.resumeJob` and registers the new job locally.
+
+### Partial Continuation (Current State)
+- MoneyPrinter: new job records a `start_step` but currently replays pipeline from that step when full extraction is implemented (stub logic until full migration of legacy steps).
+- Brainrot: if parent failed after `process_video`, resume logs skip of that phase (clip reuse not yet implemented) and proceeds to `generate_compilations` (placeholder path).
+
+### Inspecting Resume Metadata
+```
+GET /api/jobs/{job_id}
+{
+  "resumed_from": "<parent-id>",
+  "resumed_to": ["<child-id>", ...],
+  "resume_attempt": 2,
+  "resume_data": {"start_step": "script_generation", ...}
+}
+```
+
+### Migration Script
+Development environments can add resume columns without Alembic:
+```
+python -m backend.migrations.001_add_resume_columns
+```
+This script is idempotent and safe to re-run.
+
+### Artifact Persistence (Early)
+Lightweight JSON artifacts are written under `output/<job_id>/artifacts/`:
+
+- MoneyPrinter: `script_generation/script.json`, `search_terms/terms.json` (more to follow)
+- Brainrot: `process_video/clips.json` (clip manifest reused on resume)
+
+Each job also has an `artifacts/manifest.json` indexing persisted step keys.
+
+On resume, if `resume_data.start_step` is beyond an artifact-producing step, the system attempts to load that artifact instead of recomputing it.
+
+### Resume Attempt Limits
+Config value: `VIDEOHELPER_MAX_RESUME_ATTEMPTS` (default 5) — counts original attempt as 1. Further resume requests after the limit return 400 with a descriptive error.
+
+### Lineage Endpoint
+`GET /api/jobs/{id}/lineage` returns ancestry & descendant graph:
+```json
+{
+  "jobId": "<current>",
+  "ancestors": [ {"id": "root-job", "resume_attempt": 1}, ... ],
+  "descendants": [ {"id": "child-job", "resume_attempt": 2}, ... ],
+  "ancestor_count": 1,
+  "descendant_count": 2
+}
+```
+This powers future UI visualization (frontend now exposes `fetchJobLineage`).
+
+### Frontend Lineage Visualization
+On the Job Monitoring page, a new Lineage panel displays:
+- Ancestor chain (root job to current) with resume attempt numbers.
+- Descendant jobs (all resumed children) with status and attempt badges.
+- Manual refresh & force refresh (bypass 30s cache) controls.
+- Quick navigation: clicking any job ID jumps to its monitoring page; copy icon copies the full ID.
+
+This helps trace retry chains, diagnose repeated failures, and confirm resume attempt limits. Data is sourced directly from the lineage endpoint above.
+
+### Upcoming Enhancements
+- Additional MoneyPrinter step artifacts (stock downloads, subtitles, final composition)
+- True partial skip for MoneyPrinter beyond script/search terms
+- Frontend lineage graph component
+- Artifact inspection panel in UI
+
 #### Backend Setup
 ```bash
 cd backend

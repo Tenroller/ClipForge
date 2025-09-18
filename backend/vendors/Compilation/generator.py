@@ -54,6 +54,10 @@ from moviepy import (
 )
 
 from .processor import CatVideoProcessor
+try:
+    from backend.utils.youtube import extract_video_id as unified_extract_video_id
+except Exception:
+    unified_extract_video_id = None  # fallback if utility unavailable during standalone execution
 from .tiktok import TikTokVideoCreator
 
 from .title_generator import TitleGenerator
@@ -641,17 +645,20 @@ class TikYouGenerator:
         return params
     
     def extract_video_id(self, youtube_url):
-        """Extract video ID from YouTube URL"""
+        """Extract video ID using unified utility if available (preferred)."""
+        if unified_extract_video_id:
+            try:
+                return unified_extract_video_id(youtube_url)
+            except Exception:
+                pass  # fallback to legacy regex below
         patterns = [
             r'(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)',
             r'youtube\.com.*[?&]v=([^&\n?#]+)',
         ]
-        
         for pattern in patterns:
             match = re.search(pattern, youtube_url)
             if match:
                 return match.group(1)
-        
         raise ValueError(f"Could not extract video ID from URL: {youtube_url}")
     
     def _process_clip_for_compilation(self, clip_path, target_resolution=None):
@@ -708,6 +715,18 @@ class TikYouGenerator:
                 
                 # 3. Position original clip in the center
                 print(f"        📍 Positioning clip at center...")
+                
+                # Apply rounded corners to the video before positioning
+                try:
+                    from .video_effects import apply_rounded_corners_simple
+                    corner_radius = 20  # Slightly smaller radius for smaller clips
+                    clip = apply_rounded_corners_simple(clip, corner_radius)
+                    print(f"        ✨ Applied rounded corners (radius: {corner_radius}px)")
+                except Exception as e:
+                    print(f"        ⚠️  Warning: Could not apply rounded corners: {e}")
+                    # Continue without rounded corners if there's an error
+                    pass
+                
                 clip = clip.with_position("center")  # type: ignore[attr-defined]
 
                 # 4. Composite original clip over solid background
@@ -732,18 +751,20 @@ class TikYouGenerator:
                     if aspect_ratio > target_aspect_ratio: # Wider than target
                         print(f"        📏 Clip is wider than target, resizing and cropping...")
                         clip = clip.with_effects([vfx.Resize(height=target_h)])
-                        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
-                        x1 = (clip.w - target_w) // 2
-                        y1 = (clip.h - target_h) // 2
+                        # Calculate crop coordinates for center crop using clip.size (width, height)
+                        current_w, current_h = clip.size  # type: ignore
+                        x1 = int((current_w - target_w) // 2)
+                        y1 = int((current_h - target_h) // 2)
                         x2 = x1 + target_w
                         y2 = y1 + target_h
                         clip = clip.with_effects([vfx.Crop(x1, y1, x2, y2)])
                     else: # Taller than target
                         print(f"        📏 Clip is taller than target, resizing and cropping...")
                         clip = clip.with_effects([vfx.Resize(width=target_w)])
-                        # Calculate crop coordinates for center crop (v2 syntax: x1, y1, x2, y2)
-                        x1 = (clip.w - target_w) // 2
-                        y1 = (clip.h - target_h) // 2
+                        # Calculate crop coordinates for center crop using clip.size (width, height)
+                        current_w, current_h = clip.size  # type: ignore
+                        x1 = int((current_w - target_w) // 2)
+                        y1 = int((current_h - target_h) // 2)
                         x2 = x1 + target_w
                         y2 = y1 + target_h
                         clip = clip.with_effects([vfx.Crop(x1, y1, x2, y2)])
@@ -1032,6 +1053,17 @@ class TikYouGenerator:
             video_clip = video_clip.with_effects([vfx.Resize(width=W)])
             background = ColorClip(size=(W, H), color=BACKGROUND_COLOR, duration=video_clip.duration)
             
+            # Apply rounded corners to the video before positioning
+            try:
+                from .video_effects import apply_rounded_corners_simple
+                corner_radius = 30  # Configurable corner radius
+                video_clip = apply_rounded_corners_simple(video_clip, corner_radius)
+                print(f"        ✨ Applied rounded corners (radius: {corner_radius}px)")
+            except Exception as e:
+                print(f"        ⚠️  Warning: Could not apply rounded corners: {e}")
+                # Continue without rounded corners if there's an error
+                pass
+            
             # Position video in the middle area of the frame
             video_y_position = 650
             video_clip = video_clip.with_position(('center', video_y_position))  # type: ignore[attr-defined]
@@ -1138,9 +1170,14 @@ class TikYouGenerator:
                 print(f"   🔄 Video aspect ratio {current_ratio:.3f} doesn't fit 9:16, creating blurred pillarbox")
                 
                 # Scale video to fit height while maintaining aspect ratio
-                scale_factor = target_h / video_clip.h
+                # Ensure the main video takes up at least 85% of the frame height
+                min_scale_factor = (target_h * 0.85) / video_clip.h
+                height_scale_factor = target_h / video_clip.h
+                scale_factor = max(min_scale_factor, height_scale_factor)
+                
                 scaled_w = int(video_clip.w * scale_factor)
-                scaled_clip = video_clip.resized((scaled_w, target_h))
+                scaled_h = int(video_clip.h * scale_factor)
+                scaled_clip = video_clip.resized((scaled_w, scaled_h))
                 
                 # Create blurred background version
                 # Scale the original to fill the entire frame (will be cropped)
@@ -1151,21 +1188,23 @@ class TikYouGenerator:
                 # GaussianBlur is not available in MoviePy v2, so we use resize blur
                 print(f"   🔄 Applying blur effect using resize method")
                 blur_factor = 0.15  # Scale down to 15% then back up for better quality
-                temp_w, temp_h = max(1, int(bg_clip.w * blur_factor)), max(1, int(bg_clip.h * blur_factor))
-                bg_clip = bg_clip.resized((temp_w, temp_h)).resized((target_w, target_h))
+                bg_w, bg_h = bg_clip.size  # type: ignore
+                temp_w, temp_h = max(1, int(bg_w * blur_factor)), max(1, int(bg_h * blur_factor))
+                bg_clip = bg_clip.with_effects([vfx.Resize(width=temp_w, height=temp_h)]).with_effects([vfx.Resize(width=target_w, height=target_h)])
                 print(f"   ✅ Applied resize blur effect to background")
                 
                 # Center the background clip vertically
-                bg_clip = bg_clip.with_position("center")
+                bg_clip = bg_clip.with_position("center")  # type: ignore
                 
                 # Position the main video in center
-                main_clip = scaled_clip.with_position("center")
+                main_clip = scaled_clip.with_position("center")  # type: ignore
                 
                 # Composite: blurred background + main video
                 final_clip = CompositeVideoClip([bg_clip, main_clip], size=(target_w, target_h))
             
-            final_clip.duration = video_clip.duration
-            final_clip.audio = video_clip.audio
+            final_clip = final_clip.with_duration(video_clip.duration)
+            if video_clip.audio is not None:
+                final_clip = final_clip.with_audio(video_clip.audio)
             
             # Enhanced bitrates for better quality
             if video_clip.w * video_clip.h > 1920 * 1080:
@@ -1494,6 +1533,7 @@ class TikYouGenerator:
         # Track processing start time
         start_time = time.time()
         final_clips = []
+        final_compilation = None
         
         try:
             # Convert each clip to no-background format
@@ -1602,7 +1642,7 @@ class TikYouGenerator:
         finally:
             # Cleanup memory
             print(f"      🧹 Cleaning up memory...")
-            if 'final_compilation' in locals():
+            if final_compilation is not None:
                 final_compilation.close()
             for clip in final_clips:
                 clip.close()
