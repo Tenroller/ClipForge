@@ -546,6 +546,40 @@ class JobStore:
             session.commit()
             return True
 
+    def get_random_video(self, workflow: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Get a random video from the database."""
+        from sqlalchemy import func
+        
+        with self._get_session() as session:
+            query = session.query(Video)
+
+            if workflow:
+                query = query.filter(Video.workflow == workflow)
+
+            # Use ORDER BY RANDOM() for PostgreSQL to get a random video
+            video = query.order_by(func.random()).first()
+
+            if not video:
+                return None
+
+            return {
+                "id": video.id,
+                "filename": video.filename,
+                "file_path": video.file_path,
+                "job_id": video.job_id,
+                "workflow": video.workflow,
+                "video_type": video.video_type,
+                "size_bytes": video.size_bytes,
+                "duration_seconds": video.duration_seconds,
+                "compilation_type": video.compilation_type,
+                "compilation_num": video.compilation_num,
+                "posted": video.posted,
+                "posted_at": video.posted_at.isoformat() if getattr(video, 'posted_at', None) is not None else None,
+                "metadata": video.video_metadata or {},
+                "created_at": video.created_at.isoformat() if getattr(video, 'created_at', None) is not None else None,
+                "updated_at": video.updated_at.isoformat() if getattr(video, 'updated_at', None) is not None else None
+            }
+
     def get_video_stats(self) -> Dict[str, Any]:
         """Get video statistics."""
         from datetime import datetime, timedelta, timezone

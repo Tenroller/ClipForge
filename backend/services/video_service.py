@@ -134,6 +134,14 @@ class VideoService:
         """Get videos that haven't been posted yet."""
         return self.list_videos(limit=limit, posted=False, workflow=workflow)
     
+    def get_random_video(self, workflow: str = None) -> Optional[Dict[str, Any]]:
+        """Get a random video from the database."""
+        try:
+            return self.job_store.get_random_video(workflow=workflow)
+        except Exception as e:
+            self.logger.error(f"Failed to get random video: {e}")
+            return None
+    
     def sync_videos_from_job_results(self) -> Dict[str, Any]:
         """
         Sync video records from existing job results.

@@ -244,6 +244,32 @@ def get_unposted_videos(
         raise HTTPException(status_code=500, detail=f"Failed to get unposted videos: {e}")
 
 
+@router.get("/videos/random", summary="Get Random Video")
+def get_random_video(workflow: Optional[str] = Query(None)) -> Dict[str, Any]:
+    """Get a random video from the database."""
+    try:
+        video = video_service.get_random_video(workflow=workflow)
+        
+        if not video:
+            raise HTTPException(status_code=404, detail="No videos found")
+        
+        # Enhance the response
+        video["download_url"] = f"/api/download?path={video['file_path']}"
+        video["file_exists"] = Path(video["file_path"]).exists()
+        video["thumbnail_url"] = thumbnail_service.get_thumbnail_url(video["file_path"])
+        
+        if video.get("size_bytes"):
+            video["size_mb"] = round(video["size_bytes"] / (1024 * 1024), 2)
+        
+        return video
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get random video: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get random video: {e}")
+
+
 @router.get("/videos/stats/managed", summary="Get Video Statistics")
 def get_managed_video_stats() -> Dict[str, Any]:
     """Get statistics about tracked videos."""

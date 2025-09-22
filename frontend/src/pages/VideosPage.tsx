@@ -24,7 +24,8 @@ import {
   FaDatabase,
   FaExclamationTriangle,
   FaCog,
-  FaPlus
+  FaPlus,
+  FaDice
 } from 'react-icons/fa'
 import { cn } from '@/components/lib/utils'
 
@@ -94,6 +95,7 @@ export default function VideosPage() {
   const [hasMore, setHasMore] = useState(true)
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null)
   const [postingVideos, setPostingVideos] = useState<Set<string>>(new Set())
+  const [loadingRandomVideo, setLoadingRandomVideo] = useState(false)
   // Managed system is now mandatory (legacy scanning removed)
   const [syncingVideos, setSyncingVideos] = useState(false) // Loading state for sync operations
   const [showSyncPanel, setShowSyncPanel] = useState(false) // Show sync controls
@@ -410,6 +412,39 @@ export default function VideosPage() {
     }
   }
 
+  // Get random video
+  const handleRandomVideo = async () => {
+    try {
+      setLoadingRandomVideo(true)
+      
+      const response = await fetch(`${API}/api/videos/random`)
+      
+      if (!response.ok) {
+        throw new Error(`Failed to get random video: ${response.statusText}`)
+      }
+      
+      const randomVideo: Video = await response.json()
+      
+      // Set the random video as the selected video to show in the modal
+      setSelectedVideo(randomVideo)
+      
+      toast({
+        title: 'Random Video Selected',
+        description: `Selected: ${randomVideo.filename}`
+      })
+      
+    } catch (error) {
+      console.error('Failed to get random video:', error)
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to get random video. Please try again.',
+        variant: 'destructive'
+      })
+    } finally {
+      setLoadingRandomVideo(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -424,6 +459,19 @@ export default function VideosPage() {
           <p className="text-muted-foreground">View and manage videos tracked in the database</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleRandomVideo}
+            disabled={loadingRandomVideo}
+            className="w-fit"
+          >
+            {loadingRandomVideo ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
+            ) : (
+              <FaDice className="size-4 mr-2" />
+            )}
+            Random Video
+          </Button>
           <Button
             variant="outline"
             onClick={() => setShowSyncPanel(!showSyncPanel)}
