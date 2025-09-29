@@ -16,13 +16,9 @@ from fastapi import FastAPI
 
 from ..logging_config import initialize_logging, get_logger
 from ..metrics import init_metrics_system
-from ..database import get_job_store
-from ..job_queue_unified import get_job_queue
 
 # Global state for lifespan management
 MAIN_LOOP: "asyncio.AbstractEventLoop | None" = None
-WS_SUBSCRIBERS: Dict[str, set] = defaultdict(set)
-ASYNC_QUEUE: "asyncio.Queue[tuple[str, Dict[str, Any]]]" = asyncio.Queue()
 _SHUTDOWN_IN_PROGRESS = False
 _CLEANUP_COMPLETED = False
 
@@ -87,17 +83,6 @@ def _cleanup_resources():
 
     def cleanup_worker():
         try:
-            # Cleanup WebSocket connections
-            try:
-                from ..utils.websocket_manager import cleanup_websocket_connections
-                # Use async context if available
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(cleanup_websocket_connections(timeout=5.0))
-                logger.debug("WebSocket cleanup initiated")
-            except Exception as e:
-                logger.warning(f"WebSocket cleanup failed: {e}")
-
             # Cleanup temp files
             try:
                 from ..utils.file_management import get_temp_manager
@@ -131,82 +116,25 @@ def _cleanup_resources():
         logger.info("Cleanup completed successfully")
 
 
-async def _cleanup_websockets():
-    """Helper function to cleanup WebSocket connections using the manager."""
-    from ..utils.websocket_manager import cleanup_websocket_connections
-    return await cleanup_websocket_connections(timeout=10.0)
-
-
-async def _broadcast_loop():
-    """Background task to broadcast job updates to WebSocket clients."""
-    while True:
-        try:
-            job_id, payload = await asyncio.wait_for(ASYNC_QUEUE.get(), timeout=1.0)
-            await _broadcast_job_update(job_id, payload)
-        except asyncio.TimeoutError:
-            # Normal timeout, continue loop
-            continue
-        except Exception as e:
-            logger.error(f"Error in broadcast loop: {e}")
-            await asyncio.sleep(1)
-
-
 async def _job_expiration_loop():
     """Periodic loop to expire stale jobs in the database."""
+    from ..database import get_job_store
     job_store = get_job_store()
     interval_seconds = 300  # 5 minutes
     while True:
         try:
             result = job_store.expire_stale_jobs()
-            if result.get("running_expired") or result.get("queued_expired"):
-                logger.info(
-                    f"Expired stale jobs: running={result['running_expired']} queued={result['queued_expired']}"
-                )
+            if result and result.get('expired_count', 0) > 0:
+                logger.info(f"Expired {result['expired_count']} stale jobs")
         except Exception as e:
-            logger.error(f"Job expiration loop error: {e}")
+            logger.error(f"Error during job expiration: {e}")
+        
         await asyncio.sleep(interval_seconds)
 
 
-async def _broadcast_job_update(job_id: str, payload: Dict[str, Any]):
-    """Broadcast job update to all WebSocket subscribers for this job."""
-    from ..utils.websocket_manager import get_websocket_manager
-
-    ws_manager = get_websocket_manager()
-    subscribers = ws_manager.get_subscribers_for_job(job_id)
-
-    if not subscribers:
-        return
-
-    dead_connections = []
-    for websocket in subscribers:
-        try:
-            await websocket.send_json(payload)
-            # Update activity timestamp
-            ws_manager.update_activity(job_id, websocket)
-        except Exception:
-            # Connection is dead, mark for removal
-            dead_connections.append(websocket)
-
-    # Clean up dead connections
-    for websocket in dead_connections:
-        ws_manager.remove_connection(job_id, websocket)
-
-    if dead_connections:
-        logger.debug(f"Cleaned up {len(dead_connections)} dead WebSocket connections for job {job_id}")
-
-
 def _enqueue_job_update(job_id: str) -> None:
-    """Thread-safe enqueue of a job update for websocket broadcast."""
-    global MAIN_LOOP
-    try:
-        # Get job data from unified queue (which includes database data)
-        job_queue = get_job_queue()
-        payload = job_queue.get_job_status(job_id)
-        if payload and MAIN_LOOP is not None:
-            MAIN_LOOP.call_soon_threadsafe(ASYNC_QUEUE.put_nowait, (job_id, payload))
-    except Exception:
-        # Best-effort only
-        pass
+    """No-op: WebSocket broadcasting has been removed, using REST API polling instead."""
+    pass
 
 
 @asynccontextmanager
@@ -224,7 +152,6 @@ async def lifespan(app: FastAPI):
 
         # Initialize utility systems
         from ..utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
-        from ..utils.websocket_manager import init_websocket_manager
         from ..utils.streaming_processor import init_streaming_processor
         from ..utils.fonts import init_font_manager
         from ..utils.paths import init_path_manager
@@ -232,11 +159,22 @@ async def lifespan(app: FastAPI):
 
         init_temp_manager()
         cleanup_temp_files_on_startup()
-        init_websocket_manager()
         init_streaming_processor()
         init_font_manager()
         init_path_manager()
         init_gpu_manager()
+
+        # Initialize and start job queue worker (delayed import to avoid circular dependency)
+        try:
+            from ..job_queue_unified import get_job_queue
+            job_queue = get_job_queue()
+            if not job_queue.running:
+                job_queue.start_worker()
+                logger.info("Job queue worker started")
+            else:
+                logger.info("Job queue worker already running")
+        except Exception as e:
+            logger.error(f"Failed to initialize job queue worker: {e}")
 
         logger.info("✅ All systems initialized")
     except Exception as e:
@@ -247,20 +185,16 @@ async def lifespan(app: FastAPI):
     signal.signal(signal.SIGTERM, _signal_handler)
 
     # Start background tasks
-    broadcaster_task = asyncio.create_task(_broadcast_loop())
-    websocket_monitor_task = asyncio.create_task(_websocket_monitor_loop())
     expiration_task = asyncio.create_task(_job_expiration_loop())
     
     try:
         yield
     finally:
         # Cancel background tasks
-        broadcaster_task.cancel()
-        websocket_monitor_task.cancel()
         expiration_task.cancel()
         
         # Wait for tasks to complete with timeout
-        tasks_to_wait = [broadcaster_task, websocket_monitor_task, expiration_task]
+        tasks_to_wait = [expiration_task]
         try:
             await asyncio.wait_for(asyncio.gather(*tasks_to_wait, return_exceptions=True), timeout=5.0)
         except asyncio.TimeoutError:
@@ -295,45 +229,16 @@ async def lifespan(app: FastAPI):
         else:
             logger.info("Skipping threading cleanup - interpreter shutting down")
 
-        # Cleanup any remaining WebSocket connections
+        # Cleanup any remaining connections and resources
         try:
-            await _cleanup_websockets()
+            logger.info("Resource cleanup completed")
         except Exception as e:
-            logger.warning(f"Failed to cleanup WebSocket connections: {e}")
-
-
-async def _websocket_monitor_loop():
-    """Background task to monitor and cleanup WebSocket connections."""
-    from ..utils.websocket_manager import get_websocket_manager
-    
-    ws_manager = get_websocket_manager()
-    
-    while True:
-        try:
-            # Run cleanup check every 30 seconds
-            await asyncio.sleep(30)
-            await ws_manager.cleanup_stale_connections()
-            
-            # Log stats every 5 minutes
-            current_time = time.time()
-            if int(current_time) % 300 == 0:  # Every 5 minutes
-                stats = ws_manager.get_connection_stats()
-                logger.info(f"WebSocket stats: {stats['total_connections']} connections, {stats['jobs_with_connections']} jobs")
-                
-        except asyncio.CancelledError:
-            logger.info("WebSocket monitor loop cancelled")
-            break
-        except Exception as e:
-            logger.error(f"WebSocket monitor error: {e}")
-            await asyncio.sleep(30)  # Wait before retrying
+            logger.warning(f"Failed to cleanup resources: {e}")
 
 
 # Module-level exports for use in other parts of the application
 __all__ = [
     "lifespan",
     "_enqueue_job_update",
-    "_broadcast_job_update",
     "MAIN_LOOP",
-    "WS_SUBSCRIBERS", 
-    "ASYNC_QUEUE"
 ]

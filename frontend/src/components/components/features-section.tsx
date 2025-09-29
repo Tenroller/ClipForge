@@ -37,7 +37,7 @@ export function FeaturesSection() {
     {
       icon: FaChartBar,
       title: "Real-time Monitoring",
-      description: "WebSocket-based live progress updates with step-by-step visual indicators.",
+      description: "REST API polling for live progress updates with step-by-step visual indicators.",
       badges: ["Live Updates", "Progress Tracking"],
     },
   ]

@@ -119,6 +119,14 @@ export async function generateBrainrotVideo(params: any): Promise<{ status: stri
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Unknown error' }))
+    
+    // Handle validation errors (array format)
+    if (Array.isArray(error.detail) && error.detail.length > 0) {
+      const firstError = error.detail[0]
+      throw new Error(firstError.msg || 'Validation error')
+    }
+    
+    // Handle other errors (string format)
     throw new Error(error.detail || 'Failed to start video generation')
   }
 

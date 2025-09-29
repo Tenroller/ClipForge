@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func, Boolean, Float, text
+from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func, Boolean, Float, text, ARRAY
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.exc import SQLAlchemyError
@@ -56,7 +57,7 @@ class Job(Base):
     workflow = Column(String)
     user_id = Column(String)
     request_data = Column(JSON)
-    result_data = Column(JSON)
+    result = Column(JSON)  # Changed from result_data to match database schema
     error_message = Column(Text)
     logs = Column(JSON, default=list)
     resume_data = Column(JSON)
@@ -68,7 +69,7 @@ class Job(Base):
     # Resume metadata
     resumed_from = Column(String)  # Original job ID if this job is a resume of another
     resume_attempt = Column(Integer)  # Attempt count (1 = original, 2 = first resume, etc.)
-    resumed_to = Column(JSON)  # List of child job IDs resumed from this one
+    resumed_to = Column(JSON, default=list)  # List of child job IDs resumed from this one
 
     # PostgreSQL-specific indexes for better query performance
     __table_args__ = (
@@ -211,7 +212,7 @@ class JobStore:
                 if field == "logs" and isinstance(value, list):
                     setattr(job, 'logs', value)
                 elif field == "result" and isinstance(value, dict):
-                    setattr(job, 'result_data', value)
+                    setattr(job, 'result', value)  # Changed from result_data to result
                 elif field == "error":
                     setattr(job, 'error_message', str(value) if value else None)
                 elif field == "resume_data" and isinstance(value, dict):
@@ -249,7 +250,7 @@ class JobStore:
                 "workflow": job.workflow,
                 "user_id": job.user_id,
                 "logs": job.logs if job.logs is not None else [],
-                "result": job.result_data,
+                "result": job.result,  # Changed from job.result_data to job.result
                 "request_data": job.request_data if job.request_data is not None else {},
                 "resume_data": job.resume_data,
                 "resumed_from": job.resumed_from,
@@ -290,7 +291,7 @@ class JobStore:
                     "workflow": job.workflow,
                     "user_id": job.user_id,
                     "logs": job.logs if job.logs is not None else [],
-                    "result": job.result_data,
+                    "result": job.result,  # Changed from job.result_data to job.result
                     "request_data": job.request_data if job.request_data is not None else {},
                     "resume_data": job.resume_data,
                     "resumed_from": job.resumed_from,

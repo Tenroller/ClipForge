@@ -1,0 +1,114 @@
+INFO:     Started server process [84997]
+INFO:     Waiting for application startup.
+Added backend path to sys.path: /Users/guilhermetenroller/Documents/GitHub/personal/ai-video-generator/backend
+2025-09-22 22:50:56,809 - src.main - INFO - Starting Video Processing API...
+2025-09-22 22:50:56,813 - src.main - INFO - Loaded configuration for processor: processor-1
+2025-09-22 22:50:56,813 - src.main - WARNING - Configuration warning: BACKEND_API_KEY not set - communication may be insecure
+2025-09-22 22:50:56,813 - src.main - INFO - Setup directories: output=output, temp=temp
+2025-09-22 22:50:56,813 - src.core.simple_queue - INFO - Initialized in-memory job queue for processor processor-1
+2025-09-22 22:50:56,813 - src.services.video_processing - INFO - ✅ Configured system espeak-ng for Kokoro TTS:
+2025-09-22 22:50:56,813 - src.services.video_processing - INFO -    ESPEAK_PATH: /opt/homebrew/bin/espeak-ng
+2025-09-22 22:50:56,813 - src.services.video_processing - INFO -    DATA_PATH: /opt/homebrew/share/espeak-ng-data
+2025-09-22 22:50:56,813 - src.core.simple_queue - INFO - Registered handler for workflow: moneyprinter
+2025-09-22 22:50:56,813 - src.core.simple_queue - INFO - Registered handler for workflow: brainrot
+2025-09-22 22:50:56,813 - src.main - INFO - Video Processing API started successfully on 0.0.0.0:8090
+2025-09-22 22:50:56,813 - src.core.simple_queue - INFO - Starting job processing for processor processor-1
+INFO:     Application startup complete.
+2025-09-22 22:50:56,813 - src.core.simple_queue - INFO - Started processing worker: worker-0
+2025-09-22 22:50:56,814 - src.core.simple_queue - INFO - Started processing worker: worker-1
+INFO:     Uvicorn running on http://0.0.0.0:8090 (Press CTRL+C to quit)
+INFO:     127.0.0.1:54951 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55080 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55080 - "GET /api/v1/status HTTP/1.1" 200 OK
+2025-09-22 22:51:57,848 - src.core.simple_queue - INFO - Added job c12f3b3a-6ebf-49d4-833b-2e39171deaf8 to queue with priority normal
+2025-09-22 22:51:57,849 - src.api.routes - INFO - Created job c12f3b3a-6ebf-49d4-833b-2e39171deaf8 with workflow moneyprinter
+INFO:     127.0.0.1:55080 - "POST /api/v1/jobs HTTP/1.1" 200 OK
+2025-09-22 22:51:57,905 - src.core.simple_queue - INFO - Processing job c12f3b3a-6ebf-49d4-833b-2e39171deaf8 (workflow: moneyprinter)
+2025-09-22 22:51:57,905 - src.services.video_processing - INFO - Starting MoneyPrinter job c12f3b3a-6ebf-49d4-833b-2e39171deaf8
+2025-09-22 22:51:57,905 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Current sys.path entries containing 'backend': ['/Users/guilhermetenroller/Documents/GitHub/personal/ai-video-generator/backend']
+2025-09-22 22:51:57,965 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Backend vendors import successful
+2025-09-22 22:51:58,357 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Validating environment
+2025-09-22 22:51:58,357 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Generating script
+2025-09-22 22:51:58,357 - video_generator - INFO - gemini.generate_response: start
+2025-09-22 22:52:00,779 - video_generator - INFO - gemini.generate_response: success
+Artificial intelligence, or AI, is rapidly changing our world. From self-driving cars to personalized medicine, AI is already impacting numerous industries. At its core, AI is about creating machines that can perform tasks that typically require human intelligence. This includes things like learning, problem-solving, and decision-making. The potential benefits of AI are enormous, promising to revolutionize healthcare, transportation, and countless other fields. However, it also raises important ethical considerations. We need to think carefully about how to develop and deploy AI responsibly, ensuring that it benefits all of humanity.
+
+Number of paragraphs used: 1
+2025-09-22 22:52:00,780 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Generated script (642 characters)
+2025-09-22 22:52:00,780 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Generating text-to-speech
+MoviePy - Writing audio in output/c12f3b3a-6ebf-49d4-833b-2e39171deaf8/c12f3b3a-6ebf-49d4-833b-2e39171deaf8_audio.wav
+chunk:   0%|          | 0/656 [00:00<?, ?it/s, now=None]                                                        MoviePy - Done.
+[+] Audio file saved successfully as 'output/c12f3b3a-6ebf-49d4-833b-2e39171deaf8/c12f3b3a-6ebf-49d4-833b-2e39171deaf8_audio.wav'
+2025-09-22 22:52:13,051 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: MoneyPrinter processing completed (simplified version)
+2025-09-22 22:52:13,051 - src.core.simple_queue - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8 completed successfully
+INFO:     127.0.0.1:55150 - "GET /api/v1/jobs/c12f3b3a-6ebf-49d4-833b-2e39171deaf8 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+2025-09-23 08:30:32,367 - src.main - INFO - Shutting down Video Processing API...
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopped processing worker: worker-0
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopped processing worker: worker-1
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:30:32,367 - src.main - INFO - Video Processing API shutdown complete
+INFO:     Application shutdown complete.
+INFO:     Finished server process [84997]
+/opt/homebrew/Cellar/python@3.10/3.10.18/Frameworks/Python.framework/Versions/3.10/lib/python3.10/multiprocessing/resource_tracker.py:224: UserWarning: resource_tracker: There appear to be 1 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+ handler for workflow: moneyprinter
+2025-09-23 08:30:15,304 - src.core.simple_queue - INFO - Registered handler for workflow: brainrot
+2025-09-23 08:30:15,304 - src.main - INFO - Video Processing API started successfully on 0.0.0.0:8090
+2025-09-23 08:30:15,304 - src.core.simple_queue - INFO - Starting job processing for processor processor-1
+2025-09-23 08:30:15,304 - src.core.simple_queue - INFO - Started processing worker: worker-0
+2025-09-23 08:30:15,304 - src.core.simple_queue - INFO - Started processing worker: worker-1
+2025-09-23 08:30:15,305 - src.main - INFO - Shutting down Video Processing API...
+2025-09-23 08:30:15,305 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:30:15,305 - src.core.simple_queue - INFO - Stopped processing worker: worker-0
+2025-09-23 08:30:15,305 - src.core.simple_queue - INFO - Stopped processing worker: worker-1
+2025-09-23 08:30:15,305 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:30:15,305 - src.main - INFO - Video Processing API shutdown complete
+2025-09-23 08:30:32,367 - src.main - INFO - Shutting down Video Processing API...
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopped processing worker: worker-0
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopped processing worker: worker-1
+2025-09-23 08:30:32,367 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:30:32,367 - src.main - INFO - Video Processing API shutdown complete
+2025-09-23 08:32:00,176 - src.main - INFO - Starting Video Processing API...
+2025-09-23 08:32:00,180 - src.main - INFO - Loaded configuration for processor: processor-1
+2025-09-23 08:32:00,180 - src.main - WARNING - Configuration warning: BACKEND_API_KEY not set - communication may be insecure
+2025-09-23 08:32:00,180 - src.main - INFO - Setup directories: output=output, temp=temp
+2025-09-23 08:32:00,180 - src.core.simple_queue - INFO - Initialized in-memory job queue for processor processor-1
+2025-09-23 08:32:00,181 - src.services.video_processing - INFO - ✅ Configured system espeak-ng for Kokoro TTS:
+2025-09-23 08:32:00,181 - src.services.video_processing - INFO -    ESPEAK_PATH: /opt/homebrew/bin/espeak-ng
+2025-09-23 08:32:00,181 - src.services.video_processing - INFO -    DATA_PATH: /opt/homebrew/share/espeak-ng-data
+2025-09-23 08:32:00,181 - src.core.simple_queue - INFO - Registered handler for workflow: moneyprinter
+2025-09-23 08:32:00,181 - src.core.simple_queue - INFO - Registered handler for workflow: brainrot
+2025-09-23 08:32:00,181 - src.main - INFO - Video Processing API started successfully on 0.0.0.0:8090
+2025-09-23 08:32:00,181 - src.core.simple_queue - INFO - Starting job processing for processor processor-1
+2025-09-23 08:32:00,181 - src.core.simple_queue - INFO - Started processing worker: worker-0
+2025-09-23 08:32:00,181 - src.core.simple_queue - INFO - Started processing worker: worker-1
+2025-09-23 08:32:11,822 - src.main - INFO - Shutting down Video Processing API...
+2025-09-23 08:32:11,822 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:32:11,822 - src.core.simple_queue - INFO - Stopped processing worker: worker-0
+2025-09-23 08:32:11,822 - src.core.simple_queue - INFO - Stopped processing worker: worker-1
+2025-09-23 08:32:11,822 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:32:11,822 - src.main - INFO - Video Processing API shutdown complete
+2025-09-23 08:34:09,176 - src.main - INFO - Starting Video Processing API...
+2025-09-23 08:34:09,181 - src.main - INFO - Loaded configuration for processor: processor-1
+2025-09-23 08:34:09,181 - src.main - WARNING - Configuration warning: BACKEND_API_KEY not set - communication may be insecure
+2025-09-23 08:34:09,181 - src.main - INFO - Setup directories: output=output, temp=temp
+2025-09-23 08:34:09,181 - src.core.simple_queue - INFO - Initialized in-memory job queue for processor processor-1
+2025-09-23 08:34:09,181 - src.services.video_processing - INFO - ✅ Configured system espeak-ng for Kokoro TTS:
+2025-09-23 08:34:09,181 - src.services.video_processing - INFO -    ESPEAK_PATH: /opt/homebrew/bin/espeak-ng
+2025-09-23 08:34:09,181 - src.services.video_processing - INFO -    DATA_PATH: /opt/homebrew/share/espeak-ng-data
+2025-09-23 08:34:09,181 - src.core.simple_queue - INFO - Registered handler for workflow: moneyprinter
+2025-09-23 08:34:09,181 - src.core.simple_queue - INFO - Registered handler for workflow: brainrot
+2025-09-23 08:34:09,181 - src.main - INFO - Video Processing API started successfully on 0.0.0.0:8090
+2025-09-23 08:34:09,181 - src.core.simple_queue - INFO - Starting job processing for processor processor-1
+2025-09-23 08:34:09,181 - src.core.simple_queue - INFO - Started processing worker: worker-0
+2025-09-23 08:34:09,181 - src.core.simple_queue - INFO - Started processing worker: worker-1
+2025-09-23 08:34:24,144 - src.main - INFO - Shutting down Video Processing API...
+2025-09-23 08:34:24,144 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:34:24,145 - src.core.simple_queue - INFO - Stopped processing worker: worker-0
+2025-09-23 08:34:24,145 - src.core.simple_queue - INFO - Stopped processing worker: worker-1
+2025-09-23 08:34:24,145 - src.core.simple_queue - INFO - Stopping job processing
+2025-09-23 08:34:24,145 - src.main - INFO - Video Processing API shutdown complete

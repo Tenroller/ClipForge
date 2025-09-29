@@ -378,7 +378,7 @@ class UnifiedJobQueue:
                                 'started_at': db_job.get('started_at'),
                                 'completed_at': db_job.get('ended_at'),
                                 'duration': db_job.get('duration_seconds'),
-                                'result': db_job.get('result_data'),
+                                'result': db_job.get('result'),  # Changed from result_data to result
                                 'error': db_job.get('error_message'),
                                 'logs': db_job.get('logs', [])
                             }
@@ -588,7 +588,7 @@ class UnifiedJobQueue:
                     self.job_store.update_job(
                         job_id,
                         status="completed",
-                        result_data=result,
+                        result=result,  # Changed from result_data to result
                         duration_seconds=int(job.duration or 0),
                         ended_at=job.completed_at.isoformat() if job.completed_at else None
                     )

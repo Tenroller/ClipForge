@@ -45,7 +45,7 @@ export default function JobStartedNotification({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-3">
           <FaCheckCircle className="size-5 text-green-600" />
-          Job Started Successfully
+          {autoRedirect ? 'Job Started Successfully' : 'Job In Progress'}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -78,21 +78,30 @@ export default function JobStartedNotification({
           </Button>
         </div>
 
-        {autoRedirect && (
+        {autoRedirect ? (
           <div className="text-xs text-center text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30">
             <p className="flex items-center justify-center gap-2">
               <FaSpinner className="size-3 animate-spin" />
               Redirecting to job monitoring in {Math.ceil(redirectDelay / 1000)} seconds...
             </p>
           </div>
+        ) : (
+          <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+            <p>
+              This job is currently running in the background. Click "Monitor Progress" 
+              to view detailed progress and logs.
+            </p>
+          </div>
         )}
 
-        <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-          <p>
-            Your job is now being processed in the background. You'll be redirected to the 
-            monitoring page where you can track progress in real-time and view detailed logs.
-          </p>
-        </div>
+        {autoRedirect && (
+          <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
+            <p>
+              Your job is now being processed in the background. You'll be redirected to the 
+              monitoring page where you can track progress in real-time and view detailed logs.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

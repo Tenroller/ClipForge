@@ -65,7 +65,7 @@ export default function LandingPage({ onGetStarted }: LandingPageProps) {
       id: 'realtime-progress',
       icon: <FaBolt className="size-6 text-yellow-500" />,
       title: 'Real-time Progress',
-      description: 'Live updates and preview as your video is being generated with WebSocket integration.',
+      description: 'Live updates and preview as your video is being generated with REST API integration.',
       gradient: 'from-yellow-500 to-orange-500'
     }
   ]

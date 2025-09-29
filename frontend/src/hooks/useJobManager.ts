@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import JobManager, { type ManagedJob } from '@/lib/jobManager'
+import { JobManager, type ManagedJob } from '@/lib/jobManager'
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
 
@@ -33,8 +33,6 @@ function getJobManagerInstance(): JobManager {
   if (!jobManagerInstance) {
     devLog('useJobManager: Creating new JobManager singleton instance')
     jobManagerInstance = new JobManager(API_BASE)
-    // Load persisted jobs on first initialization
-    jobManagerInstance.loadFromLocalStorage()
   }
   return jobManagerInstance
 }
@@ -90,7 +88,33 @@ export function useJobManager(): UseJobManagerReturn {
   ) => {
     devLog('useJobManager: addJob called with', { id, workflow, payload });
     const jobManager = getJobManagerInstance()
-    jobManager.addJob(id, workflow, payload)
+    
+    // Create a new ManagedJob
+    const newJob: ManagedJob = {
+      id,
+      workflow,
+      status: 'queued',
+      steps: workflow === 'moneyprinter' 
+        ? [
+            { key: 'validate_env', label: 'Validating Environment', done: false },
+            { key: 'fetch_music', label: 'Fetching Background Music', done: false },
+            { key: 'script_generation', label: 'Generating Script', done: false },
+            { key: 'search_terms', label: 'Extracting Search Terms', done: false },
+            { key: 'stock_download', label: 'Downloading Stock Footage', done: false },
+            { key: 'tts', label: 'Generating Speech', done: false },
+            { key: 'subtitles', label: 'Creating Subtitles', done: false },
+            { key: 'compose_video', label: 'Composing Final Video', done: false }
+          ]
+        : [
+            { key: 'process_video', label: 'Processing Video', done: false },
+            { key: 'generate_compilations', label: 'Generating Compilations', done: false }
+          ],
+      createdAt: Date.now(),
+      progress: 0,
+      isNewlyCreated: true // Mark as newly created
+    }
+    
+    jobManager.addJob(newJob)
   }
 
   const removeJob = (id: string) => {
@@ -100,9 +124,7 @@ export function useJobManager(): UseJobManagerReturn {
   }
 
   const clearCompletedJobs = () => {
-    const jobManager = getJobManagerInstance()
-    jobManager.clearCompletedJobs()
-    setJobs(jobManager.getAllJobs())
+    setJobs(prevJobs => prevJobs.filter(job => !['done', 'error', 'cancelled'].includes(job.status)))
   }
 
   const getJob = (id: string): ManagedJob | undefined => {
@@ -111,18 +133,30 @@ export function useJobManager(): UseJobManagerReturn {
   }
 
   const hasActiveJobs = (): boolean => {
-    const jobManager = getJobManagerInstance()
-    return jobManager.hasActiveJobs()
+    return jobs.some(job => !['done', 'error', 'cancelled'].includes(job.status))
   }
 
   const getActiveJobs = (): ManagedJob[] => {
-    const jobManager = getJobManagerInstance()
-    return jobManager.getActiveJobs()
+    return jobs.filter(job => !['done', 'error', 'cancelled'].includes(job.status))
   }
 
   const validateAllJobs = async (): Promise<number> => {
+    // Validate jobs by checking their status on the server
+    let removedCount = 0
     const jobManager = getJobManagerInstance()
-    const removedCount = await jobManager.validateAllJobs()
+    
+    for (const job of jobs) {
+      try {
+        const response = await fetch(`${API_BASE}/api/jobs/${job.id}`)
+        if (response.status === 404) {
+          jobManager.removeJob(job.id)
+          removedCount++
+        }
+      } catch (error) {
+        devLog(`Failed to validate job ${job.id}:`, error)
+      }
+    }
+    
     // Refresh the local jobs state after validation
     setJobs(jobManager.getAllJobs())
     return removedCount
@@ -151,20 +185,44 @@ export function useJobManager(): UseJobManagerReturn {
   }
 
   const getResumableJobs = async (): Promise<ManagedJob[]> => {
-    const jobManager = getJobManagerInstance()
-    return jobManager.getResumableJobs()
+    const resumableJobs: ManagedJob[] = []
+    
+    for (const job of jobs) {
+      if (['error', 'cancelled'].includes(job.status)) {
+        const canResume = await checkJobResumable(job.id)
+        if (canResume) {
+          resumableJobs.push(job)
+        }
+      }
+    }
+    
+    return resumableJobs
+  }
+
+  const checkJobResumable = async (jobId: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`${API_BASE}/api/jobs/${jobId}/resumable`)
+      return response.ok
+    } catch (error) {
+      return false
+    }
   }
 
   const forceCleanup = async (): Promise<void> => {
     const jobManager = getJobManagerInstance()
-    await jobManager.forceCleanup()
+    
+    // Remove all completed jobs
+    const completedJobs = jobs.filter(job => ['done', 'error', 'cancelled'].includes(job.status))
+    completedJobs.forEach(job => jobManager.removeJob(job.id))
+    
     // Refresh the local jobs state after cleanup
     setJobs(jobManager.getAllJobs())
   }
 
   const fetchJobLineage = async (id: string, options?: { force?: boolean }): Promise<{ ancestors: any[]; descendants: any[] }> => {
     const jobManager = getJobManagerInstance()
-    return jobManager.fetchJobLineage(id, options)
+    const lineage = await jobManager.getJobLineage(id)
+    return lineage || { ancestors: [], descendants: [] }
   }
 
   return {

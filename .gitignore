@@ -60,3 +60,13 @@ jobs.db
 *.m4a
 /backend/cache
 /backend/venv
+/video-processor/vendors/moneyprinter/__pycache__
+/video-processor/vendors/moneyprinter/subtitles
+/video-processor/vendors/temp
+/video-processor/vendors/subtitles
+/video-processor/vendors/Compilation/__pycache__
+/video-processor/vendors/AIvideos/__pycache__
+/video-processor/output
+/video-processor/src/core/__pycache__
+/video-processor/src/models/__pycache__
+/video-processor/src/services/__pycache__

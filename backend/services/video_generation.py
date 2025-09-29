@@ -69,16 +69,8 @@ def _update_job(job_id: str, **fields: Any) -> None:
 
 
 def _enqueue_job_update(job_id: str) -> None:
-    """Thread-safe enqueue of a job update for websocket broadcast."""
-    try:
-        from ..core.lifespan import MAIN_LOOP, ASYNC_QUEUE
-        job_queue = get_job_queue()
-        payload = job_queue.get_job_status(job_id)
-        if payload and MAIN_LOOP is not None:
-            MAIN_LOOP.call_soon_threadsafe(ASYNC_QUEUE.put_nowait, (job_id, payload))
-    except Exception:
-        # Best-effort only
-        pass
+    """No-op: WebSocket broadcasting has been removed, using REST API polling instead."""
+    pass
 
 
 def run_moneyprinter_job(job_id: str, req: MoneyPrinterRequest):
@@ -302,7 +294,17 @@ def run_brainrot_job(job_id: str, req_dict: dict):
         tracker.add_log("Initialized TikYou generator", "info", "brainrot")
 
         if not start_step or start_step == "process_video":
-            video_clips = generator.process_single_video(req.youtubeUrl)
+            # Process video from either YouTube URL or uploaded file
+            if req.youtubeUrl:
+                tracker.add_log(f"Processing YouTube URL: {req.youtubeUrl}", "info", "brainrot")
+                video_clips = generator.process_single_video(req.youtubeUrl)
+            elif req.uploadedVideoPath:
+                tracker.add_log(f"Processing uploaded video: {req.uploadedVideoPath}", "info", "brainrot")
+                video_clips = generator._process_uploaded_video(req.uploadedVideoPath)
+            else:
+                tracker.add_log("No video source provided", "error", "brainrot")
+                raise RuntimeError("No video source provided")
+                
             if not video_clips:
                 tracker.add_log("No clips generated from source video", "error", "brainrot")
                 raise RuntimeError("No clips generated from source video")
@@ -336,7 +338,8 @@ def run_brainrot_job(job_id: str, req_dict: dict):
 
         # Generate videos with progress tracking (may fail if video_clips empty on resume)
         generator.generate_tikyou_videos(
-            req.youtubeUrl,
+            youtube_url=req.youtubeUrl,
+            uploaded_video_path=req.uploadedVideoPath,
             num_compilations=None if req.unlimited else req.numCompilations,
             min_duration=req.minDuration,
             max_duration=req.maxDuration,

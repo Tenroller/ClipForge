@@ -8,7 +8,7 @@ import uuid
 
 from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
-from ...job_queue_unified import get_job_queue
+from ...services.video_orchestrator import get_video_orchestrator
 from ...models.requests import MoneyPrinterRequest, BrainrotRequest
 
 from ...services.job_management import JobManagementService
@@ -17,7 +17,7 @@ router = APIRouter()
 job_service = JobManagementService()
 logger = get_logger("job_remake")
 job_store = get_job_store()
-job_queue = get_job_queue()
+video_orchestrator = get_video_orchestrator()
 
 
 @router.get("/jobs/resumable", summary="Get Resumable Jobs")
@@ -69,7 +69,7 @@ def job_resumable(job_id: str) -> Dict[str, Any]:
 
 
 @router.post("/jobs/{job_id}/remake", summary="Remake (requeue) a completed or failed job")
-def remake_job(job_id: str) -> Dict[str, Any]:
+async def remake_job(job_id: str) -> Dict[str, Any]:
     """Clone a previous job's request parameters and enqueue a new job.
 
     Returns a response matching frontend expectation.
@@ -86,23 +86,44 @@ def remake_job(job_id: str) -> Dict[str, Any]:
     new_job_id = str(uuid.uuid4())
 
     try:
+        # Create job in database first
+        job_store.create_job(
+            new_job_id,
+            workflow,
+            request_data,
+            user_id=None
+        )
+
+        # Submit to orchestrator
+        success = False
+        
         if workflow == "moneyprinter":
             # Reconstruct request model (best effort)
             try:
                 req_model = MoneyPrinterRequest(**request_data)
             except Exception:
                 raise HTTPException(status_code=400, detail="Cannot reconstruct original request data for moneyprinter job")
-            from ...services.video_generation import run_moneyprinter_job
-            job_queue.add_job(run_moneyprinter_job, new_job_id, req_model, job_id=new_job_id, workflow=workflow)
+            
+            success = await video_orchestrator.submit_moneyprinter_job(new_job_id, req_model)
+            
         elif workflow == "brainrot":
             try:
                 req_model = BrainrotRequest(**request_data)
             except Exception:
                 raise HTTPException(status_code=400, detail="Cannot reconstruct original request data for brainrot job")
-            from ...services.video_generation import run_brainrot_job
-            job_queue.add_job(run_brainrot_job, new_job_id, req_model.model_dump(), job_id=new_job_id, workflow=workflow)
+            
+            success = await video_orchestrator.submit_brainrot_job(new_job_id, req_model)
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported workflow '{workflow}' for remake")
+
+        if not success:
+            # Update job status to error
+            job_store.update_job(
+                new_job_id,
+                status="error",
+                error_message="Failed to submit to video processor"
+            )
+            raise HTTPException(status_code=500, detail="Failed to submit job to video processor")
 
         # Optional: log event
         try:
@@ -134,7 +155,7 @@ def remake_job(job_id: str) -> Dict[str, Any]:
 
 
 @router.post("/jobs/{job_id}/resume", summary="Resume a failed/cancelled job from its last step")
-def resume_job(job_id: str) -> Dict[str, Any]:
+async def resume_job(job_id: str) -> Dict[str, Any]:
     """Attempt to resume a previously failed or cancelled job.
 
     Strategy:
@@ -170,49 +191,6 @@ def resume_job(job_id: str) -> Dict[str, Any]:
     except Exception:
         pass  # Fail open if config load has an issue
 
-    # Extract original args/kwargs if present (fallback to request_data model reconstruction per workflow)
-    orig_args = request_data.get("args", [])
-    orig_kwargs = request_data.get("kwargs", {})
-    priority_name = request_data.get("priority", "NORMAL")
-
-    # Map workflow to execution function (authoritative mapping)
-    exec_func = None
-    exec_payload = None
-    try:
-        if workflow == "moneyprinter":
-            from ...services.video_generation import run_moneyprinter_job
-            exec_func = run_moneyprinter_job
-            # Reconstruct request model (MoneyPrinterRequest signature: first positional param is job_id when queued currently)
-            # We stored original arguments; safer to rebuild from kwargs model form if present
-            model_payload = orig_args[1] if len(orig_args) > 1 else orig_kwargs or request_data.get("kwargs_body") or request_data
-            try:
-                exec_payload = MoneyPrinterRequest(**(model_payload if isinstance(model_payload, dict) else {}))
-            except Exception:
-                raise HTTPException(status_code=400, detail="Cannot reconstruct MoneyPrinterRequest for resume")
-        elif workflow == "brainrot":
-            from ...services.video_generation import run_brainrot_job
-            exec_func = run_brainrot_job
-            model_payload = orig_args[1] if len(orig_args) > 1 else orig_kwargs or request_data.get("kwargs_body") or request_data
-            try:
-                # brainrot path used .model_dump() originally; ensure dict
-                exec_payload = BrainrotRequest(**(model_payload if isinstance(model_payload, dict) else {})).model_dump()
-            except Exception:
-                raise HTTPException(status_code=400, detail="Cannot reconstruct BrainrotRequest for resume")
-        else:
-            raise HTTPException(status_code=400, detail=f"Unsupported workflow '{workflow}' for resume")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed preparing resume: {e}")
-
-    from ...job_queue_unified import JobPriority, get_job_queue
-    job_queue_local = get_job_queue()
-    # Determine priority
-    try:
-        priority = JobPriority[priority_name] if priority_name in JobPriority.__members__ else JobPriority.NORMAL
-    except Exception:
-        priority = JobPriority.NORMAL
-
     new_job_id = str(uuid.uuid4())
 
     # Determine starting step for partial continuation
@@ -235,14 +213,49 @@ def resume_job(job_id: str) -> Dict[str, Any]:
 
     resume_metadata = {"start_step": start_step, "resumed_from": job_id, "parent_step": parent_step}
 
-    # Enqueue new job
     try:
+        # Create job in database first
+        job_store.create_job(
+            new_job_id,
+            workflow,
+            request_data,
+            user_id=None
+        )
+
+        # Submit to orchestrator
+        success = False
+        
         if workflow == "moneyprinter":
-            job_queue_local.add_job(exec_func, new_job_id, exec_payload, job_id=new_job_id, workflow=workflow, priority=priority)
+            try:
+                exec_payload = MoneyPrinterRequest(**request_data)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Cannot reconstruct MoneyPrinterRequest for resume")
+            
+            success = await video_orchestrator.submit_moneyprinter_job(new_job_id, exec_payload)
+            
         elif workflow == "brainrot":
-            job_queue_local.add_job(exec_func, new_job_id, exec_payload, job_id=new_job_id, workflow=workflow, priority=priority)
+            try:
+                exec_payload = BrainrotRequest(**request_data)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Cannot reconstruct BrainrotRequest for resume")
+            
+            success = await video_orchestrator.submit_brainrot_job(new_job_id, exec_payload)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported workflow '{workflow}' for resume")
+
+        if not success:
+            # Update job status to error
+            job_store.update_job(
+                new_job_id,
+                status="error",
+                error_message="Failed to submit to video processor"
+            )
+            raise HTTPException(status_code=500, detail="Failed to submit job to video processor")
+            
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to enqueue resumed job: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed preparing resume: {e}")
 
     # Update resume linkage metadata
     try:

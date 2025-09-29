@@ -1,0 +1,121 @@
+# VideoHelper Requirements - Unified Installation
+# All dependencies in one file for easy installation
+
+# =============================================================================
+# CORE REQUIREMENTS (Always needed)
+# =============================================================================
+# Web server & API
+uvicorn==0.35.0
+fastapi==0.115.14
+starlette==0.41.3
+python-multipart==0.0.20
+
+# Video processing (core)
+moviepy==2.1.2
+imageio==2.37.0
+imageio-ffmpeg==0.6.0
+opencv-python==4.11.0.86
+proglog==0.1.12
+
+# Audio/TTS (core)
+soundfile==0.13.1
+
+# Data & utils (core)
+requests==2.32.4
+python-dotenv==1.1.1
+termcolor==2.4.0
+tqdm==4.67.1
+psutil==7.0.0
+Pillow>=10.4.0,<11.0
+colorama==0.4.6
+PyJWT==2.10.1
+
+# Basic TTS support
+espeakng_loader==0.2.4
+
+# Database support
+prometheus-client==0.21.1
+SQLAlchemy==2.0.36
+psycopg2-binary==2.9.10
+
+# =============================================================================
+# AI/ML DEPENDENCIES (For AI-powered video generation)
+# =============================================================================
+# AI/LLM services - Gemini only
+google-generativeai==0.8.4
+
+# Enhanced ASR for better word-level timestamps
+stable-ts==2.17.5
+faster-whisper==1.1.0
+whisper-timestamped==1.15.4
+pysubs2==1.7.3
+ffmpeg-python==0.2.0
+
+# TTS pipeline (advanced)
+kokoro>=0.9.2,<0.9.4; python_version >= "3.10" and python_version < "3.13"
+kokoro==0.7.16; python_version < "3.10"
+
+# =============================================================================
+# BRAINROT DEPENDENCIES (For TikTok-style compilations)
+# =============================================================================
+# Video downloading and processing
+yt-dlp==2025.6.30
+scenedetect==0.6.6
+
+# ML dependencies for brainrot
+torch==2.6.0
+torchaudio==2.6.0
+torchvision==0.21.0
+rich==14.0.0
+
+# NLP for title generation
+spacy==3.8.7
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+
+# =============================================================================
+# MONEYPRINTER EXTRAS (For advanced text-to-video features)
+# =============================================================================
+# Web scraping and automation (for stock video sources)
+g4f
+curl_cffi
+undetected_chromedriver
+
+# Headless browser automation
+playwright==1.54.0
+
+# Subtitle processing
+srt_equalizer==0.1.8
+
+# =============================================================================
+# DEVELOPMENT & TESTING (Optional)
+# =============================================================================
+# Testing
+pytest==8.3.3
+httpx==0.28.1
+
+# Observability (optional in production)
+sentry-sdk==2.18.0
+
+# Job queue (optional - for horizontal scaling)
+redis==5.2.1
+rq==2.0.0
+
+# CORS support (if needed for development)
+flask==3.0.0
+flask-cors==4.0.0
+
+# =============================================================================
+# INSTALLATION INSTRUCTIONS
+# =============================================================================
+
+# Full installation (all features):
+# pip install -r requirements.txt
+
+# Minimal installation (core functionality only):
+# pip install uvicorn==0.35.0 fastapi==0.115.14 starlette==0.41.3 moviepy==2.1.2 imageio==2.37.0 imageio-ffmpeg==0.6.0 opencv-python==4.11.0.86 proglog==0.1.12 soundfile==0.13.1 requests==2.32.4 python-dotenv==1.1.1 termcolor==2.4.0 tqdm==4.67.1 psutil==7.0.0 Pillow>=10.4.0,<11.0 colorama==0.4.6 espeakng_loader==0.2.4 prometheus-client==0.21.1
+
+# MoneyPrinter only (without Brainrot heavy dependencies):
+# pip install -r requirements.txt
+# pip uninstall torch torchaudio torchvision
+
+

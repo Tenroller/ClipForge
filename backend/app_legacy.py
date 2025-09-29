@@ -621,7 +621,8 @@ class MoneyPrinterRequest(BaseModel):
 
 
 class BrainrotRequest(BaseModel):
-    youtubeUrl: str
+    youtubeUrl: Optional[str] = Field(default=None, description="YouTube URL to download and process")
+    uploadedVideoPath: Optional[str] = Field(default=None, description="Path to uploaded video file (alternative to YouTube URL)")
     numCompilations: int = Field(default=1, ge=1)
     minDuration: int = Field(default=60, ge=10, le=3600)
     maxDuration: int = Field(default=110, ge=10, le=3600)
@@ -631,7 +632,24 @@ class BrainrotRequest(BaseModel):
     @field_validator('youtubeUrl')
     @classmethod
     def validate_youtube_url_field(cls, v):
-        return validate_youtube_url(v)
+        if v is not None:
+            return validate_youtube_url(v)
+        return v
+        
+    @field_validator('uploadedVideoPath')
+    @classmethod
+    def validate_uploaded_video_path(cls, v):
+        if v is not None:
+            from .validation import validate_video_file_path
+            return validate_video_file_path(v)
+        return v
+        
+    def model_post_init(self, __context) -> None:
+        """Ensure exactly one of youtubeUrl or uploadedVideoPath is provided"""
+        if not self.youtubeUrl and not self.uploadedVideoPath:
+            raise ValueError("Either youtubeUrl or uploadedVideoPath must be provided")
+        if self.youtubeUrl and self.uploadedVideoPath:
+            raise ValueError("Cannot provide both youtubeUrl and uploadedVideoPath - choose one input method")
 
 
 
@@ -798,7 +816,7 @@ def health():
 
     **Required Environment Variables:**
     - `PEXELS_API_KEY`: For stock video search
-    - `GOOGLE_API_KEY` or `GEMINI_API_KEY`: For AI script generation
+    - `GEMINI_API_KEY`: For AI script generation
 
     """
 )
@@ -813,6 +831,20 @@ def moneyprinter_generate(
 
     log_job_event(logger, job_id, "moneyprinter", "created",
                 subject=req.videoSubject[:100], voice=req.voice, ai_model=req.aiModel)
+    
+    # Create progress tracker and initial logs immediately
+    from utils.progress_tracker import get_progress_tracker
+    tracker = get_progress_tracker(job_id)
+    tracker.add_log("MoneyPrinter job created and queued for processing", "info", "moneyprinter")
+    tracker.add_log(f"Configuration: {req.aiModel} model, {req.voice} voice, {req.paragraphNumber} paragraphs", "info", "config")
+    
+    # Use unified queue for job management
+    job_queue.add_job(
+        _run_moneyprinter_job,
+        job_id,
+        req,
+        workflow="moneyprinter"
+    )
     
     max_retries = 5
     for attempt in range(max_retries):
@@ -1315,7 +1347,15 @@ def _run_brainrot_job(job_id: str, req_dict: dict):
         output_dir = str(job_output_dir.resolve())
 
         generator = TikYouGenerator(output_dir=output_dir)
-        video_clips = generator.process_single_video(req.youtubeUrl)
+        
+        # Process video from either YouTube URL or uploaded file
+        if req.youtubeUrl:
+            video_clips = generator.process_single_video(req.youtubeUrl)
+        elif req.uploadedVideoPath:
+            video_clips = generator._process_uploaded_video(req.uploadedVideoPath)
+        else:
+            raise RuntimeError("No video source provided")
+            
         if not video_clips:
             raise RuntimeError("No clips generated from source video")
 
@@ -1388,7 +1428,8 @@ def _run_brainrot_job(job_id: str, req_dict: dict):
 
         # Generate videos with progress tracking
         generator.generate_tikyou_videos(
-            req.youtubeUrl,
+            youtube_url=req.youtubeUrl,
+            uploaded_video_path=req.uploadedVideoPath,
             num_compilations=None if req.unlimited else req.numCompilations,
             min_duration=req.minDuration,
             max_duration=req.maxDuration,
@@ -1432,8 +1473,8 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
                 "has_hint": bool((req.topicHint or "").strip()),
             },
         )
-        if not (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")):
-            logger.warning("suggest-subject: Gemini API key not set (GOOGLE_API_KEY/GEMINI_API_KEY)")
+        if not os.getenv("GEMINI_API_KEY"):
+            logger.warning("suggest-subject: Gemini API key not set (GEMINI_API_KEY)")
     except Exception:
         pass
 
@@ -1504,7 +1545,7 @@ def list_models() -> Dict[str, List[str]]:
         import google.generativeai as genai
         
         # Get API key from environment
-        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.warning("No Gemini API key found, returning fallback models")
             # Fallback to static list if no API key
@@ -1675,6 +1716,16 @@ def brainrot_generate(
 ):
     try:
         job_id = str(uuid.uuid4())
+
+        # Create progress tracker and initial logs immediately
+        from utils.progress_tracker import get_progress_tracker
+        tracker = get_progress_tracker(job_id)
+        tracker.add_log("Brainrot compilation job created and queued for processing", "info", "brainrot")
+        if req.youtubeUrl:
+            tracker.add_log(f"Source: YouTube URL - {req.youtubeUrl}", "info", "config")
+        elif req.uploadedVideoPath:
+            tracker.add_log(f"Source: Uploaded video - {req.uploadedVideoPath}", "info", "config")
+        tracker.add_log(f"Compilations to generate: {req.numCompilations}, Duration: {req.minDuration}s-{req.maxDuration}s", "info", "config")
 
         # Use unified queue for job management
         job_queue.add_job(

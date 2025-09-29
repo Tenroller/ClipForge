@@ -5,7 +5,7 @@ Application configuration management.
 import os
 from pathlib import Path
 from typing import List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -48,6 +48,13 @@ class AppConfig:
     videohelper_use_streaming: bool = False
     videohelper_output_dir: str = ""
     
+    # Video processor orchestration
+    video_processor_urls: List[str] = field(default_factory=lambda: ["http://localhost:8090"])
+    video_processor_api_key: str = ""
+    video_processor_timeout: int = 30
+    video_processor_poll_interval: int = 5  # seconds
+    video_processor_max_retries: int = 3
+    
     # Memory management
     videohelper_temp_cleanup_interval: int = 30  # minutes
     videohelper_temp_max_age_hours: int = 24
@@ -58,16 +65,10 @@ class AppConfig:
     videohelper_db_pool_size: int = 10
     videohelper_db_pool_timeout: int = 60
     
-    # WebSocket
-    videohelper_ws_max_age_hours: int = 1
-    videohelper_ws_heartbeat: int = 30
-    
     # API keys
     api_key: str = ""
     pexels_api_key: str = ""
-    google_api_key: str = ""
     gemini_api_key: str = ""
-    openai_api_key: str = ""
     
     # Authentication
     jwt_secret_key: str = 'your-secret-key-change-this-in-production'
@@ -123,9 +124,11 @@ class AppConfig:
         cors_origins_env = os.getenv("CORS_ALLOW_ORIGINS", "*")
         if cors_origins_env.strip() == "*":
             cors_origins = [
-                "http://localhost:5173",
+                "http://localhost:3000",   # Frontend (production nginx)
+                "http://127.0.0.1:3000",
+                "http://localhost:5173",  # Vite dev server
                 "http://127.0.0.1:5173", 
-                "http://localhost:8080",
+                "http://localhost:8080",  # Backend self
                 "http://127.0.0.1:8080",
             ]
         else:
@@ -175,6 +178,13 @@ class AppConfig:
             videohelper_use_streaming=get_bool("VIDEOHELPER_USE_STREAMING", False),
             videohelper_output_dir=os.getenv("VIDEOHELPER_OUTPUT_DIR", str(output_dir)),
             
+            # Video processor orchestration
+            video_processor_urls=os.getenv("VIDEO_PROCESSOR_URLS", "http://localhost:8090").split(","),
+            video_processor_api_key=os.getenv("VIDEO_PROCESSOR_API_KEY", ""),
+            video_processor_timeout=get_int("VIDEO_PROCESSOR_TIMEOUT", 30),
+            video_processor_poll_interval=get_int("VIDEO_PROCESSOR_POLL_INTERVAL", 5),
+            video_processor_max_retries=get_int("VIDEO_PROCESSOR_MAX_RETRIES", 3),
+            
             # Memory management
             videohelper_temp_cleanup_interval=get_int("VIDEOHELPER_TEMP_CLEANUP_INTERVAL", 30),
             videohelper_temp_max_age_hours=get_int("VIDEOHELPER_TEMP_MAX_AGE_HOURS", 24),
@@ -185,16 +195,10 @@ class AppConfig:
             videohelper_db_pool_size=get_int("VIDEOHELPER_DB_POOL_SIZE", 10),
             videohelper_db_pool_timeout=get_int("VIDEOHELPER_DB_POOL_TIMEOUT", 60),
             
-            # WebSocket
-            videohelper_ws_max_age_hours=get_int("VIDEOHELPER_WS_MAX_AGE_HOURS", 1),
-            videohelper_ws_heartbeat=get_int("VIDEOHELPER_WS_HEARTBEAT", 30),
-            
             # API keys
             api_key=os.getenv("API_KEY", ""),
             pexels_api_key=os.getenv("PEXELS_API_KEY", ""),
-            google_api_key=os.getenv("GOOGLE_API_KEY", ""),
             gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
-            openai_api_key=os.getenv("OPENAI_API_KEY", ""),
             
             # Authentication
             jwt_secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production"),
@@ -217,11 +221,9 @@ class AppConfig:
             ('PEXELS_API_KEY', 'Required for stock video search'),
         ]
         
-        ai_keys = ['GOOGLE_API_KEY', 'GEMINI_API_KEY', 'OPENAI_API_KEY']
-        has_ai_key = any(os.getenv(key) for key in ai_keys)
-        
-        if not has_ai_key:
-            env_issues.append(f"One of {', '.join(ai_keys)} is required for AI text generation")
+        # Check for Gemini API key
+        if not os.getenv('GEMINI_API_KEY'):
+            env_issues.append("GEMINI_API_KEY is required for AI text generation")
         
         for env_var, description in required_env:
             if not os.getenv(env_var):

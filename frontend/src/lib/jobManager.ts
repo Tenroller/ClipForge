@@ -35,13 +35,14 @@ export type ManagedJob = {
   }
   started_at?: string
   duration_seconds?: number
+  isNewlyCreated?: boolean // Flag to track if job was just created
 }
 
 type JobUpdateListener = (job: ManagedJob) => void
 
 class JobManager {
   private jobs = new Map<string, ManagedJob>()
-  private connections = new Map<string, WebSocket>()
+  private pollingIntervals = new Map<string, number>()
   private listeners = new Set<JobUpdateListener>()
   private apiBase: string
   private lineageCache = new Map<string, { ancestors: any[]; descendants: any[]; fetchedAt: number }>()
@@ -49,81 +50,43 @@ class JobManager {
   constructor(apiBase: string) {
     this.apiBase = apiBase
     
-    // Clean up legacy localStorage entries that might contain outdated job IDs
-    this.cleanupLegacyData()
-  }
-
-  private cleanupLegacyData() {
-    try {
-      // Get legacy job data that might still exist
-      const legacyKeys = ['creator:lastJob', 'compilations:lastJob']
-      const legacyJobIds: string[] = []
-      
-      legacyKeys.forEach(key => {
-        const data = localStorage.getItem(key)
-        if (data) {
-          try {
-            const parsed = JSON.parse(data)
-            if (parsed?.jobId && typeof parsed.jobId === 'string') {
-              legacyJobIds.push(parsed.jobId)
-            }
-          } catch {}
-        }
-      })
-      
-      // Validate legacy job IDs and remove invalid ones
-      if (legacyJobIds.length > 0) {
-        devLog(`JobManager: Found ${legacyJobIds.length} legacy job IDs, validating...`)
-        legacyJobIds.forEach(async (jobId) => {
-          try {
-            const exists = await this.validateJobExists(jobId, 2) // Fewer retries for legacy cleanup
-            if (!exists) {
-              devLog(`JobManager: Cleaning up legacy job ${jobId} (404)`)
-              // Clear the specific legacy entries for this job
-              legacyKeys.forEach(key => {
-                const data = localStorage.getItem(key)
-                if (data) {
-                  try {
-                    const parsed = JSON.parse(data)
-                    if (parsed?.jobId === jobId) {
-                      localStorage.removeItem(key)
-                      devLog(`JobManager: Removed legacy localStorage key: ${key}`)
-                    }
-                  } catch {}
-                }
-              })
-            }
-          } catch (e) {
-            console.warn(`JobManager: Failed to validate legacy job ${jobId}:`, e)
-          }
-        })
-      }
-    } catch (e) {
-      console.error('Failed to cleanup legacy data:', e)
-    }
-  }
-
-  addJob(
-    id: string, 
-    workflow: 'moneyprinter' | 'brainrot', 
-    payload?: any
-  ) {
-    devLog(`JobManager: Adding new job ${id} with workflow ${workflow}`, payload);
-    const job: ManagedJob = {
-      id,
-      workflow,
-      status: 'queued',
-      steps: this.getInitialSteps(workflow, payload),
-      createdAt: Date.now(),
-      progress: 0,
-    }
+    // Load jobs from localStorage on startup
+    this.loadFromLocalStorage()
     
-    this.jobs.set(id, job)
-    this.connectJobUpdates(id)
+    // Start initial polling for any active jobs
+    const activeJobs = Array.from(this.jobs.values())
+      .filter(job => !['done', 'error', 'cancelled'].includes(job.status))
+    
+    devLog(`JobManager: Starting polling for ${activeJobs.length} active jobs`)
+    activeJobs.forEach(job => this.startPolling(job.id))
+
+    // Auto-cleanup completed jobs after 10 minutes
+    setInterval(() => {
+      this.cleanupOldJobs()
+    }, 10 * 60 * 1000)
+  }
+
+  addJob(job: ManagedJob) {
+    devLog(`JobManager: Adding job ${job.id}`)
+    // Mark as newly created and schedule removal of flag after 5 seconds
+    job.isNewlyCreated = true
+    this.jobs.set(job.id, job)
+    this.saveToLocalStorage()
     this.notifyListeners(job)
     
-    // Save to localStorage for persistence
-    this.saveToLocalStorage()
+    // Remove the "newly created" flag after 5 seconds
+    setTimeout(() => {
+      const existingJob = this.jobs.get(job.id)
+      if (existingJob && existingJob.isNewlyCreated) {
+        existingJob.isNewlyCreated = false
+        this.jobs.set(job.id, existingJob)
+        this.saveToLocalStorage()
+        this.notifyListeners(existingJob)
+      }
+    }, 5000)
+    
+    // Start polling for updates
+    this.startPolling(job.id)
   }
 
   getJob(id: string): ManagedJob | undefined {
@@ -131,266 +94,38 @@ class JobManager {
   }
 
   getAllJobs(): ManagedJob[] {
-    return Array.from(this.jobs.values()).sort((a, b) => b.createdAt - a.createdAt)
-  }
-
-  getActiveJobs(): ManagedJob[] {
-    return this.getAllJobs().filter(job => 
-      !['done', 'error', 'cancelled'].includes(job.status)
-    )
-  }
-
-  async checkResumable(id: string): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.apiBase}/api/jobs/${id}/resumable`)
-      if (res.ok) {
-        const data = await res.json()
-        return data.can_resume || false
-      }
-      return false
-    } catch {
-      return false
-    }
-  }
-
-  async resumeJob(id: string): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.apiBase}/api/jobs/${id}/resume`, { method: 'POST' })
-      if (!res.ok) {
-        console.error('Resume failed', res.status)
-        return false
-      }
-      const data = await res.json()
-      if (data?.jobId && data?.workflow) {
-        // Register new job locally
-        this.addJob(data.jobId, data.workflow, { resumedFrom: id, resumeAttempt: data.resume_attempt })
-        return true
-      }
-      return false
-    } catch (e) {
-      console.error('Failed to resume job:', e)
-      return false
-    }
-  }
-
-  async fetchJobLineage(id: string, { force = false }: { force?: boolean } = {}): Promise<{ ancestors: any[]; descendants: any[] }> {
-    const cached = this.lineageCache.get(id)
-    if (cached && !force && Date.now() - cached.fetchedAt < 30_000) {
-      return { ancestors: cached.ancestors, descendants: cached.descendants }
-    }
-    try {
-      const res = await fetch(`${this.apiBase}/api/jobs/${id}/lineage`)
-      if (!res.ok) throw new Error(`Lineage fetch failed: ${res.status}`)
-      const data = await res.json()
-      const record = { ancestors: data.ancestors || [], descendants: data.descendants || [], fetchedAt: Date.now() }
-      this.lineageCache.set(id, record)
-      return { ancestors: record.ancestors, descendants: record.descendants }
-    } catch (e) {
-      console.error('Failed to fetch lineage', e)
-      return { ancestors: [], descendants: [] }
-    }
-  }
-
-  async getResumableJobs(): Promise<ManagedJob[]> {
-    try {
-      const res = await fetch(`${this.apiBase}/api/jobs/resumable`)
-      if (res.ok) {
-        const data = await res.json()
-        return data.resumable_jobs.map((job: any) => {
-          // Calculate completed steps based on workflow and current step
-          const steps = this.getInitialSteps(job.workflow)
-          const currentStepIndex = steps.findIndex(s => s.key === job.step)
-          const completedSteps = Math.max(0, currentStepIndex)
-          
-          return {
-            id: job.id,
-            workflow: job.workflow,
-            status: job.status,
-            steps: steps,
-            createdAt: new Date(job.created_at).getTime(),
-            progress: completedSteps > 0 ? Math.round((completedSteps / steps.length) * 100) : 0,
-            error: job.error,
-            canResume: true,
-            resumeInfo: {
-              lastCompletedStep: job.step || 'init',
-              completedSteps: completedSteps,
-              nextStep: job.next_step || 'unknown'
-            }
-          }
-        })
-      }
-      return []
-    } catch (e) {
-      console.error('Failed to get resumable jobs:', e)
-      return []
-    }
-  }
-
-  hasActiveJobs(): boolean {
-    return this.getActiveJobs().length > 0
-  }
-
-  async checkAndUpdateResumability(): Promise<void> {
-    // Check resumability for error/cancelled jobs
-    const errorJobs = this.getAllJobs().filter(job => 
-      ['error', 'cancelled'].includes(job.status)
-    )
-    
-    for (const job of errorJobs) {
-      const canResume = await this.checkResumable(job.id)
-      if (canResume !== job.canResume) {
-        job.canResume = canResume
-        this.jobs.set(job.id, job)
-        this.notifyListeners(job)
-      }
-    }
+    return Array.from(this.jobs.values())
   }
 
   removeJob(id: string) {
+    devLog(`JobManager: Removing job ${id}`)
     this.disconnectJob(id)
     this.jobs.delete(id)
     this.saveToLocalStorage()
   }
 
-  clearCompletedJobs() {
-    const toRemove = Array.from(this.jobs.entries())
-      .filter(([_, job]) => ['done', 'error', 'cancelled'].includes(job.status))
-      .map(([id]) => id)
-    
-    toRemove.forEach(id => this.removeJob(id))
-  }
-
+  // Add listener
   addListener(listener: JobUpdateListener) {
     this.listeners.add(listener)
     devLog(`JobManager: Added listener, total listeners: ${this.listeners.size}`)
   }
 
+  // Remove listener
   removeListener(listener: JobUpdateListener) {
     this.listeners.delete(listener)
     devLog(`JobManager: Removed listener, total listeners: ${this.listeners.size}`)
   }
 
+  // Notify all listeners of job update
   private notifyListeners(job: ManagedJob) {
-    devLog(`JobManager: Notifying ${this.listeners.size} listeners about job ${job.id}`, job);
+    devLog(`JobManager: Notifying ${this.listeners.size} listeners about job ${job.id}`, job)
     this.listeners.forEach(listener => listener(job))
   }
 
-  private connectJobUpdates(id: string) {
-    this.disconnectJob(id)
+  private startPolling(id: string) {
+    // Clear any existing polling interval for this job
+    this.stopPolling(id)
     
-    // First check if the job exists via HTTP before establishing WebSocket
-    this.validateJobExists(id).then(exists => {
-      if (!exists) {
-        devLog(`JobManager: Job ${id} doesn't exist, removing from storage`)
-        this.removeJob(id)
-        return
-      }
-      
-      // Job exists, proceed with WebSocket connection
-      this.establishWebSocketConnection(id)
-    }).catch(() => {
-      // If validation fails, fall back to polling which will handle 404s
-      this.startPollingFallback(id)
-    })
-  }
-  
-  private async validateJobExists(id: string, maxRetries: number = 3): Promise<boolean> {
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const res = await fetch(`${this.apiBase}/api/jobs/${id}`)
-        if (res.status === 404) {
-          devLog(`JobManager: Job ${id} not found (404)`)
-          // If this is the last attempt, consider job doesn't exist
-          if (attempt === maxRetries - 1) {
-            return false
-          }
-          // Wait a bit before retrying in case of temporary persistence delay
-          await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)))
-          continue
-        }
-        if (res.status === 410) {
-          // Job was deleted/expired
-          devLog(`JobManager: Job ${id} was deleted (410)`)
-          return false
-        }
-        return res.ok
-      } catch (error) {
-        devLog(`JobManager: Network error validating job ${id} (attempt ${attempt + 1}):`, error)
-        // Network error - if this is the last attempt, assume job might exist
-        if (attempt === maxRetries - 1) {
-          devLog(`JobManager: Network error validating job ${id}, assuming it might exist`)
-          return true
-        }
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)))
-      }
-    }
-    // Fallback - assume job might exist if we can't determine
-    return true
-  }
-  
-  private establishWebSocketConnection(id: string) {
-    const wsUrl = `${this.apiBase.replace('http', 'ws')}/ws/jobs/${id}`
-    
-    try {
-      const ws = new WebSocket(wsUrl)
-      this.connections.set(id, ws)
-      
-      ws.onmessage = async (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          await this.updateJob(id, data)
-        } catch (e) {
-          console.error('Failed to parse job update:', e)
-        }
-        
-        try {
-          ws.send('ack')
-        } catch {}
-      }
-      
-      ws.onopen = () => {
-        try {
-          ws.send('hello')
-        } catch {}
-      }
-      
-      ws.onerror = (error) => {
-        devLog(`WebSocket error for job ${id}:`, error)
-        this.startPollingFallback(id)
-      }
-      
-      ws.onclose = (event) => {
-        // Check if the close was due to 404 or similar error
-        if (event.code === 1000 || event.code === 1006) {
-          // Normal closure or connection error, check if job still exists
-          this.validateJobExists(id).then(exists => {
-            if (!exists) {
-              devLog(`JobManager: Job ${id} no longer exists after WebSocket close, removing`)
-              this.removeJob(id)
-              return
-            }
-            
-            // Job exists but connection closed, try polling fallback
-            const job = this.jobs.get(id)
-            if (job && !['done', 'error', 'cancelled'].includes(job.status)) {
-              this.startPollingFallback(id)
-            }
-          }).catch(() => {
-            // If validation fails, still try polling which will handle cleanup
-            const job = this.jobs.get(id)
-            if (job && !['done', 'error', 'cancelled'].includes(job.status)) {
-              this.startPollingFallback(id)
-            }
-          })
-        }
-      }
-    } catch {
-      this.startPollingFallback(id)
-    }
-  }
-
-  private startPollingFallback(id: string) {
     const poll = async () => {
       try {
         const res = await fetch(`${this.apiBase}/api/jobs/${id}`)
@@ -427,16 +162,20 @@ class JobManager {
             this.jobs.set(id, polledJob)
             this.notifyListeners(polledJob)
             this.saveToLocalStorage()
+            this.stopPolling(id)
             return
           }
         }
         
         const doneCheckJob = this.jobs.get(id)
         if (doneCheckJob && ['done', 'error', 'cancelled'].includes(doneCheckJob.status)) {
+          this.stopPolling(id)
           return // Stop polling
         }
         
-        setTimeout(poll, 2000)
+        // Continue polling if job is still active
+        const intervalId = window.setTimeout(poll, 2000)
+        this.pollingIntervals.set(id, intervalId)
       } catch (e) {
         // Check if this is a fetch error that might indicate 404
         if (e instanceof Error && e.message.includes('404')) {
@@ -447,321 +186,285 @@ class JobManager {
         
         // For other fetch errors, retry with exponential backoff
         console.error('Polling failed for job', id, e)
-        setTimeout(poll, 5000) // Retry with longer delay
+        const intervalId = window.setTimeout(poll, 5000) // Retry with longer delay
+        this.pollingIntervals.set(id, intervalId)
       }
     }
     
-    setTimeout(poll, 1000)
+    // Start polling immediately, then continue with interval
+    const intervalId = window.setTimeout(poll, 1000)
+    this.pollingIntervals.set(id, intervalId)
+  }
+
+  private stopPolling(id: string) {
+    const intervalId = this.pollingIntervals.get(id)
+    if (intervalId) {
+      clearTimeout(intervalId)
+      this.pollingIntervals.delete(id)
+    }
+  }
+
+  private disconnectJob(id: string) {
+    this.stopPolling(id)
   }
 
   private async updateJob(id: string, data: any) {
     const job = this.jobs.get(id)
     if (!job) return
 
+    // Parse the job status response
     const updatedJob: ManagedJob = {
       ...job,
       status: data.status || job.status,
       step: data.step || job.step,
-      result: data.result || job.result,
       error: data.error || job.error,
+      result: data.result || job.result,
+      progress: this.calculateProgress(data.step, job.workflow),
       started_at: data.started_at || job.started_at,
-      duration_seconds: data.duration_seconds || job.duration_seconds,
+      duration_seconds: data.duration_seconds || job.duration_seconds
     }
 
-    // Update progress and steps
-    updatedJob.steps = this.updateSteps(job.steps, updatedJob.step, updatedJob.status)
-    updatedJob.progress = this.calculateProgress(updatedJob.steps)
+    // Update steps based on current step
+    if (data.step) {
+      updatedJob.steps = this.updateStepProgress(job.steps, data.step)
+    }
 
-    // Handle preview URL generation for completed jobs
-    if (updatedJob.status === 'done' && !updatedJob.previewUrl) {
-      updatedJob.previewUrl = await this.generatePreviewUrl(updatedJob)
+    // Check if we should fetch the latest video for done jobs
+    if (updatedJob.status === 'done' && !updatedJob.result) {
+      try {
+        const latestVideo = await getLatestManagedVideo(id)
+        if (latestVideo && latestVideo.created_at && job.started_at) {
+          const videoTime = new Date(latestVideo.created_at).getTime()
+          const jobTime = new Date(job.started_at).getTime()
+          if (videoTime >= jobTime) {
+            updatedJob.result = latestVideo
+            updatedJob.previewUrl = latestVideo.download_url
+          }
+        }
+      } catch (e) {
+        devLog('Failed to fetch latest video for completed job:', e)
+      }
     }
 
     this.jobs.set(id, updatedJob)
-    this.notifyListeners(updatedJob)
     this.saveToLocalStorage()
-
-    // Disconnect if job is terminal
-    if (['done', 'error', 'cancelled'].includes(updatedJob.status)) {
-      this.disconnectJob(id)
-      
-      // For cancelled jobs, we can remove them immediately from storage
-      // since they won't be resumable and just clutter the UI
-      if (updatedJob.status === 'cancelled') {
-        devLog(`JobManager: Job ${id} was cancelled, scheduling removal`)
-        // Remove after a short delay to allow UI to show the cancellation
-        setTimeout(() => {
-          if (this.jobs.get(id)?.status === 'cancelled') {
-            devLog(`JobManager: Removing cancelled job ${id} from storage`)
-            this.removeJob(id)
-          }
-        }, 5000) // 5 second delay
-      }
-    }
+    this.notifyListeners(updatedJob)
   }
 
-  private async generatePreviewUrl(job: ManagedJob): Promise<string | undefined> {
-    if (!job.result) return undefined
-
-    try {
-      // Prefer managed video record if available
-      const managed = await getLatestManagedVideo(job.id)
-      if (managed?.file_path) {
-        return downloadUrl(managed.file_path)
-      }
-
-      // Fallback: direct output path from job.result (legacy shape)
-      if (typeof job.result.output === 'string') {
-        return downloadUrl(job.result.output)
-      }
-    } catch (e) {
-      console.error('Failed to generate preview URL:', e)
-    }
+  private calculateProgress(step: string | undefined, workflow: string): number {
+    if (!step) return 0
     
-    return undefined
+    const steps = this.getWorkflowSteps(workflow)
+    const stepIndex = steps.findIndex(s => s.key === step)
+    if (stepIndex === -1) return 0
+    
+    return Math.round((stepIndex / steps.length) * 100)
   }
 
-  private disconnectJob(id: string) {
-    const ws = this.connections.get(id)
-    if (ws) {
-      try {
-        ws.close()
-      } catch {}
-      this.connections.delete(id)
-    }
+  private updateStepProgress(currentSteps: JobStep[], activeStep: string): JobStep[] {
+    return currentSteps.map(step => ({
+      ...step,
+      done: this.isStepCompleted(step.key, activeStep, currentSteps),
+      active: step.key === activeStep
+    }))
   }
 
-  private getInitialSteps(workflow: string, payload?: any): JobStep[] {
+  private isStepCompleted(stepKey: string, activeStep: string, steps: JobStep[]): boolean {
+    const stepIndex = steps.findIndex(s => s.key === stepKey)
+    const activeIndex = steps.findIndex(s => s.key === activeStep)
+    return stepIndex < activeIndex || (stepIndex === activeIndex && stepKey !== activeStep)
+  }
+
+  private getWorkflowSteps(workflow: string): JobStep[] {
     if (workflow === 'moneyprinter') {
-      const baseSteps = [
-        { key: 'validate_env', label: 'Validate Environment', done: false },
-        { key: 'script_generation', label: 'Generate Script', done: false },
-        { key: 'search_terms', label: 'Extract Search Terms', done: false },
-        { key: 'stock_download', label: 'Download Stock Videos', done: false },
-        { key: 'tts', label: 'Text-to-Speech', done: false },
-        { key: 'subtitles', label: 'Generate Subtitles', done: false },
-        { key: 'compose_video', label: 'Compose Final Video', done: false },
-        { key: 'done', label: 'Complete', done: false },
+      return [
+        { key: 'validate_env', label: 'Validating Environment', done: false },
+        { key: 'fetch_music', label: 'Fetching Background Music', done: false },
+        { key: 'script_generation', label: 'Generating Script', done: false },
+        { key: 'search_terms', label: 'Extracting Search Terms', done: false },
+        { key: 'stock_download', label: 'Downloading Stock Footage', done: false },
+        { key: 'tts', label: 'Generating Speech', done: false },
+        { key: 'subtitles', label: 'Creating Subtitles', done: false },
+        { key: 'compose_video', label: 'Composing Final Video', done: false }
       ]
-
-      // Add music fetch step if needed
-      if (payload?.useMusic && payload?.zipUrl) {
-        baseSteps.splice(1, 0, { key: 'fetch_music', label: 'Fetch Background Music', done: false })
-      }
-
-      return baseSteps
     } else if (workflow === 'brainrot') {
       return [
-        { key: 'process_video', label: 'Process Source Video', done: false },
-        { key: 'generate_compilations', label: 'Generate Compilations', done: false },
-        { key: 'done', label: 'Complete', done: false },
+        { key: 'process_video', label: 'Processing Video', done: false },
+        { key: 'generate_compilations', label: 'Generating Compilations', done: false }
       ]
     }
-
     return []
   }
 
-  private updateSteps(steps: JobStep[], currentStep?: string, status?: string): JobStep[] {
-    const updatedSteps = [...steps]
-    const currentIndex = currentStep ? steps.findIndex(s => s.key === currentStep) : -1
-    
-    updatedSteps.forEach((step, index) => {
-      step.done = index < currentIndex || (status === 'done' && step.key === 'done')
-      step.active = step.key === currentStep && !['done', 'error', 'cancelled'].includes(status || '')
-    })
-
-    return updatedSteps
+  // Resume capability checking
+  async checkJobResumable(jobId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.apiBase}/api/jobs/${jobId}/resumable`)
+      if (!response.ok) return false
+      
+      const data = await response.json()
+      const job = this.jobs.get(jobId)
+      if (job && data.can_resume) {
+        job.canResume = true
+        job.resumeInfo = {
+          lastCompletedStep: data.next_step || '',
+          completedSteps: 0, // Could be calculated from step info
+          nextStep: data.next_step || ''
+        }
+        this.jobs.set(jobId, job)
+        this.saveToLocalStorage()
+        this.notifyListeners(job)
+        return true
+      }
+      return false
+    } catch (error) {
+      devLog(`Failed to check resume capability for job ${jobId}:`, error)
+      return false
+    }
   }
 
-  private calculateProgress(steps: JobStep[]): number {
-    if (steps.length === 0) return 0
-    const completedSteps = steps.filter(s => s.done).length
-    return Math.round((completedSteps / steps.length) * 100)
+  // Get job lineage (parent/child relationships for resumed jobs)
+  async getJobLineage(jobId: string): Promise<{ ancestors: any[]; descendants: any[] } | null> {
+    const cacheKey = jobId
+    const cached = this.lineageCache.get(cacheKey)
+    
+    // Return cached result if less than 5 minutes old
+    if (cached && (Date.now() - cached.fetchedAt) < 5 * 60 * 1000) {
+      return { ancestors: cached.ancestors, descendants: cached.descendants }
+    }
+
+    try {
+      const response = await fetch(`${this.apiBase}/api/jobs/${jobId}/lineage`)
+      if (!response.ok) return null
+      
+      const data = await response.json()
+      
+      // Cache the result
+      this.lineageCache.set(cacheKey, {
+        ancestors: data.ancestors || [],
+        descendants: data.descendants || [],
+        fetchedAt: Date.now()
+      })
+      
+      return {
+        ancestors: data.ancestors || [],
+        descendants: data.descendants || []
+      }
+    } catch (error) {
+      devLog(`Failed to fetch lineage for job ${jobId}:`, error)
+      return null
+    }
+  }
+
+  // Download result
+  async downloadResult(jobId: string): Promise<boolean> {
+    const job = this.jobs.get(jobId)
+    if (!job || !job.result) return false
+
+    try {
+      const downloadPath = downloadUrl(job.result.download_url || job.result.file_path)
+      // Trigger download by creating a temporary link
+      const link = document.createElement('a')
+      link.href = downloadPath
+      link.download = job.result.filename || `video_${jobId}.mp4`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      return true
+    } catch (error) {
+      console.error('Download failed:', error)
+      return false
+    }
+  }
+
+  // Cancel job
+  async cancelJob(jobId: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.apiBase}/api/jobs/${jobId}/cancel`, { method: 'POST' })
+      if (response.ok) {
+        const job = this.jobs.get(jobId)
+        if (job) {
+          job.status = 'cancelled'
+          this.jobs.set(jobId, job)
+          this.saveToLocalStorage()
+          this.notifyListeners(job)
+          this.stopPolling(jobId)
+        }
+        return true
+      }
+      return false
+    } catch (error) {
+      console.error('Cancel failed:', error)
+      return false
+    }
+  }
+
+  private loadFromLocalStorage() {
+    try {
+      const stored = localStorage.getItem('managedJobs')
+      if (stored) {
+        const jobsData = JSON.parse(stored)
+        if (Array.isArray(jobsData)) {
+          jobsData.forEach((jobData: any) => {
+            const job: ManagedJob = {
+              ...jobData,
+              steps: jobData.steps || this.getWorkflowSteps(jobData.workflow)
+            }
+            this.jobs.set(job.id, job)
+          })
+          devLog(`JobManager: Loaded ${this.jobs.size} jobs from localStorage`)
+        }
+      }
+    } catch (e) {
+      devLog('Failed to load jobs from localStorage:', e)
+    }
   }
 
   private saveToLocalStorage() {
     try {
-      const jobsData = Array.from(this.jobs.entries()).map(([_, job]) => job)
-      localStorage.setItem('jobManager:jobs', JSON.stringify(jobsData))
+      const jobsArray = Array.from(this.jobs.values())
+      localStorage.setItem('managedJobs', JSON.stringify(jobsArray))
     } catch (e) {
-      console.error('Failed to save jobs to localStorage:', e)
+      devLog('Failed to save jobs to localStorage:', e)
     }
   }
 
-  loadFromLocalStorage() {
-    try {
-      const saved = localStorage.getItem('jobManager:jobs')
-      if (!saved) return
-
-      const jobsData = JSON.parse(saved)
-      if (!Array.isArray(jobsData)) return
-
-      devLog(`JobManager: Loading ${jobsData.length} jobs from localStorage`)
-      
-      // First, filter out any jobs that are clearly invalid (malformed IDs, etc.)
-      const validJobsData = jobsData.filter((jobData: any) => {
-        if (!jobData.id || !jobData.workflow || typeof jobData.id !== 'string') {
-          devLog(`JobManager: Removing malformed job data:`, jobData)
-          return false
+  private cleanupOldJobs() {
+    const now = Date.now()
+    const maxAge = 10 * 60 * 1000 // 10 minutes
+    
+    for (const [id, job] of this.jobs.entries()) {
+      if (['done', 'error', 'cancelled'].includes(job.status)) {
+        const age = now - job.createdAt
+        if (age > maxAge) {
+          devLog(`JobManager: Cleaning up old job ${id}`)
+          this.removeJob(id)
         }
-        return true
-      })
-
-      // Load valid jobs into memory but don't auto-connect yet
-      validJobsData.forEach((jobData: any) => {
-        this.jobs.set(jobData.id, jobData)
-      })
-      
-      // Batch validate all jobs first to remove 404s before attempting connections
-      this.batchValidateJobs().then((validJobIds) => {
-        devLog(`JobManager: ${validJobIds.length} jobs validated, reconnecting to active ones`)
-        
-        // Only now connect to active jobs that passed validation
-        validJobIds.forEach(jobId => {
-          const job = this.jobs.get(jobId)
-          if (job && !['done', 'error', 'cancelled'].includes(job.status)) {
-            devLog(`JobManager: Reconnecting to active job ${jobId}`)
-            this.connectJobUpdates(jobId)
-          }
-        })
-        
-        // Check resumability for failed/cancelled jobs
-        this.checkAndUpdateResumability()
-      }).catch(error => {
-        devLog(`JobManager: Error during batch validation:`, error)
-      })
-      
-    } catch (e) {
-      console.error('Failed to load jobs from localStorage:', e)
-    }
-  }
-
-  // Method to batch validate jobs without flooding with requests
-  private async batchValidateJobs(): Promise<string[]> {
-    const allJobs = this.getAllJobs()
-    const validJobIds: string[] = []
-    const invalidJobIds: string[] = []
-
-    devLog(`JobManager: Batch validating ${allJobs.length} jobs...`)
-
-    // Validate jobs in small batches to avoid overwhelming the server
-    const batchSize = 3
-    for (let i = 0; i < allJobs.length; i += batchSize) {
-      const batch = allJobs.slice(i, i + batchSize)
-      const promises = batch.map(async (job) => {
-        try {
-          const exists = await this.validateJobExists(job.id, 1) // Single retry for batch validation
-          return { jobId: job.id, exists }
-        } catch (e) {
-          devLog(`JobManager: Failed to validate job ${job.id}:`, e)
-          return { jobId: job.id, exists: false }
-        }
-      })
-
-      const results = await Promise.all(promises)
-      results.forEach(({ jobId, exists }) => {
-        if (exists) {
-          validJobIds.push(jobId)
-        } else {
-          invalidJobIds.push(jobId)
-        }
-      })
-
-      // Small delay between batches to be gentle on the server
-      if (i + batchSize < allJobs.length) {
-        await new Promise(resolve => setTimeout(resolve, 100))
       }
     }
-
-    // Remove invalid jobs
-    invalidJobIds.forEach(jobId => {
-      devLog(`JobManager: Removing non-existent job ${jobId}`)
-      this.removeJob(jobId)
-    })
-
-    if (invalidJobIds.length > 0) {
-      devLog(`JobManager: Cleaned up ${invalidJobIds.length} invalid jobs`)
-      this.saveToLocalStorage()
-    }
-
-    return validJobIds
   }
 
-  // Method to manually clean up non-existent jobs (can be called externally)
-  async validateAllJobs(): Promise<number> {
-    return await this.batchValidateJobs().then(validJobIds => {
-      const allJobIds = Array.from(this.jobs.keys())
-      const removedCount = allJobIds.length - validJobIds.length
-      return removedCount
-    })
-  }
-
-  // Force cleanup of localStorage and invalid jobs
-  async forceCleanup(): Promise<void> {
-    devLog('JobManager: Starting force cleanup...')
+  // Cleanup method
+  cleanup() {
+    devLog('JobManager: Cleaning up...')
     
-    // Clear any problematic localStorage entries
-    const keysToCheck = [
-      'jobManager:jobs',
-      'creator:lastJob', 
-      'compilations:lastJob'
-    ]
-    
-    keysToCheck.forEach(key => {
-      try {
-        const data = localStorage.getItem(key)
-        if (data) {
-          if (key === 'jobManager:jobs') {
-            // Validate job manager data
-            const parsed = JSON.parse(data)
-            if (Array.isArray(parsed)) {
-              const validJobs = parsed.filter(job => 
-                job.id && 
-                typeof job.id === 'string' && 
-                job.workflow && 
-                ['moneyprinter', 'brainrot'].includes(job.workflow)
-              )
-              if (validJobs.length !== parsed.length) {
-                devLog(`JobManager: Cleaned ${parsed.length - validJobs.length} malformed jobs from localStorage`)
-                localStorage.setItem(key, JSON.stringify(validJobs))
-              }
-            }
-          } else {
-            // Legacy job references - validate the job ID format
-            const parsed = JSON.parse(data)
-            if (parsed?.jobId && typeof parsed.jobId === 'string') {
-              // If it looks like a UUID, keep it for validation, otherwise remove
-              const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-              if (!uuidRegex.test(parsed.jobId)) {
-                devLog(`JobManager: Removing invalid legacy job ID format: ${parsed.jobId}`)
-                localStorage.removeItem(key)
-              }
-            }
-          }
-        }
-      } catch (e) {
-        devLog(`JobManager: Error cleaning localStorage key ${key}:`, e)
-        localStorage.removeItem(key) // Remove corrupted data
-      }
-    })
-    
-    // Validate all current jobs
-    await this.batchValidateJobs()
-    
-    devLog('JobManager: Force cleanup completed')
-  }
-
-  destroy() {
-    // Close all WebSocket connections
-    this.connections.forEach((ws) => {
-      try {
-        ws.close()
-      } catch {}
-    })
-    this.connections.clear()
-    this.jobs.clear()
-    this.listeners.clear()
+    // Stop all polling
+    this.pollingIntervals.forEach(intervalId => clearTimeout(intervalId))
+    this.pollingIntervals.clear()
   }
 }
 
-export default JobManager
+// Singleton instance
+let jobManagerInstance: JobManager | null = null
+
+export function getJobManager(apiBase?: string): JobManager {
+  if (!jobManagerInstance) {
+    if (!apiBase) {
+      throw new Error('apiBase is required for first initialization of JobManager')
+    }
+    jobManagerInstance = new JobManager(apiBase)
+  }
+  return jobManagerInstance
+}
+
+export { JobManager }
