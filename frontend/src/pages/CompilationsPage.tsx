@@ -13,6 +13,8 @@ import { type ManagedJob } from '@/lib/jobManager'
 import { GeneratedVideosPanel } from '@/components/GeneratedVideosPanel'
 import { generateBrainrotVideo } from '@/lib/api'
 
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+
 // Development-only logging
 const devLog = (message: string, ...args: any[]) => {
   if (import.meta.env.DEV) {
@@ -29,8 +31,50 @@ export default function CompilationsPage() {
   const [isUnlimited, setIsUnlimited] = useState(false)
   const [generateNoBackground, setGenerateNoBackground] = useState(true)
   const [blurredPillarboxThreshold, setBlurredPillarboxThreshold] = useState([0.1])
+  
+  // Video input method selection
+  const [inputMethod, setInputMethod] = useState<'youtube' | 'upload'>('youtube')
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [uploadedFileId, setUploadedFileId] = useState<string | null>(null)
+  const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   const jobManager = useJobManager()
+
+  // File upload function
+    const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadedFile(file);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${API}/api/upload-video`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Upload failed: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      setUploadedFileId(data.file_id);
+      setUploadedFilePath(data.file_path);
+      toast.success('Video uploaded successfully');
+    } catch (error: any) {
+      toast.error(`Upload failed: ${error.message}`);
+      setUploadedFile(null);
+      setUploadedFileId(null);
+      setUploadedFilePath(null);
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   // Clean up any legacy job data on component mount
   useEffect(() => {
@@ -57,7 +101,8 @@ export default function CompilationsPage() {
     const form = new FormData(e.currentTarget)
 
     const payload = {
-      youtubeUrl: String(form.get('youtubeUrl') || ''),
+      youtubeUrl: inputMethod === 'youtube' ? String(form.get('youtubeUrl') || '') : undefined,
+      uploadedVideoPath: inputMethod === 'upload' ? uploadedFilePath : undefined,
       numCompilations: Number(form.get('numCompilations') || 1),
       minDuration: Number(form.get('minDuration') || 20),
       maxDuration: Number(form.get('maxDuration') || 40),
@@ -67,8 +112,14 @@ export default function CompilationsPage() {
       blurredPillarboxThreshold: blurredPillarboxThreshold[0],
     }
 
-    if (!payload.youtubeUrl) {
+    // Validate that either YouTube URL or uploaded file is provided
+    if (inputMethod === 'youtube' && !payload.youtubeUrl) {
       toast.error('YouTube URL is required')
+      return
+    }
+    
+    if (inputMethod === 'upload' && !uploadedFilePath) {
+      toast.error('Please upload a video file first')
       return
     }
 
@@ -138,7 +189,7 @@ export default function CompilationsPage() {
               key={job.id}
               jobId={job.id}
               workflow={job.workflow}
-              autoRedirect={true}
+              autoRedirect={job.isNewlyCreated === true}
               redirectDelay={3000}
             />
           ))
@@ -213,20 +264,86 @@ export default function CompilationsPage() {
               </CardHeader>
               <CardContent>
                 <form onSubmit={startBrainrot} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="youtubeUrl">YouTube URL</Label>
-                    <Input
-                      id="youtubeUrl"
-                      name="youtubeUrl"
-                      type="url"
-                      placeholder="https://youtube.com/watch?v=..."
-                      required
-                      className="transition-all duration-200"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Enter a YouTube video URL to create compilations from
-                    </p>
+                  {/* Input Method Selection */}
+                  <div className="space-y-3">
+                    <Label>Video Source</Label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="inputMethod"
+                          value="youtube"
+                          checked={inputMethod === 'youtube'}
+                          onChange={(e) => setInputMethod(e.target.value as 'youtube' | 'upload')}
+                          className="text-primary"
+                        />
+                        <span className="text-sm font-medium">YouTube URL</span>
+                      </label>
+                      <label className="flex items-center space-x-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="inputMethod"
+                          value="upload"
+                          checked={inputMethod === 'upload'}
+                          onChange={(e) => setInputMethod(e.target.value as 'youtube' | 'upload')}
+                          className="text-primary"
+                        />
+                        <span className="text-sm font-medium">Upload File</span>
+                      </label>
+                    </div>
                   </div>
+
+                  {/* YouTube URL Input */}
+                  {inputMethod === 'youtube' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="youtubeUrl">YouTube URL</Label>
+                      <Input
+                        id="youtubeUrl"
+                        name="youtubeUrl"
+                        type="url"
+                        placeholder="https://youtube.com/watch?v=..."
+                        required={inputMethod === 'youtube'}
+                        className="transition-all duration-200"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Enter a YouTube video URL to create compilations from
+                      </p>
+                    </div>
+                  )}
+
+                  {/* File Upload Input */}
+                  {inputMethod === 'upload' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="videoFile">Upload Video</Label>
+                      <div className="space-y-3">
+                        <input
+                          id="videoFile"
+                          type="file"
+                          accept="video/*"
+                          onChange={handleFileUpload}
+                          disabled={isUploading}
+                          className="block w-full text-sm text-muted-foreground
+                            file:mr-4 file:py-2 file:px-4
+                            file:rounded-md file:border-0
+                            file:text-sm file:font-medium
+                            file:bg-primary file:text-primary-foreground
+                            hover:file:bg-primary/90 file:cursor-pointer
+                            disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        {isUploading && (
+                          <p className="text-xs text-blue-600">Uploading...</p>
+                        )}
+                        {uploadedFile && !isUploading && (
+                          <p className="text-xs text-green-600">
+                            ✓ {uploadedFile.name} uploaded successfully
+                          </p>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Upload a video file (MP4, AVI, MOV, MKV, etc.) to create compilations from
+                      </p>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">

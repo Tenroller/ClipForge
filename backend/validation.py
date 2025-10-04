@@ -289,3 +289,44 @@ def validate_voice(voice: str) -> str:
         return voice
     
     return "af_bella"
+
+
+def validate_video_file_path(file_path: str) -> str:
+    """Validate uploaded video file path."""
+    import os
+    from pathlib import Path
+    
+    if not file_path or not isinstance(file_path, str):
+        raise ValueError("Video file path is required")
+    
+    file_path = file_path.strip()
+    path = Path(file_path)
+    
+    # Check if file exists
+    if not path.exists():
+        raise ValueError("Video file does not exist")
+    
+    # Check if it's a file (not directory)
+    if not path.is_file():
+        raise ValueError("Path must point to a file, not a directory")
+    
+    # Check file extension
+    valid_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ogv'}
+    if path.suffix.lower() not in valid_extensions:
+        raise ValueError(f"Invalid video file format. Supported formats: {', '.join(valid_extensions)}")
+    
+    # Check file size (max 10GB)
+    max_size = 10 * 1024 * 1024 * 1024  # 10GB in bytes
+    if path.stat().st_size > max_size:
+        raise ValueError("Video file is too large (max 10GB)")
+    
+    # Check if file is readable
+    try:
+        with open(path, 'rb') as f:
+            f.read(1024)  # Try to read first 1KB
+    except PermissionError:
+        raise ValueError("Cannot read video file - permission denied")
+    except Exception as e:
+        raise ValueError(f"Cannot read video file: {str(e)}")
+    
+    return str(path.absolute())

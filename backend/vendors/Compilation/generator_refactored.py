@@ -13,7 +13,6 @@ import random
 import argparse
 import shutil
 import gc
-import psutil
 import time
 import uuid
 from pathlib import Path
@@ -315,13 +314,11 @@ class ClipProcessor:
 class VideoProcessor:
     """Handles video processing and analysis operations"""
     
-    
-    
     def __init__(self, config: TikYouConfig):
         self.config = config
         self.validator = InputValidator()
         self.cache = get_video_analysis_cache()
-        self.processor = CatVideoProcessor(output_dir=config.paths.output_dir)
+        self.processor = CatVideoProcessor(output_dir=config.paths.output_dir, crop_debug_frames=False, crop_verbose=False, enable_yolo=True)
         self.creator = TikTokVideoCreator(output_dir=config.paths.output_dir)
         self.logger = logger
     
@@ -355,6 +352,84 @@ class VideoProcessor:
         
         self.logger.video_processing(f"Processing complete: {len(clips)} clips ready")
         return clips
+    
+    def process_uploaded_video(self, video_path: str, sensitivity: float = 30.0) -> List[ClipInfo]:
+        """
+        Process an uploaded video file into clips.
+        Skips the YouTube download step and processes the file directly.
+        
+        Args:
+            video_path: Path to the uploaded video file
+            sensitivity: Detection threshold
+        """
+        self.logger.video_processing(f"Processing uploaded video: {video_path}")
+        
+        # Validate video file
+        from .validation import validate_video_file
+        validation = validate_video_file(video_path)
+        ensure_valid_or_raise(validation, ValidationError)
+        
+        # Generate a unique ID for this uploaded video (use filename without extension)
+        import os
+        from pathlib import Path
+        video_id = Path(video_path).stem
+        
+        self.logger.video_processing(f"Using video ID from filename: {video_id}")
+        
+        # Crop pillarboxes
+        processed_video_path = self._crop_pillarboxes(video_path)
+        
+        # Analyze video
+        analysis = self._analyze_video(processed_video_path, sensitivity)
+        
+        # Create clips
+        clips = self._create_clips_from_analysis(analysis, video_id, processed_video_path)
+        
+        self.logger.video_processing(f"Uploaded video processing complete: {len(clips)} clips ready")
+        return clips
+    
+    def process_video_source(self, youtube_url: Optional[str] = None, uploaded_video_path: Optional[str] = None, sensitivity: float = 30.0) -> List[ClipInfo]:
+        """
+        Process a video from either YouTube URL or uploaded file.
+        
+        Args:
+            youtube_url: YouTube URL to download and process (optional)
+            uploaded_video_path: Path to uploaded video file (optional)
+            sensitivity: Detection threshold
+            
+        Returns:
+            List of ClipInfo objects
+            
+        Raises:
+            ValidationError: If neither or both sources are provided, or if validation fails
+        """
+        if not youtube_url and not uploaded_video_path:
+            raise ValidationError(
+                field_name="video_source",
+                field_value="None",
+                constraint="Either youtube_url or uploaded_video_path must be provided"
+            )
+        
+        if youtube_url and uploaded_video_path:
+            raise ValidationError(
+                field_name="video_source", 
+                field_value="Both provided",
+                constraint="Cannot provide both youtube_url and uploaded_video_path"
+            )
+        
+        if youtube_url:
+            self.logger.video_processing("Processing YouTube URL")
+            return self.process_single_video(youtube_url, sensitivity)
+        elif uploaded_video_path:
+            self.logger.video_processing("Processing uploaded video file")
+            return self.process_uploaded_video(uploaded_video_path, sensitivity)
+        else:
+            # This should never happen due to earlier validation, but added for type safety
+            raise ValidationError(
+                field_name="video_source",
+                field_value="None",
+                constraint="No valid video source provided"
+            )
     
     def _extract_video_id(self, youtube_url: str) -> str:
         """Delegate video ID extraction to unified youtube utility."""

@@ -6,12 +6,14 @@ Provides PostgreSQL-based job storage with SQLAlchemy ORM.
 
 import os
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func, Boolean, Float, text
+from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func, Boolean, Float, text, ARRAY
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
 from sqlalchemy.exc import SQLAlchemyError
@@ -56,7 +58,7 @@ class Job(Base):
     workflow = Column(String)
     user_id = Column(String)
     request_data = Column(JSON)
-    result_data = Column(JSON)
+    result = Column(JSON)  # Changed from result_data to match database schema
     error_message = Column(Text)
     logs = Column(JSON, default=list)
     resume_data = Column(JSON)
@@ -68,7 +70,7 @@ class Job(Base):
     # Resume metadata
     resumed_from = Column(String)  # Original job ID if this job is a resume of another
     resume_attempt = Column(Integer)  # Attempt count (1 = original, 2 = first resume, etc.)
-    resumed_to = Column(JSON)  # List of child job IDs resumed from this one
+    resumed_to = Column(JSON, default=list)  # List of child job IDs resumed from this one
 
     # PostgreSQL-specific indexes for better query performance
     __table_args__ = (
@@ -84,7 +86,7 @@ class Video(Base):
     __tablename__ = "videos"
 
     # Primary key - unique video ID
-    id = Column(String, primary_key=True)
+    id = Column(UUID(as_uuid=True), primary_key=True)
     
     # Video metadata
     filename = Column(String, nullable=False)
@@ -211,7 +213,7 @@ class JobStore:
                 if field == "logs" and isinstance(value, list):
                     setattr(job, 'logs', value)
                 elif field == "result" and isinstance(value, dict):
-                    setattr(job, 'result_data', value)
+                    setattr(job, 'result', value)  # Changed from result_data to result
                 elif field == "error":
                     setattr(job, 'error_message', str(value) if value else None)
                 elif field == "resume_data" and isinstance(value, dict):
@@ -249,7 +251,7 @@ class JobStore:
                 "workflow": job.workflow,
                 "user_id": job.user_id,
                 "logs": job.logs if job.logs is not None else [],
-                "result": job.result_data,
+                "result": job.result,  # Changed from job.result_data to job.result
                 "request_data": job.request_data if job.request_data is not None else {},
                 "resume_data": job.resume_data,
                 "resumed_from": job.resumed_from,
@@ -290,7 +292,7 @@ class JobStore:
                     "workflow": job.workflow,
                     "user_id": job.user_id,
                     "logs": job.logs if job.logs is not None else [],
-                    "result": job.result_data,
+                    "result": job.result,  # Changed from job.result_data to job.result
                     "request_data": job.request_data if job.request_data is not None else {},
                     "resume_data": job.resume_data,
                     "resumed_from": job.resumed_from,
@@ -426,14 +428,14 @@ class JobStore:
             return None
 
     # Video management methods
-    def create_video(self, video_id: str, filename: str, file_path: str, job_id: str, 
+    def create_video(self, video_id: Union[str, uuid.UUID], filename: str, file_path: str, job_id: str, 
                      workflow: str, video_type: Optional[str] = None, size_bytes: Optional[int] = None, 
                      duration_seconds: Optional[float] = None, compilation_type: Optional[str] = None, 
                      compilation_num: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> None:
         """Create a new video record."""
         with self._get_session() as session:
             video = Video(
-                id=video_id,
+                id=str(video_id) if isinstance(video_id, uuid.UUID) else video_id,
                 filename=filename,
                 file_path=file_path,
                 job_id=job_id,
@@ -449,10 +451,12 @@ class JobStore:
             session.add(video)
             session.commit()
 
-    def get_video(self, video_id: str) -> Optional[Dict[str, Any]]:
+    def get_video(self, video_id: Union[str, uuid.UUID]) -> Optional[Dict[str, Any]]:
         """Get video by ID."""
+        # Convert to string for query compatibility
+        video_id_str = str(video_id) if isinstance(video_id, uuid.UUID) else video_id
         with self._get_session() as session:
-            video = session.query(Video).filter(Video.id == video_id).first()
+            video = session.query(Video).filter(Video.id == video_id_str).first()
             
             if not video:
                 return None
@@ -475,13 +479,15 @@ class JobStore:
                 "updated_at": video.updated_at.isoformat() if getattr(video, 'updated_at', None) is not None else None
             }
 
-    def update_video(self, video_id: str, **fields: Any) -> bool:
+    def update_video(self, video_id: Union[str, uuid.UUID], **fields: Any) -> bool:
         """Update video fields."""
         if not fields:
             return False
 
+        # Convert to string for query compatibility
+        video_id_str = str(video_id) if isinstance(video_id, uuid.UUID) else video_id
         with self._get_session() as session:
-            video = session.query(Video).filter(Video.id == video_id).first()
+            video = session.query(Video).filter(Video.id == video_id_str).first()
             if not video:
                 return False
 
@@ -535,10 +541,12 @@ class JobStore:
 
             return video_list
 
-    def delete_video(self, video_id: str) -> bool:
+    def delete_video(self, video_id: Union[str, uuid.UUID]) -> bool:
         """Delete a video record by ID."""
+        # Convert to string for query compatibility
+        video_id_str = str(video_id) if isinstance(video_id, uuid.UUID) else video_id
         with self._get_session() as session:
-            video = session.query(Video).filter(Video.id == video_id).first()
+            video = session.query(Video).filter(Video.id == video_id_str).first()
             if not video:
                 return False
             

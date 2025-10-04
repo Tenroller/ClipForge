@@ -43,6 +43,71 @@ def log_file_operation(logger, operation, path, **kwargs):
 
 
 class TTSGenerator:
+    def _extract_clean_phrase(self, text):
+        """
+        Extract a clean intro phrase from potentially messy AI-generated text
+        
+        Args:
+            text (str): Raw text from AI
+            
+        Returns:
+            str: Clean phrase or None if no suitable phrase found
+        """
+        import re
+        
+        if not text:
+            return None
+            
+        # Remove markdown formatting first
+        text = re.sub(r'\*\*([^*]+)\*\*', r'\1', text)  # Remove **bold**
+        text = re.sub(r'\*([^*]+)\*', r'\1', text)      # Remove *italic*
+        
+        # Split into lines and process each
+        lines = text.split('\n')
+        candidate_phrases = []
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Remove list markers and bullets
+            line = re.sub(r'^[\s\*\-\•\d+\.\)]+', '', line).strip()
+            
+            # Clean up quotes and punctuation
+            line = line.strip('"\'""''')
+            line = re.sub(r'^[^\w]+', '', line)  # Remove leading non-word chars
+            
+            # If line has a dash, take only the part before the dash (likely the quote)
+            if ' - ' in line:
+                line = line.split(' - ')[0].strip()
+            
+            # Skip lines that look like instructions or explanations (AFTER dash processing)
+            skip_words = ['here', 'example', 'phrase', 'generate', 'create', 'compilation', 'perfect', 'requirement', 'instruction', 'like this']
+            if any(word in line.lower() for word in skip_words):
+                continue
+            
+            # Check if this looks like a good intro phrase
+            words = line.split()
+            if 2 <= len(words) <= 10:  # Reasonable phrase length
+                # Clean up any trailing quotes or punctuation, then add exclamation
+                line = re.sub(r'["\'"!.?]+$', '', line) + '!'
+                candidate_phrases.append((line, len(words)))
+        
+        # Return the shortest reasonable phrase (usually the best)
+        if candidate_phrases:
+            candidate_phrases.sort(key=lambda x: x[1])  # Sort by word count
+            return candidate_phrases[0][0]
+            
+        # If no good candidates, try to extract from first line
+        first_line = lines[0] if lines else text
+        first_line = re.sub(r'^[^\w]+', '', first_line.strip())
+        first_line = first_line.strip('"\'""''')
+        if len(first_line.split()) <= 15:  # Not too long
+            return first_line.rstrip('!.?') + '!'
+            
+        return None
+
     def __init__(self, api_key=None):
         """
         Initialize TTS Generator
@@ -50,9 +115,9 @@ class TTSGenerator:
         Args:
             api_key (str): Google Gemini API key. If None, will try to get from environment.
         """
-        self.api_key = api_key or os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
         if not self.api_key:
-            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY environment variable or pass api_key parameter.")
         
         # Initialize Gemini client
         self.client = genai.Client(api_key=self.api_key)
@@ -133,34 +198,54 @@ class TTSGenerator:
             str: Generated intro message
         """
         try:
-            system_instruction = f"""You are a creative content creator who makes catchy, fun introductions for {context} compilations. 
-            Generate short, energetic intro phrases that would be perfect for TikTok/social media. 
-            Keep it under 10 words and make it exciting and engaging.
-            Examples: "Cat videos of the day!", "Daily dose of cats!", "Your feline fix is here!", "Purrfect moments ahead!"
-            Be creative but keep the energy high and the tone fun."""
+            # Much more specific and clear prompt to get just ONE clean phrase
+            system_instruction = f"""You are a creative content creator. Create ONE short, catchy intro phrase for a {context} compilation video that would be perfect for TikTok/social media.
+
+REQUIREMENTS:
+- Maximum 8 words
+- High energy and fun
+- Must end with exclamation mark
+- No formatting, no lists, no explanations
+- Just return the phrase itself
+
+EXAMPLES:
+"Cat videos of the day!"
+"Daily dose of cats!"
+"Purrfect moments ahead!"
+
+Generate ONE phrase now."""
             
             response = self.client.models.generate_content(
                 model="gemini-2.0-flash",
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
-                    temperature=0.9,  # High creativity
-                    max_output_tokens=50,
+                    temperature=0.7,  # Slightly lower for more focused output
+                    max_output_tokens=50,  # Limit output to prevent long responses
                 ),
-                contents="Generate a catchy intro message for a cat video compilation."
+                contents="Generate one catchy intro phrase."
             )
             
-            intro_message = response.text.strip() if response.text else ""
-            # Clean up the message (remove quotes, extra punctuation)
-            intro_message = intro_message.strip('"\'')
-            if not intro_message.endswith('!'):
-                intro_message += '!'
+            raw_text = response.text.strip() if response.text else ""
             
-            print(f"🎙️ Generated intro: '{intro_message}'")
+            # Show what AI actually returned for debugging
+            if len(raw_text) > 100:
+                print(f"🤖 AI returned (truncated): '{raw_text[:100]}...'")
+            else:
+                print(f"🤖 AI returned: '{raw_text}'")
+            
+            # Use the enhanced extraction method
+            intro_message = self._extract_clean_phrase(raw_text)
+            
+            # Final validation - if extraction failed or result is invalid, use fallback
+            if not intro_message or len(intro_message) > 50 or any(word in intro_message.lower() for word in ['here are', 'examples', 'phrases', 'perfect for']):
+                raise ValueError("Generated text appears to be instructions rather than a phrase")
+            
+            print(f"🎙️ Extracted clean intro: '{intro_message}'")
             return intro_message
             
         except Exception as e:
             print(f"⚠️ Error generating intro with Gemini: {e}")
-            # Fallback to predefined messages
+            # Enhanced fallback with more variety
             fallback_messages = [
                 "Cat videos of the day!",
                 "Daily dose of cats!",
@@ -169,7 +254,13 @@ class TTSGenerator:
                 "Get ready for some cat magic!",
                 "Cute cats incoming!",
                 "Time for your cat therapy!",
-                "Whiskers and wags await!"
+                "Whiskers and wags await!",
+                "Meow-gical moments incoming!",
+                "Cuteness overload alert!",
+                "Feline frenzy time!",
+                "Your daily catnip dose!",
+                "Prepare for peak purrfection!",
+                "Kitty chaos unleashed!"
             ]
             message = random.choice(fallback_messages)
             print(f"🎙️ Using fallback intro: '{message}'")
@@ -239,11 +330,17 @@ class TTSGenerator:
             if intro_text is None:
                 intro_text = self.generate_intro_message()
             
-            # Generate TTS audio
-            tts_audio_path = self.text_to_speech(intro_text, voice)
-            if not tts_audio_path:
-                print("❌ Failed to generate TTS audio")
-                return None
+            # Use cached audio if available, otherwise generate new TTS audio
+            tts_audio_path = None
+            if hasattr(self, '_cached_audio_path') and self._cached_audio_path and os.path.exists(self._cached_audio_path):
+                tts_audio_path = self._cached_audio_path
+                print(f"   🎵 Using cached TTS audio: {os.path.basename(tts_audio_path)}")
+            else:
+                # Generate TTS audio
+                tts_audio_path = self.text_to_speech(intro_text, voice)
+                if not tts_audio_path:
+                    print("❌ Failed to generate TTS audio")
+                    return None
             
             # Load video and audio clips
             video_clip = VideoFileClip(video_path)
@@ -354,8 +451,9 @@ class TTSGenerator:
             except Exception as cleanup_error:
                 print(f"⚠️ Warning during cleanup: {cleanup_error}")
             
-            # Remove temporary TTS file
-            if os.path.exists(tts_audio_path):
+            # Remove temporary TTS file (only if not from cache)
+            if (os.path.exists(tts_audio_path) and 
+                not (hasattr(self, '_cached_audio_path') and tts_audio_path == self._cached_audio_path)):
                 os.remove(tts_audio_path)
             
             print(f"✅ TTS intro video created: {output_path}")
@@ -403,16 +501,34 @@ class TTSGenerator:
                 print("❌ Failed to create base compilation")
                 return None
             
-            # Generate context-aware intro message
-            context_messages = [
-                "cat videos",
-                "feline fun", 
-                "purr-fect moments",
-                "kitty compilation",
-                "cat content"
-            ]
-            context = random.choice(context_messages)
-            intro_text = self.generate_intro_message(context)
+            # Get intro text from phrase manager if available, otherwise generate new one
+            intro_text = None
+            if hasattr(generator, 'tts_phrase_manager') and generator.tts_phrase_manager and generator.tts_phrase_manager._generated:
+                try:
+                    phrase, audio_path, voice = generator.tts_phrase_manager.get_random_phrase_with_audio()
+                    intro_text = phrase
+                    print(f"   🎯 Using pre-generated phrase: '{intro_text}' (voice: {voice})")
+                    
+                    # Store the audio path for reuse
+                    self._cached_audio_path = audio_path
+                    self._cached_voice = voice
+                except Exception as e:
+                    print(f"   ⚠️  Failed to get pre-generated phrase: {e}")
+            
+            if not intro_text:
+                # Fallback to original method
+                print(f"   🔄 Generating new phrase...")
+                context_messages = [
+                    "cat videos",
+                    "feline fun", 
+                    "purr-fect moments",
+                    "kitty compilation",
+                    "cat content"
+                ]
+                context = random.choice(context_messages)
+                intro_text = self.generate_intro_message(context)
+                self._cached_audio_path = None
+                self._cached_voice = None
             
             # Add TTS intro to the compilation
             final_result = self.add_tts_intro_to_video(

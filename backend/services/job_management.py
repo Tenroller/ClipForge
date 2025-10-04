@@ -241,16 +241,8 @@ class JobManagementService:
         self._enqueue_job_update(job_id)
     
     def _enqueue_job_update(self, job_id: str) -> None:
-        """Thread-safe enqueue of a job update for websocket broadcast."""
-        try:
-            from ..core.lifespan import MAIN_LOOP, ASYNC_QUEUE
-            # Get job data from unified queue (which includes database data)
-            payload = self.job_queue.get_job_status(job_id)
-            if payload and MAIN_LOOP is not None:
-                MAIN_LOOP.call_soon_threadsafe(ASYNC_QUEUE.put_nowait, (job_id, payload))
-        except Exception:
-            # Best-effort only
-            pass
+        """No-op: WebSocket broadcasting has been removed, using REST API polling instead."""
+        pass
     
     def _get_next_step_for_workflow(self, workflow: str, last_step: str) -> str:
         """Determine the next step for a workflow based on the last completed step."""

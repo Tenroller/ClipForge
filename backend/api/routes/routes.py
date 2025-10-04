@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from .health import router as health_router
 from .video_generation import router as video_generation_router
 from .job_management import router as job_management_router
+from .job_callbacks import router as job_callbacks_router
 from .system import router as system_router
-from .websocket import router as websocket_router
 from .videos import router as videos_router
 from .video_management import router as video_management_router
 
@@ -25,6 +25,9 @@ def register_routes(app: FastAPI) -> None:
     # Job management and monitoring
     app.include_router(job_management_router, prefix="/api", tags=["Job Management"])
     
+    # Job callbacks from video processor
+    app.include_router(job_callbacks_router, prefix="/api", tags=["Job Callbacks"])
+    
     # Video management and listing (legacy)
     app.include_router(videos_router, prefix="/api", tags=["Video Management"])
     
@@ -33,6 +36,3 @@ def register_routes(app: FastAPI) -> None:
     
     # System management and maintenance
     app.include_router(system_router, prefix="/api", tags=["System"])
-    
-    # WebSocket connections
-    app.include_router(websocket_router)

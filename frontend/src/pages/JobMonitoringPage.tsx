@@ -103,7 +103,6 @@ export default function JobMonitoringPage() {
   const [job, setJob] = useState<ManagedJob | null>(null)
   const [logs, setLogs] = useState<JobLogs | null>(null)
   const [loading, setLoading] = useState(true)
-  const [logsLoading, setLogsLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   // Initial fetch
@@ -116,16 +115,33 @@ export default function JobMonitoringPage() {
     } else {
       fetchJobDetails()
     }
-    fetchJobLogs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId])
 
-  // Auto refresh logs
+  // Auto refresh job details (includes logs when backend is updated)
   useEffect(() => {
     if (!autoRefresh || !job || ['done', 'error', 'cancelled'].includes(job.status)) return
-    const interval = setInterval(() => fetchJobLogs(), 2000)
+    const interval = setInterval(() => {
+      fetchJobDetails()
+    }, 2000)
     return () => clearInterval(interval)
   }, [autoRefresh, job?.status])
+
+  // Additional periodic logs refresh for current backend (will be redundant when backend is updated)
+  useEffect(() => {
+    if (!autoRefresh || !job || ['done', 'error', 'cancelled'].includes(job.status)) return
+    
+    // Only fetch logs separately if we don't have recent logs from job status
+    const needsSeparateLogsRefresh = !logs || logs.logs.length === 0
+    
+    if (needsSeparateLogsRefresh) {
+      const logsInterval = setInterval(() => {
+        fetchJobLogsFromSeparateEndpoint()
+      }, 3000) // Slightly less frequent than job details
+      
+      return () => clearInterval(logsInterval)
+    }
+  }, [autoRefresh, job?.status, logs])
 
   const fetchJobDetails = async () => {
     if (!jobId) return
@@ -154,6 +170,23 @@ export default function JobMonitoringPage() {
         duration_seconds: jobData.duration_seconds
       }
 
+      // Check if job status response includes logs (optimized API)
+      const hasLogsInResponse = jobData.logs && Array.isArray(jobData.logs)
+      const hasEnhancedLogs = hasLogsInResponse && (jobData.total_logs !== undefined || jobData.logs.length > 0)
+      
+      if (hasEnhancedLogs) {
+        // Use logs from job status response (optimized path)
+        const logsData: JobLogs = {
+          job_id: jobData.id,
+          logs: jobData.logs,
+          total_logs: jobData.total_logs || jobData.logs.length
+        }
+        setLogs(logsData)
+      } else if (hasLogsInResponse && jobData.logs.length === 0) {
+        // Job status has empty logs array - fetch from separate endpoint
+        await fetchJobLogsFromSeparateEndpoint()
+      }
+
       setJob(managedJob)
     } catch (error) {
       console.error('Failed to fetch job details:', error)
@@ -163,7 +196,7 @@ export default function JobMonitoringPage() {
     }
   }
 
-  const fetchJobLogs = async () => {
+  const fetchJobLogsFromSeparateEndpoint = async () => {
     if (!jobId) return
 
     try {
@@ -175,10 +208,8 @@ export default function JobMonitoringPage() {
       const logsData = await response.json()
       setLogs(logsData)
     } catch (error) {
-      console.error('Failed to fetch job logs:', error)
-      toast.error('Failed to load job logs')
-    } finally {
-      setLogsLoading(false)
+      console.error('Failed to fetch job logs from separate endpoint:', error)
+      // Don't show error toast for logs - just log it
     }
   }
 
@@ -435,9 +466,9 @@ export default function JobMonitoringPage() {
             <CardTitle className="flex items-center justify-between">
               <span>Job Logs</span>
               <div className="flex items-center gap-2">
-                {logsLoading && <FaSpinner className="size-4 animate-spin" />}
+                {loading && <FaSpinner className="size-4 animate-spin" />}
                 <Badge variant="secondary">
-                  {logs?.total_logs || 0} entries
+                  {job?.total_logs || logs?.total_logs || job?.logs?.length || 0} entries
                 </Badge>
               </div>
             </CardTitle>
@@ -447,9 +478,10 @@ export default function JobMonitoringPage() {
           </CardHeader>
           <CardContent>
             <div className="h-[400px] w-full rounded border bg-muted/20 p-4 overflow-auto">
-              {logs?.logs && logs.logs.length > 0 ? (
+              {(logs?.logs && logs.logs.length > 0) || (job?.logs && job.logs.length > 0) ? (
                 <div className="space-y-2">
-                  {logs.logs.map((log, index) => (
+                  {/* Use logs from job first, fallback to separate logs state */}
+                  {(job?.logs || logs?.logs || []).map((log, index) => (
                     <div key={index} className="text-sm font-mono">
                       <div className={`inline-block px-2 py-1 rounded text-xs font-semibold mr-2 ${getLevelColor(log.level)}`}>
                         {log.level.toUpperCase()}
@@ -466,7 +498,7 @@ export default function JobMonitoringPage() {
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
-                  {logsLoading ? (
+                  {loading ? (
                     <div className="flex items-center justify-center gap-2">
                       <FaSpinner className="size-4 animate-spin" />
                       <span>Loading logs...</span>

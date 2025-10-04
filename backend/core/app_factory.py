@@ -74,7 +74,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         
         * **MoneyPrinter Workflow**: Generate videos from text prompts using AI script generation, stock footage, and TTS
         * **Brainrot Workflow**: Create TikTok-style compilations from YouTube videos
-        * **Real-time Progress**: WebSocket support for live job updates
+        * **Real-time Progress**: REST API polling for live job updates
         * **Job Management**: Persistent job storage with SQLite/PostgreSQL support
         * **Security**: Rate limiting
         * **Monitoring**: Comprehensive logging and error tracking
@@ -83,9 +83,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         
         If enabled via `RATE_LIMIT_PER_MINUTE`, endpoints are rate-limited per IP address.
         
-        ## WebSocket Support
+        ## Status Updates
         
-        Connect to `/ws/jobs/{job_id}` for real-time job progress updates.
+        Use GET `/api/jobs/{job_id}` for job progress updates via polling.
         """,
         version="1.0.0",
         contact={

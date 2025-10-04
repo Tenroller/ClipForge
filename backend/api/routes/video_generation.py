@@ -7,21 +7,21 @@ import time
 from typing import Dict, Any
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, File, UploadFile
 from fastapi.responses import FileResponse
 
 from ...models.requests import MoneyPrinterRequest, BrainrotRequest, SuggestSubjectRequest
 from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
-from ...job_queue_unified import get_job_queue
-from ...utils.paths import get_backend_path
+from ...services.video_orchestrator import get_video_orchestrator
+from ...utils.paths import get_backend_path, get_temp_path
 
 router = APIRouter()
 logger = get_logger("video_generation")
 
-# Get database and queue instances
+# Get database and orchestrator instances
 job_store = get_job_store()
-job_queue = get_job_queue()
+video_orchestrator = get_video_orchestrator()
 
 VENDOR_ROOT = get_backend_path("vendors")
 
@@ -33,7 +33,7 @@ VENDOR_ROOT = get_backend_path("vendors")
     Create a video using AI-powered script generation, stock footage, and text-to-speech.
 
     This endpoint starts a video generation job and returns immediately with a job ID.
-    Use the job ID to track progress via WebSocket or polling.
+    Use the job ID to track progress via REST API polling.
 
     **Process Overview:**
     1. Generate script from subject using AI model
@@ -45,10 +45,10 @@ VENDOR_ROOT = get_backend_path("vendors")
 
     **Required Environment Variables:**
     - `PEXELS_API_KEY`: For stock video search
-    - `GOOGLE_API_KEY` or `GEMINI_API_KEY`: For AI script generation
+    - `GEMINI_API_KEY`: For AI script generation
     """
 )
-def moneyprinter_generate(req: MoneyPrinterRequest):
+async def moneyprinter_generate(req: MoneyPrinterRequest):
     """Generate video using MoneyPrinter workflow."""
     job_id = str(uuid.uuid4())
 
@@ -58,18 +58,46 @@ def moneyprinter_generate(req: MoneyPrinterRequest):
     log_job_event(logger, job_id, "moneyprinter", "created",
                 subject=req.videoSubject[:100], voice=req.voice, ai_model=req.aiModel)
     
-    # Submit job to queue
+    # Create job in database
     try:
-        from ...services.video_generation import run_moneyprinter_job
-        job_queue.add_job(
-            run_moneyprinter_job,
+        job_store.create_job(
             job_id,
-            req,
-            job_id=job_id,          # Explicitly specify job_id
-            workflow="moneyprinter"
+            "moneyprinter",
+            req.model_dump(),
+            user_id=None
         )
+        
+        # Create progress tracker and initial log
+        from ...utils.progress_tracker import get_progress_tracker
+        tracker = get_progress_tracker(job_id)
+        tracker.add_log("MoneyPrinter job created and queued for processing", "info", "moneyprinter")
+        tracker.add_log(f"Configuration: {req.aiModel} model, {req.voice} voice, {req.paragraphNumber} paragraphs", "info", "config")
+        
+    except Exception as e:
+        logger.error(f"Failed to create job {job_id} in database: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create job: {e}")
+    
+    # Submit job to orchestrator
+    try:
+        success = await video_orchestrator.submit_moneyprinter_job(job_id, req)
+        
+        if not success:
+            # Update job status to error
+            job_store.update_job(
+                job_id,
+                status="error",
+                error_message="Failed to submit to video processor"
+            )
+            raise HTTPException(status_code=500, detail="Failed to submit job to video processor")
+        
     except Exception as e:
         logger.error(f"Failed to submit MoneyPrinter job {job_id}: {e}")
+        # Update job status to error
+        job_store.update_job(
+            job_id,
+            status="error", 
+            error_message=str(e)
+        )
         raise HTTPException(status_code=500, detail=f"Failed to submit job: {e}")
     
     # Ensure job is persisted to database before returning
@@ -91,29 +119,115 @@ def moneyprinter_generate(req: MoneyPrinterRequest):
     return {"status": "queued", "jobId": job_id}
 
 
+@router.post("/upload-video", summary="Upload Video File")
+async def upload_video_file(file: UploadFile = File(...)):
+    """Upload a video file for processing."""
+    try:
+        # Validate file type
+        if not file.filename or not file.filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ogv')):
+            raise HTTPException(status_code=400, detail="Invalid file type. Supported formats: MP4, AVI, MOV, MKV, WMV, FLV, WebM, M4V, 3GP, OGV")
+        
+        # Validate file size (max 10GB)
+        max_size = 10 * 1024 * 1024 * 1024  # 10GB
+        content = await file.read()
+        if len(content) > max_size:
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 10GB")
+        
+        if len(content) == 0:
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
+        
+        # Create uploads directory in shared temp space
+        uploads_dir = get_temp_path("uploads")
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate unique filename
+        file_id = str(uuid.uuid4())
+        file_extension = Path(file.filename).suffix
+        filename = f"{file_id}{file_extension}"
+        file_path = uploads_dir / filename
+        
+        # Save file
+        try:
+            with open(file_path, "wb") as buffer:
+                buffer.write(content)
+        except Exception as e:
+            logger.error(f"Failed to save uploaded file: {e}")
+            raise HTTPException(status_code=500, detail="Failed to save uploaded file")
+        
+        # Verify file was saved correctly
+        if not file_path.exists() or file_path.stat().st_size != len(content):
+            raise HTTPException(status_code=500, detail="File upload verification failed")
+        
+        logger.info(f"Video file uploaded successfully: {filename} ({len(content)} bytes)")
+        
+        return {
+            "success": True,
+            "file_id": file_id,
+            "filename": filename,
+            "file_path": str(file_path),
+            "size_bytes": len(content),
+            "original_filename": file.filename
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during file upload: {e}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
 @router.post("/brainrot/generate", summary="Generate Brainrot Compilation")
-def brainrot_generate(req: BrainrotRequest):
+async def brainrot_generate(req: BrainrotRequest):
     """Generate video using Brainrot workflow."""
     try:
         job_id = str(uuid.uuid4())
 
-        # Use unified queue for job management
-        from ...services.video_generation import run_brainrot_job
-        logger.debug(f"Adding brainrot job with ID: {job_id}")
-        actual_job_id = job_queue.add_job(
-            run_brainrot_job,
-            job_id,                # Pass job_id as first argument to the function
-            req.model_dump(),      # Convert Pydantic model to dict for serialization
-            job_id=job_id,         # Specify job_id for the job queue
-            workflow="brainrot"
-        )
-        logger.debug(f"Job queue returned ID: {actual_job_id}")
-        
-        if actual_job_id != job_id:
-            logger.warning(f"Job ID mismatch! Expected: {job_id}, Got: {actual_job_id}")
-            # Use the actual job ID for database checks
-            job_id = actual_job_id
+        # Create job in database
+        try:
+            job_store.create_job(
+                job_id,
+                "brainrot",
+                req.model_dump(),
+                user_id=None
+            )
+            
+            # Create progress tracker and initial log
+            from ...utils.progress_tracker import get_progress_tracker
+            tracker = get_progress_tracker(job_id)
+            tracker.add_log("Brainrot compilation job created and queued for processing", "info", "brainrot")
+            if req.youtubeUrl:
+                tracker.add_log(f"Source: YouTube URL - {req.youtubeUrl}", "info", "config")
+            elif req.uploadedVideoPath:
+                tracker.add_log(f"Source: Uploaded video - {req.uploadedVideoPath}", "info", "config")
+            tracker.add_log(f"Compilations to generate: {req.numCompilations}, Duration: {req.minDuration}s-{req.maxDuration}s", "info", "config")
+            
+        except Exception as e:
+            logger.error(f"Failed to create job {job_id} in database: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to create job: {e}")
 
+        # Submit job to orchestrator
+        try:
+            success = await video_orchestrator.submit_brainrot_job(job_id, req)
+            
+            if not success:
+                # Update job status to error
+                job_store.update_job(
+                    job_id,
+                    status="error",
+                    error_message="Failed to submit to video processor"
+                )
+                raise HTTPException(status_code=500, detail="Failed to submit job to video processor")
+                
+        except Exception as e:
+            logger.error(f"Failed to submit Brainrot job {job_id}: {e}")
+            # Update job status to error
+            job_store.update_job(
+                job_id,
+                status="error",
+                error_message=str(e)
+            )
+            raise HTTPException(status_code=500, detail=f"Failed to submit job: {e}")
+        
         # Ensure job is persisted to database before returning
         max_retries = 5
         for attempt in range(max_retries):

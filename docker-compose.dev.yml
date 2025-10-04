@@ -1,0 +1,150 @@
+version: '3.8'
+
+# Development version with hot reloading and volume mounts
+services:
+  # PostgreSQL Database (Development)
+  postgres-dev:
+    image: postgres:15-alpine
+    container_name: ai-video-postgres-dev
+    ports:
+      - "5434:5432"  # Different port for dev to avoid conflicts
+    environment:
+      - POSTGRES_DB=videohelper_dev
+      - POSTGRES_USER=videohelper_user
+      - POSTGRES_PASSWORD=videohelper_password
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - ai-video-network-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U videohelper_user -d videohelper_dev"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis Cache (Development)
+  redis-dev:
+    image: redis:7-alpine
+    container_name: ai-video-redis-dev
+    ports:
+      - "6381:6379"  # Different port for dev
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - ai-video-network-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Service (Development)
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: builder
+    container_name: ai-video-frontend-dev
+    ports:
+      - "3000:5173"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: npm run dev
+    networks:
+      - ai-video-network-dev
+    restart: unless-stopped
+
+  # Backend API Service (Development)
+  backend-dev:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: ai-video-backend-dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+      redis-dev:
+        condition: service_healthy
+      video-processor-dev:
+        condition: service_started
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - RELOAD=true
+      - DEBUG_MODE=true
+      - LOG_LEVEL=DEBUG
+      - CORS_ALLOW_ORIGINS=http://localhost:3000,http://localhost:5173
+      - VIDEO_PROCESSOR_URLS=http://video-processor-dev:8090
+      - PYTHONPATH=/app
+      - DATABASE_URL=postgresql://videohelper_user:videohelper_password@postgres-dev:5432/videohelper_dev
+      - REDIS_URL=redis://redis-dev:6379
+    volumes:
+      - .:/app
+      - dev_output:/app/output
+      - dev_temp:/app/temp
+      - dev_backend_logs:/app/logs
+      - dev_backend_cache:/app/cache
+    networks:
+      - ai-video-network-dev
+    restart: unless-stopped
+
+  # Video Processor Service (Development)
+  video-processor-dev:
+    build:
+      context: ./video-processor
+      dockerfile: Dockerfile
+    container_name: ai-video-processor-dev
+    ports:
+      - "8090:8090"
+    depends_on:
+      redis-dev:
+        condition: service_healthy
+    environment:
+      - PROCESSOR_HOST=0.0.0.0
+      - PROCESSOR_PORT=8090
+      - BACKEND_API_URL=http://backend-dev:8080
+      - OUTPUT_DIR=/app/output
+      - TEMP_DIR=/app/temp
+      - LOG_LEVEL=DEBUG
+      - PYTHONPATH=/app
+      - REDIS_URL=redis://redis-dev:6379
+      - REDIS_DB=1
+    volumes:
+      - ./video-processor:/app
+      - dev_output:/app/output
+      - dev_temp:/app/temp
+      - dev_processor_logs:/app/logs
+    networks:
+      - ai-video-network-dev
+    restart: unless-stopped
+
+# Development volumes
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  dev_output:
+    driver: local
+  dev_temp:
+    driver: local
+  dev_backend_logs:
+    driver: local
+  dev_processor_logs:
+    driver: local
+  dev_backend_cache:
+    driver: local
+
+# Development network
+networks:
+  ai-video-network-dev:
+    driver: bridge

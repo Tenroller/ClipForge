@@ -157,7 +157,7 @@ export default function CreatorPage() {
               key={job.id}
               jobId={job.id}
               workflow={job.workflow}
-              autoRedirect={true}
+              autoRedirect={job.isNewlyCreated === true}
               redirectDelay={3000}
             />
           ))

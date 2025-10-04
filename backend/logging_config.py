@@ -377,26 +377,6 @@ def log_file_operation(logger: logging.Logger, operation: str, file_path: str,
         }
     )
 
-
-def log_performance_metric(logger: logging.Logger, metric_name: str,
-                          value: float, unit: str = "", **tags) -> None:
-    """Log performance metrics."""
-    message = f"Performance: {metric_name} = {value}"
-    if unit:
-        message += f" {unit}"
-
-    logger.info(
-        message,
-        extra={
-            "metric_name": metric_name,
-            "metric_value": value,
-            "metric_unit": unit,
-            "performance_metric": True,
-            **tags
-        }
-    )
-
-
 def log_error(logger: logging.Logger, error: Exception, context: Dict[str, Any] = {}) -> None:
     """Log errors with context."""
     logger.error(

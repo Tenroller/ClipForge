@@ -8,7 +8,7 @@ functions used throughout the VideoHelper application.
 import os
 from pathlib import Path
 from typing import Optional, Union, List, Dict, Any
-from ..logging_config import get_logger
+from backend.logging_config import get_logger
 
 logger = get_logger("path_utils")
 
@@ -17,12 +17,16 @@ class PathManager:
     """Centralized path management system."""
 
     def __init__(self):
+        import os
+        
         self.project_root: Path = self._find_project_root()
         self.backend_root: Path = self.project_root / "backend"
         self.frontend_root: Path = self.project_root / "frontend"
-        self.output_root: Path = self.project_root / "output"
-        self.temp_root: Path = self.project_root / "temp"
-        self.logs_root: Path = self.project_root / "logs"
+        
+        # Use environment variables if available, otherwise fall back to project structure
+        self.output_root: Path = Path(os.getenv("VIDEOHELPER_OUTPUT_DIR", str(self.project_root / "output")))
+        self.temp_root: Path = Path(os.getenv("VIDEOHELPER_TEMP_DIR", str(self.project_root / "temp")))
+        self.logs_root: Path = Path(os.getenv("VIDEOHELPER_LOGS_DIR", str(self.project_root / "logs")))
 
         # Create directories if they don't exist
         self._ensure_directories()

@@ -1,0 +1,30 @@
+# Video Processing API Configuration
+
+# Service configuration
+PROCESSOR_ID=processor-1
+PROCESSOR_PORT=8090
+PROCESSOR_HOST=0.0.0.0
+PROCESSOR_MAX_CONCURRENT_JOBS=2
+PROCESSOR_JOB_TIMEOUT_SECONDS=3600
+
+# Backend API communication
+BACKEND_API_URL=http://localhost:8080
+BACKEND_API_KEY=your-backend-api-key
+
+# Job queue configuration
+REDIS_URL=redis://localhost:6379
+REDIS_DB=1
+
+# Output configuration
+OUTPUT_DIR=./output
+TEMP_DIR=./temp
+
+# AI API Keys (required for video processing)
+PEXELS_API_KEY=your-pexels-api-key
+GEMINI_API_KEY=your-gemini-api-key
+
+# Logging
+LOG_LEVEL=INFO
+
+# Health check
+HEALTH_CHECK_INTERVAL=30

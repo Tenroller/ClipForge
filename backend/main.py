@@ -10,16 +10,15 @@ import os
 from pathlib import Path
 
 def main():
-    # Get the backend directory (where this script is located)
+    # Get the current directory (backend directory in container)
     backend_dir = Path(__file__).parent.resolve()
-    project_root = backend_dir.parent
     
-    # Change working directory to project root
-    os.chdir(project_root)
+    # Add backend directory to Python path so 'backend' module can be imported
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
     
-    # Add project root to Python path
-    if str(project_root) not in sys.path:
-        sys.path.insert(0, str(project_root))
+    # Set working directory to backend
+    os.chdir(backend_dir)
     
     # Get configuration from environment
     host = os.getenv("HOST", "0.0.0.0")
@@ -28,15 +27,15 @@ def main():
     
     print(f"🚀 Starting AI Video Generator API on {host}:{port}")
     print(f"📁 Working directory: {os.getcwd()}")
-    print(f"🐍 Python path includes: {project_root}")
-    print(f"🔧 Using reorganized backend structure")
+    print(f"🐍 Backend directory: {backend_dir}")
+    print(f"🔧 Using containerized backend structure")
     
     # Import uvicorn
     import uvicorn
     
-    # Run the reorganized app
+    # Run the app directly from the backend directory
     uvicorn.run(
-        "backend.app:app",  # Now using the clean reorganized structure
+        "app:app",  # Direct import since we're in the backend directory
         host=host,
         port=port,
         reload=reload,

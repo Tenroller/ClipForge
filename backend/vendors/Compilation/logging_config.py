@@ -40,9 +40,11 @@ class UnicodeStreamHandler(logging.StreamHandler):
     """Unicode-safe stream handler for Windows compatibility"""
     
     def emit(self, record):
+        # Get stream reference at the beginning to ensure it's always available
+        stream = self.stream
+        
         try:
             msg = self.format(record)
-            stream = self.stream
             stream.write(msg + self.terminator)
             self.flush()
         except UnicodeEncodeError:
