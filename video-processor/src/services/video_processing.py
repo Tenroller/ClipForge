@@ -229,7 +229,8 @@ class VideoProcessingService:
                     result = subprocess.run(probe_cmd, capture_output=True, text=True)
                     if result.returncode == 0:
                         probe_data = json.loads(result.stdout)
-                        duration = float(probe_data['format']['duration'])
+                        format_info = probe_data.get('format', {})
+                        duration = float(format_info.get('duration', 0))
                         logger.info(f"Job {job_id}: Audio duration is {duration:.2f} seconds")
                 except Exception as duration_error:
                     logger.warning(f"Job {job_id}: Could not get audio duration: {duration_error}")
@@ -471,12 +472,17 @@ class VideoProcessingService:
                     logger.info(f"Job {job_id}: Processing clip: {os.path.basename(split_info['path'])}")
                     cropped_clip_path = generator.processor.crop_video_if_vertical_with_blur(split_info['path'])
                     
+                    # Get video info and orientation for the cropped clip
+                    video_info = generator.processor.get_video_info(cropped_clip_path)
+                    orientation = generator.processor.get_video_orientation(video_info)
+                    
                     clip_info = {
                         'path': cropped_clip_path,
                         'start_time': split_info['start_time'],
                         'end_time': split_info['end_time'],
                         'duration': split_info['duration'],
                         'scene_number': split_info['scene_number'],
+                        'orientation': orientation,
                         'temp_dir': temp_dir
                     }
                     video_clips.append(clip_info)
@@ -484,12 +490,18 @@ class VideoProcessingService:
         else:
             # Single video or no scenes detected (same as process_single_video)
             logger.info(f"Job {job_id}: Processing as single video (no scene splitting)")
+            
+            # Get video info and orientation for the single video
+            video_info = generator.processor.get_video_info(video_path)
+            orientation = generator.processor.get_video_orientation(video_info)
+            
             clip_info = {
                 'path': video_path,
                 'start_time': 0,
                 'end_time': analysis['duration'],
                 'duration': analysis['duration'],
                 'scene_number': 1,
+                'orientation': orientation,
                 'temp_dir': None
             }
             video_clips.append(clip_info)

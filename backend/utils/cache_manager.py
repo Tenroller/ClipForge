@@ -61,12 +61,12 @@ class CacheEntry:
     def from_dict(cls, data: Dict[str, Any]) -> 'CacheEntry':
         """Create from dictionary."""
         return cls(
-            key=data['key'],
-            data=data['data'],
-            created_at=data['created_at'],
+            key=data.get('key', ''),
+            data=data.get('data'),
+            created_at=data.get('created_at', 0),
             expires_at=data.get('expires_at'),
             access_count=data.get('access_count', 0),
-            last_accessed=data.get('last_accessed', data['created_at']),
+            last_accessed=data.get('last_accessed', data.get('created_at', 0)),
             size_bytes=data.get('size_bytes', 0),
             metadata=data.get('metadata', {})
         )

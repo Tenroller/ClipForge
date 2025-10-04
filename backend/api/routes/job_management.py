@@ -15,7 +15,7 @@ from ...services.job_management import JobManagementService
 
 router = APIRouter()
 job_service = JobManagementService()
-logger = get_logger("job_remake")
+logger = get_logger("job_management")
 job_store = get_job_store()
 video_orchestrator = get_video_orchestrator()
 
@@ -44,6 +44,20 @@ def job_status(job_id: str):
             # Ignore tombstone lookup failures and fallthrough to 404
             pass
         raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Include logs in the job status response for efficiency
+    try:
+        logger.info(f"Fetching logs for job {job_id} in job_status endpoint")
+        logs_data = job_service.get_job_logs(job_id)
+        job['logs'] = logs_data.get('logs', [])
+        job['total_logs'] = logs_data.get('total_logs', 0)
+        logger.info(f"Successfully added {len(job['logs'])} logs to job status response")
+    except Exception as e:
+        logger.warning(f"Failed to fetch logs for job {job_id}: {e}")
+        # Fallback to empty logs if logs fetch fails
+        job['logs'] = []
+        job['total_logs'] = 0
+    
     return job
 
 

@@ -70,3 +70,7 @@ jobs.db
 /video-processor/src/core/__pycache__
 /video-processor/src/models/__pycache__
 /video-processor/src/services/__pycache__
+/video-processor/__pycache__
+/video-processor/utils/__pycache__
+/video-processor/utils/__pycache__
+/video-processor/src/__pycache__

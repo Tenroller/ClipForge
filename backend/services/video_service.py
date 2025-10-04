@@ -4,6 +4,7 @@ Video service for managing video records in the database.
 
 import hashlib
 import time
+import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
@@ -20,23 +21,15 @@ class VideoService:
         self.job_store = get_job_store()
         self.output_dir = get_output_path()
     
-    def generate_video_id(self, job_id: str, filename: str, compilation_num: int = None, 
-                         compilation_type: str = None) -> str:
-        """Generate a unique video ID based on job and file information."""
-        # Create a unique identifier based on job_id, filename, and optional parameters
-        base_string = f"{job_id}_{filename}"
-        if compilation_num is not None:
-            base_string += f"_comp{compilation_num}"
-        if compilation_type:
-            base_string += f"_{compilation_type}"
-        
-        # Create a shorter hash for the ID
-        hash_object = hashlib.md5(base_string.encode())
-        return f"vid_{hash_object.hexdigest()[:12]}"
+    def generate_video_id(self, job_id: str, filename: str, compilation_num: Optional[int] = None, 
+                         compilation_type: Optional[str] = None) -> str:
+        """Generate a unique video ID as a proper UUID."""
+        # Generate a UUID for the video ID to match database schema
+        return str(uuid.uuid4())
     
     def register_video(self, job_id: str, file_path: str, workflow: str, 
-                      video_type: str = None, compilation_type: str = None, 
-                      compilation_num: int = None, metadata: Dict[str, Any] = None) -> str:
+                      video_type: Optional[str] = None, compilation_type: Optional[str] = None, 
+                      compilation_num: Optional[int] = None, metadata: Optional[Dict[str, Any]] = None) -> str:
         """
         Register a new video in the database.
         
@@ -119,8 +112,8 @@ class VideoService:
             self.logger.error(f"Failed to get video {video_id}: {e}")
             return None
     
-    def list_videos(self, limit: int = 100, offset: int = 0, workflow: str = None, 
-                   posted: bool = None, job_id: str = None) -> List[Dict[str, Any]]:
+    def list_videos(self, limit: int = 100, offset: int = 0, workflow: Optional[str] = None, 
+                   posted: Optional[bool] = None, job_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """List videos with optional filtering."""
         try:
             return self.job_store.list_videos(
@@ -130,11 +123,11 @@ class VideoService:
             self.logger.error(f"Failed to list videos: {e}")
             return []
     
-    def get_unposted_videos(self, workflow: str = None, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_unposted_videos(self, workflow: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
         """Get videos that haven't been posted yet."""
         return self.list_videos(limit=limit, posted=False, workflow=workflow)
     
-    def get_random_video(self, workflow: str = None) -> Optional[Dict[str, Any]]:
+    def get_random_video(self, workflow: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Get a random video from the database."""
         try:
             return self.job_store.get_random_video(workflow=workflow)

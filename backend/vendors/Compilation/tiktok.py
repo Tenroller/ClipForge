@@ -37,7 +37,7 @@ class TikTokVideoCreator:
         
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
-        self.processor = CatVideoProcessor(output_dir=output_dir, ffmpeg_path=ffmpeg_path)
+        self.processor = CatVideoProcessor(output_dir=output_dir, ffmpeg_path=ffmpeg_path, crop_verbose=False, enable_yolo=True, crop_debug_frames=False)
         
         # Create output directory if it doesn't exist
         Path(self.output_dir).mkdir(exist_ok=True)
@@ -65,8 +65,8 @@ class TikTokVideoCreator:
 
         Strategy:
         1.  Quick exit for obvious cases (height >= width => vertical/square).
-        2.  If the frame is wider than tall, run advanced pillar-box detection that analyses
-            multiple frames using the new detect_pillarboxes_advanced method.
+        2.  If the frame is wider than tall, run edge-based pillar-box detection that analyses
+            multiple frames using the detect_pillarboxes_edge_detection method.
         3.  Default to horizontal when all heuristics fail.
         """
 
@@ -83,16 +83,16 @@ class TikTokVideoCreator:
         if width == height:
             return 'square'
 
-        # 2.  Potential pillar-boxed vertical – run advanced detection
+        # 2.  Potential pillar-boxed vertical – run edge detection
         try:
-            left_crop, right_crop = self.processor.detect_pillarboxes_advanced(video_path, method='edge')
+            left_crop, right_crop = self.processor.detect_pillarboxes_edge_detection(video_path)
             if left_crop > 0 or right_crop > 0:
                 content_width = width - left_crop - right_crop
                 # If the detected content is narrower than the frame height, treat as vertical
                 if content_width < height:
                     return 'vertical'
         except Exception as pillar_err:
-            print(f"[Orientation] Advanced pillar detection failed: {pillar_err}")
+            print(f"[Orientation] Edge pillar detection failed: {pillar_err}")
 
         # 3.  No heuristic indicated vertical → assume horizontal
         return 'horizontal'
@@ -185,8 +185,8 @@ class TikTokVideoCreator:
             selected_videos.append(video)
             total_duration += video['duration']
             
-            video_type = video['type']
-            orientation = video['orientation']
+            video_type = video.get('type', 'unknown')
+            orientation = video.get('orientation', 'unknown')
             template_note = " (will use template)" if orientation == 'horizontal' else " (direct use)" if orientation == 'vertical' else " (will use template)"
             
             print(f"Selected: {video['id']} ({orientation}, {video_type}, {video['duration']:.1f}s){template_note} - Total: {total_duration:.1f}s")
@@ -195,9 +195,9 @@ class TikTokVideoCreator:
         print(f"Selected {len(selected_videos)} videos for total duration: {total_duration:.1f}s")
         
         # Show breakdown
-        horizontal_count = len([v for v in selected_videos if v['orientation'] == 'horizontal'])
-        vertical_count = len([v for v in selected_videos if v['orientation'] == 'vertical'])
-        square_count = len([v for v in selected_videos if v['orientation'] == 'square'])
+        horizontal_count = len([v for v in selected_videos if v.get('orientation', 'unknown') == 'horizontal'])
+        vertical_count = len([v for v in selected_videos if v.get('orientation', 'unknown') == 'vertical'])
+        square_count = len([v for v in selected_videos if v.get('orientation', 'unknown') == 'square'])
         split_count = len([v for v in selected_videos if v['type'] == 'split'])
         single_count = len([v for v in selected_videos if v['type'] == 'single'])
         
@@ -363,9 +363,16 @@ class TikTokVideoCreator:
         
         try:
             for i, video_info in enumerate(selected_videos):
-                video_path = video_info['path']
-                orientation = video_info['orientation']
-                video_type = video_info['type']
+                # Safely extract video info with fallbacks
+                video_path = video_info.get('path')
+                orientation = video_info.get('orientation', 'unknown')
+                video_type = video_info.get('type', 'unknown')
+                video_id = video_info.get('id', f'clip_{i+1}')
+                
+                if not video_path:
+                    print(f"[COMPILATION] Skipping clip {i+1}: missing video path")
+                    continue
+                    
                 print(f"[COMPILATION] Using video for clip {i+1}: {video_path} (orientation: {orientation}, type: {video_type})")
                 
                 clip = None
@@ -377,7 +384,7 @@ class TikTokVideoCreator:
                             clip = VideoFileClip(vertical_path)
                             temp_files.append(vertical_path)
                         else:
-                            print(f"Failed to convert horizontal video, skipping: {video_info['id']}")
+                            print(f"Failed to convert horizontal video, skipping: {video_id}")
                             continue
                     
                     elif orientation == 'vertical':
@@ -402,15 +409,15 @@ class TikTokVideoCreator:
                             clip = VideoFileClip(vertical_path)
                             temp_files.append(vertical_path)
                         else:
-                            print(f"Failed to convert square video, skipping: {video_info['id']}")
+                            print(f"Failed to convert square video, skipping: {video_id}")
                             continue
                     
                     else:
-                        print(f"Unknown orientation, skipping: {video_info['id']}")
+                        print(f"Unknown orientation, skipping: {video_id}")
                         continue
                         
                 except Exception as e:
-                    print(f"⚠️  Error processing video {video_info['id']} ({video_path}): {e}")
+                    print(f"⚠️  Error processing video {video_id} ({video_path}): {e}")
                     print(f"   Skipping corrupted/problematic video and continuing...")
                     # Clean up any partially created clip
                     try:

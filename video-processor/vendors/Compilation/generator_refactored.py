@@ -322,7 +322,7 @@ class VideoProcessor:
         self.config = config
         self.validator = InputValidator()
         self.cache = get_video_analysis_cache()
-        self.processor = CatVideoProcessor(output_dir=config.paths.output_dir)
+        self.processor = CatVideoProcessor(output_dir=config.paths.output_dir, crop_debug_frames=False, crop_verbose=False, enable_yolo=True)
         self.creator = TikTokVideoCreator(output_dir=config.paths.output_dir)
         self.logger = logger
     

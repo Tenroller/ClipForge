@@ -66,7 +66,10 @@ def clean_text_for_filename(text):
 
 
 class CatVideoProcessor:
-    def __init__(self, output_dir="final_videos", ffmpeg_path=None):
+    def __init__(self, output_dir="final_videos", ffmpeg_path=None,
+                 crop_verbose: bool | None = None,
+                 crop_debug_frames: bool | None = None,
+                 enable_yolo: bool | None = None):
         # FFmpeg 7+ compatibility fixes - cross-platform
         import sys
         import os
@@ -93,6 +96,29 @@ class CatVideoProcessor:
             self.ffmpeg_path = os.getenv('FFMPEG_PATH') or shutil.which('ffmpeg') or r'C:\ffmpeg\bin\ffmpeg.exe'
 
         self.check_dependencies()
+
+        # Runtime behavior flags (env overrides -> args -> defaults)
+        # Set to 1 to enable detailed crop detection logs
+        if crop_verbose is None:
+            crop_verbose = os.getenv("CROP_VERBOSE", "0") == "1"
+        if crop_debug_frames is None:
+            crop_debug_frames = os.getenv("CROP_DEBUG_FRAMES", "0") == "1"
+        if enable_yolo is None:
+            enable_yolo = os.getenv("CROP_ENABLE_YOLO", "1") != "0"
+
+        self.crop_verbose = crop_verbose
+        self.crop_debug_frames = crop_debug_frames
+        self.enable_yolo = enable_yolo
+
+        # Cached YOLO model (lazy loaded) so we don't reload per video
+        self._yolo_model = None
+        self._yolo_device = None
+
+    # ---------------- internal logging helpers -----------------
+    def _crop_log(self, msg: str, always: bool = False):
+        """Log crop detection messages respecting verbosity flag."""
+        if always or self.crop_verbose:
+            print(msg)
     
     def check_dependencies(self):
         """Check if required dependencies are installed"""
@@ -1043,12 +1069,16 @@ class CatVideoProcessor:
         Returns:
             tuple: (left_crop, right_crop) - pixels to crop from each side
         """
-        print(f"[YOLOv8 Detection] Starting YOLOv8 object-based pillarbox detection")
+        if not self.enable_yolo:
+            # YOLO disabled explicitly
+            return 0, 0
+        self._crop_log(f"[YOLOv8 Detection] Starting YOLOv8 object-based pillarbox detection")
         try:
+            # Lazy import to avoid cost when not used
             from ultralytics import YOLO  # type: ignore
             import torch  # type: ignore
         except ImportError:
-            print("[YOLOv8 Detection] ultralytics not installed, falling back to vision methods")
+            self._crop_log("[YOLOv8 Detection] ultralytics not installed, falling back to vision methods")
             return self.detect_pillarboxes_transition_based(video_path, sample_frames)
 
         cap = cv2.VideoCapture(video_path)
@@ -1057,12 +1087,20 @@ class CatVideoProcessor:
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        print(f"[YOLOv8 Detection] Video: {width}x{height}, {total_frames} frames")
+        self._crop_log(f"[YOLOv8 Detection] Video: {width}x{height}, {total_frames} frames")
 
-        # Load YOLOv8 model (nano for speed, or use 'yolov8m.pt' for more accuracy)
-        model = YOLO('yolov8n.pt')
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        model.to(device)
+        # Load YOLOv8 model once and reuse
+        if self._yolo_model is None:
+            model_name = os.getenv("CROP_YOLO_MODEL", "yolov8n.pt")
+            try:
+                self._yolo_model = YOLO(model_name)
+                self._yolo_device = 'cuda' if torch.cuda.is_available() else 'cpu'
+                self._yolo_model.to(self._yolo_device)
+                self._crop_log(f"[YOLOv8 Detection] Loaded model {model_name} on {self._yolo_device}")
+            except Exception as e:
+                self._crop_log(f"[YOLOv8 Detection] Failed to load model ({e}), fallback to vision methods")
+                return self.detect_pillarboxes_transition_based(video_path, sample_frames)
+        model = self._yolo_model
 
         frame_indices = np.linspace(0, total_frames - 1, sample_frames, dtype=int)
         all_boxes = []
@@ -1081,7 +1119,7 @@ class CatVideoProcessor:
         cap.release()
 
         if not all_boxes:
-            print("[YOLOv8 Detection] No objects detected, falling back to vision methods.")
+            self._crop_log("[YOLOv8 Detection] No objects detected, falling back to vision methods.")
             return self.detect_pillarboxes_transition_based(video_path, sample_frames)
 
         # Find the min/max x coordinates across all boxes
@@ -1097,7 +1135,7 @@ class CatVideoProcessor:
         if abs(left_crop - right_crop) < width * 0.05:
             avg_crop = (left_crop + right_crop) // 2
             left_crop = right_crop = avg_crop
-        print(f"[YOLOv8 Detection] Cropping to: left={left_crop}, right={right_crop}")
+        self._crop_log(f"[YOLOv8 Detection] Cropping to: left={left_crop}, right={right_crop}")
         return left_crop, right_crop
 
     def crop_video_if_vertical_with_blur(self, video_path):
@@ -1107,7 +1145,8 @@ class CatVideoProcessor:
         Uses edge detection as the primary method, with fallback to YOLOv8 and then transition-based methods.
         Returns the path to the cropped video, or the original path if no cropping was needed.
         """
-        print(f"Detecting and removing pillarboxes from {video_path}")
+        # Minimal log always
+        self._crop_log(f"Detecting and removing pillarboxes from {video_path}", always=self.crop_verbose)
 
         # Debug: Check if file exists and is accessible
         if not os.path.exists(video_path):
@@ -1116,7 +1155,7 @@ class CatVideoProcessor:
 
         try:
             file_size = os.path.getsize(video_path)
-            print(f"✅ File exists: {video_path} ({file_size} bytes)")
+            self._crop_log(f"✅ File exists: {video_path} ({file_size} bytes)")
         except Exception as e:
             print(f"❌ Cannot access file: {video_path} - {e}")
             return video_path
@@ -1130,36 +1169,37 @@ class CatVideoProcessor:
             return video_path
         width = video_info.get('width', 0)
         height = video_info.get('height', 0)
-        print(f"[Crop Detection] Video dimensions: {width}x{height}")
+        self._crop_log(f"[Crop Detection] Video dimensions: {width}x{height}")
         if height >= width:
             print("Video is already vertical or square. No cropping needed.")
             return video_path
         # Save a preview frame for debugging
-        try:
-            cap = cv2.VideoCapture(video_path)
-            if cap.isOpened():
-                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames // 2)
-                ret, frame = cap.read()
-                if ret:
-                    preview_path = os.path.join(debug_dir, f"{video_id}_original.png")
-                    cv2.imwrite(preview_path, frame)
-                    print(f"[Crop Detection] Saved preview frame: {preview_path}")
-                cap.release()
-        except Exception as e:
-            print(f"[Crop Detection] Could not save preview frame: {e}")
+        if self.crop_debug_frames:
+            try:
+                cap = cv2.VideoCapture(video_path)
+                if cap.isOpened():
+                    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames // 2)
+                    ret, frame = cap.read()
+                    if ret:
+                        preview_path = os.path.join(debug_dir, f"{video_id}_original.png")
+                        cv2.imwrite(preview_path, frame)
+                        self._crop_log(f"[Crop Detection] Saved preview frame: {preview_path}")
+                    cap.release()
+            except Exception as e:
+                self._crop_log(f"[Crop Detection] Could not save preview frame: {e}")
         # Use edge detection as primary, fallback to YOLOv8, then transition-based
         try:
             left_crop, right_crop = self.detect_pillarboxes_edge_detection(video_path)
-            print(f"[Crop Detection] [Edge] Detected pillarboxes: left={left_crop}px, right={right_crop}px")
+            self._crop_log(f"[Crop Detection] [Edge] Detected pillarboxes: left={left_crop}px, right={right_crop}px")
             if left_crop == 0 and right_crop == 0:
-                print("[Crop Detection] [Edge] No crop detected, falling back to YOLOv8.")
+                self._crop_log("[Crop Detection] [Edge] No crop detected, falling back to YOLOv8.")
                 left_crop, right_crop = self.detect_pillarboxes_yolov8(video_path)
-                print(f"[Crop Detection] [YOLOv8] Detected pillarboxes: left={left_crop}px, right={right_crop}px")
+                self._crop_log(f"[Crop Detection] [YOLOv8] Detected pillarboxes: left={left_crop}px, right={right_crop}px")
                 if left_crop == 0 and right_crop == 0:
-                    print("[Crop Detection] [YOLOv8] No crop detected, falling back to transition-based.")
+                    self._crop_log("[Crop Detection] [YOLOv8] No crop detected, falling back to transition-based.")
                     left_crop, right_crop = self.detect_pillarboxes_transition_based(video_path)
-                    print(f"[Crop Detection] [Transition] Detected pillarboxes: left={left_crop}px, right={right_crop}px")
+                    self._crop_log(f"[Crop Detection] [Transition] Detected pillarboxes: left={left_crop}px, right={right_crop}px")
             crop_width = width - left_crop - right_crop
             if crop_width <= 0:
                 print("[Crop Detection] Invalid crop width, no cropping needed")
@@ -1172,21 +1212,21 @@ class CatVideoProcessor:
                 return video_path
             min_crop_threshold = max(width * 0.05, 30)  # Increased from 0.02/20 to 0.05/30
             total_crop = left_crop + right_crop
-            print(f"[Crop Detection] Total crop: {total_crop}px, threshold: {min_crop_threshold*2:.1f}px")
+            self._crop_log(f"[Crop Detection] Total crop: {total_crop}px, threshold: {min_crop_threshold*2:.1f}px")
             if total_crop < min_crop_threshold * 2:
                 print(f"[Crop Detection] Not enough cropping detected ({total_crop}px < {min_crop_threshold*2:.1f}px)")
                 return video_path
             new_aspect_ratio = crop_width / height
             original_aspect_ratio = width / height
-            print(f"[Crop Detection] Aspect ratios: original={original_aspect_ratio:.2f}, new={new_aspect_ratio:.2f}")
+            self._crop_log(f"[Crop Detection] Aspect ratios: original={original_aspect_ratio:.2f}, new={new_aspect_ratio:.2f}")
             if new_aspect_ratio >= original_aspect_ratio * 0.8:  # Increased from 0.9 to 0.8 - require more significant improvement
                 print(f"[Crop Detection] Not enough improvement in aspect ratio")
                 return video_path
             if new_aspect_ratio > 1.5:  # Reduced from 1.8 to 1.5 - be more strict about wide videos
                 print(f"[Crop Detection] Still too wide after cropping (ratio: {new_aspect_ratio:.2f})")
                 return video_path
-            print(f"[Crop Detection] ✓ Cropping approved: {width}x{height} -> {crop_width}x{height}")
-            print(f"[Crop Detection] ✓ Aspect ratio: {original_aspect_ratio:.2f} -> {new_aspect_ratio:.2f}")
+            self._crop_log(f"[Crop Detection] ✓ Cropping approved: {width}x{height} -> {crop_width}x{height}", always=True)
+            self._crop_log(f"[Crop Detection] ✓ Aspect ratio: {original_aspect_ratio:.2f} -> {new_aspect_ratio:.2f}")
             try:
                 cap = cv2.VideoCapture(video_path)
                 if cap.isOpened():
@@ -1196,20 +1236,21 @@ class CatVideoProcessor:
                     if ret:
                         crop_region = frame[:, left_crop:left_crop+crop_width]
                         region_variance = np.var(cv2.cvtColor(crop_region, cv2.COLOR_BGR2GRAY).astype(np.float64))
-                        print(f"[Crop Detection] Crop region variance: {region_variance:.2f}")
+                        self._crop_log(f"[Crop Detection] Crop region variance: {region_variance:.2f}")
                         if region_variance < 10:
                             print(f"[Crop Detection] Crop region appears empty (variance={region_variance:.2f})")
                             cap.release()
                             return video_path
-                        preview_crop_path = os.path.join(debug_dir, f"{video_id}_crop_preview.png")
-                        cv2.imwrite(preview_crop_path, crop_region)
-                        print(f"[Crop Detection] Saved crop preview: {preview_crop_path}")
-                        debug_frame = frame.copy()
-                        cv2.line(debug_frame, (left_crop, 0), (left_crop, height-1), (0, 255, 0), 2)
-                        cv2.line(debug_frame, (left_crop + crop_width, 0), (left_crop + crop_width, height-1), (0, 0, 255), 2)
-                        debug_path = os.path.join(debug_dir, f"{video_id}_crop_lines.png")
-                        cv2.imwrite(debug_path, debug_frame)
-                        print(f"[Crop Detection] Saved debug frame with crop lines: {debug_path}")
+                        if self.crop_debug_frames:
+                            preview_crop_path = os.path.join(debug_dir, f"{video_id}_crop_preview.png")
+                            cv2.imwrite(preview_crop_path, crop_region)
+                            self._crop_log(f"[Crop Detection] Saved crop preview: {preview_crop_path}")
+                            debug_frame = frame.copy()
+                            cv2.line(debug_frame, (left_crop, 0), (left_crop, height-1), (0, 255, 0), 2)
+                            cv2.line(debug_frame, (left_crop + crop_width, 0), (left_crop + crop_width, height-1), (0, 0, 255), 2)
+                            debug_path = os.path.join(debug_dir, f"{video_id}_crop_lines.png")
+                            cv2.imwrite(debug_path, debug_frame)
+                            self._crop_log(f"[Crop Detection] Saved debug frame with crop lines: {debug_path}")
                     cap.release()
             except Exception as e:
                 print(f"[Crop Detection] Could not validate crop region: {e}")
@@ -1224,7 +1265,7 @@ class CatVideoProcessor:
                     pass
 
                 if has_gpu:
-                    print("[Crop Detection] 🎮 GPU acceleration available - using NVENC encoding")
+                    self._crop_log("[Crop Detection] 🎮 GPU acceleration available - using NVENC encoding")
                     cmd = [
                         self.ffmpeg_path, '-y', '-i', video_path,
                         '-filter:v', f'crop={crop_width}:{height}:{left_crop}:0',
@@ -1235,7 +1276,7 @@ class CatVideoProcessor:
                         output_path
                     ]
                 else:
-                    print("[Crop Detection] 💻 Using CPU encoding (GPU not available)")
+                    self._crop_log("[Crop Detection] 💻 Using CPU encoding (GPU not available)")
                     cmd = [
                         self.ffmpeg_path, '-y', '-i', video_path,
                         '-filter:v', f'crop={crop_width}:{height}:{left_crop}:0',
@@ -1246,14 +1287,14 @@ class CatVideoProcessor:
                         output_path
                     ]
 
-                print(f"[Crop Detection] Running FFmpeg: crop={crop_width}:{height}:{left_crop}:0")
-                print(f"[Crop Detection] Using {'GPU (NVENC)' if has_gpu else 'CPU (libx264)'} encoding")
+                self._crop_log(f"[Crop Detection] Running FFmpeg: crop={crop_width}:{height}:{left_crop}:0")
+                self._crop_log(f"[Crop Detection] Using {'GPU (NVENC)' if has_gpu else 'CPU (libx264)'} encoding")
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 if result.returncode == 0:
-                    print(f"[Crop Detection] ✓ Successfully cropped video and saved to {output_path}")
+                    self._crop_log(f"[Crop Detection] ✓ Successfully cropped video and saved to {output_path}", always=True)
                     output_info = self.get_video_info(output_path)
                     if output_info and output_info.get('duration', 0) > 0:
-                        print(f"[Crop Detection] ✓ Output validation: {output_info['width']}x{output_info['height']}, {output_info['duration']:.1f}s")
+                        self._crop_log(f"[Crop Detection] ✓ Output validation: {output_info['width']}x{output_info['height']}, {output_info['duration']:.1f}s")
                         return output_path
                     else:
                         print(f"[Crop Detection] ✗ Output file appears invalid")
@@ -1269,91 +1310,74 @@ class CatVideoProcessor:
             return video_path
 
     def split_video_with_ffmpeg(self, video_path, start_time, end_time, output_path):
-        """Split a video segment using ffmpeg via subprocess with improved compatibility"""
+        """Split a video segment with fast keyframe copy + optional accurate re-encode.
+
+        Env toggles:
+          SPLIT_ACCURATE_SEEK=1 -> force accurate re-encode
+          SPLIT_ENCODE_PRESET (default fast)
+          SPLIT_ENCODE_CRF (default 23)
+        """
         try:
             print(f"🎬 Splitting scene: {start_time:.1f}s to {end_time:.1f}s -> {os.path.basename(output_path)}")
-
-            # Check if ffmpeg is available
             if not os.path.exists(self.ffmpeg_path):
                 print(f"❌ FFmpeg not found at: {self.ffmpeg_path}")
                 return False
-
-            # Check if input video exists
             if not os.path.exists(video_path):
+                # Allow idempotent reuse if output already present
+                if os.path.exists(output_path):
+                    print(f"✅ Output already exists (source missing): {os.path.basename(output_path)}")
+                    return True
                 print(f"❌ Input video not found: {video_path}")
                 return False
-
-            # First, try with stream copy for speed - FIXED: Put -ss BEFORE -i for accurate seeking
             cmd_copy = [
-                self.ffmpeg_path, '-y',
-                '-ss', str(start_time),  # Put seek BEFORE input for accurate timing
-                '-i', video_path,
+                self.ffmpeg_path, '-y', '-loglevel', 'error',
+                '-ss', str(start_time), '-i', video_path,
                 '-t', str(end_time - start_time),
                 '-c:v', 'copy', '-c:a', 'copy',
-                '-avoid_negative_ts', 'make_zero',  # Fix timing issues
-                '-fflags', '+genpts',  # Generate presentation timestamps
-                '-start_at_zero',  # Ensure output starts at zero
+                '-avoid_negative_ts', 'make_zero', '-fflags', '+genpts',
+                '-start_at_zero', '-err_detect', 'ignore_err',
                 output_path
             ]
-
             print(f"   📋 FFmpeg command: {' '.join(cmd_copy)}")
             result = subprocess.run(cmd_copy, capture_output=True, text=True)
-
             if result.returncode != 0:
                 print(f"   ❌ Stream copy failed: {result.stderr}")
-
-            # Check if file was created
             if os.path.exists(output_path):
-                file_size = os.path.getsize(output_path)
-                print(f"   ✅ File created: {file_size} bytes")
+                print(f"   ✅ File created: {os.path.getsize(output_path)} bytes")
             else:
-                print(f"   ❌ File not created")
-            
-            # If stream copy fails or produces invalid output, re-encode
-            if result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) < 1024:
-                print(f"Stream copy failed for {os.path.basename(output_path)}, re-encoding...")
-                
-                # Remove failed output file if it exists
+                print("   ❌ File not created")
+            accurate_seek_requested = os.getenv("SPLIT_ACCURATE_SEEK", "0") == "1"
+            if accurate_seek_requested:
+                print("   ℹ️ SPLIT_ACCURATE_SEEK=1 -> enforcing accurate seek")
+            need_reencode = (accurate_seek_requested or result.returncode != 0 or not os.path.exists(output_path) or os.path.getsize(output_path) < 1024)
+            if need_reencode:
                 if os.path.exists(output_path):
-                    os.remove(output_path)
-                
-                # Re-encode with compatibility settings - FIXED: Put -ss BEFORE -i
+                    try: os.remove(output_path)
+                    except OSError: pass
                 cmd_encode = [
-                    self.ffmpeg_path, '-y',
-                    '-ss', str(start_time),  # Put seek BEFORE input for accurate timing
+                    self.ffmpeg_path, '-y', '-loglevel', 'error',
                     '-i', video_path,
-                    '-t', str(end_time - start_time),
-                    '-c:v', 'libx264',  # Ensure H.264 video codec
-                    '-c:a', 'aac',      # Ensure AAC audio codec
-                    '-preset', 'fast',   # Balance speed and quality
-                    '-crf', '23',        # Good quality setting
-                    '-pix_fmt', 'yuv420p',  # Ensure compatibility
-                    '-movflags', 'faststart',  # Web optimization
-                    '-avoid_negative_ts', 'make_zero',
-                    '-fflags', '+genpts',
-                    '-start_at_zero',  # Ensure output starts at zero
+                    '-ss', str(start_time), '-t', str(end_time - start_time),
+                    '-c:v', 'libx264', '-c:a', 'aac',
+                    '-preset', os.getenv('SPLIT_ENCODE_PRESET', 'fast'),
+                    '-crf', os.getenv('SPLIT_ENCODE_CRF', '23'),
+                    '-pix_fmt', 'yuv420p', '-movflags', 'faststart',
+                    '-avoid_negative_ts', 'make_zero', '-fflags', '+genpts',
+                    '-start_at_zero', '-err_detect', 'ignore_err',
                     output_path
                 ]
-
                 print(f"   🔄 Re-encoding with: {' '.join(cmd_encode)}")
                 result = subprocess.run(cmd_encode, capture_output=True, text=True)
-
                 if result.returncode != 0:
                     print(f"   ❌ Re-encoding failed: {result.stderr}")
-
-                # Check if file was created after re-encoding
-                if os.path.exists(output_path):
-                    file_size = os.path.getsize(output_path)
-                    print(f"   ✅ Re-encoded file: {file_size} bytes")
+                elif os.path.exists(output_path):
+                    print(f"   ✅ Re-encoded file: {os.path.getsize(output_path)} bytes")
                 else:
-                    print(f"   ❌ Re-encoded file not created")
-                
+                    print("   ❌ Re-encoded file not created")
             if result.returncode == 0 and os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
                 return True
-            else:
-                print(f"Error splitting video with ffmpeg: {result.stderr}")
-                return False
-                
+            print(f"Error splitting video with ffmpeg: {result.stderr}")
+            return False
         except Exception as e:
             print(f"Error splitting video with ffmpeg: {e}")
             return False
@@ -1486,68 +1510,161 @@ class CatVideoProcessor:
             }
 
     def split_video_from_scenes(self, video_path, source_video_id, scene_list):
+        """Split video into scene clips (optional concurrency) then crop pillarboxes.
+
+        Improvements vs older version:
+          - Creates a protected working copy to avoid source deletion mid-process
+          - Adds start_time / end_time to each returned clip dict (prevents KeyError downstream)
+          - Collects basic failure stats
+
+        Env:
+          SCENE_SPLIT_CONCURRENCY -> int workers (default 1, cap 6)
         """
-        Splits a video into multiple clips based on a list of scenes using ffmpeg.
-        Saves clips to the 'temp_vertical' directory.
-        Returns the temporary directory and a list of dictionaries with clip info.
-        """
-        # Clips are saved in a flat structure in 'temp_vertical'
-        # Use absolute path to avoid working directory issues
-        # Get the backend directory (parent of vendors)
         backend_dir = Path(__file__).resolve().parent.parent.parent.parent
         temp_dir = backend_dir / "temp_vertical"
         os.makedirs(temp_dir, exist_ok=True)
-        
-        video_clips = []
-        print(f"Splitting video into {len(scene_list)} scenes...")
-        
-        for i, (start, end) in enumerate(scene_list):
-            output_filename = os.path.join(str(temp_dir), f"{source_video_id}-Scene-{i+1:03d}.mp4")
-            
-            # Use ffmpeg for splitting
-            success = self.split_video_with_ffmpeg(video_path, start.get_seconds(), end.get_seconds(), output_filename)
 
-            if not success:
-                print(f"❌ Failed to split scene {i+1} from {start.get_seconds():.1f}s to {end.get_seconds():.1f}s")
-                continue
+        if not os.path.exists(video_path):
+            print(f"❌ Source video not found at start of splitting: {video_path}")
+            return str(temp_dir), []
 
-            # Verify file was created
-            if not os.path.exists(output_filename):
-                print(f"❌ Scene file not found after splitting: {output_filename}")
-                continue
+        # Record initial file size for sanity
+        try:
+            initial_size = os.path.getsize(video_path)
+            print(f"🎬 Starting scene splitting: {len(scene_list)} scenes from {video_path} ({initial_size} bytes)")
+        except Exception as e:
+            print(f"❌ Cannot access source video file: {e}")
+            return str(temp_dir), []
 
+        # Create protected working copy (prevents cleanup race conditions)
+        protected_video_path = None
+        try:
+            import uuid, shutil
+            working_filename = f"working_{source_video_id}_{uuid.uuid4().hex[:8]}.mp4"
+            protected_video_path = os.path.join(str(temp_dir), working_filename)
+            print(f"🔒 Creating protected working copy: {protected_video_path}")
+            shutil.copy2(video_path, protected_video_path)
+            protected_size = os.path.getsize(protected_video_path)
+            if protected_size != initial_size:
+                print(f"❌ Working copy size mismatch: {initial_size} vs {protected_size}")
+                return str(temp_dir), []
+            print(f"✅ Protected working copy created successfully ({protected_size} bytes)")
+            working_video_path = protected_video_path
+        except Exception as e:
+            print(f"⚠️  Could not create protected working copy: {e}")
+            print(f"🔄 Falling back to original source file (risk of cleanup interference)")
+            working_video_path = video_path
+
+        # Preprocess & filter extremely short scenes (<0.5s)
+        prepared = []
+        for idx, (start, end) in enumerate(scene_list):
             try:
-                file_size = os.path.getsize(output_filename)
-                print(f"✅ Scene {i+1} created: {os.path.basename(output_filename)} ({file_size} bytes)")
-            except Exception as e:
-                print(f"❌ Cannot access scene file {i+1}: {e}")
+                s = start.get_seconds(); e = end.get_seconds()
+                if e - s < 0.5:
+                    continue
+                prepared.append((idx, s, e))
+            except Exception:
                 continue
 
-            # Add a small delay to ensure file is fully written (Windows file locking issue)
-            time.sleep(0.5)
+        # Determine concurrency
+        try:
+            concurrency = int(os.getenv("SCENE_SPLIT_CONCURRENCY", "1"))
+        except ValueError:
+            concurrency = 1
+        concurrency = max(1, min(concurrency, 6))
+        if concurrency > 1 and len(prepared) > 2:
+            print(f"⚙️  Parallel scene splitting enabled (workers={concurrency})")
+        else:
+            concurrency = 1
 
-            # Get video info
-            clip_info = self.get_video_info(output_filename)
-            
-            # Append clip information to the list
-            if clip_info and clip_info.get('duration') and clip_info['duration'] >= 3.0:  # Filter out very short clips (minimum 3 seconds)
-                # ✅ Detect and crop pillarboxes on each clip
-                print(f"🔍 Detecting pillarboxes on scene {i+1}...")
-                cropped_clip_path = self.crop_video_if_vertical_with_blur(output_filename)
-                if cropped_clip_path != output_filename:
-                    print(f"✅ Scene {i+1} pillarboxes cropped: {os.path.basename(output_filename)} -> {os.path.basename(cropped_clip_path)}")
-                    output_filename = cropped_clip_path
-                else:
-                    print(f"ℹ️  No pillarboxes detected on scene {i+1}")
-                
-                video_clips.append({
-                    "path": output_filename,
-                    "duration": clip_info["duration"],
-                    "orientation": self.get_video_orientation(clip_info),
-                    "scene_number": i + 1,
-                })
-        
-        print(f"Generated {len(video_clips)} valid clips.")
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def _do_split(idx, s, e):
+            scene_no = idx + 1
+            out_path = os.path.join(str(temp_dir), f"{source_video_id}-Scene-{scene_no:03d}.mp4")
+            # Reuse existing if already valid
+            if os.path.exists(out_path) and os.path.getsize(out_path) > 1024:
+                return scene_no, out_path, True, s, e
+            ok = self.split_video_with_ffmpeg(working_video_path, s, e, out_path)
+            return scene_no, out_path, ok, s, e
+
+        split_results = []
+        failed_scenes = []
+        if concurrency > 1:
+            with ThreadPoolExecutor(max_workers=concurrency) as pool:
+                future_map = {pool.submit(_do_split, idx, s, e): (idx, s, e) for idx, s, e in prepared}
+                for fut in as_completed(future_map):
+                    idx, s, e = future_map[fut]
+                    try:
+                        split_results.append(fut.result())
+                    except Exception as exc:
+                        scene_no = idx + 1
+                        msg = f"Exception splitting scene {scene_no} ({s:.1f}-{e:.1f}s): {exc}"
+                        print(f"❌ {msg}")
+                        failed_scenes.append((scene_no, msg))
+        else:
+            for idx, s, e in prepared:
+                split_results.append(_do_split(idx, s, e))
+
+        # Deterministic order
+        split_results.sort(key=lambda r: r[0])
+
+        # Collect metadata
+        valid_segments = []
+        for scene_no, out_path, ok, s, e in split_results:
+            if not ok or not os.path.exists(out_path):
+                msg = f"Failed to split scene {scene_no} from {s:.1f}s to {e:.1f}s"
+                print(f"❌ {msg}")
+                failed_scenes.append((scene_no, msg))
+                continue
+            try:
+                size = os.path.getsize(out_path)
+                print(f"✅ Scene {scene_no} created: {os.path.basename(out_path)} ({size} bytes)")
+            except OSError as fs_err:
+                msg = f"File access error scene {scene_no}: {fs_err}"
+                print(f"❌ {msg}")
+                failed_scenes.append((scene_no, msg))
+                continue
+            time.sleep(0.05)
+            clip_info = self.get_video_info(out_path)
+            if not (clip_info and clip_info.get('duration') and clip_info['duration'] >= 3.0):
+                continue
+            valid_segments.append((scene_no, out_path, clip_info, s, e))
+
+        # Cropping phase
+        video_clips = []
+        for scene_no, out_path, clip_info, s, e in valid_segments:
+            print(f"🔍 Detecting pillarboxes on scene {scene_no}...")
+            cropped_path = self.crop_video_if_vertical_with_blur(out_path)
+            if cropped_path != out_path:
+                print(f"✅ Scene {scene_no} cropped: {os.path.basename(out_path)} -> {os.path.basename(cropped_path)}")
+                out_path = cropped_path
+            else:
+                print(f"ℹ️  No pillarboxes detected on scene {scene_no}")
+            video_clips.append({
+                "path": out_path,
+                "duration": clip_info["duration"],
+                "orientation": self.get_video_orientation(clip_info),
+                "scene_number": scene_no,
+                "start_time": s,
+                "end_time": e,
+            })
+
+        # Summary
+        print("📊 Scene splitting summary:")
+        print(f"   Total scenes: {len(scene_list)}")
+        print(f"   Successfully processed: {len(video_clips)}")
+        print(f"   Failed: {len(failed_scenes)}")
+        if failed_scenes:
+            print("⚠️  Failed scenes details:")
+            for scene_num, error in failed_scenes:
+                print(f"   Scene {scene_num}: {error}")
+
+        # Deferred cleanup: keep protected copy until explicit frontend cleanup command
+        if protected_video_path and os.path.exists(protected_video_path):
+            print(f"� Deferred cleanup: protected working copy retained at {protected_video_path}")
+
+        print(f"✅ Generated {len(video_clips)} valid clips from {source_video_id}")
         return str(temp_dir), video_clips
 
     def get_video_orientation(self, video_info):
@@ -1627,8 +1744,10 @@ class CatVideoProcessor:
                 print(f"✅ Pillarbox detection completed on {len(video_clips)} individual clips")
                 
                 # Clean up original downloaded file if splitting was successful
-                if video_clips:
-                    os.remove(video_path)
+                # Note: Be cautious with cleanup to avoid race conditions
+                # Defer removal of original file; will be handled by explicit cleanup action
+                if video_clips and os.path.exists(video_path):
+                    print(f"🕒 Deferred cleanup: original video file retained ({video_path})")
 
         except Exception as e:
             print(f"An error occurred during video processing for {video_id}: {e}")

@@ -112,6 +112,10 @@ services:
       - .env
     ports:
       - "8090:8090"
+    deploy:
+      resources:
+        limits:
+          cpus: '5'
     depends_on:
       redis:
         condition: service_healthy
@@ -131,6 +135,11 @@ services:
       - GEMINI_API_KEY=${GOOGLE_API_KEY}
       # Add BACKEND_API_KEY (use the API_KEY from .env)
       - BACKEND_API_KEY=your_secret_api_key
+      # FFmpeg configuration to suppress H.264 decoder warnings
+      - FFMPEG_LOGLEVEL=error
+      - AV_LOG_FORCE_NOCOLOR=1
+      - OPENCV_FFMPEG_CAPTURE_OPTIONS=loglevel;error
+      - FFREPORT=level=error
     volumes:
       - shared_output:/app/output
       - shared_temp:/app/temp

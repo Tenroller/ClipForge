@@ -13,7 +13,6 @@ import random
 import argparse
 import shutil
 import gc
-import psutil
 import time
 import uuid
 from pathlib import Path
@@ -315,13 +314,11 @@ class ClipProcessor:
 class VideoProcessor:
     """Handles video processing and analysis operations"""
     
-    
-    
     def __init__(self, config: TikYouConfig):
         self.config = config
         self.validator = InputValidator()
         self.cache = get_video_analysis_cache()
-        self.processor = CatVideoProcessor(output_dir=config.paths.output_dir)
+        self.processor = CatVideoProcessor(output_dir=config.paths.output_dir, crop_debug_frames=False, crop_verbose=False, enable_yolo=True)
         self.creator = TikTokVideoCreator(output_dir=config.paths.output_dir)
         self.logger = logger
     

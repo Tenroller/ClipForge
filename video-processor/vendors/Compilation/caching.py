@@ -86,19 +86,27 @@ class CacheManager:
                 index_data = json.load(f)
             
             for key, entry_data in index_data.items():
-                # Convert datetime strings back to datetime objects
-                created_at = datetime.fromisoformat(entry_data['created_at'])
-                last_accessed = datetime.fromisoformat(entry_data['last_accessed'])
+                # Convert datetime strings back to datetime objects with error handling
+                try:
+                    created_at = datetime.fromisoformat(entry_data.get('created_at', '1970-01-01T00:00:00'))
+                    last_accessed = datetime.fromisoformat(entry_data.get('last_accessed', entry_data.get('created_at', '1970-01-01T00:00:00')))
+                except (ValueError, TypeError):
+                    created_at = datetime.now()
+                    last_accessed = created_at
+                    
                 expires_at = None
                 if entry_data.get('expires_at'):
-                    expires_at = datetime.fromisoformat(entry_data['expires_at'])
+                    try:
+                        expires_at = datetime.fromisoformat(entry_data['expires_at'])
+                    except (ValueError, TypeError):
+                        expires_at = None
                 
                 cache_entry = CacheEntry(
                     key=key,
                     value=None,  # Will be loaded on demand
                     created_at=created_at,
                     last_accessed=last_accessed,
-                    access_count=entry_data['access_count'],
+                    access_count=entry_data.get('access_count', 0),
                     expires_at=expires_at
                 )
                 

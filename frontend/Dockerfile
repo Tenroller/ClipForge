@@ -1,5 +1,5 @@
 # Frontend Dockerfile - React/Vite Application
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 # Set working directory
 WORKDIR /app
@@ -7,8 +7,13 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --legacy-peer-deps
+# Configure npm for better reliability
+RUN npm config set fetch-retries 5
+RUN npm config set fetch-retry-factor 2
+RUN npm config set fetch-timeout 60000
+
+# Install dependencies with timeout and retry options
+RUN npm ci --legacy-peer-deps --timeout=300000 --registry=https://registry.npmjs.org/
 
 # Copy source code
 COPY . .

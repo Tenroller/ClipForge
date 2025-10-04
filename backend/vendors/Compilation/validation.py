@@ -9,6 +9,7 @@ validation results.
 
 import os
 import re
+import subprocess
 import urllib.parse
 from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
@@ -590,9 +591,6 @@ def validate_processing_environment() -> ValidationResult:
     
     # Check required tools (ffmpeg, etc.)
     try:
-        import subprocess
-        import os
-        
         # Check for FFMPEG_PATH environment variable first
         ffmpeg_cmd = os.getenv('FFMPEG_PATH', 'ffmpeg')
         subprocess.run([ffmpeg_cmd, '-version'], 

@@ -36,6 +36,13 @@ export type ManagedJob = {
   started_at?: string
   duration_seconds?: number
   isNewlyCreated?: boolean // Flag to track if job was just created
+  logs?: Array<{
+    timestamp: string
+    level: string
+    source: string
+    message: string
+  }>
+  total_logs?: number
 }
 
 type JobUpdateListener = (job: ManagedJob) => void
@@ -221,7 +228,10 @@ class JobManager {
       result: data.result || job.result,
       progress: this.calculateProgress(data.step, job.workflow),
       started_at: data.started_at || job.started_at,
-      duration_seconds: data.duration_seconds || job.duration_seconds
+      duration_seconds: data.duration_seconds || job.duration_seconds,
+      // Only update logs if the response contains meaningful logs data
+      logs: (data.logs && data.logs.length > 0) ? data.logs : job.logs,
+      total_logs: data.total_logs !== undefined ? data.total_logs : job.total_logs
     }
 
     // Update steps based on current step

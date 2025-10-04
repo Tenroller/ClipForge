@@ -88,7 +88,8 @@ def convert_clip_worker(args):
     """Worker function for parallel video conversion"""
     clip_info, converted_paths, temp_files = args
     try:
-        if clip_info['orientation'] in ['horizontal', 'square']:
+        orientation = clip_info.get('orientation', 'unknown')
+        if orientation in ['horizontal', 'square']:
             if clip_info['path'] not in converted_paths:
                 generator = TikYouGenerator()
                 vertical_path = generator.create_vertical_clip_from_horizontal(clip_info['path'])
@@ -141,6 +142,17 @@ class TikYouGenerator:
             logger.warning(f"TTS Generator initialization failed: {e} - This is likely due to dependency version incompatibilities. TTS variations will be skipped")
             self.tts_generator = None
             self.tts_enabled = False
+        
+        # Initialize TTS Phrase Manager for batch phrase generation
+        self.tts_phrase_manager = None
+        if self.tts_enabled:
+            try:
+                from .tts_phrase_manager import TTSPhraseManager
+                self.tts_phrase_manager = TTSPhraseManager(num_phrases=20)
+                logger.info("TTS Phrase Manager initialized successfully")
+            except Exception as e:
+                logger.warning(f"TTS Phrase Manager initialization failed: {e} - Will use individual phrase generation")
+                self.tts_phrase_manager = None
         
         # Initialize Title generator for video titles
         try:
@@ -281,7 +293,8 @@ class TikYouGenerator:
             # Submit all conversion tasks
             future_to_clip = {}
             for clip in clips_to_process:
-                if clip['orientation'] in ['horizontal', 'square']:
+                orientation = clip.get('orientation', 'unknown')
+                if orientation in ['horizontal', 'square']:
                     future = executor.submit(self._convert_clip_with_cache, clip['path'])
                     future_to_clip[future] = clip
                 else:
@@ -308,12 +321,25 @@ class TikYouGenerator:
         print(f"✅ Pre-processing completed: {len(processed_clips)} clips ready")
         return processed_clips
     
-    def _get_video_cache_key(self, youtube_url):
-        """Generate cache key for video based on URL and video metadata"""
+    def _get_video_cache_key(self, source):
+        """Generate cache key for video based on URL or file path and video metadata"""
         try:
-            video_id = self.extract_video_id(youtube_url)
-            # Include video ID and current date to handle video updates
-            cache_key = f"{video_id}_{time.strftime('%Y%m%d')}"
+            if source and source.startswith(('http://', 'https://', 'youtube.com', 'youtu.be')):
+                # YouTube URL - extract video ID
+                video_id = self.extract_video_id(source)
+                # Include video ID and current date to handle video updates
+                cache_key = f"{video_id}_{time.strftime('%Y%m%d')}"
+            elif source:
+                # Local file - use filename and modification time
+                video_id = os.path.splitext(os.path.basename(source))[0]
+                try:
+                    mtime = int(os.path.getmtime(source))
+                    cache_key = f"{video_id}_{mtime}"
+                except:
+                    cache_key = f"{video_id}_{time.strftime('%Y%m%d')}"
+            else:
+                return None
+            
             return hashlib.md5(cache_key.encode()).hexdigest()
         except:
             return None
@@ -1077,7 +1103,19 @@ class TikYouGenerator:
         }
         
         for clip in video_clips:
-            orientation = clip['orientation']
+            # Get orientation from clip, with fallback if missing
+            orientation = clip.get('orientation')
+            if not orientation:
+                # If orientation is missing, try to determine it from the video file
+                try:
+                    video_info = self.processor.get_video_info(clip['path'])
+                    orientation = self.processor.get_video_orientation(video_info)
+                    clip['orientation'] = orientation  # Add it to the clip for future use
+                except Exception as e:
+                    print(f"Warning: Could not determine orientation for {clip['path']}: {e}")
+                    orientation = 'unknown'
+                    clip['orientation'] = orientation
+            
             categorized[orientation].append(clip)
         
         print(f"📊 Clip Categorization:")
@@ -1104,7 +1142,7 @@ class TikYouGenerator:
             
             # Sort clips by orientation priority: vertical first, then horizontal/square
             def get_orientation_priority(clip):
-                orientation = clip['orientation']
+                orientation = clip.get('orientation', 'unknown')
                 if orientation == 'vertical':
                     return 0  # Highest priority
                 elif orientation == 'horizontal':
@@ -1118,9 +1156,9 @@ class TikYouGenerator:
             available_clips.sort(key=get_orientation_priority)
             
             # Shuffle within each orientation group to maintain randomness
-            vertical_clips = [c for c in available_clips if c['orientation'] == 'vertical']
-            horizontal_clips = [c for c in available_clips if c['orientation'] in ['horizontal', 'square']]
-            other_clips = [c for c in available_clips if c['orientation'] not in ['vertical', 'horizontal', 'square']]
+            vertical_clips = [c for c in available_clips if c.get('orientation', 'unknown') == 'vertical']
+            horizontal_clips = [c for c in available_clips if c.get('orientation', 'unknown') in ['horizontal', 'square']]
+            other_clips = [c for c in available_clips if c.get('orientation', 'unknown') not in ['vertical', 'horizontal', 'square']]
             
             random.shuffle(vertical_clips)
             random.shuffle(horizontal_clips)
@@ -1141,11 +1179,11 @@ class TikYouGenerator:
             # Check if the selection is valid
             if total_duration >= min_duration:
                 # Log the selection order for transparency
-                vertical_count = len([c for c in selected if c['orientation'] == 'vertical'])
-                horizontal_count = len([c for c in selected if c['orientation'] in ['horizontal', 'square']])
+                vertical_count = len([c for c in selected if c.get('orientation', 'unknown') == 'vertical'])
+                horizontal_count = len([c for c in selected if c.get('orientation', 'unknown') in ['horizontal', 'square']])
                 
                 if len(selected) > 0:
-                    first_clip_orientation = selected[0]['orientation']
+                    first_clip_orientation = selected[0].get('orientation', 'unknown')
                     print(f"📊 Clip selection prioritized: {vertical_count} vertical, {horizontal_count} horizontal clips")
                     print(f"🎯 First clip will be: {first_clip_orientation}")
                 
@@ -1437,7 +1475,7 @@ class TikYouGenerator:
             for i, clip_info in enumerate(selected_clips):
                 print(f"     📹 Processing clip {i+1}/{len(selected_clips)}: {os.path.basename(clip_info['path'])}")
                 print(f"        - Duration: {clip_info['duration']:.1f}s")
-                print(f"        - Orientation: {clip_info['orientation']}")
+                print(f"        - Orientation: {clip_info.get('orientation', 'unknown')}")
                 
                 processed_clip = self._process_clip_for_compilation(clip_info['path'], target_resolution)
                 if processed_clip:
@@ -2038,7 +2076,18 @@ class TikYouGenerator:
             return performance_stats
             
         clip_usage = {clip['path']: 0 for clip in all_clips}
-        video_id = self.extract_video_id(youtube_url)
+        
+        # Extract video ID based on source type
+        if youtube_url:
+            # YouTube URL provided - extract video ID normally
+            video_id = self.extract_video_id(youtube_url)
+        elif uploaded_video_path:
+            # Uploaded video file path - use filename as video ID
+            video_id = os.path.splitext(os.path.basename(uploaded_video_path))[0]
+        else:
+            # Pre-processed clips - use a generic identifier
+            video_id = "processed_clips"
+            
         created_count = 0
 
         # 3. Generate videos with performance tracking
@@ -2047,6 +2096,26 @@ class TikYouGenerator:
         print(f"{'='*50}")
         
         generation_start = time.time()
+        
+        # 3.1 Pre-generate TTS phrases if TTS is enabled
+        if self.tts_enabled and self.tts_phrase_manager and num_compilations:
+            print(f"\n🎙️ Pre-generating TTS phrases for all compilations...")
+            phrase_gen_start = time.time()
+            try:
+                self.tts_phrase_manager.generate_phrases()
+                phrase_gen_time = time.time() - phrase_gen_start
+                print(f"✅ TTS phrase generation completed in {phrase_gen_time:.1f}s")
+                self._log(f"Pre-generated {self.tts_phrase_manager.num_phrases} TTS phrases in {phrase_gen_time:.1f}s", "info", "generate_tikyou_videos")
+                
+                # Show stats
+                stats = self.tts_phrase_manager.get_stats()
+                print(f"   📊 Total phrases: {stats['total_phrases']}")
+                print(f"   📁 Cache directory: {stats['cache_dir']}")
+                print(f"   🎵 Cached audio files: {stats['cached_audio_files']}")
+            except Exception as e:
+                print(f"⚠️  TTS phrase generation failed: {e}")
+                self._log(f"TTS phrase generation failed: {e}", "warning", "generate_tikyou_videos")
+                print("   Will fall back to individual phrase generation per compilation")
 
         if num_compilations:
             self._log(f"Generating {num_compilations} compilation sets", "info", "generate_tikyou_videos")
@@ -2357,22 +2426,45 @@ class TikYouGenerator:
                 performance_stats['failed_compilations'] += 1
 
         performance_stats['generation_time'] = time.time() - start_time
+        
+        # Clean up TTS cache if phrase manager is available
+        if self.tts_phrase_manager:
+            try:
+                self.tts_phrase_manager.cleanup_cache()
+            except Exception as e:
+                logger.warning(f"TTS cache cleanup failed: {e}")
+        
         return performance_stats
 
-    def download_and_split_video(self, youtube_url: str, sensitivity: float = 30.0):
+    def download_and_split_video(self, source: str, sensitivity: float = 30.0):
         """
-        New, streamlined function for API usage.
-        Downloads, analyzes, and splits a video, returning clip data.
+        Streamlined function for API usage.
+        Downloads and analyzes a YouTube video, or analyzes a local video file, returning clip data.
+        
+        Args:
+            source: YouTube URL or local video file path
+            sensitivity: Scene detection sensitivity
         """
         try:
-            video_id = self.extract_video_id(youtube_url)
+            if source.startswith(('http://', 'https://', 'youtube.com', 'youtu.be')):
+                # YouTube URL - extract video ID and download
+                video_id = self.extract_video_id(source)
+                clips = self.processor.download_and_split(video_id, sensitivity=sensitivity)
+            else:
+                # Local file path - use filename as ID and process directly
+                if not os.path.exists(source):
+                    print(f"Error: Local video file not found: {source}")
+                    return []
+                
+                video_id = os.path.splitext(os.path.basename(source))[0]
+                # For local files, we need to implement direct processing
+                # This would require extending the processor to handle local files
+                print(f"Error: Local file processing not yet implemented for download_and_split_video")
+                return []
         except ValueError as e:
             print(f"Error: {e}")
             return []
 
-        # This now returns a list of dictionaries with clip metadata
-        clips = self.processor.download_and_split(video_id, sensitivity=sensitivity)
-        
         return clips
 
     # ------------------------------------------------------------------

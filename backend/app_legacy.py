@@ -25,7 +25,7 @@ if sys.platform == "win32":
 
 import asyncio
 from collections import defaultdict
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, Depends, Header, Request, Cookie
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, Cookie
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -230,7 +230,7 @@ async def lifespan(app: FastAPI):
 
         # Initialize utility systems
         from .utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
-        from .utils.websocket_manager import init_websocket_manager
+       
         from .utils.streaming_processor import init_streaming_processor
         from .utils.fonts import init_font_manager
         from .utils.paths import init_path_manager
@@ -238,7 +238,6 @@ async def lifespan(app: FastAPI):
 
         init_temp_manager()
         cleanup_temp_files_on_startup()
-        init_websocket_manager()
         init_streaming_processor()
         init_font_manager()
         init_path_manager()
@@ -259,12 +258,6 @@ async def lifespan(app: FastAPI):
             except asyncio.CancelledError:
                 # Exit cleanly on shutdown
                 break
-
-            # Use the new WebSocket manager for broadcasting
-            try:
-                await _broadcast_job_update(job_id, payload)
-            except Exception as e:
-                logger.warning(f"Failed to broadcast job update for {job_id}: {e}")
 
     broadcaster_task = asyncio.create_task(_broadcast_loop())
     try:
@@ -327,22 +320,13 @@ async def lifespan(app: FastAPI):
                 logger.info(f"Cleaning up {active_connections} WebSocket connections...")
 
                 # Close all WebSocket connections
-                try:
-                    await _cleanup_websockets()
-                    logger.debug("WebSocket connections cleaned up")
-                except Exception as e:
-                    logger.warning(f"Failed to cleanup WebSocket connections: {e}")
+                for subscribers in WS_SUBSCRIBERS.values(): 
+                    for websocket in subscribers:
+                        await websocket.close()
             else:
                 logger.debug("No active WebSocket connections found")
         except Exception as e:
             logger.warning(f"Failed to cleanup WebSocket connections: {e}")
-
-
-async def _cleanup_websockets():
-    """Helper function to cleanup WebSocket connections using the manager."""
-    from .utils.websocket_manager import cleanup_websocket_connections
-    return await cleanup_websocket_connections(timeout=10.0)
-
 
 class LoggingMiddleware(BaseHTTPMiddleware):
     """Middleware for comprehensive request/response logging and monitoring."""
@@ -706,33 +690,6 @@ def _enqueue_job_update(job_id: str) -> None:
         # Best-effort only
         pass
 
-
-async def _broadcast_job_update(job_id: str, payload: Dict[str, Any]):
-    """Broadcast job update to all WebSocket subscribers for this job."""
-    from utils.websocket_manager import get_websocket_manager
-
-    ws_manager = get_websocket_manager()
-    subscribers = ws_manager.get_subscribers_for_job(job_id)
-
-    if not subscribers:
-        return
-
-    dead_connections = []
-    for websocket in subscribers:
-        try:
-            await websocket.send_json(payload)
-            # Update activity timestamp
-            ws_manager.update_activity(job_id, websocket)
-        except Exception:
-            # Connection is dead, mark for removal
-            dead_connections.append(websocket)
-
-    # Clean up dead connections
-    for websocket in dead_connections:
-        ws_manager.remove_connection(job_id, websocket)
-
-    if dead_connections:
-        logger.debug(f"Cleaned up {len(dead_connections)} dead WebSocket connections for job {job_id}")
 
 
 def _update_job(job_id: str, **fields: Any) -> None:
@@ -1833,6 +1790,22 @@ def job_status(job_id: str):
     job = job_store.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Include logs in the job status response for efficiency
+    try:
+        logger.info(f"Legacy app: Fetching logs for job {job_id} in job_status endpoint")
+        from services.job_management import JobManagementService
+        job_service = JobManagementService()
+        logs_data = job_service.get_job_logs(job_id)
+        job['logs'] = logs_data.get('logs', [])
+        job['total_logs'] = logs_data.get('total_logs', 0)
+        logger.info(f"Legacy app: Successfully added {len(job['logs'])} logs to job status response")
+    except Exception as e:
+        logger.warning(f"Legacy app: Failed to fetch logs for job {job_id}: {e}")
+        # Fallback to empty logs if logs fetch fails
+        job['logs'] = []
+        job['total_logs'] = 0
+    
     return job
 
 
@@ -1946,85 +1919,6 @@ class PlaylistBatchRequest(BaseModel):
     minDuration: int = Field(default=60, ge=10, le=3600)
     maxDuration: int = Field(default=110, ge=10, le=3600)
 
-
-@app.websocket("/ws/jobs/{job_id}")
-async def websocket_job_updates(websocket: WebSocket, job_id: str):
-    from utils.websocket_manager import get_websocket_manager
-
-    ws_manager = get_websocket_manager()
-    client_info = {
-        'client_host': getattr(websocket.client, 'host', 'unknown') if websocket.client else 'unknown',
-        'user_agent': websocket.headers.get('user-agent', 'unknown')
-    }
-
-    # Add connection to manager
-    ws_manager.add_connection(job_id, websocket, client_info)
-
-    await websocket.accept()
-
-    # Send the current job state immediately if exists
-    try:
-        job = job_store.get_job(job_id)
-        if job is not None:
-            await websocket.send_json(job)
-    except Exception as e:
-        logger.warning(f"Failed to send initial job state: {e}")
-
-    try:
-        # Keep the connection open with heartbeat monitoring
-        while True:
-            try:
-                # Wait for messages with timeout
-                message = await asyncio.wait_for(websocket.receive_text(), timeout=60.0)
-                # Update activity on any received message
-                ws_manager.update_activity(job_id, websocket)
-
-                # Handle ping/pong
-                if message.lower() in ['ping', 'pong']:
-                    await websocket.send_text('pong' if message.lower() == 'ping' else 'pong')
-                else:
-                    # Echo back any other messages for debugging
-                    await websocket.send_text(f"echo: {message}")
-
-            except asyncio.TimeoutError:
-                # Send ping to check if connection is still alive
-                try:
-                    await websocket.send_text('ping')
-                    # Update activity on successful ping
-                    ws_manager.update_activity(job_id, websocket)
-                except Exception:
-                    # Connection likely dead
-                    break
-            except WebSocketDisconnect:
-                break
-            except Exception as e:
-                logger.warning(f"WebSocket error for job {job_id}: {e}")
-                await asyncio.sleep(0.5)
-    finally:
-        # Remove connection from manager
-        ws_manager.remove_connection(job_id, websocket)
-
- 
-def _is_allowed_path(p: Path) -> bool:
-    p_resolved = p.resolve()
-    allowed_roots = [
-        DEFAULT_OUTPUT_DIR.resolve(), 
-        (ROOT / "AIvideos_output").resolve(),
-        (ROOT / "temp").resolve(),  # Allow access to temp directory
-        # Include old moneyprinter temp directory for backwards compatibility
-        (VENDOR_ROOT / "AIvideos" / "cat-video-creator" / "output").resolve()
-    ]
-    for root in allowed_roots:
-        try:
-            if p_resolved.is_relative_to(root):
-                return True
-        except Exception:
-            # Fallback for older Python versions or edge cases
-            if str(p_resolved).startswith(str(root) + os.sep):
-                return True
-    return False
-
-
 @app.get("/api/download")
 def download_file(path: str):
     """Download a file."""
@@ -2072,8 +1966,7 @@ def download_file(path: str):
         else:
             raise HTTPException(status_code=404, detail="File not found")
     
-    if not _is_allowed_path(file_path):
-        raise HTTPException(status_code=403, detail="Access denied")
+  
     
     media_type = "application/octet-stream"
     if file_path.suffix.lower() == ".mp4":
@@ -2117,24 +2010,6 @@ async def get_temp_files_stats():
         return system_routes.get_temp_files_stats()
     except Exception:
         raise
-
-
-@app.get("/api/websocket/stats", tags=["Monitoring"], summary="Get WebSocket connection statistics")
-async def get_websocket_stats():
-    """Get statistics about WebSocket connections.
-
-    Returns connection counts, ages, and monitoring status.
-    """
-    from utils.websocket_manager import get_websocket_manager
-
-    ws_manager = get_websocket_manager()
-    stats = ws_manager.get_connection_stats()
-
-    return {
-        "websocket_stats": stats,
-        "monitoring_active": True
-    }
-
 
 @app.get("/api/database/stats", tags=["Monitoring"], summary="Get database statistics")
 async def get_database_stats():
@@ -2402,17 +2277,6 @@ def _cleanup_resources():
                 logger.info("Streaming processor temp files cleaned up")
             except Exception as e:
                 logger.warning(f"Failed to cleanup streaming temp files: {e}")
-
-            # Cleanup any remaining WebSocket connections
-            try:
-                from utils.websocket_manager import cleanup_websocket_connections_sync
-                cleanup_count = cleanup_websocket_connections_sync(timeout=10.0)
-                if cleanup_count > 0:
-                    logger.info(f"WebSocket connections cleaned up: {cleanup_count} connections")
-                else:
-                    logger.info("No active WebSocket connections found")
-            except Exception as e:
-                logger.warning(f"Failed to cleanup WebSocket connections: {e}")
 
         except Exception as e:
             # Don't log "can't register atexit after shutdown" errors during import

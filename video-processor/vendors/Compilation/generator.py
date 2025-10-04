@@ -115,7 +115,7 @@ class TikYouGenerator:
         os.environ["FFMPEG_DISABLE_SHOW_FORMAT"] = "1"
         
         self.output_dir = output_dir
-        self.processor = CatVideoProcessor(output_dir=output_dir, ffmpeg_path=ffmpeg_path)
+        self.processor = CatVideoProcessor(output_dir=output_dir, ffmpeg_path=ffmpeg_path, crop_debug_frames=False, crop_verbose=False, enable_yolo=True)
         self.creator = TikTokVideoCreator(output_dir=output_dir, ffmpeg_path=ffmpeg_path)
         self.max_workers = min(multiprocessing.cpu_count(), 4)  # Limit to 4 workers max
         self.tracker = tracker  # Add tracker support
@@ -141,6 +141,17 @@ class TikYouGenerator:
             logger.warning(f"TTS Generator initialization failed: {e} - This is likely due to dependency version incompatibilities. TTS variations will be skipped")
             self.tts_generator = None
             self.tts_enabled = False
+        
+        # Initialize TTS Phrase Manager for batch phrase generation
+        self.tts_phrase_manager = None
+        if self.tts_enabled:
+            try:
+                from .tts_phrase_manager import TTSPhraseManager
+                self.tts_phrase_manager = TTSPhraseManager(num_phrases=20)
+                logger.info("TTS Phrase Manager initialized successfully")
+            except Exception as e:
+                logger.warning(f"TTS Phrase Manager initialization failed: {e} - Will use individual phrase generation")
+                self.tts_phrase_manager = None
         
         # Initialize Title generator for video titles
         try:
@@ -308,12 +319,23 @@ class TikYouGenerator:
         print(f"✅ Pre-processing completed: {len(processed_clips)} clips ready")
         return processed_clips
     
-    def _get_video_cache_key(self, youtube_url):
-        """Generate cache key for video based on URL and video metadata"""
+    def _get_video_cache_key(self, source):
+        """Generate cache key for video based on URL or file path and video metadata"""
         try:
-            video_id = self.extract_video_id(youtube_url)
-            # Include video ID and current date to handle video updates
-            cache_key = f"{video_id}_{time.strftime('%Y%m%d')}"
+            if source.startswith(('http://', 'https://', 'youtube.com', 'youtu.be')):
+                # YouTube URL - extract video ID
+                video_id = self.extract_video_id(source)
+                # Include video ID and current date to handle video updates
+                cache_key = f"{video_id}_{time.strftime('%Y%m%d')}"
+            else:
+                # Local file - use filename and modification time
+                video_id = os.path.splitext(os.path.basename(source))[0]
+                try:
+                    mtime = int(os.path.getmtime(source))
+                    cache_key = f"{video_id}_{mtime}"
+                except:
+                    cache_key = f"{video_id}_{time.strftime('%Y%m%d')}"
+            
             return hashlib.md5(cache_key.encode()).hexdigest()
         except:
             return None
@@ -792,60 +814,85 @@ class TikYouGenerator:
 
     def process_single_video(self, youtube_url, sensitivity: float = 15, method: str = 'scenedetect'):
         """
-        Process a single YouTube video:
-        1. Download the video
+        Process a single video source:
+        1. Download the video (if YouTube URL) or use existing file (if local path)
         2. ✅ Detect and crop pillarboxes
         3. Split into individual scenes if it's a compilation
         4. ✅ Detect and crop pillarboxes on each clip
         5. Return list of video clips with metadata
         
         Args:
-            youtube_url: YouTube video URL
+            youtube_url: YouTube video URL or local video file path
             sensitivity: Detection threshold
             method: Scene detection method - 'scenedetect' or 'moviepy'
         """
-        self._log(f"Starting video processing for URL: {youtube_url}", "info", "process_single_video")
+        # Determine if we're processing a URL or local file
+        is_youtube_url = youtube_url.startswith(('http://', 'https://', 'youtube.com', 'youtu.be'))
+        source_type = "YouTube URL" if is_youtube_url else "local video file"
+        
+        self._log(f"Starting video processing for {source_type}: {youtube_url}", "info", "process_single_video")
         self._log(f"Using method: {method}, sensitivity: {sensitivity}", "info", "process_single_video")
         
-        log_generation_step(logger, None, "compilation", "youtube_processing_started",
-                           youtube_url=youtube_url)
+        log_generation_step(logger, None, "compilation", "video_processing_started" if not is_youtube_url else "youtube_processing_started",
+                           source=youtube_url)
 
-        # Extract video ID
+        # Extract video ID based on source type
         try:
-            video_id = self.extract_video_id(youtube_url)
-            logger.info(f"YouTube video ID extracted: {video_id}")
-            self._log(f"Extracted video ID: {video_id}", "info", "process_single_video")
+            if is_youtube_url:
+                video_id = self.extract_video_id(youtube_url)
+                logger.info(f"YouTube video ID extracted: {video_id}")
+                self._log(f"Extracted YouTube video ID: {video_id}", "info", "process_single_video")
+            else:
+                # For local files, use filename as video ID
+                video_id = os.path.splitext(os.path.basename(youtube_url))[0]
+                logger.info(f"Using filename as video ID: {video_id}")
+                self._log(f"Using filename as video ID: {video_id}", "info", "process_single_video")
         except ValueError as e:
-            logger.error(f"Failed to extract YouTube video ID from URL {youtube_url}: {e}")
+            logger.error(f"Failed to extract video ID from {source_type} {youtube_url}: {e}")
             self._log(f"Failed to extract video ID: {str(e)}", "error", "process_single_video")
             return []
 
-        # Download the video
-        self._log(f"Starting video download for ID: {video_id}", "info", "process_single_video")
-        log_generation_step(logger, None, "compilation", "video_download_started",
-                           video_id=video_id)
-        download_start = time.time()
-        download_result = self.processor.download_video(video_id)
-        download_duration = time.time() - download_start
-
-        if not download_result or download_result[0] is None:
-            log_generation_step(logger, None, "compilation", "video_download_failed",
-                               video_id=video_id, duration=download_duration)
-            self._log(f"Video download failed for ID: {video_id}", "error", "process_single_video")
-            return []
-
-        log_generation_step(logger, None, "compilation", "video_download_completed",
-                           video_id=video_id, duration=download_duration)
-        self._log(f"Video download completed in {download_duration:.1f}s", "info", "process_single_video")
+        # Download the video (if YouTube) or use existing file (if local)
+        download_duration = 0  # Initialize for local files
         
-        video_path = download_result[0]
+        if is_youtube_url:
+            self._log(f"Starting video download for ID: {video_id}", "info", "process_single_video")
+            log_generation_step(logger, None, "compilation", "video_download_started",
+                               video_id=video_id)
+            download_start = time.time()
+            download_result = self.processor.download_video(video_id)
+            download_duration = time.time() - download_start
+
+            if not download_result or download_result[0] is None:
+                log_generation_step(logger, None, "compilation", "video_download_failed",
+                                   video_id=video_id, duration=download_duration)
+                self._log(f"Video download failed for ID: {video_id}", "error", "process_single_video")
+                return []
+
+            log_generation_step(logger, None, "compilation", "video_download_completed",
+                               video_id=video_id, duration=download_duration)
+            self._log(f"Video download completed in {download_duration:.1f}s", "info", "process_single_video")
+            
+            video_path = download_result[0]
+        else:
+            # For local files, use the provided path directly
+            video_path = youtube_url
+            if not os.path.exists(video_path):
+                self._log(f"Local video file not found: {video_path}", "error", "process_single_video")
+                return []
+            self._log(f"Using local video file: {video_path}", "info", "process_single_video")
         if os.path.exists(video_path):
             file_size = os.path.getsize(video_path)
-            log_file_operation(logger, "downloaded", video_path, file_size=file_size, duration=download_duration)
+            # Only log download operation for YouTube videos
+            if is_youtube_url:
+                log_file_operation(logger, "downloaded", video_path, file_size=file_size, duration=download_duration)
+            else:
+                log_file_operation(logger, "loaded", video_path, file_size=file_size)
 
-        # Add a small delay to ensure file is fully written (Windows file locking issue)
-        print(f"⏳ Waiting 2 seconds for file to be fully written...")
-        time.sleep(2)
+        # Add a small delay to ensure downloaded file is fully written (Windows file locking issue)
+        if is_youtube_url:
+            print(f"⏳ Waiting 2 seconds for downloaded file to be fully written...")
+            time.sleep(2)
 
         # 2. ✅ Detect and crop pillarboxes on the main video
         self._log("Detecting and cropping pillarboxes from main video", "info", "process_single_video")
@@ -944,7 +991,19 @@ class TikYouGenerator:
         }
         
         for clip in video_clips:
-            orientation = clip['orientation']
+            # Get orientation from clip, with fallback if missing
+            orientation = clip.get('orientation')
+            if not orientation:
+                # If orientation is missing, try to determine it from the video file
+                try:
+                    video_info = self.processor.get_video_info(clip['path'])
+                    orientation = self.processor.get_video_orientation(video_info)
+                    clip['orientation'] = orientation  # Add it to the clip for future use
+                except Exception as e:
+                    print(f"Warning: Could not determine orientation for {clip['path']}: {e}")
+                    orientation = 'unknown'
+                    clip['orientation'] = orientation
+            
             categorized[orientation].append(clip)
         
         print(f"📊 Clip Categorization:")
@@ -1886,7 +1945,15 @@ class TikYouGenerator:
             return performance_stats
             
         clip_usage = {clip['path']: 0 for clip in all_clips}
-        video_id = self.extract_video_id(youtube_url)
+        
+        # Extract video ID based on source type
+        if youtube_url.startswith(('http://', 'https://', 'youtube.com', 'youtu.be')):
+            # YouTube URL - extract video ID normally
+            video_id = self.extract_video_id(youtube_url)
+        else:
+            # Uploaded video file path - use filename as video ID
+            video_id = os.path.splitext(os.path.basename(youtube_url))[0]
+            
         created_count = 0
 
         # 3. Generate videos with performance tracking
@@ -1895,6 +1962,26 @@ class TikYouGenerator:
         print(f"{'='*50}")
         
         generation_start = time.time()
+        
+        # 3.1 Pre-generate TTS phrases if TTS is enabled
+        if self.tts_enabled and self.tts_phrase_manager and num_compilations:
+            print(f"\n🎙️ Pre-generating TTS phrases for all compilations...")
+            phrase_gen_start = time.time()
+            try:
+                self.tts_phrase_manager.generate_phrases()
+                phrase_gen_time = time.time() - phrase_gen_start
+                print(f"✅ TTS phrase generation completed in {phrase_gen_time:.1f}s")
+                self._log(f"Pre-generated {self.tts_phrase_manager.num_phrases} TTS phrases in {phrase_gen_time:.1f}s", "info", "generate_tikyou_videos")
+                
+                # Show stats
+                stats = self.tts_phrase_manager.get_stats()
+                print(f"   📊 Total phrases: {stats['total_phrases']}")
+                print(f"   📁 Cache directory: {stats['cache_dir']}")
+                print(f"   🎵 Cached audio files: {stats['cached_audio_files']}")
+            except Exception as e:
+                print(f"⚠️  TTS phrase generation failed: {e}")
+                self._log(f"TTS phrase generation failed: {e}", "warning", "generate_tikyou_videos")
+                print("   Will fall back to individual phrase generation per compilation")
 
         if num_compilations:
             self._log(f"Generating {num_compilations} compilation sets", "info", "generate_tikyou_videos")
@@ -2205,22 +2292,45 @@ class TikYouGenerator:
                 performance_stats['failed_compilations'] += 1
 
         performance_stats['generation_time'] = time.time() - start_time
+        
+        # Clean up TTS cache if phrase manager is available
+        if self.tts_phrase_manager:
+            try:
+                self.tts_phrase_manager.cleanup_cache()
+            except Exception as e:
+                logger.warning(f"TTS cache cleanup failed: {e}")
+        
         return performance_stats
 
-    def download_and_split_video(self, youtube_url: str, sensitivity: float = 30.0):
+    def download_and_split_video(self, source: str, sensitivity: float = 30.0):
         """
-        New, streamlined function for API usage.
-        Downloads, analyzes, and splits a video, returning clip data.
+        Streamlined function for API usage.
+        Downloads and analyzes a YouTube video, or analyzes a local video file, returning clip data.
+        
+        Args:
+            source: YouTube URL or local video file path
+            sensitivity: Scene detection sensitivity
         """
         try:
-            video_id = self.extract_video_id(youtube_url)
+            if source.startswith(('http://', 'https://', 'youtube.com', 'youtu.be')):
+                # YouTube URL - extract video ID and download
+                video_id = self.extract_video_id(source)
+                clips = self.processor.download_and_split(video_id, sensitivity=sensitivity)
+            else:
+                # Local file path - use filename as ID and process directly
+                if not os.path.exists(source):
+                    print(f"Error: Local video file not found: {source}")
+                    return []
+                
+                video_id = os.path.splitext(os.path.basename(source))[0]
+                # For local files, we need to implement direct processing
+                # This would require extending the processor to handle local files
+                print(f"Error: Local file processing not yet implemented for download_and_split_video")
+                return []
         except ValueError as e:
             print(f"Error: {e}")
             return []
 
-        # This now returns a list of dictionaries with clip metadata
-        clips = self.processor.download_and_split(video_id, sensitivity=sensitivity)
-        
         return clips
 
     # ------------------------------------------------------------------

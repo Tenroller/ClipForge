@@ -2,6 +2,7 @@
 Video generation service layer.
 """
 
+import os
 import time
 import uuid
 import shutil
@@ -327,6 +328,31 @@ def run_brainrot_job(job_id: str, req_dict: dict):
             if loaded:
                 # Rehydrate minimal structure for downstream generator usage (expects list of dicts with keys used later)
                 video_clips = loaded  # type: ignore
+                
+                # Validate and repair loaded clips - ensure orientation field exists
+                clips_repaired = 0
+                for clip in video_clips:
+                    if 'orientation' not in clip or not clip['orientation']:
+                        # Try to determine orientation from video file if it exists
+                        try:
+                            if os.path.exists(clip['path']):
+                                # Import generator to access orientation detection
+                                from ..vendors.Compilation.generator import TikYouGenerator
+                                temp_generator = TikYouGenerator()
+                                orientation = temp_generator.creator.get_video_orientation(clip['path'])
+                                clip['orientation'] = orientation
+                                clips_repaired += 1
+                            else:
+                                clip['orientation'] = 'unknown'
+                                clips_repaired += 1
+                        except Exception as e:
+                            tracker.add_log(f"Failed to determine orientation for clip {clip.get('path', 'unknown')}: {e}", "warning", "brainrot")
+                            clip['orientation'] = 'unknown'
+                            clips_repaired += 1
+                
+                if clips_repaired > 0:
+                    tracker.add_log(f"Repaired {clips_repaired} clips with missing orientation data", "info", "brainrot")
+                
                 tracker.add_log(f"Loaded {len(video_clips)} cached clips from artifact manifest", "info", "brainrot")
             else:
                 tracker.add_log("No cached clip manifest found; continuing with empty clip list (may cause failure)", "warning", "brainrot")

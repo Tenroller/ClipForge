@@ -37,7 +37,7 @@ class TikTokVideoCreator:
         
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
-        self.processor = CatVideoProcessor(output_dir=output_dir, ffmpeg_path=ffmpeg_path)
+        self.processor = CatVideoProcessor(output_dir=output_dir, ffmpeg_path=ffmpeg_path, crop_debug_frames=False, crop_verbose=False, enable_yolo=True)
         
         # Create output directory if it doesn't exist
         Path(self.output_dir).mkdir(exist_ok=True)
@@ -363,9 +363,16 @@ class TikTokVideoCreator:
         
         try:
             for i, video_info in enumerate(selected_videos):
-                video_path = video_info['path']
-                orientation = video_info['orientation']
-                video_type = video_info['type']
+                # Safely extract video info with fallbacks
+                video_path = video_info.get('path')
+                orientation = video_info.get('orientation', 'unknown')
+                video_type = video_info.get('type', 'unknown')
+                video_id = video_info.get('id', f'clip_{i+1}')
+                
+                if not video_path:
+                    print(f"[COMPILATION] Skipping clip {i+1}: missing video path")
+                    continue
+                    
                 print(f"[COMPILATION] Using video for clip {i+1}: {video_path} (orientation: {orientation}, type: {video_type})")
                 
                 clip = None
@@ -377,7 +384,7 @@ class TikTokVideoCreator:
                             clip = VideoFileClip(vertical_path)
                             temp_files.append(vertical_path)
                         else:
-                            print(f"Failed to convert horizontal video, skipping: {video_info['id']}")
+                            print(f"Failed to convert horizontal video, skipping: {video_id}")
                             continue
                     
                     elif orientation == 'vertical':
@@ -402,15 +409,15 @@ class TikTokVideoCreator:
                             clip = VideoFileClip(vertical_path)
                             temp_files.append(vertical_path)
                         else:
-                            print(f"Failed to convert square video, skipping: {video_info['id']}")
+                            print(f"Failed to convert square video, skipping: {video_id}")
                             continue
                     
                     else:
-                        print(f"Unknown orientation, skipping: {video_info['id']}")
+                        print(f"Unknown orientation, skipping: {video_id}")
                         continue
                         
                 except Exception as e:
-                    print(f"⚠️  Error processing video {video_info['id']} ({video_path}): {e}")
+                    print(f"⚠️  Error processing video {video_id} ({video_path}): {e}")
                     print(f"   Skipping corrupted/problematic video and continuing...")
                     # Clean up any partially created clip
                     try:
