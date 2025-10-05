@@ -8,7 +8,11 @@ functions used throughout the VideoHelper application.
 import os
 from pathlib import Path
 from typing import Optional, Union, List, Dict, Any
-from backend.logging_config import get_logger
+try:
+    from backend.logging_config import get_logger
+except ImportError:
+    # Fallback for when running from backend directory
+    from logging_config import get_logger
 
 logger = get_logger("path_utils")
 

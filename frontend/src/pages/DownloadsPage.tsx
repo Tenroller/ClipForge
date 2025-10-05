@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/component
 import { Button } from '@/components/components/ui/button'
 import { getLatestManagedVideo, listManagedVideosByJob, ManagedVideoRecord, downloadUrl } from '@/lib/api'
 
-const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
 type DisplayEntry = {
   id: string

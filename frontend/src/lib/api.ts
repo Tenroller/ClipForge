@@ -10,7 +10,7 @@ export type JobRecord = {
   request_data?: any  // Added to store original request parameters
 }
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
 // Helper function to make API requests
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {

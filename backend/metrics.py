@@ -35,7 +35,11 @@ except ImportError:
     CONTENT_TYPE_LATEST = "text/plain"
     PROMETHEUS_AVAILABLE = False
 
-from .logging_config import get_logger
+try:
+    from .logging_config import get_logger
+except ImportError:
+    # Fallback for when running from backend directory
+    from logging_config import get_logger
 
 logger = get_logger("metrics")
 

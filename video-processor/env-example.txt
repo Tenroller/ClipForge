@@ -8,7 +8,7 @@ PROCESSOR_MAX_CONCURRENT_JOBS=2
 PROCESSOR_JOB_TIMEOUT_SECONDS=3600
 
 # Backend API communication
-BACKEND_API_URL=http://localhost:8080
+BACKEND_API_URL=http://localhost:9000
 BACKEND_API_KEY=your-backend-api-key
 
 # Job queue configuration

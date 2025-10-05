@@ -22,13 +22,13 @@ def main():
     
     # Get configuration from environment
     host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("PORT", "8080"))
+    port = int(os.getenv("PORT", "9000"))
     reload = os.getenv("RELOAD", "false").lower() == "true"
     
-    print(f"🚀 Starting AI Video Generator API on {host}:{port}")
-    print(f"📁 Working directory: {os.getcwd()}")
-    print(f"🐍 Backend directory: {backend_dir}")
-    print(f"🔧 Using containerized backend structure")
+    print(f"Starting AI Video Generator API on {host}:{port}")
+    print(f"Working directory: {os.getcwd()}")
+    print(f"Backend directory: {backend_dir}")
+    print(f"Using containerized backend structure")
     
     # Import uvicorn
     import uvicorn

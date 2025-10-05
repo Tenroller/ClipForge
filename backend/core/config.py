@@ -14,7 +14,7 @@ class AppConfig:
     
     # Server settings
     host: str = "0.0.0.0"
-    port: int = 8080
+    port: int = 9000
     reload: bool = False
     
     # Security settings
@@ -128,8 +128,8 @@ class AppConfig:
                 "http://127.0.0.1:3000",
                 "http://localhost:5173",  # Vite dev server
                 "http://127.0.0.1:5173", 
-                "http://localhost:8080",  # Backend self
-                "http://127.0.0.1:8080",
+                "http://localhost:9000",  # Backend self
+                "http://127.0.0.1:9000",
             ]
         else:
             cors_origins = [o.strip() for o in cors_origins_env.split(",") if o.strip()]
@@ -144,7 +144,7 @@ class AppConfig:
         return cls(
             # Server settings
             host=os.getenv("HOST", "0.0.0.0"),
-            port=get_int("PORT", 8080),
+            port=get_int("PORT", 9000),
             reload=get_bool("RELOAD", False),
             
             # Security settings

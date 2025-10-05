@@ -29,7 +29,7 @@ import {
 } from 'react-icons/fa'
 import { cn } from '@/components/lib/utils'
 
-const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
 interface Video {
   id: string

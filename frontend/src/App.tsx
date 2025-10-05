@@ -15,7 +15,7 @@ import SidebarRouter from './components/SidebarRouter'
 import { useJobManager } from './hooks/useJobManager'
 import { Toaster } from '@/components/components/ui/toaster'
 
-const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
 function AppContent() {
 	const navigate = useNavigate()

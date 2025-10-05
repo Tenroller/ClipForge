@@ -11,7 +11,11 @@ import threading
 from pathlib import Path
 
 # Early setup for environment and paths
-from backend.utils.paths import get_project_root, get_output_path, get_backend_path
+try:
+    from backend.utils.paths import get_project_root, get_output_path, get_backend_path
+except ImportError:
+    # Fallback for when running from backend directory
+    from utils.paths import get_project_root, get_output_path, get_backend_path
 
 ROOT = get_project_root()
 DEFAULT_OUTPUT_DIR = get_output_path()
@@ -136,14 +140,22 @@ if sys.platform == "win32":
         pass
 
 # Create the FastAPI application using the new factory
-from backend.core import create_app, AppConfig
+try:
+    from backend.core import create_app, AppConfig
+except ImportError:
+    # Fallback for when running from backend directory
+    from core import create_app, AppConfig
 
 # Create app with configuration
 config = AppConfig.from_env()
 app = create_app(config)
 
 # Initialize database and migrate existing data
-from backend.database import get_job_store, migrate_from_json
+try:
+    from backend.database import get_job_store, migrate_from_json
+except ImportError:
+    # Fallback for when running from backend directory
+    from database import get_job_store, migrate_from_json
 
 JOBS_FILE = DEFAULT_OUTPUT_DIR / "jobs.json"
 job_store = get_job_store()
@@ -158,7 +170,11 @@ if JOBS_FILE.exists():
         early_logger.info(f"   Backed up original file to {backup_file}")
 
 # Initialize unified job queue
-from backend.job_queue_unified import get_job_queue
+try:
+    from backend.job_queue_unified import get_job_queue
+except ImportError:
+    # Fallback for when running from backend directory
+    from job_queue_unified import get_job_queue
 job_queue = get_job_queue()
 
 # Legacy compatibility for tests that expect app.JOBS
@@ -176,7 +192,10 @@ def _atexit_cleanup_with_timeout():
 
     def cleanup_worker():
         try:
-            from backend.core.lifespan import _cleanup_resources
+            try:
+                from backend.core.lifespan import _cleanup_resources
+            except ImportError:
+                from core.lifespan import _cleanup_resources
             _cleanup_resources()
         except Exception as e:
             early_logger.error(f"Error during atexit cleanup: {e}")

@@ -7,7 +7,7 @@ description: "API endpoint patterns, authentication, and error handling"
 ## 🌐 API Architecture
 
 ### Base Configuration
-- **Backend API**: `http://localhost:8080` (development)
+- **Backend API**: `http://localhost:9000` (development)
 - **Authentication**: Optional API key via `X-API-Key` header
 - **Format**: JSON request/response
 - **Framework**: FastAPI with automatic OpenAPI documentation
@@ -37,7 +37,7 @@ Optional API key authentication for all endpoints:
 export API_KEY="your-secret-api-key"
 
 # Include in requests
-curl -H "X-API-Key: your-secret-api-key" http://localhost:8080/api/health
+curl -H "X-API-Key: your-secret-api-key" http://localhost:9000/api/health
 ```
 
 ```tsx
@@ -231,7 +231,7 @@ Real-time job progress updates:
 
 ```javascript
 // Connect to WebSocket
-const ws = new WebSocket('ws://localhost:8080/ws')
+const ws = new WebSocket('ws://localhost:9000/ws')
 
 // Subscribe to job updates
 ws.onopen = () => {
@@ -418,9 +418,9 @@ const handleApiError = (error: any) => {
 ## 🔧 Development & Testing
 
 ### API Documentation
-- **Swagger UI**: `http://localhost:8080/docs`
-- **ReDoc**: `http://localhost:8080/redoc`
-- **OpenAPI Spec**: `http://localhost:8080/openapi.json`
+- **Swagger UI**: `http://localhost:9000/docs`
+- **ReDoc**: `http://localhost:9000/redoc`
+- **OpenAPI Spec**: `http://localhost:9000/openapi.json`
 
 ### Testing Endpoints
 Use the Bruno API collection in [Video Gen/](mdc:Video Gen/) directory:

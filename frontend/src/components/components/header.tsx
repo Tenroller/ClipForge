@@ -23,7 +23,7 @@ export default function Header() {
         <div className="ml-auto flex items-center gap-2">
           <Badge variant="outline" className="gap-1">
             <FaLink className="size-3" />
-            API: localhost:8080
+            API: localhost:9000
           </Badge>
           <Button
             variant="ghost"

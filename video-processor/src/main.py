@@ -13,16 +13,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("processor.log")
-    ]
-)
-logger = logging.getLogger(__name__)
+# Setup logging with Unicode support for Windows
+import os
+if sys.platform == "win32":
+    # Set environment variable for UTF-8 encoding
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    # Try to set console code page to UTF-8
+    try:
+        import subprocess
+        subprocess.run(['chcp', '65001'], shell=True, capture_output=True)
+    except Exception:
+        pass
+
+# Import the proper logging configuration
+sys.path.append(str(Path(__file__).parent.parent))
+from logging_config import setup_logging
+
+# Setup logging with Unicode support
+logger = setup_logging()
 
 # Import our modules
 from .core.config import ProcessorConfig

@@ -152,7 +152,7 @@ class VideoOrchestrationService:
         """Get callback URL for job updates."""
         # Return the callback URL where the video processor can send status updates
         # Use the backend service name for container-to-container communication
-        return "http://backend:8080/api/jobs/callback"
+        return "http://backend:9000/api/jobs/callback"
 
 
 # Global instance

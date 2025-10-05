@@ -9,11 +9,11 @@ This Docker configuration provides a complete containerized setup for the AI Vid
 - **Purpose**: User interface for video generation
 - **URL**: http://localhost:3000
 
-### 2. Backend API (Port 8080)
+### 2. Backend API (Port 9000)
 - **Technology**: FastAPI + Python
 - **Purpose**: Main API server and job management
-- **URL**: http://localhost:8080
-- **API Docs**: http://localhost:8080/docs
+- **URL**: http://localhost:9000
+- **API Docs**: http://localhost:9000/docs
 
 ### 3. Video Processor (Port 8090)
 - **Technology**: FastAPI + Python
@@ -53,8 +53,8 @@ docker-compose up -d
 
 ### 4. Access Application
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:8080
-- API Documentation: http://localhost:8080/docs
+- Backend API: http://localhost:9000
+- API Documentation: http://localhost:9000/docs
 
 ## Configuration
 
@@ -136,7 +136,7 @@ docker-compose logs -f frontend
 ### Health Checks
 ```bash
 # Check service health
-curl http://localhost:8080/health  # Backend
+curl http://localhost:9000/health  # Backend
 curl http://localhost:8090/health  # Video Processor
 curl http://localhost:3000         # Frontend
 ```
@@ -156,7 +156,7 @@ docker stats
 1. Check if ports are available:
    ```bash
    lsof -i :3000  # Frontend
-   lsof -i :8080  # Backend
+   lsof -i :9000  # Backend
    lsof -i :8090  # Video Processor
    ```
 

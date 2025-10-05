@@ -33,7 +33,7 @@ docker compose -f docker/docker-compose.yml up --build -d
 
 # Access services
 # Frontend: http://localhost:5173
-# Backend API: http://localhost:8080
+# Backend API: http://localhost:9000
 # Database: localhost:5432
 # Redis: localhost:6379
 ```
@@ -127,10 +127,10 @@ COPY . .
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/health || exit 1
+    CMD curl -f http://localhost:9000/api/health || exit 1
 
 # Run application
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "9000"]
 ```
 
 ### Frontend Container
@@ -188,7 +188,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.backend
     ports:
-      - "8080:8080"
+      - "9000:9000"
     environment:
       - DATABASE_URL=postgresql://videohelper_user:videohelper_password@postgres:5432/videohelper
       - REDIS_URL=redis://redis:6379/0
@@ -206,7 +206,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -219,7 +219,7 @@ services:
     ports:
       - "5173:80"
     environment:
-      - VITE_API_BASE=http://localhost:8080
+      - VITE_API_BASE=http://localhost:9000
     depends_on:
       - backend
     restart: unless-stopped
@@ -270,7 +270,7 @@ volumes:
 services:
   backend:
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/health"]
       interval: 30s
       timeout: 10s
       start_period: 30s
@@ -422,7 +422,7 @@ services:
       - DEBUG_MODE=true
       - LOG_LEVEL=DEBUG
       - RELOAD=true
-    command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+    command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "9000", "--reload"]
 
   frontend:
     volumes:
@@ -500,7 +500,7 @@ docker compose exec backend bash
 
 # Check service health
 docker compose ps
-docker compose exec backend curl http://localhost:8080/api/health
+docker compose exec backend curl http://localhost:9000/api/health
 
 # Monitor resource usage
 docker compose exec backend htop

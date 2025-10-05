@@ -1710,11 +1710,17 @@ class TikYouGenerator:
             # Convert each clip to no-background format
             for i, clip_info in enumerate(selected_clips):
                 clip_name = os.path.basename(clip_info['path'])
-                
+
                 print(f"   📽️  Processing clip {i+1}/{len(selected_clips)}: {clip_name}")
-                
+
+                # Validate that the clip path exists before processing
+                if not os.path.exists(clip_info['path']):
+                    print(f"      ❌ Clip file does not exist: {clip_info['path']}")
+                    continue
+
                 # Convert to no-background format
                 no_bg_path = self.create_no_background_clip(clip_info['path'])
+
                 if not no_bg_path:
                     print(f"      ❌ Failed to create no-background version of {clip_name}")
                     continue
@@ -2512,4 +2518,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()

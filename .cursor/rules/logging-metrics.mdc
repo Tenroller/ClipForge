@@ -211,15 +211,15 @@ Access metrics through API endpoints:
 
 ```bash
 # Prometheus format metrics
-curl http://localhost:8080/api/metrics
+curl http://localhost:9000/api/metrics
 
 # Human-readable metrics summary  
-curl http://localhost:8080/api/metrics/stats
+curl http://localhost:9000/api/metrics/stats
 
 # Specific metric categories
-curl http://localhost:8080/api/metrics/performance
-curl http://localhost:8080/api/cache/stats
-curl http://localhost:8080/api/gpu/stats
+curl http://localhost:9000/api/metrics/performance
+curl http://localhost:9000/api/cache/stats
+curl http://localhost:9000/api/gpu/stats
 ```
 
 ## 🔍 Monitoring & Alerting

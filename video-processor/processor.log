@@ -37,7 +37,10 @@ Number of paragraphs used: 1
 2025-09-22 22:52:00,780 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Generated script (642 characters)
 2025-09-22 22:52:00,780 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: Generating text-to-speech
 MoviePy - Writing audio in output/c12f3b3a-6ebf-49d4-833b-2e39171deaf8/c12f3b3a-6ebf-49d4-833b-2e39171deaf8_audio.wav
-chunk:   0%|          | 0/656 [00:00<?, ?it/s, now=None]                                                        MoviePy - Done.
+
+chunk:   0%|          | 0/656 [00:00<?, ?it/s, now=None]
+                                                        
+MoviePy - Done.
 [+] Audio file saved successfully as 'output/c12f3b3a-6ebf-49d4-833b-2e39171deaf8/c12f3b3a-6ebf-49d4-833b-2e39171deaf8_audio.wav'
 2025-09-22 22:52:13,051 - src.services.video_processing - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8: MoneyPrinter processing completed (simplified version)
 2025-09-22 22:52:13,051 - src.core.simple_queue - INFO - Job c12f3b3a-6ebf-49d4-833b-2e39171deaf8 completed successfully
@@ -1953,13 +1956,121 @@ INFO:     Finished server process [84997]
 2025-10-04 14:16:34,632 - google_genai.models - INFO - AFC is enabled with max remote calls: 10.
 2025-10-04 14:16:36,139 - httpx - INFO - HTTP Request: POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent "HTTP/1.1 200 OK"
 2025-10-04 14:16:36,144 - google_genai.models - INFO - AFC remote call 1 is done.
-2025-10-04 14:19:32,297 - src.services.video_processing - ERROR - Job d4401737-0d68-42b8-aaef-dc810155c2f3 failed: [Errno 5] Input/output error
+2025-10-04 14:19:32,297 - src.services.video_processing - ERROR - Job d4401737-0d68-42b8-aaef-dc810155c2f3 failed: [Errno 5] Input/output error9000
 2025-10-04 14:19:32,298 - src.core.simple_queue - ERROR - Job d4401737-0d68-42b8-aaef-dc810155c2f3 failed: [Errno 5] Input/output error
-2025-10-04 14:19:32,298 - src.core.simple_queue - INFO - Sending callback for job d4401737-0d68-42b8-aaef-dc810155c2f3 to http://backend:8080/api/jobs/callback
-2025-10-04 14:19:33,331 - src.core.simple_queue - ERROR - Failed to send callback for job d4401737-0d68-42b8-aaef-dc810155c2f3: HTTPConnectionPool(host='backend', port=8080): Max retries exceeded with url: /api/jobs/callback (Caused by NameResolutionError("<urllib3.connection.HTTPConnection object at 0x145baaad0>: Failed to resolve 'backend' ([Errno 8] nodename nor servname provided, or not known)"))
+2025-10-04 14:19:32,298 - src.core.simple_queue - INFO - Sending callback for job d4401737-0d68-42b8-aaef-dc810155c2f3 to http://backend:9000/api/jobs/callback
+2025-10-04 14:19:33,331 - src.core.simple_queue - ERROR - Failed to send callback for job d4401737-0d68-42b8-aaef-dc810155c2f3: HTTPConnectionPool(host='backend', port=9000): Max retries exceeded with url: /api/jobs/callback (Caused by NameResolutionError("<urllib3.connection.HTTPConnection object at 0x145baaad0>: Failed to resolve 'backend' ([Errno 8] nodename nor servname provided, or not known)"))
 2025-10-04 14:19:33,438 - src.main - INFO - Shutting down Video Processing API...
 2025-10-04 14:19:33,438 - src.core.simple_queue - INFO - Stopping job processing
 2025-10-04 14:19:33,439 - src.core.simple_queue - INFO - Stopped processing worker: worker-0
 2025-10-04 14:19:33,439 - src.core.simple_queue - INFO - Stopped processing worker: worker-1
 2025-10-04 14:19:33,439 - src.core.simple_queue - INFO - Stopping job processing
 2025-10-04 14:19:33,439 - src.main - INFO - Video Processing API shutdown complete
+2025-10-04 15:32:42,030 - src.main - INFO - Starting Video Processing API...
+2025-10-04 15:32:42,035 - src.main - INFO - Loaded configuration for processor: processor-1
+2025-10-04 15:32:42,035 - src.main - WARNING - Configuration warning: BACKEND_API_KEY not set - communication may be insecure
+2025-10-04 15:32:42,035 - src.main - INFO - Setup directories: output=output, temp=temp
+2025-10-04 15:32:42,036 - src.core.simple_queue - INFO - Initialized in-memory job queue for processor processor-1
+2025-10-04 15:32:42,056 - src.services.video_processing - INFO -    ESPEAK_PATH: C:\Program Files\eSpeak NG\espeak-ng.exe
+2025-10-04 15:32:42,056 - src.services.video_processing - INFO -    DATA_PATH: C:\Program Files\eSpeak NG\espeak-ng-data
+2025-10-04 15:32:42,056 - src.core.simple_queue - INFO - Registered handler for workflow: WorkflowType.MONEYPRINTER
+2025-10-04 15:32:42,056 - src.core.simple_queue - INFO - Registered handler for workflow: WorkflowType.BRAINROT
+2025-10-04 15:32:42,056 - src.main - INFO - Video Processing API started successfully on 0.0.0.0:8090
+2025-10-04 15:32:42,056 - src.core.simple_queue - INFO - Starting job processing for processor processor-1
+2025-10-04 15:32:42,057 - src.core.simple_queue - INFO - Started processing worker: worker-0
+2025-10-04 15:32:42,057 - src.core.simple_queue - INFO - Started processing worker: worker-1
+2025-10-04 15:36:53,068 - src.core.simple_queue - INFO - Added job 50d39756-1221-404c-805a-ec14a0854b41 to queue with priority JobPriority.NORMAL
+2025-10-04 15:36:53,068 - src.api.routes - INFO - Created job 50d39756-1221-404c-805a-ec14a0854b41 with workflow WorkflowType.BRAINROT
+2025-10-04 15:36:53,440 - src.core.simple_queue - INFO - Processing job 50d39756-1221-404c-805a-ec14a0854b41 (workflow: WorkflowType.BRAINROT)
+2025-10-04 15:36:53,440 - src.services.video_processing - INFO - Starting Brainrot job 50d39756-1221-404c-805a-ec14a0854b41
+2025-10-04 15:37:02,163 - utils.ffmpeg_utils - INFO - Found FFmpeg at: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffmpeg.EXE
+2025-10-04 15:37:02,171 - utils.ffmpeg_utils - INFO - Found FFprobe at: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffprobe.EXE
+2025-10-04 15:37:02,171 - utils.ffmpeg_utils - INFO - Using existing FFmpeg path: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffmpeg.EXE
+2025-10-04 15:37:02,171 - utils.ffmpeg_utils - INFO - Using existing FFprobe path: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffprobe.EXE
+2025-10-04 15:37:02,910 - utils.ffmpeg_utils - INFO - Using existing FFmpeg path: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffmpeg.EXE
+2025-10-04 15:37:02,910 - utils.ffmpeg_utils - INFO - Using existing FFprobe path: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffprobe.EXE
+2025-10-04 15:37:02,910 - utils.ffmpeg_utils - INFO - Using existing FFmpeg path: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffmpeg.EXE
+2025-10-04 15:37:02,910 - utils.ffmpeg_utils - INFO - Using existing FFprobe path: C:\Users\tenroller\AppData\Local\Microsoft\WinGet\Links\ffprobe.EXE
+2025-10-04 15:37:03,608 - video_generator.compilation - WARNING - TTS Generator initialization failed: ForwardRef._evaluate() missing 1 required keyword-only argument: 'recursive_guard' - This is likely due to dependency version incompatibilities. TTS variations will be skipped
+2025-10-04 15:37:03,608 - google_genai._api_client - WARNING - Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.
+2025-10-04 15:37:04,362 - video_generator.compilation - INFO - Title Generator initialized successfully
+2025-10-04 15:37:04,364 - src.services.video_processing - INFO - Job 50d39756-1221-404c-805a-ec14a0854b41: Processing source video
+2025-10-04 15:37:04,364 - video_generator.compilation - INFO - process_single_video: Starting video processing for YouTube URL: https://www.youtube.com/watch?v=0QkV2L9mSew
+2025-10-04 15:37:04,364 - video_generator.compilation - INFO - process_single_video: Using method: scenedetect, sensitivity: 15
+2025-10-04 15:37:04,364 - video_generator.compilation - INFO - Generation step: (None, 'compilation', 'youtube_processing_started'), {'source': 'https://www.youtube.com/watch?v=0QkV2L9mSew'}
+2025-10-04 15:37:04,365 - video_generator.compilation - INFO - YouTube video ID extracted: 0QkV2L9mSew
+2025-10-04 15:37:04,365 - video_generator.compilation - INFO - process_single_video: Extracted YouTube video ID: 0QkV2L9mSew
+2025-10-04 15:37:04,365 - video_generator.compilation - INFO - process_single_video: Starting video download for ID: 0QkV2L9mSew
+2025-10-04 15:37:04,365 - video_generator.compilation - INFO - Generation step: (None, 'compilation', 'video_download_started'), {'video_id': '0QkV2L9mSew'}
+2025-10-04 15:37:04,366 - video_generator.compilation.processor - INFO - Starting YouTube video download for: 0QkV2L9mSew (unified)
+2025-10-04 15:37:04,367 - utils.youtube - INFO - Attempt 1/5 using default_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:06,428 - utils.youtube - WARNING - Unknown error with default_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:06,429 - utils.youtube - INFO - Attempt 1/5 using alternative_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:08,245 - utils.youtube - WARNING - Unknown error with alternative_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:08,246 - utils.youtube - INFO - Attempt 1/5 using robust_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:10,122 - utils.youtube - WARNING - Unknown error with robust_hq strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:10,122 - utils.youtube - INFO - Attempt 1/5 using medium_quality strategy for 0QkV2L9mSew
+2025-10-04 15:37:12,064 - utils.youtube - WARNING - Unknown error with medium_quality strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:12,064 - utils.youtube - INFO - Attempt 1/5 using emergency strategy for 0QkV2L9mSew
+2025-10-04 15:37:13,874 - utils.youtube - WARNING - Unknown error with emergency strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:15,374 - utils.youtube - INFO - Attempt 2/5 using default_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:17,213 - utils.youtube - WARNING - Unknown error with default_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:17,213 - utils.youtube - INFO - Attempt 2/5 using alternative_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:19,268 - utils.youtube - WARNING - Unknown error with alternative_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:19,268 - utils.youtube - INFO - Attempt 2/5 using robust_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:21,152 - utils.youtube - WARNING - Unknown error with robust_hq strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:21,152 - utils.youtube - INFO - Attempt 2/5 using medium_quality strategy for 0QkV2L9mSew
+2025-10-04 15:37:23,043 - utils.youtube - WARNING - Unknown error with medium_quality strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:23,043 - utils.youtube - INFO - Attempt 2/5 using emergency strategy for 0QkV2L9mSew
+2025-10-04 15:37:24,917 - utils.youtube - WARNING - Unknown error with emergency strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:27,918 - utils.youtube - INFO - Attempt 3/5 using default_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:29,751 - utils.youtube - WARNING - Unknown error with default_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:29,751 - utils.youtube - INFO - Attempt 3/5 using alternative_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:31,600 - utils.youtube - WARNING - Unknown error with alternative_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:31,600 - utils.youtube - INFO - Attempt 3/5 using robust_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:33,462 - utils.youtube - WARNING - Unknown error with robust_hq strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:33,462 - utils.youtube - INFO - Attempt 3/5 using medium_quality strategy for 0QkV2L9mSew
+2025-10-04 15:37:35,273 - utils.youtube - WARNING - Unknown error with medium_quality strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:35,273 - utils.youtube - INFO - Attempt 3/5 using emergency strategy for 0QkV2L9mSew
+2025-10-04 15:37:37,032 - utils.youtube - WARNING - Unknown error with emergency strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:41,533 - utils.youtube - INFO - Attempt 4/5 using default_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:43,324 - utils.youtube - WARNING - Unknown error with default_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:43,324 - utils.youtube - INFO - Attempt 4/5 using alternative_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:45,257 - utils.youtube - WARNING - Unknown error with alternative_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:45,258 - utils.youtube - INFO - Attempt 4/5 using robust_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:47,284 - utils.youtube - WARNING - Unknown error with robust_hq strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:47,284 - utils.youtube - INFO - Attempt 4/5 using medium_quality strategy for 0QkV2L9mSew
+2025-10-04 15:37:49,134 - utils.youtube - WARNING - Unknown error with medium_quality strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:49,134 - utils.youtube - INFO - Attempt 4/5 using emergency strategy for 0QkV2L9mSew
+2025-10-04 15:37:50,925 - utils.youtube - WARNING - Unknown error with emergency strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:37:56,926 - utils.youtube - INFO - Attempt 5/5 using default_hq strategy for 0QkV2L9mSew
+2025-10-04 15:37:58,707 - utils.youtube - WARNING - Unknown error with default_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:37:58,708 - utils.youtube - INFO - Attempt 5/5 using alternative_hq strategy for 0QkV2L9mSew
+2025-10-04 15:38:00,583 - utils.youtube - WARNING - Unknown error with alternative_hq strategy for 0QkV2L9mSew: [0;31mERROR:[0m [youtube] 0QkV2L9mSew: Sign in to confirm you�re not a bot. This helps protect our community. Learn more
+2025-10-04 15:38:00,583 - utils.youtube - INFO - Attempt 5/5 using robust_hq strategy for 0QkV2L9mSew
+2025-10-04 15:38:02,316 - utils.youtube - WARNING - Unknown error with robust_hq strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:38:02,316 - utils.youtube - INFO - Attempt 5/5 using medium_quality strategy for 0QkV2L9mSew
+2025-10-04 15:38:04,248 - utils.youtube - WARNING - Unknown error with medium_quality strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:38:04,248 - utils.youtube - INFO - Attempt 5/5 using emergency strategy for 0QkV2L9mSew
+2025-10-04 15:38:06,150 - utils.youtube - WARNING - Unknown error with emergency strategy for 0QkV2L9mSew: Download reported success but file not found or empty
+2025-10-04 15:38:06,150 - video_generator.compilation - INFO - Generation step: (None, 'compilation', 'video_download_failed'), {'video_id': '0QkV2L9mSew', 'duration': 61.78419589996338}
+2025-10-04 15:38:06,150 - video_generator.compilation - ERROR - process_single_video: Video download failed for ID: 0QkV2L9mSew9000
+2025-10-04 15:38:06,151 - src.services.video_processing - ERROR - Job 50d39756-1221-404c-805a-ec14a0854b41 failed: No clips generated from source video9000
+2025-10-04 15:38:06,151 - src.core.simple_queue - ERROR - Job 50d39756-1221-404c-805a-ec14a0854b41 failed: No clips generated from source video
+2025-10-04 15:38:06,151 - src.core.simple_queue - INFO - Sending callback for job 50d39756-1221-404c-805a-ec14a0854b41 to http://backend:9000/api/jobs/callback
+2025-10-04 15:38:08,853 - src.core.simple_queue - ERROR - Failed to send callback for job 50d39756-1221-404c-805a-ec14a0854b41: HTTPConnectionPool(host='backend', port=9000): Max retries exceeded with url: /api/jobs/callback (Caused by NameResolutionError("<urllib3.connection.HTTPConnection object at 0x000001AC035C2360>: Failed to resolve 'backend' ([Errno 11001] getaddrinfo failed)"))
+2025-10-04 15:38:08,962 - src.core.simple_queue - INFO - Stopped processing worker: worker-1
+2025-10-04 15:38:08,975 - src.core.simple_queue - INFO - Stopped processing worker: worker-0
+2025-10-04 15:38:25,209 - src.main - INFO - Starting Video Processing API...
+2025-10-04 15:38:25,215 - src.main - INFO - Loaded configuration for processor: processor-1
+2025-10-04 15:38:25,215 - src.main - WARNING - Configuration warning: BACKEND_API_KEY not set - communication may be insecure
+2025-10-04 15:38:25,215 - src.main - INFO - Setup directories: output=output, temp=temp
+2025-10-04 15:38:25,215 - src.core.simple_queue - INFO - Initialized in-memory job queue for processor processor-1
+2025-10-04 15:38:25,224 - src.services.video_processing - INFO -    ESPEAK_PATH: C:\Program Files\eSpeak NG\espeak-ng.exe
+2025-10-04 15:38:25,224 - src.services.video_processing - INFO -    DATA_PATH: C:\Program Files\eSpeak NG\espeak-ng-data
+2025-10-04 15:38:25,224 - src.core.simple_queue - INFO - Registered handler for workflow: WorkflowType.MONEYPRINTER
+2025-10-04 15:38:25,224 - src.core.simple_queue - INFO - Registered handler for workflow: WorkflowType.BRAINROT
+2025-10-04 15:38:25,224 - src.main - INFO - Video Processing API started successfully on 0.0.0.0:8090
+2025-10-04 15:38:25,224 - src.core.simple_queue - INFO - Starting job processing for processor processor-1
+2025-10-04 15:38:25,224 - src.core.simple_queue - INFO - Started processing worker: worker-0
+2025-10-04 15:38:25,225 - src.core.simple_queue - INFO - Started processing worker: worker-1

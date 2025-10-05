@@ -5,7 +5,11 @@ Health check and basic system status endpoints.
 from pathlib import Path
 from fastapi import APIRouter
 
-from ...utils.paths import get_project_root, get_backend_path
+try:
+    from ...utils.paths import get_project_root, get_backend_path
+except ImportError:
+    # Fallback for when running from backend directory
+    from utils.paths import get_project_root, get_backend_path
 
 router = APIRouter()
 

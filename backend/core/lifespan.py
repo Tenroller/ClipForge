@@ -14,8 +14,13 @@ from collections import defaultdict
 
 from fastapi import FastAPI
 
-from ..logging_config import initialize_logging, get_logger
-from ..metrics import init_metrics_system
+try:
+    from ..logging_config import initialize_logging, get_logger
+    from ..metrics import init_metrics_system
+except ImportError:
+    # Fallback for when running from backend directory
+    from logging_config import initialize_logging, get_logger
+    from metrics import init_metrics_system
 
 # Global state for lifespan management
 MAIN_LOOP: "asyncio.AbstractEventLoop | None" = None
@@ -85,7 +90,10 @@ def _cleanup_resources():
         try:
             # Cleanup temp files
             try:
-                from ..utils.file_management import get_temp_manager
+                try:
+                    from ..utils.file_management import get_temp_manager
+                except ImportError:
+                    from utils.file_management import get_temp_manager
                 manager = get_temp_manager()
                 manager.cleanup_all(force=True)
                 logger.debug("Temp file cleanup completed")
@@ -94,7 +102,10 @@ def _cleanup_resources():
 
             # Cleanup GPU resources
             try:
-                from ..utils.gpu_manager import cleanup_gpu_memory
+                try:
+                    from ..utils.gpu_manager import cleanup_gpu_memory
+                except ImportError:
+                    from utils.gpu_manager import cleanup_gpu_memory
                 cleanup_gpu_memory(force=True)
                 logger.debug("GPU cleanup completed")
             except Exception as e:
@@ -118,7 +129,10 @@ def _cleanup_resources():
 
 async def _job_expiration_loop():
     """Periodic loop to expire stale jobs in the database."""
-    from ..database import get_job_store
+    try:
+        from ..database import get_job_store
+    except ImportError:
+        from database import get_job_store
     job_store = get_job_store()
     interval_seconds = 300  # 5 minutes
     while True:
@@ -151,11 +165,18 @@ async def lifespan(app: FastAPI):
         init_metrics_system()
 
         # Initialize utility systems
-        from ..utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
-        from ..utils.streaming_processor import init_streaming_processor
-        from ..utils.fonts import init_font_manager
-        from ..utils.paths import init_path_manager
-        from ..utils.gpu_manager import init_gpu_manager
+        try:
+            from ..utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
+            from ..utils.streaming_processor import init_streaming_processor
+            from ..utils.fonts import init_font_manager
+            from ..utils.paths import init_path_manager
+            from ..utils.gpu_manager import init_gpu_manager
+        except ImportError:
+            from utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
+            from utils.streaming_processor import init_streaming_processor
+            from utils.fonts import init_font_manager
+            from utils.paths import init_path_manager
+            from utils.gpu_manager import init_gpu_manager
 
         init_temp_manager()
         cleanup_temp_files_on_startup()
@@ -166,7 +187,10 @@ async def lifespan(app: FastAPI):
 
         # Initialize and start job queue worker (delayed import to avoid circular dependency)
         try:
-            from ..job_queue_unified import get_job_queue
+            try:
+                from ..job_queue_unified import get_job_queue
+            except ImportError:
+                from job_queue_unified import get_job_queue
             job_queue = get_job_queue()
             if not job_queue.running:
                 job_queue.start_worker()

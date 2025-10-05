@@ -13,10 +13,10 @@ echo ""
 echo "🏥 Health Checks:"
 
 # Test Backend API
-if curl -s http://localhost:8080/health > /dev/null; then
-    echo "✅ Backend API (8080) - Healthy"
+if curl -s http://localhost:9000/health > /dev/null; then
+    echo "✅ Backend API (9000) - Healthy"
 else
-    echo "❌ Backend API (8080) - Not responding"
+    echo "❌ Backend API (9000) - Not responding"
 fi
 
 # Test Video Processor
@@ -70,7 +70,7 @@ docker-compose logs --tail=5 video-processor | tail -5
 echo ""
 echo "🔗 Service URLs:"
 echo "   Frontend: http://localhost:3000"
-echo "   Backend API: http://localhost:8080"
-echo "   API Docs: http://localhost:8080/docs"
+echo "   Backend API: http://localhost:9000"
+echo "   API Docs: http://localhost:9000/docs"
 echo "   PostgreSQL: localhost:5433"
 echo "   Redis: localhost:6380"

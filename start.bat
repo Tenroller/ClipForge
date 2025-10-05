@@ -5,7 +5,7 @@ REM AI Video Generator - Development Start Script (Windows)
 REM 
 REM This script starts all three services:
 REM - Frontend (React/Vite) on port 5173
-REM - Backend (FastAPI) on port 8080  
+REM - Backend (FastAPI) on port 9000  
 REM - Video Processor (FastAPI) on port 8090
 REM
 REM Prerequisites:
@@ -16,17 +16,6 @@ REM 4. Install frontend deps: cd frontend && npm install
 REM 5. Configure environment: copy env-example.txt to .env and edit API keys
 REM
 REM Note: The script will run with dummy API keys if .env is not configured
-
-REM Function to kill all background processes when the script exits
-:cleanup
-echo Shutting down all services...
-taskkill /f /im node.exe >nul 2>&1
-taskkill /f /im python.exe >nul 2>&1
-exit /b
-
-REM Set up cleanup on script exit
-set "CLEANUP_SCRIPT=%~f0"
-set "CLEANUP_FUNCTION=:cleanup"
 
 REM --- Frontend ---
 echo Starting frontend development server...
@@ -74,7 +63,7 @@ set "PYTHONPATH=%CD%;%PYTHONPATH%"
 
 cd backend
 
-start "Backend" cmd /c "python main.py"
+start "Backend" cmd /c "set PYTHONPATH=%CD%\..;%PYTHONPATH% && python main.py"
 
 cd ..
 
@@ -119,7 +108,7 @@ REM Set default environment variables for video processor if not already set
 if not defined PROCESSOR_ID set "PROCESSOR_ID=processor-1"
 if not defined PROCESSOR_HOST set "PROCESSOR_HOST=0.0.0.0"
 if not defined PROCESSOR_PORT set "PROCESSOR_PORT=8090"
-if not defined BACKEND_API_URL set "BACKEND_API_URL=http://localhost:8080"
+if not defined BACKEND_API_URL set "BACKEND_API_URL=http://localhost:9000"
 if not defined REDIS_URL set "REDIS_URL=redis://localhost:6379"
 if not defined REDIS_DB set "REDIS_DB=1"
 if not defined OUTPUT_DIR set "OUTPUT_DIR=../output"
@@ -131,12 +120,13 @@ if not defined PEXELS_API_KEY set "PEXELS_API_KEY=dummy_pexels_key_for_dev"
 if not defined GEMINI_API_KEY set "GEMINI_API_KEY=dummy_gemini_key_for_dev"
 
 REM Start the video processor
-start "VideoProcessor" cmd /c "python main.py"
+start "VideoProcessor" cmd /c "set PYTHONPATH=%CD%\..;%PYTHONPATH% && python main.py"
 cd ..
 
 REM Wait for user input to keep the script running
 echo All services started. Press any key to stop all services...
 pause >nul
 
-REM Cleanup when user presses a key
-call :cleanup
+echo Shutting down all services...
+taskkill /f /im node.exe >nul 2>&1
+taskkill /f /im python.exe >nul 2>&1

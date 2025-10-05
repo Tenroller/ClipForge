@@ -15,7 +15,7 @@ const devLog = (message: string, ...args: any[]) => {
   }
 }
 
-const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
 export default function CreatorPage() {
   const [busy, setBusy] = useState(false)

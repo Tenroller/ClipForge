@@ -552,7 +552,7 @@ import json
 @pytest.mark.asyncio
 async def test_websocket_job_updates():
     """Test WebSocket job progress updates."""
-    uri = "ws://localhost:8080/ws"
+    uri = "ws://localhost:9000/ws"
     
     async with websockets.connect(uri) as websocket:
         # Subscribe to job updates

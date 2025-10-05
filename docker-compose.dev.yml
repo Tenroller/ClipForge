@@ -68,7 +68,7 @@ services:
       dockerfile: backend/Dockerfile
     container_name: ai-video-backend-dev
     ports:
-      - "8080:8080"
+      - "9000:9000"
     depends_on:
       postgres-dev:
         condition: service_healthy
@@ -78,7 +78,7 @@ services:
         condition: service_started
     environment:
       - HOST=0.0.0.0
-      - PORT=8080
+      - PORT=9000
       - RELOAD=true
       - DEBUG_MODE=true
       - LOG_LEVEL=DEBUG
@@ -111,7 +111,7 @@ services:
     environment:
       - PROCESSOR_HOST=0.0.0.0
       - PROCESSOR_PORT=8090
-      - BACKEND_API_URL=http://backend-dev:8080
+      - BACKEND_API_URL=http://backend-dev:9000
       - OUTPUT_DIR=/app/output
       - TEMP_DIR=/app/temp
       - LOG_LEVEL=DEBUG

@@ -9,7 +9,11 @@ import traceback
 import json
 from typing import Dict, Any, Optional, Union, List
 from enum import Enum
-from ..logging_config import get_logger
+try:
+    from ..logging_config import get_logger
+except ImportError:
+    # Fallback for when running from backend directory
+    from logging_config import get_logger
 
 logger = get_logger("error_handling")
 

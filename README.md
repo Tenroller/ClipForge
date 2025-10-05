@@ -35,7 +35,7 @@ All video generation endpoints now require authentication:
 
 ### Running the Application
 
-1. **Backend**: `uvicorn app:app --host 0.0.0.0 --port 8080 --reload`
+1. **Backend**: `uvicorn app:app --host 0.0.0.0 --port 9000 --reload`
 2. **Frontend**: `npm run dev` (serves on port 5173)
 
 The frontend will automatically redirect unauthenticated users to login. with Cloud GPU Support
@@ -120,7 +120,7 @@ docker compose -f docker/docker-compose.yml up --build
 
 # Access the application
 # Frontend: http://localhost:5173
-# Backend API: http://localhost:8080
+# Backend API: http://localhost:9000
 # Metrics: http://localhost:9090
 ```
 
@@ -267,7 +267,7 @@ psql -c "GRANT ALL PRIVILEGES ON DATABASE videohelper TO videohelper_user;"
 export DATABASE_URL="postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper"
 
 # Start the server
-uvicorn app:app --host 0.0.0.0 --port 8080 --reload
+uvicorn app:app --host 0.0.0.0 --port 9000 --reload
 ```
 
 #### Frontend Setup
@@ -367,13 +367,13 @@ MAX_CACHE_SIZE_GB=5                 # Cache size limit
 #### Authentication
 ```bash
 # All requests require API key header (if API_KEY is set)
-curl -H "X-API-Key: your-secret-key" http://localhost:8080/api/health
+curl -H "X-API-Key: your-secret-key" http://localhost:9000/api/health
 ```
 
 #### Single Video Generation
 ```bash
 # MoneyPrinter workflow
-curl -X POST http://localhost:8080/api/moneyprinter/generate \
+curl -X POST http://localhost:9000/api/moneyprinter/generate \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
   -d '{
@@ -388,7 +388,7 @@ curl -X POST http://localhost:8080/api/moneyprinter/generate \
 #### Batch Processing
 ```bash
 # Create a batch of videos
-curl -X POST http://localhost:8080/api/batch \
+curl -X POST http://localhost:9000/api/batch \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
   -d '{
@@ -404,18 +404,18 @@ curl -X POST http://localhost:8080/api/batch \
   }'
 
 # Start batch processing
-curl -X POST http://localhost:8080/api/batch/{batch_id}/start \
+curl -X POST http://localhost:9000/api/batch/{batch_id}/start \
   -H "X-API-Key: your-key"
 
 # Monitor progress
-curl http://localhost:8080/api/batch/{batch_id} \
+curl http://localhost:9000/api/batch/{batch_id} \
   -H "X-API-Key: your-key"
 ```
 
 #### Thumbnail Generation
 ```bash
 # Generate thumbnails for completed video
-curl -X POST http://localhost:8080/api/videos/{job_id}/thumbnails \
+curl -X POST http://localhost:9000/api/videos/{job_id}/thumbnails \
   -H "X-API-Key: your-key"
 ```
 
@@ -469,13 +469,13 @@ curl -X POST http://localhost:8080/api/videos/{job_id}/thumbnails \
 ### Health Checks
 ```bash
 # System health
-curl http://localhost:8080/api/health
+curl http://localhost:9000/api/health
 
 # Detailed metrics
-curl http://localhost:8080/api/metrics/stats
+curl http://localhost:9000/api/metrics/stats
 
 # Cache performance
-curl http://localhost:8080/api/cache/stats
+curl http://localhost:9000/api/cache/stats
 ```
 
 ### Prometheus Metrics
@@ -509,7 +509,7 @@ psql postgresql://videohelper_user:videohelper_password@localhost:5432/videohelp
 #### Video Generation Fails
 ```bash
 # Check API keys and database
-curl http://localhost:8080/api/health
+curl http://localhost:9000/api/health
 
 # Verify FFmpeg installation
 ffmpeg -version
@@ -521,13 +521,13 @@ docker-compose logs backend
 #### Performance Issues
 ```bash
 # Monitor resource usage
-curl http://localhost:8080/api/metrics/stats
+curl http://localhost:9000/api/metrics/stats
 
 # Check cache performance
-curl http://localhost:8080/api/cache/stats
+curl http://localhost:9000/api/cache/stats
 
 # Optimize cache settings
-curl -X POST http://localhost:8080/api/cache/clear
+curl -X POST http://localhost:9000/api/cache/clear
 
 # Check PostgreSQL performance
 psql postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper -c "SELECT * FROM pg_stat_activity;"

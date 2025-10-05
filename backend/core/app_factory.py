@@ -11,8 +11,13 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 
 from .config import AppConfig
 from .lifespan import lifespan
-from ..middleware.logging import LoggingMiddleware
-from ..api.routes import register_routes
+try:
+    from ..middleware.logging import LoggingMiddleware
+    from ..api.routes import register_routes
+except ImportError:
+    # Fallback for when running from backend directory
+    from middleware.logging import LoggingMiddleware
+    from api.routes import register_routes
 
 
 def setup_sentry(config: AppConfig) -> None:

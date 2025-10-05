@@ -28,7 +28,9 @@ from ..models import MoneyPrinterRequest, BrainrotRequest, WorkflowType
 from ..core.config import ProcessorConfig
 
 import logging
-logger = logging.getLogger(__name__)
+
+# Use the proper logger from the logging configuration
+logger = logging.getLogger("video_generator")
 
 
 class VideoProcessingService:

@@ -10,9 +10,15 @@ from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
-from ..logging_config import get_logger, log_request, log_security_event
-from ..metrics import record_request_metrics
-from ..utils.error_handling import handle_error
+try:
+    from ..logging_config import get_logger, log_request, log_security_event
+    from ..metrics import record_request_metrics
+    from ..utils.error_handling import handle_error
+except ImportError:
+    # Fallback for when running from backend directory
+    from logging_config import get_logger, log_request, log_security_event
+    from metrics import record_request_metrics
+    from utils.error_handling import handle_error
 
 logger = get_logger("middleware.logging")
 

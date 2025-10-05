@@ -4,7 +4,7 @@
 # 
 # This script starts all three services:
 # - Frontend (React/Vite) on port 5173
-# - Backend (FastAPI) on port 8080  
+# - Backend (FastAPI) on port 9000  
 # - Video Processor (FastAPI) on port 8090
 #
 # Prerequisites:
@@ -103,7 +103,7 @@ fi
 export PROCESSOR_ID=${PROCESSOR_ID:-processor-1}
 export PROCESSOR_HOST=${PROCESSOR_HOST:-0.0.0.0}
 export PROCESSOR_PORT=${PROCESSOR_PORT:-8090}
-export BACKEND_API_URL=${BACKEND_API_URL:-http://localhost:8080}
+export BACKEND_API_URL=${BACKEND_API_URL:-http://localhost:9000}
 export REDIS_URL=${REDIS_URL:-redis://localhost:6379}
 export REDIS_DB=${REDIS_DB:-1}
 export OUTPUT_DIR=${OUTPUT_DIR:-../output}

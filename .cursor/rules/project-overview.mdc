@@ -102,7 +102,7 @@ This is an enterprise-grade AI video generation platform with dual workflows, cl
 - **Compose**: [docker/docker-compose.yml](mdc:docker/docker-compose.yml) - Full stack deployment
 
 ### Development Setup
-1. **Backend**: `cd backend && uvicorn app:app --host 0.0.0.0 --port 8080 --reload`
+1. **Backend**: `cd backend && uvicorn app:app --host 0.0.0.0 --port 9000 --reload`
 2. **Frontend**: `cd frontend && npm run dev`
 3. **Database**: PostgreSQL required for job persistence
 

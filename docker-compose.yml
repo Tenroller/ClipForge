@@ -70,7 +70,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8080:8080"
+      - "9000:9000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -81,7 +81,7 @@ services:
     environment:
       # Service-specific overrides (these take precedence over .env file)
       - HOST=0.0.0.0
-      - PORT=8080
+      - PORT=9000
       - PYTHONPATH=/app
       - VIDEOHELPER_OUTPUT_DIR=/app/output
       - VIDEOHELPER_TEMP_DIR=/app/temp
@@ -123,7 +123,7 @@ services:
       # Service-specific overrides (these take precedence over .env file)
       - PROCESSOR_HOST=0.0.0.0
       - PROCESSOR_PORT=8090
-      - BACKEND_API_URL=http://backend:8080
+      - BACKEND_API_URL=http://backend:9000
       - OUTPUT_DIR=/app/output
       - TEMP_DIR=/app/temp
       - PYTHONPATH=/app

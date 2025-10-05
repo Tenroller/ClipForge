@@ -48,11 +48,11 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
 # Expose port
-EXPOSE 8080
+EXPOSE 9000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:8080/health || exit 1
+  CMD curl -f http://localhost:9000/health || exit 1
 
 # Run the application using uvicorn directly, pointing to backend module
-CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "9000"]

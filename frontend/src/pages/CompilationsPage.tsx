@@ -13,7 +13,7 @@ import { type ManagedJob } from '@/lib/jobManager'
 import { GeneratedVideosPanel } from '@/components/GeneratedVideosPanel'
 import { generateBrainrotVideo } from '@/lib/api'
 
-const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
 // Development-only logging
 const devLog = (message: string, ...args: any[]) => {

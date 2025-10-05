@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { JobManager, type ManagedJob } from '@/lib/jobManager'
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:8080'
+const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
 export interface UseJobManagerReturn {
   jobs: ManagedJob[]

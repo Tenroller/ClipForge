@@ -22,7 +22,7 @@ class ProcessorConfig:
     job_timeout_seconds: int = 3600  # 1 hour
     
     # Backend API communication
-    backend_api_url: str = "http://localhost:8080"
+    backend_api_url: str = "http://localhost:9000"
     backend_api_key: str = ""
     
     # Job queue
@@ -65,7 +65,7 @@ class ProcessorConfig:
             port=get_int("PROCESSOR_PORT", 8090),
             max_concurrent_jobs=get_int("PROCESSOR_MAX_CONCURRENT_JOBS", 2),
             job_timeout_seconds=get_int("PROCESSOR_JOB_TIMEOUT_SECONDS", 3600),
-            backend_api_url=os.getenv("BACKEND_API_URL", "http://localhost:8080"),
+            backend_api_url=os.getenv("BACKEND_API_URL", "http://localhost:9000"),
             backend_api_key=os.getenv("BACKEND_API_KEY", ""),
             redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
             redis_db=get_int("REDIS_DB", 1),

@@ -12,7 +12,10 @@ import psutil
 from typing import Dict, Optional, List, Tuple, Any, Callable
 from dataclasses import dataclass
 import json
-from ..logging_config import get_logger
+try:
+    from ..logging_config import get_logger
+except ImportError:
+    from logging_config import get_logger
 
 logger = get_logger("gpu_manager")
 
@@ -268,7 +271,10 @@ class GPUMemoryManager:
             import torch
 
             stats_before = self.get_memory_stats()
-            primary_device = stats_before.get('devices', [{}])[0]
+            devices = stats_before.get('devices', [])
+            if not devices:
+                return {'success': False, 'reason': 'No GPU devices found'}
+            primary_device = devices[0]
             usage_before = primary_device.get('usage_percentage', 0)
 
             # Trigger cleanup if usage is high or forced
@@ -297,8 +303,12 @@ class GPUMemoryManager:
                 time.sleep(0.5)
 
                 stats_after = self.get_memory_stats()
-                primary_device_after = stats_after.get('devices', [{}])[0]
-                usage_after = primary_device_after.get('usage_percentage', 0)
+                devices_after = stats_after.get('devices', [])
+                if not devices_after:
+                    usage_after = 0
+                else:
+                    primary_device_after = devices_after[0]
+                    usage_after = primary_device_after.get('usage_percentage', 0)
 
                 memory_freed = max(0, usage_before - usage_after)
 
@@ -358,8 +368,9 @@ class GPUMemoryManager:
                     self.usage_history = self.usage_history[-100:]
 
                 # Check for high memory usage
-                if stats.get('devices'):
-                    primary_device = stats['devices'][0]
+                devices = stats.get('devices', [])
+                if devices:
+                    primary_device = devices[0]
                     usage = primary_device.get('usage_percentage', 0)
 
                     if usage >= self.memory_thresholds['critical'] * 100:
