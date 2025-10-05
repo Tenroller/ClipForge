@@ -1205,16 +1205,24 @@ class TikYouGenerator:
         """Create a no-background version of the clip - just video or blurred pillarbox"""
         print(f"   🔧 Creating no-background clip from: {os.path.basename(video_path)}")
         output_path = None
+        video_clip = None
+        scaled_clip = None
+        bg_clip = None
+        final_clip = None
+        
         try:
             video_name = os.path.splitext(os.path.basename(video_path))[0]
             output_path = os.path.join(self.temp_dir, f"{video_name}_no_bg.mp4")
             
             # If no-background version already exists, return its path
             if os.path.exists(output_path):
+                print(f"   ♻️  Using existing no-background clip: {os.path.basename(output_path)}")
                 return output_path
             
             target_w, target_h = target_resolution
+            print(f"   📂 Loading clip for no-background processing...")
             video_clip = VideoFileClip(video_path, audio=True)
+            print(f"   ✅ Clip loaded: {video_clip.w}x{video_clip.h}, {video_clip.duration:.1f}s")
             
             # Check if video fits 9:16 aspect ratio
             threshold = getattr(self.request, 'blurredPillarboxThreshold', 0.1) if self.request else 0.1
@@ -1236,18 +1244,21 @@ class TikYouGenerator:
                 
                 scaled_w = int(video_clip.w * scale_factor)
                 scaled_h = int(video_clip.h * scale_factor)
+                print(f"   📏 Scaling main clip to {scaled_w}x{scaled_h}")
                 scaled_clip = video_clip.resized((scaled_w, scaled_h))
                 
-                # Create blurred background version
+                # Create blurred background version with simpler approach
                 # Scale the original to fill the entire frame (will be cropped)
                 bg_scale_factor = target_w / video_clip.w
-                bg_clip = video_clip.resized((target_w, int(video_clip.h * bg_scale_factor)))
+                bg_w = target_w
+                bg_h = int(video_clip.h * bg_scale_factor)
+                print(f"   🎨 Creating background clip: {bg_w}x{bg_h}")
+                bg_clip = video_clip.resized((bg_w, bg_h))
                 
                 # Apply blur to background using resize method (v2 compatible)
-                # GaussianBlur is not available in MoviePy v2, so we use resize blur
+                # Use a more conservative blur to avoid memory issues
                 print(f"   🔄 Applying blur effect using resize method")
-                blur_factor = 0.15  # Scale down to 15% then back up for better quality
-                bg_w, bg_h = bg_clip.size  # type: ignore
+                blur_factor = 0.25  # Less aggressive blur to reduce processing load
                 temp_w, temp_h = max(1, int(bg_w * blur_factor)), max(1, int(bg_h * blur_factor))
                 bg_clip = bg_clip.with_effects([vfx.Resize(width=temp_w, height=temp_h)]).with_effects([vfx.Resize(width=target_w, height=target_h)])
                 print(f"   ✅ Applied resize blur effect to background")
@@ -1259,79 +1270,118 @@ class TikYouGenerator:
                 main_clip = scaled_clip.with_position("center")  # type: ignore
                 
                 # Composite: blurred background + main video
+                print(f"   🔗 Compositing clips...")
                 final_clip = CompositeVideoClip([bg_clip, main_clip], size=(target_w, target_h))
+                print(f"   ✅ Composition complete")
             
+            # Set duration and audio
             final_clip = final_clip.with_duration(video_clip.duration)
             if video_clip.audio is not None:
                 final_clip = final_clip.with_audio(video_clip.audio)
             
-            # Enhanced bitrates for better quality
-            if video_clip.w * video_clip.h > 1920 * 1080:
-                bitrate = '8000k'
-                audio_bitrate = '256k'
-            elif video_clip.duration > 60:
-                bitrate = '6000k'
-                audio_bitrate = '192k'
-            else:
-                bitrate = '5000k'
-                audio_bitrate = '192k'
+            # Use conservative encoding settings to avoid hangs
+            # Force CPU encoding to avoid GPU hangs
+            codec = 'libx264'  # Always use CPU encoding for stability
+            bitrate = '4000k'   # More conservative bitrate
+            audio_bitrate = '128k'
             
-            # Use optimized encoding parameters
-            codec = 'h264_nvenc' if (hasattr(self, 'has_gpu') and self.has_gpu) else 'libx264'
+            # Simplified encoding parameters
             ffmpeg_params = [
                 '-movflags', 'faststart',
                 '-pix_fmt', 'yuv420p',
-                '-profile:v', 'high',
-                '-level', '4.1',
             ]
             
-            preset = 'p3' if (hasattr(self, 'has_gpu') and self.has_gpu) else 'slow'
+            preset = 'medium'  # Balanced preset
+            threads = min(4, self.max_workers)  # Limit threads to prevent deadlocks
             
             # Create unique temp audio file
             temp_audio_file = os.path.join(self.temp_dir, f"{uuid.uuid4().hex}_temp_audio.wav")
             
-            final_clip.write_videofile(
-                output_path,
-                codec=codec,
-                audio_codec='aac',
-                bitrate=bitrate,
-                audio_bitrate=audio_bitrate,
-                temp_audiofile=temp_audio_file,
-                remove_temp=True,
-                fps=30,
-                preset=preset,
-                threads=self.max_workers,
-                logger=None,
-                ffmpeg_params=ffmpeg_params,
-            )
+            print(f"   🎬 Starting video encoding...")
+            print(f"      📊 Settings: codec={codec}, bitrate={bitrate}, threads={threads}")
             
-            # Clean up
-            video_clip.close()
-            final_clip.close()
+            # Add timeout and error handling for write operation
+            import signal
+            import time
             
-            # Cleanup temp audio file if it still exists
-            if os.path.exists(temp_audio_file):
-                try:
-                    os.remove(temp_audio_file)
-                except:
-                    pass
+            def timeout_handler(signum, frame):
+                raise TimeoutError("Video encoding timed out")
+            
+            # Set 5 minute timeout for encoding
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(300)  # 5 minutes
+            
+            try:
+                final_clip.write_videofile(
+                    output_path,
+                    codec=codec,
+                    audio_codec='aac',
+                    bitrate=bitrate,
+                    audio_bitrate=audio_bitrate,
+                    temp_audiofile=temp_audio_file,
+                    remove_temp=True,
+                    fps=30,
+                    preset=preset,
+                    threads=threads,
+                    logger=None,
+                    ffmpeg_params=ffmpeg_params,
+                    verbose=False,  # Reduce output to prevent buffering issues
+                )
+                print(f"   ✅ Video encoding completed successfully")
+            finally:
+                signal.alarm(0)  # Cancel the alarm
+                signal.signal(signal.SIGALRM, old_handler)
             
             # Validate output
             if not os.path.exists(output_path) or os.path.getsize(output_path) < 1024:
                 print(f"⚠️  Warning: No-background output file seems invalid for {video_name}")
                 return None
             
+            print(f"   ✅ No-background clip created successfully: {os.path.basename(output_path)}")
             return output_path
             
+        except TimeoutError as e:
+            print(f"❌ Encoding timed out for {video_name}: {e}")
+            return None
         except Exception as e:
             print(f"❌ Error creating no-background clip: {e}")
-            # Clean up partial file
-            if output_path and os.path.exists(output_path):
-                try:
-                    os.remove(output_path)
-                except:
-                    pass
+            import traceback
+            traceback.print_exc()
             return None
+            
+        finally:
+            # Aggressive cleanup to prevent memory leaks
+            try:
+                if final_clip is not None:
+                    final_clip.close()
+                if bg_clip is not None:
+                    bg_clip.close()
+                if scaled_clip is not None:
+                    scaled_clip.close()
+                if video_clip is not None:
+                    video_clip.close()
+                    
+                # Force garbage collection
+                import gc
+                gc.collect()
+                
+                # Cleanup temp audio file if it still exists
+                temp_audio_file = os.path.join(self.temp_dir, f"{uuid.uuid4().hex}_temp_audio.wav")
+                if 'temp_audio_file' in locals() and os.path.exists(temp_audio_file):
+                    try:
+                        os.remove(temp_audio_file)
+                    except:
+                        pass
+                        
+                # Clean up partial file on error
+                if output_path and os.path.exists(output_path) and os.path.getsize(output_path) < 1024:
+                    try:
+                        os.remove(output_path)
+                    except:
+                        pass
+                        
+            except Exception as cleanup_error:
+                print(f"⚠️  Warning during cleanup: {cleanup_error}")
     
     def create_single_compilation(self, selected_clips, output_path, compilation_num):
         """Create one compilation from a list of selected clips"""
@@ -1593,31 +1643,55 @@ class TikYouGenerator:
         start_time = time.time()
         final_clips = []
         final_compilation = None
+        max_retries = 3
         
         try:
-            # Convert each clip to no-background format
+            # Convert each clip to no-background format with retry logic
             for i, clip_info in enumerate(selected_clips):
                 clip_name = os.path.basename(clip_info['path'])
                 
                 print(f"   📽️  Processing clip {i+1}/{len(selected_clips)}: {clip_name}")
                 
-                # Convert to no-background format
-                no_bg_path = self.create_no_background_clip(clip_info['path'])
+                # Try to create no-background version with retries
+                no_bg_path = None
+                for attempt in range(max_retries):
+                    try:
+                        print(f"      🔄 Attempt {attempt + 1}/{max_retries} for no-background conversion...")
+                        no_bg_path = self.create_no_background_clip(clip_info['path'])
+                        if no_bg_path:
+                            break
+                        else:
+                            print(f"      ⚠️  Attempt {attempt + 1} failed, retrying...")
+                    except Exception as e:
+                        print(f"      ❌ Attempt {attempt + 1} failed with error: {e}")
+                        if attempt < max_retries - 1:
+                            import time
+                            time.sleep(2)  # Wait before retry
+                        continue
+                
                 if not no_bg_path:
-                    print(f"      ❌ Failed to create no-background version of {clip_name}")
+                    print(f"      ❌ Failed to create no-background version of {clip_name} after {max_retries} attempts")
+                    print(f"      ⏭️  Skipping this clip and continuing with remaining clips...")
                     continue
                 
                 print(f"      ✅ No-background clip created: {os.path.basename(no_bg_path)}")
                 
-                # Load the no-background clip
+                # Load the no-background clip with error handling
                 try:
                     clip = VideoFileClip(no_bg_path, audio=True)
                     # Ensure correct duration
                     if hasattr(clip_info, 'duration'):
                         clip = clip.with_duration(clip_info['duration'])
                     final_clips.append(clip)
+                    print(f"      ✅ Clip loaded successfully")
                 except Exception as e:
                     print(f"      ❌ Error loading no-background clip: {e}")
+                    print(f"      🧹 Cleaning up failed no-background file...")
+                    try:
+                        if os.path.exists(no_bg_path):
+                            os.remove(no_bg_path)
+                    except:
+                        pass
                     continue
             
             if not final_clips:
@@ -1804,8 +1878,12 @@ class TikYouGenerator:
             print(f"\n   ⏭️ Variation 2/3: TTS Intro Compilation (SKIPPED - not available)")
         
         # 3. Create No-Background Compilation (if enabled)
+        # Check environment variable for emergency disable
+        env_disable_no_bg = os.getenv('DISABLE_NO_BACKGROUND_COMPILATION', '').lower() in ('true', '1', 'yes')
         should_generate_no_bg = getattr(self.request, 'generateNoBackground', True) if self.request else True
-        print(f"   🔍 Debug: request={self.request}, should_generate_no_bg={should_generate_no_bg}")
+        should_generate_no_bg = should_generate_no_bg and not env_disable_no_bg
+        
+        print(f"   🔍 Debug: request={self.request}, should_generate_no_bg={should_generate_no_bg}, env_disable={env_disable_no_bg}")
         if should_generate_no_bg:
             print(f"\n   🎯 Variation 3/3: No-Background Compilation")
             no_bg_path = f"{base_output_path}_no_bg.mp4"
@@ -1828,7 +1906,10 @@ class TikYouGenerator:
                 print(f"         - Memory constraints")
                 print(f"         - FFmpeg encoding issues")
         else:
-            print(f"\n   ⏭️ Variation 3/3: No-Background Compilation (SKIPPED - disabled in request)")
+            skip_reason = "environment variable" if env_disable_no_bg else "request settings"
+            print(f"\n   ⏭️ Variation 3/3: No-Background Compilation (SKIPPED - disabled via {skip_reason})")
+            if env_disable_no_bg:
+                print(f"      💡 To re-enable: unset DISABLE_NO_BACKGROUND_COMPILATION environment variable")
         
         print(f"\n   📊 Compilation {compilation_num} Summary:")
         print(f"      ✅ Successful variations: {results['successful_count']}/{results['total_count']}")
