@@ -10,7 +10,7 @@ from .enhanced_subtitles import SubtitleConfig
 
 # Add path to access backend logging
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from ...logging_config import get_logger, log_generation_step, log_file_operation, log_api_call
+from ...logging_config import get_logger
 
 # Initialize logger for this module
 logger = get_logger("video_generator.ai_videos")
@@ -21,7 +21,6 @@ from .utils import determine_optimal_resolution, get_target_aspect_ratio
 from moviepy import (
     VideoFileClip,
     AudioFileClip,
-    CompositeAudioClip,
     CompositeVideoClip,
     TextClip,
     ColorClip,
@@ -39,25 +38,25 @@ except ImportError:
     if str(backend_dir) not in sys.path:
         sys.path.insert(0, str(backend_dir))
     from font_detection import get_font_fallback_list
-from termcolor import colored
-from dotenv import load_dotenv
-from pathlib import Path
-from datetime import timedelta
-from moviepy import vfx
-from moviepy.video.tools.subtitles import SubtitlesClip
-import inspect
-try:
-    # Use imageio-ffmpeg to reliably locate ffmpeg on all platforms
-    from imageio_ffmpeg import get_ffmpeg_exe  # type: ignore
-except Exception:  # pragma: no cover - optional dependency resolution
-    get_ffmpeg_exe = None  # type: ignore
+    from termcolor import colored
+    from dotenv import load_dotenv
+    from pathlib import Path
+    from datetime import timedelta
+    from moviepy import vfx
+    from moviepy.video.tools.subtitles import SubtitlesClip
+    import inspect
+    try:
+        # Use imageio-ffmpeg to reliably locate ffmpeg on all platforms
+        from imageio_ffmpeg import get_ffmpeg_exe  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency resolution
+        get_ffmpeg_exe = None  # type: ignore
 
-try:
-    load_dotenv(Path(__file__).resolve().parent / ".env")
-except Exception:
-    load_dotenv("../.env")
+    try:
+        load_dotenv(Path(__file__).resolve().parent / ".env")
+    except Exception:
+        load_dotenv("../.env")
 
-ASSEMBLY_AI_API_KEY = os.getenv("ASSEMBLY_AI_API_KEY")
+    ASSEMBLY_AI_API_KEY = os.getenv("ASSEMBLY_AI_API_KEY")
 
 
 def test_gpu_encoding():
@@ -520,8 +519,9 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
                 print(colored("[-] Streaming combination failed, falling back to traditional method", "yellow"))
         except Exception as e:
             print(colored(f"[-] Streaming combination error: {e}, falling back to traditional method", "yellow"))
+    from utils.temp_manager import get_temp_file_path
     video_id = uuid.uuid4()
-    combined_video_path = f"../../../temp/{video_id}.mp4"
+    combined_video_path = get_temp_file_path(f"{video_id}.mp4")
     
     # Required duration of each clip
     req_dur = max_duration / len(video_paths)

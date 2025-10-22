@@ -35,6 +35,7 @@ from moviepy import (  # type: ignore
     CompositeAudioClip,
     concatenate_audioclips,
 )
+from backend.utils.temp_manager import get_temp_dir, get_temp_file_path
 
 # Allow importing the brainrot generator without packaging by augmenting sys.path
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -84,7 +85,7 @@ def generate():
         GENERATING = True
 
         # Clean
-        clean_dir("../../../temp/")
+        clean_dir(str(get_temp_dir()))
         clean_dir("./subtitles/")
 
 
@@ -255,14 +256,14 @@ def generate():
                         "data": [],
                     }
                 )
-            current_tts_path = f"../../../temp/{uuid4()}.mp3"
+            current_tts_path = get_temp_file_path(f"{uuid4()}.mp3")
             tts(sentence, voice, filename=current_tts_path)
             audio_clip = AudioFileClip(current_tts_path)
             paths.append(audio_clip)
 
         # Combine all TTS files using moviepy
         final_audio = concatenate_audioclips(paths)
-        tts_path = f"../../../temp/{uuid4()}.mp3"
+        tts_path = get_temp_file_path(f"{uuid4()}.mp3")
         final_audio.write_audiofile(tts_path)
 
         try:
@@ -296,7 +297,8 @@ def generate():
         print(colored("   Keywords: ", "blue"))
         print(colored(f"  {', '.join(keywords)}", "blue"))
 
-        video_clip = VideoFileClip(f"../../../temp/{final_video_path}")
+        if final_video_path:
+            video_clip = VideoFileClip(get_temp_file_path(final_video_path))
         
         # Get GPU-optimized codec settings for final export
         codec_settings = get_video_codec_settings(use_gpu)

@@ -520,8 +520,11 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
                 print(colored("[-] Streaming combination failed, falling back to traditional method", "yellow"))
         except Exception as e:
             print(colored(f"[-] Streaming combination error: {e}, falling back to traditional method", "yellow"))
+    
+    from backend.utils.temp_manager import get_temp_file_path
+    
     video_id = uuid.uuid4()
-    combined_video_path = f"../../../temp/{video_id}.mp4"
+    combined_video_path = get_temp_file_path(f"{video_id}.mp4")
     
     # Required duration of each clip
     req_dur = max_duration / len(video_paths)
