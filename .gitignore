@@ -75,3 +75,4 @@ jobs.db
 /video-processor/utils/__pycache__
 /video-processor/src/__pycache__
 backups/
+video-processor/*.mp4
