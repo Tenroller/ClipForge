@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
 import { Button } from '@/components/components/ui/button'
-import { FaFilm, FaBars } from 'react-icons/fa'
+import { FaFilm, FaBars, FaSignOutAlt } from 'react-icons/fa'
 import ThemeToggle from './components/ThemeToggle'
 import CreatorPage from './pages/CreatorPage'
 import CompilationsPage from './pages/CompilationsPage'
@@ -10,8 +10,11 @@ import DownloadsPage from './pages/DownloadsPage'
 import CleanupPage from './pages/CleanupPage'
 import VideosPage from './pages/VideosPage'
 import JobMonitoringPage from './pages/JobMonitoringPage'
+import LoginPage from './pages/LoginPage'
 import NewLandingPage from './components/NewLandingPage'
 import SidebarRouter from './components/SidebarRouter'
+import ProtectedRoute from './components/ProtectedRoute'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { useJobManager } from './hooks/useJobManager'
 import { Toaster } from '@/components/components/ui/toaster'
 
@@ -20,6 +23,7 @@ const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 function AppContent() {
 	const navigate = useNavigate()
 	const location = useLocation()
+	const { user, logout } = useAuth()
 	const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
 	const [showMobileSidebar, setShowMobileSidebar] = useState(false)
 
@@ -31,10 +35,16 @@ function AppContent() {
 		navigate('/creator')
 	}
 
-	// Check if we're on the landing page
-	const isLandingPage = location.pathname === '/'
+	const handleLogout = () => {
+		logout()
+		navigate('/login')
+	}
 
-	// If on landing page, render it without sidebar/header
+	// Check if we're on the landing page or login page
+	const isLandingPage = location.pathname === '/'
+	const isLoginPage = location.pathname === '/login'
+
+	// If on landing page or login page, render without sidebar/header
 	if (isLandingPage) {
 		return (
 			<>
@@ -43,10 +53,15 @@ function AppContent() {
 		)
 	}
 
+	if (isLoginPage) {
+		return <LoginPage />
+	}
+
 	return (
-		<div className="flex h-screen bg-background">
-			{/* Sidebar */}
-			<SidebarRouter
+		<ProtectedRoute>
+			<div className="flex h-screen bg-background">
+				{/* Sidebar */}
+				<SidebarRouter
 				isCollapsed={sidebarCollapsed}
 				onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
 				activeJobs={activeJobCount}
@@ -129,11 +144,29 @@ function AppContent() {
 						</div>
 
 						<div className="flex items-center gap-3">
+							{user && (
+								<div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
+									<span className="text-xs font-medium text-muted-foreground">
+										{user.username}
+									</span>
+								</div>
+							)}
 							<div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
 								<div className="size-2 rounded-full bg-green-500 animate-pulse"></div>
 								<span className="text-xs font-medium text-muted-foreground">API: {API.replace('http://', '')}</span>
 							</div>
 							<ThemeToggle />
+							{user && (
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={handleLogout}
+									className="gap-2"
+								>
+									<FaSignOutAlt className="size-4" />
+									<span className="hidden sm:inline">Logout</span>
+								</Button>
+							)}
 						</div>
 					</div>
 				</header>
@@ -156,9 +189,17 @@ function AppContent() {
 				<Toaster />
 			</div>
 		</div>
+		</ProtectedRoute>
 	)
 }
 
 export default function App() {
-	return <AppContent />
+	return (
+		<AuthProvider>
+			<Routes>
+				<Route path="/login" element={<LoginPage />} />
+				<Route path="*" element={<AppContent />} />
+			</Routes>
+		</AuthProvider>
+	)
 }

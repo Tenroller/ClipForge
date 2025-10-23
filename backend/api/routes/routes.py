@@ -4,6 +4,7 @@ API route registration.
 
 from fastapi import FastAPI
 
+from .auth import router as auth_router
 from .health import router as health_router
 from .video_generation import router as video_generation_router
 from .job_management import router as job_management_router
@@ -15,7 +16,10 @@ from .video_management import router as video_management_router
 
 def register_routes(app: FastAPI) -> None:
     """Register all API routes with the FastAPI application."""
-    
+
+    # Authentication (no prefix to keep /auth/login clean)
+    app.include_router(auth_router, prefix="/api", tags=["Authentication"])
+
     # Health and system status
     app.include_router(health_router, tags=["System"])
     

@@ -356,7 +356,10 @@ class ProcessorJobQueue:
                 if not job:
                     await asyncio.sleep(1)  # Wait before checking again
                     continue
-                
+
+                # Notify backend that job has started running
+                await self.update_job_status(job.job_id, JobStatus.RUNNING)
+
                 # Process job
                 await self._process_job(job)
                 

@@ -7,10 +7,11 @@ import time
 from typing import Dict, Any
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, File, UploadFile
+from fastapi import APIRouter, HTTPException, File, UploadFile, Depends
 from fastapi.responses import FileResponse
 
 from ...models.requests import MoneyPrinterRequest, BrainrotRequest, SuggestSubjectRequest
+from ...middleware.auth import get_current_user
 from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
 from ...services.video_orchestrator import get_video_orchestrator
@@ -48,7 +49,10 @@ VENDOR_ROOT = get_backend_path("vendors")
     - `GEMINI_API_KEY`: For AI script generation
     """
 )
-async def moneyprinter_generate(req: MoneyPrinterRequest):
+async def moneyprinter_generate(
+    req: MoneyPrinterRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """Generate video using MoneyPrinter workflow."""
     job_id = str(uuid.uuid4())
 
@@ -177,7 +181,10 @@ async def upload_video_file(file: UploadFile = File(...)):
 
 
 @router.post("/brainrot/generate", summary="Generate Brainrot Compilation")
-async def brainrot_generate(req: BrainrotRequest):
+async def brainrot_generate(
+    req: BrainrotRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """Generate video using Brainrot workflow."""
     try:
         job_id = str(uuid.uuid4())

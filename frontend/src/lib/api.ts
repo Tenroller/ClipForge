@@ -12,17 +12,29 @@ export type JobRecord = {
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
 
-// Helper function to make API requests
+// Helper function to make API requests with automatic auth token injection
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-	const headers = {
+	const headers: Record<string, string> = {
 		'Content-Type': 'application/json',
-		...(options.headers || {})
+		...(options.headers || {}) as Record<string, string>
+	}
+
+	// Add auth token if available
+	const token = localStorage.getItem('auth_token')
+	if (token) {
+		headers['Authorization'] = `Bearer ${token}`
 	}
 
 	const response = await fetch(url, {
 		...options,
 		headers
 	})
+
+	// If we get a 401, clear the token and redirect to login
+	if (response.status === 401) {
+		localStorage.removeItem('auth_token')
+		window.location.href = '/login'
+	}
 
 	return response
 }

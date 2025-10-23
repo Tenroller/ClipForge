@@ -390,10 +390,56 @@ def download_video(url: str, output_dir: str, max_retries: int = 3, sleep_second
     raise YouTubeDownloadError(f"Failed to download {video_id} after {max_retries} attempts with all strategies: {last_err}")
 
 
+def update_yt_dlp() -> bool:
+    """Update yt-dlp to the latest version.
+
+    Returns True if update succeeded, False otherwise.
+    """
+    try:
+        import yt_dlp
+        # Use yt-dlp's built-in update mechanism
+        # This works for pip-installed versions
+        result = subprocess.run(
+            [
+                "pip", "install", "--upgrade",
+                "yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master"
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+
+        if result.returncode == 0:
+            logger.info("Successfully updated yt-dlp")
+            return True
+        else:
+            logger.warning(f"yt-dlp update failed: {result.stderr}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error updating yt-dlp: {e}")
+        return False
+
+
+def check_yt_dlp_version() -> Optional[str]:
+    """Get the current yt-dlp version.
+
+    Returns version string or None if not installed.
+    """
+    try:
+        import yt_dlp
+        return yt_dlp.version.__version__
+    except Exception as e:
+        logger.warning(f"Could not get yt-dlp version: {e}")
+        return None
+
+
 __all__ = [
     "extract_video_id",
     "normalize_url",
     "download_video",
     "DownloadResult",
     "YouTubeDownloadError",
+    "update_yt_dlp",
+    "check_yt_dlp_version",
 ]

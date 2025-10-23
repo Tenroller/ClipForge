@@ -163,20 +163,8 @@ class CatVideoProcessor:
         Increased max_retries to 5 for better handling of problematic videos.
         """
         logger.info(f"Starting YouTube video download for: {video_id} (unified)")
-        try:
-            try:
-                from utils.youtube import download_video as unified_download
-                from utils.youtube import YouTubeDownloadError
-            except Exception:
-                # Fallback: dynamic path injection for direct execution contexts
-                import sys as _sys
-                from pathlib import Path as _Path
-                backend_dir = _Path(__file__).resolve().parent.parent.parent.parent
-                if str(backend_dir) not in _sys.path:
-                    _sys.path.insert(0, str(backend_dir))
-                from utils.youtube import download_video as unified_download
-                from utils.youtube import YouTubeDownloadError
-
+        try: 
+            from utils.youtube import download_video as unified_download
             output_dir = os.path.join(self.output_dir, video_id)
             url = f"https://www.youtube.com/watch?v={video_id}"
             result = unified_download(url, output_dir, max_retries=max_retries)
@@ -212,7 +200,7 @@ class CatVideoProcessor:
         """Get video duration using ffprobe directly (FFmpeg 7+ compatible)"""
         try:
             result = subprocess.run([
-                'ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+                'ffprobe', '-v', 'fatal', '-show_entries', 'format=duration',  # Changed from 'quiet' to 'fatal'
                 '-of', 'csv=p=0', video_path
             ], capture_output=True, text=True, timeout=10)
             if result.returncode == 0 and result.stdout.strip():
@@ -229,7 +217,7 @@ class CatVideoProcessor:
             # First, try a simple ffprobe command to check if the file is accessible
             ffprobe_path = os.environ.get('FFPROBE_BINARY', r'C:\ffmpeg\bin\ffprobe.exe')
             simple_result = subprocess.run([
-                ffprobe_path, '-v', 'error', video_path
+                ffprobe_path, '-v', 'fatal', video_path  # Changed from 'error' to 'fatal' to suppress warnings
             ], capture_output=True, text=True, timeout=5)
 
             if simple_result.returncode != 0:
@@ -237,7 +225,7 @@ class CatVideoProcessor:
                 return None
 
             result = subprocess.run([
-                ffprobe_path, '-v', 'quiet', '-show_entries',
+                ffprobe_path, '-v', 'fatal', '-show_entries',  # Changed from 'quiet' to 'fatal' for consistency
                 'stream=width,height,duration,r_frame_rate,codec_name,codec_type',
                 '-of', 'json', video_path
             ], capture_output=True, text=True, timeout=10)

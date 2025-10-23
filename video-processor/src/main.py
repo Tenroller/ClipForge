@@ -45,14 +45,61 @@ job_queue: ProcessorJobQueue
 video_service: VideoProcessingService
 
 
+def _auto_update_yt_dlp(check_interval_days: int = 1):
+    """Auto-update yt-dlp on startup if needed.
+
+    Args:
+        check_interval_days: Only update if last check was more than N days ago
+    """
+    from datetime import datetime, timedelta
+
+    # Import from parent utils directory
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from utils.youtube import update_yt_dlp, check_yt_dlp_version
+
+    last_check_file = Path(__file__).parent.parent / ".yt_dlp_last_check"
+
+    try:
+        # Check if we updated recently
+        if last_check_file.exists():
+            last_check = datetime.fromtimestamp(last_check_file.stat().st_mtime)
+            if datetime.now() - last_check < timedelta(days=check_interval_days):
+                logger.debug(f"yt-dlp update check skipped (last check: {last_check.strftime('%Y-%m-%d')})")
+                return
+
+        current_version = check_yt_dlp_version()
+        logger.info(f"Current yt-dlp version: {current_version}")
+        logger.info("Checking for yt-dlp updates...")
+
+        success = update_yt_dlp()
+
+        if success:
+            # Touch the file to record last check time
+            last_check_file.touch()
+            new_version = check_yt_dlp_version()
+            if new_version and new_version != current_version:
+                logger.info(f"yt-dlp updated: {current_version} -> {new_version}")
+            else:
+                logger.info("yt-dlp is already up to date")
+        else:
+            logger.warning("yt-dlp update check failed, continuing with current version")
+
+    except Exception as e:
+        logger.error(f"Error during yt-dlp auto-update: {e}")
+        # Don't fail startup if update fails
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
     global config, job_queue, video_service
-    
+
     # Startup
     logger.info("Starting Video Processing API...")
-    
+
+    # Auto-update yt-dlp on startup
+    _auto_update_yt_dlp(check_interval_days=1)
+
     try:
         # Load configuration
         config = ProcessorConfig.from_env()

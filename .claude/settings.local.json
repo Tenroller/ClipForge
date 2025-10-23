@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat:*)",
+      "Bash(ss:*)",
+      "Bash(pip install:*)",
+      "Bash(.venvScriptspip.exe install --upgrade \"bcrypt>=4.0.0\")",
+      "Bash(.venv/Scripts/python.exe:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

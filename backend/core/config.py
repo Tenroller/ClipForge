@@ -54,6 +54,7 @@ class AppConfig:
     video_processor_timeout: int = 30
     video_processor_poll_interval: int = 5  # seconds
     video_processor_max_retries: int = 3
+    backend_callback_url: str = "http://localhost:9000"  # Backend URL for processor callbacks
     
     # Memory management
     videohelper_temp_cleanup_interval: int = 30  # minutes
@@ -184,6 +185,7 @@ class AppConfig:
             video_processor_timeout=get_int("VIDEO_PROCESSOR_TIMEOUT", 30),
             video_processor_poll_interval=get_int("VIDEO_PROCESSOR_POLL_INTERVAL", 5),
             video_processor_max_retries=get_int("VIDEO_PROCESSOR_MAX_RETRIES", 3),
+            backend_callback_url=os.getenv("BACKEND_CALLBACK_URL", "http://localhost:9000"),
             
             # Memory management
             videohelper_temp_cleanup_interval=get_int("VIDEOHELPER_TEMP_CLEANUP_INTERVAL", 30),

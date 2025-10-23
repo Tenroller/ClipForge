@@ -5,11 +5,6 @@ TikYou Video Generator
 Takes a YouTube URL, downloads the video, splits it into individual clips,
 processes them based on orientation, and creates 3 random vertical compilations.
 
-Usage:
-    python -m tikyou_video_generator.generator <youtube_url>
-
-Example:
-    python -m tikyou_video_generator.generator "https://www.youtube.com/watch?v=ef9iFTB-3cs"
 """
 
 import sys
@@ -30,6 +25,7 @@ import uuid
 import concurrent.futures
 import hashlib
 import subprocess
+import signal
 
 # Initialize logger for this module
 logger = logging.getLogger("video_generator.compilation")
@@ -44,10 +40,8 @@ def log_file_operation(logger, operation, path, **kwargs):
 
 from moviepy import (
     VideoFileClip,
-    AudioFileClip,
     CompositeVideoClip,
     ColorClip,
-    ImageClip,
     TextClip,
     concatenate_videoclips,
     vfx
@@ -386,28 +380,7 @@ class TikYouGenerator:
         except Exception as e:
             logger.warning(f"Clip conversion with cache failed for {video_path}: {e}")
             return None
-        """Convert horizontal video to vertical format with caching"""
-        # Generate cache key from file path and modification time
-        try:
-            cache_key = f"{video_path}_{os.path.getmtime(video_path)}"
-            cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
-            
-            if cache_hash in self.clip_cache:
-                cached_path = self.clip_cache[cache_hash]
-                if os.path.exists(cached_path):
-                    return cached_path
-            
-            # Convert the clip
-            vertical_path = self.create_vertical_clip_from_horizontal(video_path)
-            
-            # Cache the result
-            if vertical_path:
-                self.clip_cache[cache_hash] = vertical_path
-                
-            return vertical_path
-        except Exception as e:
-            logger.warning(f"Clip conversion with cache failed for {video_path}: {e}")
-            return None
+     
     
     def _analyze_content_complexity(self, video_clips):
         """Analyze content complexity to optimize encoding parameters"""
@@ -483,7 +456,7 @@ class TikYouGenerator:
             # Create compilation
             base_output_path = os.path.join(self.output_dir, f"{video_id}_compilation_{compilation_num}")
             variations_result = self.create_all_compilation_variations(
-                selected_clips, base_output_path, video_id, compilation_num
+                selected_clips, base_output_path, compilation_num
             )
             
             # Update clip usage (thread-safe)
@@ -689,6 +662,7 @@ class TikYouGenerator:
         If the clip is low resolution, it will be placed on a blurred background
         instead of being upscaled to avoid pixelation.
         """
+        clip = None
         try:
             print(f"        📂 Loading clip: {os.path.basename(clip_path)}")
             # Not passing target_resolution here to load with original resolution
@@ -810,6 +784,8 @@ class TikYouGenerator:
             return clip
         except Exception as e:
             print(f"        ❌ Error processing clip {os.path.basename(clip_path)}: {e}")
+            if clip:
+                clip.close()
             return None
 
     def process_single_video(self, youtube_url, sensitivity: float = 15, method: str = 'scenedetect'):
@@ -1082,6 +1058,8 @@ class TikYouGenerator:
     def create_vertical_clip_from_horizontal(self, video_path):
         """Convert horizontal video to vertical format with optimized encoding"""
         output_path = None  # Initialize to avoid scope issues
+        video_clip = None
+        final_clip = None
         try:
             # Use the optimized temp directory
             video_name = os.path.splitext(os.path.basename(video_path))[0]
@@ -1182,9 +1160,15 @@ class TikYouGenerator:
                 except:
                     pass
             return None
+        finally:
+            if video_clip:
+                video_clip.close()
+            if final_clip:
+                final_clip.close()
     
     def _fits_916_aspect_ratio(self, video_path, threshold=0.1):
         """Check if video fits 9:16 aspect ratio within threshold"""
+        video = None
         try:
             video = VideoFileClip(video_path)
             aspect_ratio = video.w / video.h
@@ -1194,12 +1178,14 @@ class TikYouGenerator:
             ratio_difference = abs(aspect_ratio - target_ratio)
             fits = ratio_difference <= threshold
             
-            video.close()
             return fits, aspect_ratio
             
         except Exception as e:
             print(f"❌ Error checking aspect ratio for {video_path}: {e}")
             return False, 0
+        finally:
+            if video:
+                video.close()
     
     def create_no_background_clip(self, video_path, target_resolution=(1080, 1920)):
         """Create a no-background version of the clip - just video or blurred pillarbox"""
@@ -1299,18 +1285,10 @@ class TikYouGenerator:
             
             print(f"   🎬 Starting video encoding...")
             print(f"      📊 Settings: codec={codec}, bitrate={bitrate}, threads={threads}")
-            
+
             # Add timeout and error handling for write operation
-            import signal
             import time
-            
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Video encoding timed out")
-            
-            # Set 5 minute timeout for encoding
-            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(300)  # 5 minutes
-            
+
             try:
                 final_clip.write_videofile(
                     output_path,
@@ -1323,14 +1301,13 @@ class TikYouGenerator:
                     fps=30,
                     preset=preset,
                     threads=threads,
-                    logger=None,
+                    logger='bar',  # Changed from None to 'bar' for progress visibility
                     ffmpeg_params=ffmpeg_params,
-                    verbose=False,  # Reduce output to prevent buffering issues
                 )
                 print(f"   ✅ Video encoding completed successfully")
-            finally:
-                signal.alarm(0)  # Cancel the alarm
-                signal.signal(signal.SIGALRM, old_handler)
+            except Exception as e:
+                print(f"   ❌ Video encoding failed: {e}")
+                raise  # Re-raise to be caught by outer exception handler
             
             # Validate output
             if not os.path.exists(output_path) or os.path.getsize(output_path) < 1024:
@@ -1338,6 +1315,25 @@ class TikYouGenerator:
                 return None
             
             print(f"   ✅ No-background clip created successfully: {os.path.basename(output_path)}")
+
+            # Critical: Ensure all file handles are released before returning
+            # This is a known issue on Windows with MoviePy/FFmpeg
+            # Force synchronization to disk
+            import sys
+
+            # Windows-specific file sync - ensure file is fully written
+            if sys.platform == 'win32':
+                try:
+                    # Force file sync using Python's os module
+                    with open(output_path, 'rb') as f:
+                        os.fsync(f.fileno())
+                except Exception as sync_error:
+                    # If sync fails, just continue - file should still be valid
+                    print(f"   ⚠️  File sync warning (non-critical): {sync_error}")
+
+            # Give OS time to release file handles
+            time.sleep(1.0)  # Increased from 0.5s for better reliability
+
             return output_path
             
         except TimeoutError as e:
@@ -1364,9 +1360,15 @@ class TikYouGenerator:
                 # Force garbage collection
                 import gc
                 gc.collect()
-                
+
+                # Clear GPU cache if available
+                if self.has_gpu:
+                    try:
+                        torch.cuda.empty_cache()
+                    except:
+                        pass
+
                 # Cleanup temp audio file if it still exists
-                temp_audio_file = os.path.join(self.temp_dir, f"{uuid.uuid4().hex}_temp_audio.wav")
                 if 'temp_audio_file' in locals() and os.path.exists(temp_audio_file):
                     try:
                         os.remove(temp_audio_file)
@@ -1640,6 +1642,7 @@ class TikYouGenerator:
         print(f"   📁 Output path: {output_path}")
         
         # Track processing start time
+        import time
         start_time = time.time()
         final_clips = []
         final_compilation = None
@@ -1649,9 +1652,9 @@ class TikYouGenerator:
             # Convert each clip to no-background format with retry logic
             for i, clip_info in enumerate(selected_clips):
                 clip_name = os.path.basename(clip_info['path'])
-                
+
                 print(f"   📽️  Processing clip {i+1}/{len(selected_clips)}: {clip_name}")
-                
+
                 # Try to create no-background version with retries
                 no_bg_path = None
                 for attempt in range(max_retries):
@@ -1668,31 +1671,129 @@ class TikYouGenerator:
                             import time
                             time.sleep(2)  # Wait before retry
                         continue
-                
+
                 if not no_bg_path:
                     print(f"      ❌ Failed to create no-background version of {clip_name} after {max_retries} attempts")
                     print(f"      ⏭️  Skipping this clip and continuing with remaining clips...")
                     continue
-                
+
                 print(f"      ✅ No-background clip created: {os.path.basename(no_bg_path)}")
-                
-                # Load the no-background clip with error handling
+
+                # Add delay to ensure file is fully flushed to disk
+                print(f"      ⏳ Waiting for file I/O to complete...")
+                time.sleep(0.5)
+
+                # Verify file exists and is valid before loading
+                if not os.path.exists(no_bg_path):
+                    print(f"      ❌ No-background file doesn't exist: {no_bg_path}")
+                    continue
+
+                file_size = os.path.getsize(no_bg_path)
+                if file_size < 1024:
+                    print(f"      ❌ No-background file too small ({file_size} bytes): {no_bg_path}")
+                    continue
+
+                print(f"      ✓ File verified: {file_size / (1024*1024):.2f}MB")
+
+                # WORKAROUND: Copy file to avoid Windows file handle issues
+                # This prevents FFmpeg from keeping locks on the original file
+                import shutil
+                load_path = no_bg_path
+                copied_file = None
+
                 try:
-                    clip = VideoFileClip(no_bg_path, audio=True)
+                    # Create a temporary copy with unique name
+                    copy_filename = f"load_{uuid.uuid4().hex[:8]}_{os.path.basename(no_bg_path)}"
+                    copied_file = os.path.join(self.temp_dir, copy_filename)
+
+                    print(f"      📋 Creating working copy for loading (Windows file handle workaround)...")
+                    shutil.copy2(no_bg_path, copied_file)
+                    load_path = copied_file
+                    print(f"      ✓ Working copy created: {os.path.basename(copied_file)}")
+                except Exception as copy_error:
+                    print(f"      ⚠️  Could not create working copy, using original: {copy_error}")
+                    load_path = no_bg_path
+
+                # Load the no-background clip with error handling and timeout
+                clip = None
+                try:
+                    print(f"      📂 Loading clip into memory...")
+
+                    # Use a timeout to detect hangs
+                    from concurrent.futures import TimeoutError as FutureTimeoutError, ThreadPoolExecutor
+
+                    def load_clip_with_timeout():
+                        return VideoFileClip(load_path, audio=True)
+
+                    # Try loading with a 30-second timeout
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(load_clip_with_timeout)
+                        try:
+                            clip = future.result(timeout=30.0)
+                            print(f"      ✓ Clip loaded: {clip.w}x{clip.h}, {clip.duration:.1f}s")
+                        except FutureTimeoutError:
+                            print(f"      ❌ Timeout loading clip after 30 seconds")
+                            print(f"      🔍 Killing any stuck FFmpeg processes...")
+
+                            # Kill stuck ffmpeg/ffprobe processes on Windows
+                            if sys.platform == 'win32':
+                                try:
+                                    subprocess.run(['taskkill', '/F', '/IM', 'ffmpeg.exe'],
+                                                 capture_output=True, timeout=5)
+                                    subprocess.run(['taskkill', '/F', '/IM', 'ffprobe.exe'],
+                                                 capture_output=True, timeout=5)
+                                except:
+                                    pass
+
+                            raise Exception("Clip loading timed out")
+
                     # Ensure correct duration
                     if hasattr(clip_info, 'duration'):
                         clip = clip.with_duration(clip_info['duration'])
+
                     final_clips.append(clip)
                     print(f"      ✅ Clip loaded successfully")
+
+                    # Clean up the temporary copy if we created one
+                    if copied_file and os.path.exists(copied_file) and copied_file != no_bg_path:
+                        try:
+                            # Don't delete yet - MoviePy might still have it open
+                            # It will be cleaned up at the end
+                            pass
+                        except:
+                            pass
+
                 except Exception as e:
                     print(f"      ❌ Error loading no-background clip: {e}")
                     print(f"      🧹 Cleaning up failed no-background file...")
+
+                    # Close clip if it was partially loaded
+                    if clip is not None:
+                        try:
+                            clip.close()
+                        except:
+                            pass
+
+                    # Remove the failed files
                     try:
+                        if copied_file and os.path.exists(copied_file):
+                            os.remove(copied_file)
                         if os.path.exists(no_bg_path):
                             os.remove(no_bg_path)
+                            print(f"      ✓ Removed invalid file")
+                    except Exception as cleanup_error:
+                        print(f"      ⚠️  Could not remove file: {cleanup_error}")
+
+                    continue
+
+                # Force garbage collection after each clip to prevent memory buildup
+                print(f"      🧹 Running garbage collection...")
+                gc.collect()
+                if self.has_gpu:
+                    try:
+                        torch.cuda.empty_cache()
                     except:
                         pass
-                    continue
             
             if not final_clips:
                 print(f"   ❌ No valid clips for compilation")
@@ -1795,8 +1896,8 @@ class TikYouGenerator:
             return None
             
         return output_path
-    
-    def create_all_compilation_variations(self, selected_clips, base_output_path, video_id, compilation_num):
+
+    def create_all_compilation_variations(self, selected_clips, base_output_path, compilation_num):
         """
         Create all variations of a compilation:
         1. Normal compilation (with white background)
@@ -1806,7 +1907,6 @@ class TikYouGenerator:
         Args:
             selected_clips (list): List of selected video clips
             base_output_path (str): Base output path (without extension)
-            video_id (str): Video ID for naming
             compilation_num (int): Compilation number
             
         Returns:
@@ -2095,7 +2195,7 @@ class TikYouGenerator:
                 # Create all variations
                 base_output_path = os.path.join(self.output_dir, f"{video_id}_compilation_{i+1}")
                 variations_result = self.create_all_compilation_variations(
-                    selected_clips, base_output_path, video_id, i+1
+                    selected_clips, base_output_path, i+1
                 )
                 
                 # Update statistics
@@ -2185,7 +2285,7 @@ class TikYouGenerator:
                 
                 try:
                     variations_result = self.create_all_compilation_variations(
-                        selected_clips, base_output_path, video_id, compilation_num
+                        selected_clips, base_output_path, compilation_num
                     )
                     
                     # Update statistics
@@ -2349,7 +2449,7 @@ class TikYouGenerator:
             
             base_output_path = os.path.join(self.output_dir, f"{video_id}_compilation_{created_count + 1}")
             variations_result = self.create_all_compilation_variations(
-                selected_clips, base_output_path, video_id, created_count + 1
+                selected_clips, base_output_path, created_count + 1
             )
             
             if variations_result['successful_count'] > 0:
@@ -2383,7 +2483,7 @@ class TikYouGenerator:
         
         return performance_stats
 
-    def download_and_split_video(self, source: str, sensitivity: float = 30.0):
+    def download_and_split_video(self, source: str, sensitivity: float = 17.5):
         """
         Streamlined function for API usage.
         Downloads and analyzes a YouTube video, or analyzes a local video file, returning clip data.
@@ -2427,36 +2527,3 @@ class TikYouGenerator:
         ensuring that we always use the single, enhanced implementation.
         """
         return self.creator.get_video_orientation(video_path)
-
-
-def main():
-    """Main function for CLI execution"""
-    parser = argparse.ArgumentParser(description="TikYou Video Generator")
-    
-    parser.add_argument("youtube_url", help="The YouTube URL to process")
-    parser.add_argument("-n", "--num_compilations", type=int,
-                        help="The number of compilations to create. If not provided, creates as many as possible.")
-    parser.add_argument("--min_duration", type=int, default=20,
-                        help="Minimum duration of each compilation in seconds.")
-    parser.add_argument("--max_duration", type=int, default=40,
-                        help="Maximum duration of each compilation in seconds.")
-    parser.add_argument("--max_reuse", type=int, default=3,
-                        help="Maximum number of times a single clip can be reused.")
-
-    args = parser.parse_args()
-
-    # Initialize generator
-    generator = TikYouGenerator()
-
-    # Generate videos
-    generator.generate_tikyou_videos(
-        args.youtube_url,
-        num_compilations=args.num_compilations,
-        min_duration=args.min_duration,
-        max_duration=args.max_duration,
-        max_reuse=args.max_reuse
-    )
-
-
-if __name__ == "__main__":
-    main() 

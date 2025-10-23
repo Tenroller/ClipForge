@@ -168,3 +168,23 @@ class PlaylistBatchRequest(BaseModel):
     numCompilations: int = Field(default=1, ge=1)
     minDuration: int = Field(default=60, ge=10, le=3600)
     maxDuration: int = Field(default=110, ge=10, le=3600)
+
+
+class LoginRequest(BaseModel):
+    """Login request with username and password."""
+    username: str = Field(..., min_length=1, max_length=50)
+    password: str = Field(..., min_length=1)
+
+
+class LoginResponse(BaseModel):
+    """Login response with access token."""
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user: dict
+
+
+class TokenVerifyResponse(BaseModel):
+    """Token verification response."""
+    valid: bool
+    user: Optional[dict] = None

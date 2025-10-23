@@ -1,3 +1,0 @@
-# MoneyPrinter vendored modules
-
-

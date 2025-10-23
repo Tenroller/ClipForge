@@ -3,7 +3,7 @@ Job management endpoints.
 """
 
 from typing import Dict, Any, Optional
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 import uuid
 
 from ...logging_config import get_logger, log_job_event
@@ -12,6 +12,7 @@ from ...services.video_orchestrator import get_video_orchestrator
 from ...models.requests import MoneyPrinterRequest, BrainrotRequest
 
 from ...services.job_management import JobManagementService
+from ...middleware.auth import get_current_user
 
 router = APIRouter()
 job_service = JobManagementService()
@@ -83,7 +84,10 @@ def job_resumable(job_id: str) -> Dict[str, Any]:
 
 
 @router.post("/jobs/{job_id}/remake", summary="Remake (requeue) a completed or failed job")
-async def remake_job(job_id: str) -> Dict[str, Any]:
+async def remake_job(
+    job_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
     """Clone a previous job's request parameters and enqueue a new job.
 
     Returns a response matching frontend expectation.
@@ -169,7 +173,10 @@ async def remake_job(job_id: str) -> Dict[str, Any]:
 
 
 @router.post("/jobs/{job_id}/resume", summary="Resume a failed/cancelled job from its last step")
-async def resume_job(job_id: str) -> Dict[str, Any]:
+async def resume_job(
+    job_id: str,
+    current_user: dict = Depends(get_current_user)
+) -> Dict[str, Any]:
     """Attempt to resume a previously failed or cancelled job.
 
     Strategy:
@@ -390,7 +397,7 @@ def list_jobs(
 
 
 @router.post("/jobs/{job_id}/cancel", summary="Cancel Job")
-def cancel_job(job_id: str):
+def cancel_job(job_id: str, current_user: dict = Depends(get_current_user)):
     """Cancel a job."""
     if not job_service.cancel_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found or cannot be cancelled")
@@ -398,7 +405,7 @@ def cancel_job(job_id: str):
 
 
 @router.delete("/jobs/{job_id}", summary="Delete Job")
-def delete_job(job_id: str):
+def delete_job(job_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a job from the database."""
     if not job_service.delete_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found")
@@ -406,7 +413,7 @@ def delete_job(job_id: str):
 
 
 @router.post("/jobs/{job_id}/purge", summary="Purge (delete) a job and create tombstone")
-def purge_job(job_id: str):
+def purge_job(job_id: str, current_user: dict = Depends(get_current_user)):
     purged_reason = "Purged by request"
     if job_service.purge_job(job_id, purged_reason):
         return {"status": "purged", "jobId": job_id, "reason": purged_reason}
@@ -416,7 +423,8 @@ def purge_job(job_id: str):
 @router.post("/jobs/cleanup", summary="Cleanup Jobs")
 def cleanup_jobs(
     older_than_days: int = 7,
-    statuses: Optional[list[str]] = None
+    statuses: Optional[list[str]] = None,
+    current_user: dict = Depends(get_current_user)
 ):
     """Cleanup old jobs based on age and status."""
     if statuses is None:

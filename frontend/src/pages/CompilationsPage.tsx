@@ -6,11 +6,7 @@ import { Label } from '@/components/components/ui/label'
 import { Button } from '@/components/components/ui/button'
 import { Switch } from '@/components/components/ui/switch'
 import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip, FaVideo } from 'react-icons/fa'
-import ResultPanel from '@/components/ResultPanel'
-import JobStartedNotification from '@/components/JobStartedNotification'
 import { useJobManager } from '@/hooks/useJobManager'
-import { type ManagedJob } from '@/lib/jobManager'
-import { GeneratedVideosPanel } from '@/components/GeneratedVideosPanel'
 import { generateBrainrotVideo } from '@/lib/api'
 
 const API = (import.meta.env.VITE_API_BASE as string) || 'http://localhost:9000'
@@ -22,11 +18,8 @@ const devLog = (message: string, ...args: any[]) => {
   }
 }
 
-
-
 export default function CompilationsPage() {
   const [busy, setBusy] = useState(false)
-  const [selectedResult, setSelectedResult] = useState<ManagedJob | null>(null)
   const [useGpu, setUseGpu] = useState(true)
   const [isUnlimited, setIsUnlimited] = useState(false)
   const [generateNoBackground, setGenerateNoBackground] = useState(true)
@@ -131,35 +124,13 @@ export default function CompilationsPage() {
       console.log('CompilationsPage: Adding job to manager:', data.jobId, payload);
       jobManager.addJob(data.jobId, 'brainrot', payload)
       console.log('CompilationsPage: Job added, current jobs:', jobManager.jobs.length);
-      toast.success('Compilation job started successfully')
+      toast.success('Starting the generation')
     } catch (e: any) {
       toast.error(e.message)
     } finally {
       setBusy(false)
     }
   }
-
-  const handleViewResult = (job: ManagedJob) => {
-    setSelectedResult(job)
-  }
-
-  const handleCloseResult = () => {
-    setSelectedResult(null)
-  }
-
-  // Get completed brainrot jobs with generated videos
-  const completedBrainrotJobs = jobManager.jobs.filter(job => 
-    job.workflow === 'brainrot' && 
-    job.status === 'done' && 
-    job.result?.generated_videos
-  )
-
-  // Get the most recent completed job with videos
-  const latestCompletedJob = completedBrainrotJobs.length > 0 
-    ? completedBrainrotJobs.sort((a, b) => 
-        (b.result?.duration_seconds || 0) - (a.result?.duration_seconds || 0)
-      )[0] 
-    : null
 
   return (
     <div className="container-page-wide fade-in">
@@ -181,74 +152,7 @@ export default function CompilationsPage() {
       </div>
 
       <div className="slide-in space-y-8">
-        {/* Show active jobs as simple notifications with auto-redirect */}
-        {(() => {
-          const activeJobs = jobManager.jobs.filter(j => j.workflow === 'brainrot' && ['queued', 'running'].includes(j.status))
-          return activeJobs.map(job => (
-            <JobStartedNotification 
-              key={job.id}
-              jobId={job.id}
-              workflow={job.workflow}
-              autoRedirect={job.isNewlyCreated === true}
-              redirectDelay={3000}
-            />
-          ))
-        })()}
-
-        {/* Result Panel - Show when a result is selected */}
-        {selectedResult && (
-          <ResultPanel
-            job={selectedResult}
-            onClose={handleCloseResult}
-          />
-        )}
-
-        {/* Generated Videos Panel - Show when there are completed jobs with videos or jobs in progress */}
-        {(() => {
-          const brainrotJobs = jobManager.jobs.filter(j => j.workflow === 'brainrot')
-          const activeJob = brainrotJobs.find(j => j.status === 'running' || j.status === 'queued')
-          const completedJobWithVideos = brainrotJobs.find(j =>
-            j.status === 'done' && j.result?.generated_videos
-          )
-
-          // Show panel if there's an active job or completed job with videos
-          const shouldShowPanel = activeJob || completedJobWithVideos
-
-          if (!shouldShowPanel) return null
-
-          // Determine which job data to use
-          const displayJob = completedJobWithVideos || activeJob
-          const videos = displayJob?.result?.generated_videos || []
-          const isGenerating = displayJob?.status === 'running' || displayJob?.status === 'queued'
-
-          // Get numCompilations from the job payload
-          const numCompilations = displayJob ? (displayJob as any).payload?.numCompilations || 0 : 0
-          const isUnlimited = displayJob ? (displayJob as any).payload?.unlimited || false : false
-          const expectedVideos = displayJob?.result?.expected_videos || (isUnlimited ? null : (numCompilations * 2))
-
-          return (
-            <GeneratedVideosPanel
-              videos={videos}
-              totalSizeMb={displayJob?.result?.total_size_mb || 0}
-              compilationTypes={displayJob?.result?.compilation_types || { normal: 0, tts: 0, total: 0 }}
-              numCompilations={numCompilations}
-              expectedVideos={expectedVideos}
-              isGenerating={isGenerating}
-            />
-          )
-        })()}
-
-        {/* Result Panel - Show when a result is selected */}
-        {selectedResult && (
-          <ResultPanel
-            job={selectedResult}
-            onClose={handleCloseResult}
-          />
-        )}
-
-        {/* Main Content - Hide when showing results */}
-        {!selectedResult && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Form Section */}
             <Card className="enhanced-card">
               <CardHeader>
@@ -594,7 +498,6 @@ export default function CompilationsPage() {
               </CardContent>
             </Card>
           </div>
-        )}
       </div>
     </div>
   )

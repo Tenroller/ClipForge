@@ -151,8 +151,9 @@ class VideoOrchestrationService:
     def _get_callback_url(self, job_id: str) -> Optional[str]:
         """Get callback URL for job updates."""
         # Return the callback URL where the video processor can send status updates
-        # Use the backend service name for container-to-container communication
-        return "http://backend:9000/api/jobs/callback"
+        # Use configured backend URL (supports both Docker and local development)
+        base_url = self.config.backend_callback_url
+        return f"{base_url}/api/jobs/callback"
 
 
 # Global instance
