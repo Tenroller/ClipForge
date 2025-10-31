@@ -1,7 +1,7 @@
 # Video Processor Dockerfile - FastAPI Microservice
 FROM python:3.11-slim
 
-# Install system dependencies including espeak-ng for TTS
+# Install system dependencies including espeak-ng for TTS and fonts for Pillow
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     espeak-ng \
@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     gcc \
     python3-dev \
     build-essential \
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

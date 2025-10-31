@@ -3,82 +3,109 @@ import os
 import re
 import uuid
 from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, ColorClip
-from playwright.sync_api import sync_playwright
+from PIL import Image, ImageDraw, ImageFont
 from .processor import clean_text_for_filename
 import torch
 
 class TextToImageRenderer:
     def __init__(self):
-        self.playwright = None
-        self.browser = None
-        self.page = None
         # Add GPU detection
         self.has_gpu = torch.cuda.is_available()
-        
-    def init_browser(self):
-        """Initialize browser if not already initialized"""
-        if not self.playwright:
-            self.playwright = sync_playwright().start()
-            self.browser = self.playwright.chromium.launch()
-            self.page = self.browser.new_page()
-    
+
     def close(self):
-        """Close browser and playwright"""
-        if self.browser:
-            self.browser.close()
-        if self.playwright:
-            self.playwright.stop()
-    
+        """Cleanup method for compatibility (no-op for Pillow)"""
+        pass
+
+    def _parse_color(self, color_str):
+        """Parse color string to RGB tuple"""
+        if color_str.startswith('#'):
+            # Hex color
+            color_str = color_str.lstrip('#')
+            if len(color_str) == 6:
+                return tuple(int(color_str[i:i+2], 16) for i in (0, 2, 4))
+        elif color_str.startswith('rgba'):
+            # Extract RGB from rgba (ignore alpha for now)
+            import re
+            match = re.search(r'rgba?\((\d+),\s*(\d+),\s*(\d+)', color_str)
+            if match:
+                return tuple(int(x) for x in match.groups())
+
+        # Named colors
+        color_map = {
+            'black': (0, 0, 0),
+            'white': (255, 255, 255),
+            'red': (255, 0, 0),
+            'green': (0, 255, 0),
+            'blue': (0, 0, 255),
+        }
+        return color_map.get(color_str.lower(), (0, 0, 0))
+
     def render_text_to_image(self, text, output_path, width=1080, height=200, font_size=32, font_color="black", background_color="white"):
-        """Render text to an image using HTML/CSS and Playwright"""
-        self.init_browser()
+        """Render text to an image using PIL/Pillow"""
+        # Parse colors
+        bg_color = self._parse_color(background_color)
+        text_color = self._parse_color(font_color)
 
-        if not self.page:
-            print("Failed to initialize browser page")
-            return output_path
+        # Create image with background color
+        image = Image.new('RGB', (width, height), bg_color)
+        draw = ImageDraw.Draw(image)
 
-        # Create an HTML document with the text
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <style>
-                body {{
-                    margin: 0;
-                    padding: 20px;
-                    width: {width}px;
-                    height: {height}px;
-                    background: {background_color};
-                    box-sizing: border-box;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }}
-                .text-container {{
-                    font-family: Arial, sans-serif;
-                    font-size: {font_size}px;
-                    color: {font_color};
-                    text-align: center;
-                    word-wrap: break-word;
-                    max-width: 100%;
-                    font-weight: bold;
-                    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="text-container">{text}</div>
-        </body>
-        </html>
-        """
+        # Try to load a TrueType font, fall back to default if not available
+        try:
+            # Try to use a bold font
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+        except:
+            try:
+                # Fallback to default DejaVu Sans
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+            except:
+                # Last resort: use default font
+                font = ImageFont.load_default()
 
-        # Set viewport size
-        self.page.set_viewport_size({"width": width, "height": height})
+        # Word wrap the text to fit within the width
+        words = text.split()
+        lines = []
+        current_line = []
 
-        # Set content and wait for it to load
-        self.page.set_content(html_content)
-        self.page.wait_for_load_state("networkidle")
+        for word in words:
+            test_line = ' '.join(current_line + [word])
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            text_width = bbox[2] - bbox[0]
 
+            if text_width <= width - 40:  # 20px padding on each side
+                current_line.append(word)
+            else:
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+
+        if current_line:
+            lines.append(' '.join(current_line))
+
+        # Calculate total text height
+        line_height = font_size + 10
+        total_text_height = len(lines) * line_height
+
+        # Start Y position to center text vertically
+        y = (height - total_text_height) // 2
+
+        # Draw each line centered
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            text_width = bbox[2] - bbox[0]
+            x = (width - text_width) // 2
+
+            # Draw text shadow for better visibility
+            shadow_offset = 2
+            draw.text((x + shadow_offset, y + shadow_offset), line, font=font, fill=(0, 0, 0, 128))
+
+            # Draw main text
+            draw.text((x, y), line, font=font, fill=text_color)
+
+            y += line_height
+
+        # Save the image
+        image.save(output_path)
         return output_path
 
 def get_next_video_number(output_dir):

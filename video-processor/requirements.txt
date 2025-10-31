@@ -93,9 +93,6 @@ g4f
 curl_cffi
 undetected_chromedriver
 
-# Headless browser automation
-playwright
-
 # Subtitle processing
 srt_equalizer
 
