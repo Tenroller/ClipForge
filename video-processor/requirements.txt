@@ -1,0 +1,134 @@
+# VideoHelper Requirements - Unified Installation
+# All dependencies in one file for easy installation
+
+# =============================================================================
+# CORE REQUIREMENTS (Always needed)
+# =============================================================================
+# Web server & API
+uvicorn
+fastapi
+starlette
+pydantic
+anyio
+python-multipart
+
+# Video processing (core)
+moviepy
+imageio
+imageio-ffmpeg
+opencv-python
+proglog
+numpy
+matplotlib
+
+# Audio/TTS (core)
+soundfile
+
+# Data & utils (core)
+requests
+python-dotenv
+termcolor
+tqdm
+psutil
+Pillow
+colorama
+aiofiles
+
+# Logging
+structlog
+
+# Authentication & security
+PyJWT
+bcrypt==4.2.0
+
+# Basic TTS support
+espeakng_loader
+
+# Database support
+prometheus-client
+SQLAlchemy
+psycopg2-binary
+
+# =============================================================================
+# AI/ML DEPENDENCIES (For AI-powered video generation)
+# =============================================================================
+
+google-genai
+transformers
+ultralytics
+
+# Enhanced ASR for better word-level timestamps
+stable-ts
+faster-whisper
+whisper-timestamped
+pysubs2
+ffmpeg-python
+
+# TTS pipeline (advanced)
+kokoro
+
+# =============================================================================
+# BRAINROT DEPENDENCIES (For TikTok-style compilations)
+# =============================================================================
+# Video downloading and processing
+yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master
+scenedetect
+
+# ML dependencies for brainrot
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch
+torchaudio
+torchvision
+rich
+
+# NLP for title generation
+spacy
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+
+# =============================================================================
+# MONEYPRINTER EXTRAS (For advanced text-to-video features)
+# =============================================================================
+# Web scraping and automation (for stock video sources)
+g4f
+curl_cffi
+undetected_chromedriver
+
+# Headless browser automation
+playwright
+
+# Subtitle processing
+srt_equalizer
+
+# =============================================================================
+# DEVELOPMENT & TESTING (Optional)
+# =============================================================================
+# Testing
+pytest
+httpx
+
+# Observability (optional in production)
+sentry-sdk
+
+# Job queue (optional - for horizontal scaling)
+redis
+rq
+
+# CORS support (if needed for development)
+flask
+flask-cors
+
+# =============================================================================
+# INSTALLATION INSTRUCTIONS
+# =============================================================================
+
+# Full installation (all features):
+# pip install -r requirements.txt
+
+# Minimal installation (core functionality only):
+# pip install uvicorn==0.35.0 fastapi==0.115.14 starlette==0.41.3 moviepy==2.1.2 imageio==2.37.0 imageio-ffmpeg==0.6.0 opencv-python==4.11.0.86 proglog==0.1.12 soundfile==0.13.1 requests==2.32.4 python-dotenv==1.1.1 termcolor==2.4.0 tqdm==4.67.1 psutil==7.0.0 Pillow>=10.4.0,<11.0 colorama==0.4.6 espeakng_loader==0.2.4 prometheus-client==0.21.1
+
+# MoneyPrinter only (without Brainrot heavy dependencies):
+# pip install -r requirements.txt
+# pip uninstall torch torchaudio torchvision
+
+
