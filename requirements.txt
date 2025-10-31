@@ -1,5 +1,5 @@
-# VideoHelper Requirements - Unified Installation
-# All dependencies in one file for easy installation
+# VideoHelper Requirements - Optimized Installation
+# Cleaned up to remove unused dependencies and reduce Docker image size
 
 # =============================================================================
 # CORE REQUIREMENTS (Always needed)
@@ -9,7 +9,6 @@ uvicorn
 fastapi
 starlette
 pydantic
-anyio
 python-multipart
 
 # Video processing (core)
@@ -17,7 +16,6 @@ moviepy
 imageio
 imageio-ffmpeg
 opencv-python
-proglog
 numpy
 matplotlib
 
@@ -31,7 +29,6 @@ termcolor
 tqdm
 psutil
 Pillow
-colorama
 aiofiles
 
 # Logging
@@ -54,7 +51,6 @@ psycopg2-binary
 # =============================================================================
 
 google-genai
-transformers
 ultralytics
 
 # Enhanced ASR for better word-level timestamps
@@ -79,40 +75,22 @@ scenedetect
 torch
 torchaudio
 torchvision
-rich
-
-# NLP for title generation
-spacy
-en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
 
 # =============================================================================
 # MONEYPRINTER EXTRAS (For advanced text-to-video features)
 # =============================================================================
-# Web scraping and automation (for stock video sources)
-g4f
-curl_cffi
-undetected_chromedriver
-
 # Subtitle processing
 srt_equalizer
 
 # =============================================================================
-# DEVELOPMENT & TESTING (Optional)
+# DEVELOPMENT & TESTING (Optional - not needed in production)
 # =============================================================================
-# Testing
+# Testing (only needed for running tests locally)
 pytest
 httpx
 
-# Observability (optional in production)
+# Observability (optional - only if SENTRY_DSN is configured)
 sentry-sdk
-
-# Job queue (optional - for horizontal scaling)
-redis
-rq
-
-# CORS support (if needed for development)
-flask
-flask-cors
 
 # =============================================================================
 # INSTALLATION INSTRUCTIONS
@@ -121,11 +99,15 @@ flask-cors
 # Full installation (all features):
 # pip install -r requirements.txt
 
-# Minimal installation (core functionality only):
-# pip install uvicorn==0.35.0 fastapi==0.115.14 starlette==0.41.3 moviepy==2.1.2 imageio==2.37.0 imageio-ffmpeg==0.6.0 opencv-python==4.11.0.86 proglog==0.1.12 soundfile==0.13.1 requests==2.32.4 python-dotenv==1.1.1 termcolor==2.4.0 tqdm==4.67.1 psutil==7.0.0 Pillow>=10.4.0,<11.0 colorama==0.4.6 espeakng_loader==0.2.4 prometheus-client==0.21.1
+# Production installation (exclude dev dependencies):
+# pip install -r requirements.txt && pip uninstall -y pytest httpx sentry-sdk
 
-# MoneyPrinter only (without Brainrot heavy dependencies):
-# pip install -r requirements.txt
-# pip uninstall torch torchaudio torchvision
-
+# Note: The following dependencies have been REMOVED as unused:
+# - g4f, curl_cffi, undetected_chromedriver (web scraping - not used)
+# - transformers (~2GB - not used, saves significant space)
+# - spacy, en_core_web_sm (NLP models - not used)
+# - redis, rq (queue system - we use in-memory queue)
+# - flask, flask-cors (legacy MoneyPrinter - not used in current FastAPI app)
+# - rich, proglog, colorama, anyio (indirect deps or not directly used)
+# - playwright (replaced with Pillow for text rendering)
 
