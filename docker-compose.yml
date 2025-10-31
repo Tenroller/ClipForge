@@ -142,7 +142,7 @@ services:
 
     restart: unless-stopped
 
-  # Frontend - React Application with Nginx
+  # Frontend - React Application with Vite Preview
   frontend:
     build:
       context: ./frontend
@@ -153,9 +153,9 @@ services:
     container_name: videohelper_frontend
 
     # Note: No ports exposed - Coolify's proxy (Traefik/Caddy) handles routing
-    # The container internally listens on port 80, Coolify will proxy to it
+    # The container internally listens on port 4173, Coolify will proxy to it
     expose:
-      - "80"
+      - "4173"
 
     networks:
       - videohelper_network
@@ -165,7 +165,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4173"]
       interval: 30s
       timeout: 10s
       retries: 3
