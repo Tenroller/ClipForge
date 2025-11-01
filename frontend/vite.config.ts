@@ -7,6 +7,11 @@ export default defineConfig({
   server: {
     port: 5173,
   },
+  preview: {
+    port: 4173,
+    host: '0.0.0.0', // Listen on all interfaces for Docker
+    strictPort: true, // Fail if port is already in use
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

@@ -26,5 +26,5 @@ EXPOSE 4173
 HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:4173 || exit 1
 
-# Run vite preview server (built-in, no nginx needed)
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "4173"]
+# Run vite preview server (config in vite.config.ts)
+CMD ["npm", "run", "preview"]
