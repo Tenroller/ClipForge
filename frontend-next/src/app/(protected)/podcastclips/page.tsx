@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useJobs, useAvailableModels } from '@/hooks/use-jobs';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import { useToast } from '@/hooks/use-toast';
 import type { JobRecord } from '@/lib/api';
+import { generatePodcastClips } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,12 +22,10 @@ import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Sparkles, Video, Zap, Target } from 'lucide-react';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
-
 export default function PodcastClipsPage() {
   const { toast } = useToast();
   const { data: recentJobs = [] } = useJobs({ limit: 10, refetchInterval: 5000 });
-  const { data: models = [] } = useAvailableModels();
+  const { data: allModels = [] } = useAvailableModels();
 
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [completedJob, setCompletedJob] = useState<JobRecord | null>(null);
@@ -34,12 +33,44 @@ export default function PodcastClipsPage() {
 
   // Form state
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [aiModel, setAiModel] = useState('gemini-2.0-flash');
+  const [aiModel, setAiModel] = useState('gemini-2.5-flash');
   const [whisperModel, setWhisperModel] = useState('base');
   const [targetClipCount, setTargetClipCount] = useState(7);
   const [minDuration, setMinDuration] = useState(30);
   const [maxDuration, setMaxDuration] = useState(60);
   const [subtitleFontSize, setSubtitleFontSize] = useState(40);
+
+  // Organize models into categories for better UX (mutually exclusive)
+  const organizedModels = useMemo(() => {
+    if (!allModels.length) {
+      return {
+        recommended: ['gemini-2.0-flash', 'gemini-2.5-flash'],
+        stable: [],
+        experimental: [],
+      };
+    }
+
+    // First, identify experimental models (has precedence)
+    const experimental = allModels.filter(m =>
+      m.includes('exp') || m.includes('preview') || m.includes('thinking')
+    );
+
+    // Then, identify recommended models that are NOT experimental
+    const recommended = allModels.filter(m =>
+      !experimental.includes(m) &&
+      (m.includes('2.5-flash') || m.includes('2.0-flash') ||
+       m.includes('2.5-pro') || m.includes('2.0-pro'))
+    );
+
+    // Finally, stable models that are neither recommended nor experimental
+    const stable = allModels.filter(m =>
+      !recommended.includes(m) &&
+      !experimental.includes(m) &&
+      (m.includes('gemini') || m.includes('gemma'))
+    );
+
+    return { recommended, stable, experimental };
+  }, [allModels]);
 
   // Find the current job in the recent jobs list
   const currentJob = currentJobId
@@ -97,22 +128,7 @@ export default function PodcastClipsPage() {
         viralFocusKeywords: []
       };
 
-      const token = localStorage.getItem('access_token');
-      const response = await fetch(`${API_BASE}/api/podcastclips/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` })
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to start job');
-      }
-
-      const data = await response.json();
+      const data = await generatePodcastClips(payload);
       setCurrentJobId(data.jobId);
 
       toast({
@@ -225,21 +241,67 @@ export default function PodcastClipsPage() {
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent>
-                      {models.length > 0 ? (
-                        models.map((model) => (
-                          <SelectItem key={model.id} value={model.id}>
-                            {model.name}
-                          </SelectItem>
-                        ))
-                      ) : (
+                    <SelectContent className="max-h-[400px]">
+                      {/* Recommended Models */}
+                      {organizedModels.recommended.length > 0 && (
                         <>
-                          <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash (Recommended)</SelectItem>
-                          <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro</SelectItem>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                            Recommended
+                          </div>
+                          {organizedModels.recommended.slice(0, 6).map((model) => (
+                            <SelectItem key={model} value={model}>
+                              {model}
+                              {model === 'gemini-2.5-flash' && ' ⚡ (Fastest)'}
+                              {model === 'gemini-2.0-flash' && ' ✨ (Default)'}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+
+                      {/* Stable Models */}
+                      {organizedModels.stable.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
+                            Other Models
+                          </div>
+                          {organizedModels.stable.map((model) => (
+                            <SelectItem key={model} value={model}>
+                              {model}
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+
+                      {/* Experimental Models */}
+                      {organizedModels.experimental.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
+                            Experimental
+                          </div>
+                          {organizedModels.experimental.slice(0, 5).map((model) => (
+                            <SelectItem key={model} value={model}>
+                              {model} 🧪
+                            </SelectItem>
+                          ))}
+                        </>
+                      )}
+
+                      {/* Fallback if no models loaded */}
+                      {allModels.length === 0 && organizedModels.recommended.length === 0 && (
+                        <>
+                          <SelectItem key="gemini-2.0-flash-fallback" value="gemini-2.0-flash">
+                            Gemini 2.0 Flash (Default)
+                          </SelectItem>
+                          <SelectItem key="gemini-2.5-flash-fallback" value="gemini-2.5-flash">
+                            Gemini 2.5 Flash (Latest)
+                          </SelectItem>
                         </>
                       )}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {allModels.length > 0 ? `${allModels.length} models available from Gemini API` : 'Loading models...'}
+                  </p>
                 </div>
 
                 {/* Whisper Model */}
@@ -250,10 +312,10 @@ export default function PodcastClipsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="tiny">Tiny (Fastest)</SelectItem>
-                      <SelectItem value="base">Base (Recommended)</SelectItem>
-                      <SelectItem value="small">Small (Better)</SelectItem>
-                      <SelectItem value="medium">Medium (Best)</SelectItem>
+                      <SelectItem key="tiny" value="tiny">Tiny (Fastest)</SelectItem>
+                      <SelectItem key="base" value="base">Base (Recommended)</SelectItem>
+                      <SelectItem key="small" value="small">Small (Better)</SelectItem>
+                      <SelectItem key="medium" value="medium">Medium (Best)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -6,11 +6,11 @@ functions used throughout the VideoHelper application.
 """
 
 import os
+import logging
 from pathlib import Path
 from typing import Optional, Union, List, Dict, Any
-from backend.logging_config import get_logger
 
-logger = get_logger("path_utils")
+logger = logging.getLogger("path_utils")
 
 
 class PathManager:

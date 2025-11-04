@@ -17,6 +17,7 @@ import {
   FaTrash,
   FaChevronRight,
   FaSignOutAlt,
+  FaPodcast,
 } from 'react-icons/fa';
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/app/login/actions';
@@ -46,6 +47,13 @@ export default function Sidebar({ username, className }: SidebarProps) {
       label: 'Compilations',
       icon: <FaBrain className="size-4" />,
       description: 'Create from existing videos',
+    },
+    {
+      id: 'podcastclips',
+      href: '/podcastclips',
+      label: 'Podcast Clips',
+      icon: <FaPodcast className="size-4" />,
+      description: 'Generate clips from podcasts',
     },
   ];
 

@@ -20,9 +20,20 @@ import tempfile
 # Add parent directories to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from backend.utils.youtube import download_video, extract_video_id
-from backend.utils.artifacts import persist_artifact, load_artifact
-from backend.database import get_job_store
+# Use video-processor's utils instead of backend modules
+from utils.youtube import download_video, extract_video_id
+from utils.artifacts import persist_artifact, load_artifact
+
+# Create stub for job store since video-processor doesn't have database module
+class JobStoreStub:
+    """Stub for job store when running in video-processor context."""
+    def update_job_progress(self, job_id, progress, status, step=None, message=None):
+        # Progress updates are handled by the video-processor's job queue
+        pass
+
+def get_job_store():
+    """Return stub job store for video-processor context."""
+    return JobStoreStub()
 
 from .face_tracker import FaceTracker
 from .subtitle_generator import SubtitleGenerator

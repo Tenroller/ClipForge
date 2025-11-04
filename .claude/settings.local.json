@@ -7,7 +7,10 @@
       "Bash(npx tailwindcss:*)",
       "Bash(find:*)",
       "Bash(npm run build:*)",
-      "Bash($null)"
+      "Bash($null)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(python test_gemini_models.py:*)",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

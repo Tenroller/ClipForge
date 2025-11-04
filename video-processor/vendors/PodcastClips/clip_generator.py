@@ -7,7 +7,7 @@ Handles video cutting, cropping to 9:16 format, and final composition.
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
-from moviepy.editor import VideoFileClip, CompositeVideoClip
+from moviepy import VideoFileClip, CompositeVideoClip
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
@@ -125,7 +125,7 @@ class ClipGenerator:
 
             # Extract clip segment
             logger.debug(f"Extracting segment: {viral_moment.start_time:.1f}s to {viral_moment.end_time:.1f}s")
-            clip = video.subclip(viral_moment.start_time, viral_moment.end_time)
+            clip = video.subclipped(viral_moment.start_time, viral_moment.end_time)
 
             # Get optimal crop box from face tracker
             logger.debug("Calculating optimal crop box")
@@ -143,11 +143,11 @@ class ClipGenerator:
             # Apply crop to 9:16 format
             logger.debug(f"Applying crop: x={crop_box.x}, width={crop_box.width}")
             x1, y1, x2, y2 = crop_box.to_moviepy_crop()
-            clip = clip.crop(x1=x1, y1=y1, x2=x2, y2=y2)
+            clip = clip.cropped(x1, y1, x2, y2)
 
             # Resize to target resolution (1080x1920)
             logger.debug(f"Resizing to {self.target_resolution[0]}x{self.target_resolution[1]}")
-            clip = clip.resize(self.target_resolution)
+            clip = clip.resized(self.target_resolution)
 
             # Extract relevant word timings for this clip
             logger.debug("Extracting word timings for subtitle generation")

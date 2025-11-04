@@ -25,20 +25,37 @@ VENDOR_ROOT = get_backend_path("vendors")
 # Load environment variables early
 try:
     from dotenv import load_dotenv  # type: ignore
-    # Canonical: repository root .env
-    load_dotenv((ROOT / ".env"))
+    # Canonical: repository root .env (override existing variables)
+    env_path = ROOT / ".env"
+    if env_path.exists():
+        load_dotenv(env_path, override=True)
+        print(f"[ENV] Loaded {env_path}")
     # Legacy monorepo layout support
     try:
         legacy_env = (ROOT.parents[1] / ".env")
         if legacy_env.exists():
-            load_dotenv(legacy_env)
+            load_dotenv(legacy_env, override=True)
+            print(f"[ENV] Loaded {legacy_env}")
     except Exception:
         pass
     # Also support backend-local .env and vendor override
-    load_dotenv((Path(__file__).resolve().parent / ".env"))
-    load_dotenv((VENDOR_ROOT / "moneyprinter" / ".env"))
-except Exception:
-    # python-dotenv is optional
+    backend_env = Path(__file__).resolve().parent / ".env"
+    if backend_env.exists():
+        load_dotenv(backend_env, override=True)
+        print(f"[ENV] Loaded {backend_env}")
+    vendor_env = VENDOR_ROOT / "moneyprinter" / ".env"
+    if vendor_env.exists():
+        load_dotenv(vendor_env, override=True)
+        print(f"[ENV] Loaded {vendor_env}")
+
+    # Verify critical keys are loaded
+    gemini_key = os.getenv('GEMINI_API_KEY')
+    if gemini_key:
+        print(f"[ENV] GEMINI_API_KEY loaded (length: {len(gemini_key)})")
+    else:
+        print("[ENV] WARNING: GEMINI_API_KEY not found in environment!")
+except Exception as e:
+    print(f"[ENV] Error loading .env files: {e}")
     pass
 
 # Early logger setup

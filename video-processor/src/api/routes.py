@@ -45,7 +45,7 @@ async def create_job(request: ProcessingJobRequest):
     
     try:
         # Validate workflow type
-        if request.workflow not in [WorkflowType.MONEYPRINTER, WorkflowType.BRAINROT]:
+        if request.workflow not in [WorkflowType.MONEYPRINTER, WorkflowType.BRAINROT, WorkflowType.PODCASTCLIPS]:
             raise HTTPException(status_code=400, detail=f"Unsupported workflow: {request.workflow}")
         
         # Add job to queue
@@ -142,7 +142,7 @@ async def get_processor_status():
         total_processed=stats["total_jobs"],
         uptime_seconds=int(uptime),
         last_heartbeat=datetime.now(timezone.utc),
-        available_workflows=[WorkflowType.MONEYPRINTER, WorkflowType.BRAINROT]
+        available_workflows=[WorkflowType.MONEYPRINTER, WorkflowType.BRAINROT, WorkflowType.PODCASTCLIPS]
     )
 
 

@@ -6,7 +6,7 @@ Generates professional-style subtitles with word-level timing from Whisper trans
 
 import logging
 from typing import List, Dict, Any, Tuple
-from moviepy.editor import TextClip, CompositeVideoClip, VideoClip
+from moviepy import TextClip, CompositeVideoClip, VideoClip
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -186,9 +186,9 @@ class SubtitleGenerator:
                 )
 
                 # Set timing
-                txt_clip = txt_clip.set_start(segment.start_time)
-                txt_clip = txt_clip.set_duration(segment.duration)
-                txt_clip = txt_clip.set_position(('center', y_pos))
+                txt_clip = txt_clip.with_start(segment.start_time)
+                txt_clip = txt_clip.with_duration(segment.duration)
+                txt_clip = txt_clip.with_position(('center', y_pos))
 
                 subtitle_clips.append(txt_clip)
 

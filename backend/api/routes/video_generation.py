@@ -413,16 +413,16 @@ def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
 def list_models() -> Dict[str, list]:
     """List available Gemini models using API discovery."""
     try:
-        try:
-            # Try to get available models, fallback to defaults
-            models = ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.0-pro"]
-            return {"models": models}
-        except Exception as e:
-            logger.error(f"Failed to list models: {e}")
-            return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
+        from ...utils.gemini_client import get_available_gemini_models
+
+        # Fetch models from Gemini API
+        models = get_available_gemini_models()
+        logger.info(f"Returning {len(models)} models from Gemini API")
+        return {"models": models}
     except Exception as e:
-        logger.error(f"Failed to list models: {e}")
-        return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
+        logger.error(f"Failed to list models: {e}", exc_info=True)
+        # Fallback to default models
+        return {"models": ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro", "gemini-1.5-flash"]}
 
 
 @router.get("/AIvideos/gpu-info")

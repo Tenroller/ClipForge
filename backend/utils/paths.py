@@ -40,14 +40,20 @@ class PathManager:
         # Start from the current file's directory
         current = Path(__file__).resolve().parent
 
-        # Go up until we find a marker file/directory
-        markers = ['README.md', 'requirements.txt', '.git']
-
+        # Go up until we find .git directory (most reliable marker)
         for parent in [current] + list(current.parents):
-            if any((parent / marker).exists() for marker in markers):
+            if (parent / '.git').exists():
                 return parent
 
-        # Fallback to current directory
+        # Fallback: look for README.md at project root
+        for parent in [current] + list(current.parents):
+            if (parent / 'README.md').exists():
+                return parent
+
+        # Last resort fallback to current directory's parent (assumes we're in backend/)
+        if current.name == 'utils' and current.parent.name == 'backend':
+            return current.parent.parent
+
         return Path.cwd()
 
     def _ensure_directories(self):

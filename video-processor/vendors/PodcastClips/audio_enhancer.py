@@ -7,7 +7,7 @@ Provides normalization, noise reduction, and audio quality improvements.
 import logging
 from pathlib import Path
 from typing import Optional
-from moviepy.editor import AudioFileClip, VideoFileClip
+from moviepy import AudioFileClip, VideoFileClip
 import numpy as np
 
 logger = logging.getLogger(__name__)

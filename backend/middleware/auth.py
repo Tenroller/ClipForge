@@ -2,7 +2,7 @@
 Authentication middleware and dependencies.
 """
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 
@@ -10,17 +10,23 @@ from backend.utils.auth import verify_token, user_store
 from backend.logging_config import get_logger
 
 logger = get_logger("auth.middleware")
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
     """
     Dependency to get the current authenticated user.
 
+    Checks for token in:
+    1. Authorization header (Bearer token)
+    2. HTTP-only cookie (auth_token)
+
     Args:
-        credentials: Bearer token from Authorization header
+        request: FastAPI request object
+        credentials: Optional bearer token from Authorization header
 
     Returns:
         User information dictionary
@@ -28,7 +34,25 @@ async def get_current_user(
     Raises:
         HTTPException: 401 if authentication fails
     """
-    token = credentials.credentials
+    token = None
+
+    # Try to get token from Authorization header first
+    if credentials:
+        token = credentials.credentials
+
+    # If not in header, try to get from cookie
+    if not token:
+        token = request.cookies.get("auth_token")
+
+    # If still no token, authentication failed
+    if not token:
+        logger.warning("No authentication token provided")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     payload = verify_token(token)
 
     if not payload:
@@ -61,24 +85,37 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(
-        HTTPBearer(auto_error=False)
-    )
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> Optional[dict]:
     """
     Dependency to optionally get the current authenticated user.
     Returns None if no valid token is provided.
 
+    Checks for token in:
+    1. Authorization header (Bearer token)
+    2. HTTP-only cookie (auth_token)
+
     Args:
+        request: FastAPI request object
         credentials: Optional bearer token from Authorization header
 
     Returns:
         User information dictionary or None
     """
-    if not credentials:
+    token = None
+
+    # Try to get token from Authorization header first
+    if credentials:
+        token = credentials.credentials
+
+    # If not in header, try to get from cookie
+    if not token:
+        token = request.cookies.get("auth_token")
+
+    if not token:
         return None
 
-    token = credentials.credentials
     payload = verify_token(token)
 
     if not payload:
