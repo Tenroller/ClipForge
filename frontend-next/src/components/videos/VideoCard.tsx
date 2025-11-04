@@ -1,0 +1,143 @@
+'use client';
+
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { FaDownload, FaPlay, FaFilm, FaBrain, FaVideo, FaCheck, FaClock } from 'react-icons/fa';
+
+export interface Video {
+  id: string;
+  job_id: string;
+  workflow: 'moneyprinter' | 'brainrot';
+  filename: string;
+  file_path?: string;
+  size_bytes: number;
+  created_at: string;
+  duration_seconds?: number;
+  download_url: string;
+  thumbnail_url?: string;
+  posted?: boolean;
+  posted_at?: string;
+}
+
+interface VideoCardProps {
+  video: Video;
+  onDownload: (video: Video) => void;
+  onPlay?: (video: Video) => void;
+  onMarkPosted?: (video: Video) => void;
+}
+
+export default function VideoCard({ video, onDownload, onPlay, onMarkPosted }: VideoCardProps) {
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const getWorkflowIcon = () => {
+    switch (video.workflow) {
+      case 'moneyprinter':
+        return <FaFilm className="size-4" />;
+      case 'brainrot':
+        return <FaBrain className="size-4" />;
+      default:
+        return <FaVideo className="size-4" />;
+    }
+  };
+
+  return (
+    <Card className="hover:shadow-lg transition-shadow">
+      <CardContent className="p-4">
+        <div className="flex items-start gap-4">
+          {/* Thumbnail */}
+          <div className="relative w-32 h-20 bg-muted rounded-lg overflow-hidden shrink-0">
+            {video.thumbnail_url ? (
+              <img
+                src={video.thumbnail_url}
+                alt={video.filename}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <FaVideo className="size-8 text-muted-foreground" />
+              </div>
+            )}
+            {video.duration_seconds && (
+              <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                {Math.floor(video.duration_seconds / 60)}:{(video.duration_seconds % 60).toString().padStart(2, '0')}
+              </div>
+            )}
+          </div>
+
+          {/* Details */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex-1 min-w-0">
+                <h3 className="font-medium truncate" title={video.filename}>
+                  {video.filename}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <Badge variant="outline" className="text-xs">
+                    {getWorkflowIcon()}
+                    <span className="ml-1">{video.workflow}</span>
+                  </Badge>
+                  {video.posted && (
+                    <Badge variant="default" className="text-xs">
+                      <FaCheck className="size-3 mr-1" />
+                      Posted
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-3">
+              <div className="flex items-center gap-1">
+                <FaClock className="size-3" />
+                {formatDate(video.created_at)}
+              </div>
+              <div>
+                Size: {formatFileSize(video.size_bytes)}
+              </div>
+              <div className="col-span-2 truncate">
+                Job: {video.job_id.substring(0, 16)}...
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              {onPlay && (
+                <Button variant="outline" size="sm" onClick={() => onPlay(video)}>
+                  <FaPlay className="size-3 mr-1" />
+                  Play
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => onDownload(video)}>
+                <FaDownload className="size-3 mr-1" />
+                Download
+              </Button>
+              {onMarkPosted && !video.posted && (
+                <Button variant="outline" size="sm" onClick={() => onMarkPosted(video)}>
+                  <FaCheck className="size-3 mr-1" />
+                  Mark Posted
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
