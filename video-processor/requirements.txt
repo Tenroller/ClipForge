@@ -52,6 +52,7 @@ psycopg2-binary
 
 google-genai
 ultralytics
+mediapipe  # For face detection in podcast clips workflow
 
 # Enhanced ASR for better word-level timestamps
 stable-ts

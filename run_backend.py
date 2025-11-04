@@ -15,10 +15,11 @@ def main():
     # Add project root to Python path so 'backend' module can be imported
     if str(project_root) not in sys.path:
         sys.path.insert(0, str(project_root))
-    
-    # Change to backend directory
-    os.chdir(backend_dir)
-    
+
+    # Add backend directory to path for direct imports (when in backend dir)
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+
     # Get configuration from environment
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "9000"))
@@ -26,8 +27,7 @@ def main():
     
     print(f"Starting AI Video Generator API on {host}:{port}")
     print(f"Project root: {project_root}")
-    print(f"Backend directory: {backend_dir}")
-    print(f"Working directory: {os.getcwd()}")
+    print(f"Python path includes: backend={str(backend_dir) in sys.path}")
     
     # Import uvicorn
     import uvicorn

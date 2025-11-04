@@ -8,6 +8,7 @@ from .job import (
     WorkflowType,
     MoneyPrinterRequest,
     BrainrotRequest,
+    PodcastClipsRequest,
     ProcessingJobRequest,
     ProcessingJobResponse,
     JobStatusResponse,
@@ -21,12 +22,13 @@ from .job import (
 
 __all__ = [
     "JobStatus",
-    "JobPriority", 
+    "JobPriority",
     "WorkflowType",
     "MoneyPrinterRequest",
     "BrainrotRequest",
+    "PodcastClipsRequest",
     "ProcessingJobRequest",
-    "ProcessingJobResponse", 
+    "ProcessingJobResponse",
     "JobStatusResponse",
     "JobListResponse",
     "ProcessorStatusResponse",

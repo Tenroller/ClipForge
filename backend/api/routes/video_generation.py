@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, File, UploadFile, Depends
 from fastapi.responses import FileResponse
 
-from ...models.requests import MoneyPrinterRequest, BrainrotRequest, SuggestSubjectRequest
+from ...models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest, SuggestSubjectRequest
 from ...middleware.auth import get_current_user
 from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
@@ -254,6 +254,112 @@ async def brainrot_generate(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate brainrot video: {e}")
+
+
+@router.post(
+    "/podcastclips/generate",
+    summary="Generate Podcast Clips",
+    description="""
+    Create viral short-form videos from podcast content.
+
+    This endpoint analyzes a YouTube podcast video and generates 5-10 short-form (9:16 format)
+    clips optimized for social media platforms like TikTok, Instagram Reels, and YouTube Shorts.
+
+    **Process Overview:**
+    1. Download podcast video from YouTube
+    2. Transcribe with word-level timestamps (Whisper)
+    3. AI-powered viral moment detection (Gemini)
+    4. Face tracking for intelligent person-focused cropping
+    5. Generate 9:16 vertical clips with professional subtitles
+
+    **Key Features:**
+    - Automatic detection of viral moments (AI-powered)
+    - Face-focused cropping with MediaPipe
+    - Professional closed captions
+    - Multiple clips per job (5-10 clips)
+
+    **Required Environment Variables:**
+    - `GEMINI_API_KEY`: For AI viral moment detection
+    """
+)
+async def podcastclips_generate(
+    req: PodcastClipsRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate viral clips from podcast video."""
+    try:
+        job_id = str(uuid.uuid4())
+
+        log_job_event(logger, job_id, "podcastclips", "created",
+                     url=req.youtubeUrl, ai_model=req.aiModel)
+
+        # Create job in database
+        try:
+            job_store.create_job(
+                job_id,
+                "podcastclips",
+                req.model_dump(),
+                user_id=None
+            )
+
+            # Create progress tracker and initial log
+            from ...utils.progress_tracker import get_progress_tracker
+            tracker = get_progress_tracker(job_id)
+            tracker.add_log("Podcast clips job created and queued for processing", "info", "podcastclips")
+            tracker.add_log(f"Source: {req.youtubeUrl}", "info", "config")
+            tracker.add_log(f"Target: {req.targetClipCount} clips, Duration: {req.minDuration}s-{req.maxDuration}s", "info", "config")
+            tracker.add_log(f"AI Model: {req.aiModel}, Whisper: {req.whisperModel}", "info", "config")
+
+        except Exception as e:
+            logger.error(f"Failed to create job {job_id} in database: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to create job: {e}")
+
+        # Submit job to orchestrator
+        try:
+            success = await video_orchestrator.submit_podcastclips_job(job_id, req)
+
+            if not success:
+                # Update job status to error
+                job_store.update_job(
+                    job_id,
+                    status="error",
+                    error_message="Failed to submit to video processor"
+                )
+                raise HTTPException(status_code=500, detail="Failed to submit job to video processor")
+
+        except Exception as e:
+            logger.error(f"Failed to submit PodcastClips job {job_id}: {e}")
+            # Update job status to error
+            job_store.update_job(
+                job_id,
+                status="error",
+                error_message=str(e)
+            )
+            raise HTTPException(status_code=500, detail=f"Failed to submit job: {e}")
+
+        # Ensure job is persisted to database before returning
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                job = job_store.get_job(job_id)
+                if job:
+                    logger.info(f"[podcastclips_generate] Job {job_id} successfully persisted to database")
+                    break
+                if attempt < max_retries - 1:
+                    time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+            except Exception as db_e:
+                logger.warning(f"[podcastclips_generate] Database check failed for job {job_id}, attempt {attempt + 1}: {db_e}")
+                if attempt < max_retries - 1:
+                    time.sleep(0.1 * (attempt + 1))
+
+        return {
+            "status": "success",
+            "jobId": job_id,
+            "message": f"Podcast clips generation started. Expecting {req.targetClipCount} clips."
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate podcast clips: {e}")
 
 
 @router.post("/AIvideos/suggest-subject")

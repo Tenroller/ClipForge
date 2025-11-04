@@ -7,7 +7,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
-from ..models.requests import MoneyPrinterRequest, BrainrotRequest
+from ..models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest
 from ..database import get_job_store
 from ..logging_config import get_logger
 from ..core.config import AppConfig
@@ -91,7 +91,36 @@ class VideoOrchestrationService:
         except Exception as e:
             logger.error(f"Error submitting Brainrot job {job_id}: {e}")
             return False
-    
+
+    async def submit_podcastclips_job(self, job_id: str, request: PodcastClipsRequest) -> bool:
+        """Submit a PodcastClips job to available processor."""
+        try:
+            logger.info(f"Submitting PodcastClips job {job_id} to processor")
+
+            # Prepare request data
+            request_data = request.model_dump()
+
+            # Submit to processor
+            result = await self.processor_manager.submit_job(
+                job_id=job_id,
+                workflow="podcastclips",
+                request_data=request_data,
+                priority="normal",
+                callback_url=self._get_callback_url(job_id)
+            )
+
+            if result:
+                # Job submitted successfully - frontend handles polling via REST API
+                logger.info(f"Successfully submitted PodcastClips job {job_id}")
+                return True
+            else:
+                logger.error(f"Failed to submit PodcastClips job {job_id}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error submitting PodcastClips job {job_id}: {e}")
+            return False
+
     async def cancel_job(self, job_id: str) -> bool:
         """Cancel a job on the processors."""
         try:

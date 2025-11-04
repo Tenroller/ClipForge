@@ -24,7 +24,7 @@ else:
     print(f"Warning: Could not find vendors directory at {vendors_path}")
     print("Video processing features may not work.")
 
-from ..models import MoneyPrinterRequest, BrainrotRequest, WorkflowType
+from ..models import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest, WorkflowType
 from ..core.config import ProcessorConfig
 
 import logging
@@ -412,7 +412,60 @@ class VideoProcessingService:
         except Exception as e:
             logger.error(f"Job {job_id} failed: {e}")
             raise
-    
+
+    async def process_podcastclips_job(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a PodcastClips viral short-form video generation job."""
+        job_id = job_data["job_id"]
+        request_data = job_data["request_data"]
+
+        logger.info(f"Starting PodcastClips job {job_id}")
+
+        try:
+            # Parse request
+            req = PodcastClipsRequest(**request_data)
+
+            # Import podcast clips processor from local vendors
+            try:
+                from PodcastClips.processor import process_podcast_clips
+            except ImportError as e:
+                logger.error(f"Job {job_id}: Could not import PodcastClips processor from local vendors: {e}")
+                logger.error("This feature requires vendor modules to be available")
+                raise RuntimeError("PodcastClips processing requires vendor dependency that is not available")
+
+            # Create job-specific output directory
+            job_output_dir = self.config.output_dir / job_id
+            job_output_dir.mkdir(parents=True, exist_ok=True)
+            output_dir_str = str(job_output_dir.resolve())
+
+            logger.info(f"Job {job_id}: Processing podcast from {req.youtubeUrl}")
+
+            # Process podcast clips using our processor
+            result = process_podcast_clips(
+                job_id=job_id,
+                parameters=request_data,
+                output_dir=output_dir_str
+            )
+
+            # Collect output files
+            output_files = []
+            for video_file in job_output_dir.rglob("*.mp4"):
+                if video_file.is_file() and "_clip_" in video_file.name:
+                    output_files.append(str(video_file))
+
+            logger.info(f"Job {job_id}: PodcastClips job completed, generated {len(output_files)} clips")
+
+            return {
+                "status": "completed",
+                "output_files": output_files,
+                "clips_count": result.get("total_clips_generated", len(output_files)),
+                "job_id": job_id,
+                "summary": result
+            }
+
+        except Exception as e:
+            logger.error(f"Job {job_id} failed: {e}", exc_info=True)
+            raise
+
     def _process_uploaded_video(self, generator, uploaded_video_path: str, job_id: str):
         """
         Process an uploaded video file (skip YouTube download step).

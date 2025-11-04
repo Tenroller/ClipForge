@@ -76,3 +76,5 @@ jobs.db
 /video-processor/src/__pycache__
 backups/
 video-processor/*.mp4
+backend/migrations/__pycache__/__init__.cpython-310.pyc
+/video-processor/src/api/__pycache__

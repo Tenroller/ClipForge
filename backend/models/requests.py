@@ -149,6 +149,46 @@ class BrainrotRequest(BaseModel):
             raise ValueError("Cannot provide both youtubeUrl and uploadedVideoPath - choose one input method")
 
 
+class PodcastClipsRequest(BaseModel):
+    """Request model for podcast clips workflow - generates viral short-form videos from podcasts."""
+    youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
+    aiModel: str = Field(default="gemini-2.0-flash", description="AI model for viral moment detection")
+    whisperModel: str = Field(default="base", description="Whisper model size: tiny, base, small, medium, large")
+    targetClipCount: int = Field(default=7, ge=5, le=10, description="Target number of clips (AI decides final count within range)")
+    minDuration: int = Field(default=20, ge=15, le=60, description="Minimum clip duration in seconds")
+    maxDuration: int = Field(default=70, ge=30, le=120, description="Maximum clip duration in seconds")
+    useGPU: bool = Field(default=True, description="Use GPU acceleration for processing")
+    subtitleFontSize: int = Field(default=40, ge=20, le=80, description="Subtitle font size")
+    subtitleColor: str = Field(default="#FFFFFF", description="Subtitle text color (hex format)")
+    subtitleStrokeColor: str = Field(default="#000000", description="Subtitle stroke/outline color")
+    subtitleStrokeWidth: int = Field(default=2, ge=0, le=5, description="Subtitle stroke width")
+    viralFocusKeywords: List[str] = Field(default=[], description="Optional keywords to prioritize when detecting viral moments")
+
+    @field_validator('youtubeUrl')
+    @classmethod
+    def validate_youtube_url_field(cls, v):
+        return validate_youtube_url(v)
+
+    @field_validator('aiModel')
+    @classmethod
+    def validate_ai_model_field(cls, v):
+        return validate_ai_model(v)
+
+    @field_validator('subtitleColor', 'subtitleStrokeColor')
+    @classmethod
+    def validate_subtitle_color_fields(cls, v):
+        return validate_color(v)
+
+    @field_validator('minDuration', 'maxDuration')
+    @classmethod
+    def validate_duration_fields(cls, v):
+        if v < 10:
+            raise ValueError("Duration must be at least 10 seconds")
+        if v > 300:
+            raise ValueError("Duration cannot exceed 300 seconds (5 minutes)")
+        return v
+
+
 class SuggestSubjectRequest(BaseModel):
     aiModel: str | None = None
     examples: list[str] | None = None

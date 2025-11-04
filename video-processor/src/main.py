@@ -129,6 +129,7 @@ async def lifespan(app: FastAPI):
         # Register workflow handlers
         job_queue.register_handler(WorkflowType.MONEYPRINTER, video_service.process_moneyprinter_job)
         job_queue.register_handler(WorkflowType.BRAINROT, video_service.process_brainrot_job)
+        job_queue.register_handler(WorkflowType.PODCASTCLIPS, video_service.process_podcastclips_job)
         
         # Set dependencies for routes
         set_dependencies(job_queue, video_service, config.processor_id)

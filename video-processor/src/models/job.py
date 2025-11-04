@@ -29,6 +29,7 @@ class WorkflowType(str, Enum):
     """Supported workflow types."""
     MONEYPRINTER = "moneyprinter"
     BRAINROT = "brainrot"
+    PODCASTCLIPS = "podcastclips"
 
 
 # MoneyPrinter specific models
@@ -56,13 +57,29 @@ class BrainrotRequest(BaseModel):
     unlimited: bool = Field(False, description="Generate unlimited compilations")
     generateNoBackground: bool = Field(True, description="Generate third variation without white background")
     blurredPillarboxThreshold: float = Field(0.1, description="Aspect ratio tolerance for 9:16 format")
-    
+
     def model_post_init(self, __context: Any) -> None:
         """Ensure exactly one of youtubeUrl or uploadedVideoPath is provided"""
         if not self.youtubeUrl and not self.uploadedVideoPath:
             raise ValueError("Either youtubeUrl or uploadedVideoPath must be provided")
         if self.youtubeUrl and self.uploadedVideoPath:
             raise ValueError("Cannot provide both youtubeUrl and uploadedVideoPath - choose one input method")
+
+
+class PodcastClipsRequest(BaseModel):
+    """PodcastClips viral short-form video generation request."""
+    youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
+    aiModel: str = Field("gemini-2.0-flash", description="AI model for viral moment detection")
+    whisperModel: str = Field("base", description="Whisper model size: tiny, base, small, medium, large")
+    targetClipCount: int = Field(7, description="Target number of clips (AI decides final count within range)")
+    minDuration: int = Field(20, description="Minimum clip duration in seconds")
+    maxDuration: int = Field(70, description="Maximum clip duration in seconds")
+    useGPU: bool = Field(True, description="Use GPU acceleration for processing")
+    subtitleFontSize: int = Field(40, description="Subtitle font size")
+    subtitleColor: str = Field("#FFFFFF", description="Subtitle text color (hex format)")
+    subtitleStrokeColor: str = Field("#000000", description="Subtitle stroke/outline color")
+    subtitleStrokeWidth: int = Field(2, description="Subtitle stroke width")
+    viralFocusKeywords: List[str] = Field(default_factory=list, description="Optional keywords to prioritize when detecting viral moments")
 
 
 # Job models
