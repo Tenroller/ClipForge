@@ -108,49 +108,67 @@ export default function ActivityPage() {
   }
 
   return (
-    <div className="container-page fade-in max-w-[1200px]">
+    <div className="container-page fade-in">
       <div className="space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">Job Activity</h1>
-            <p className="text-muted-foreground mt-2">View and manage your video generation jobs</p>
+        {/* Enhanced Header */}
+        <div className="glass-header">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="section-title">Job Activity</h1>
+              <p className="section-subtitle">View and manage your video generation jobs</p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isLoading}
+              className="hover:bg-primary/10 hover:border-primary/50 transition-all"
+            >
+              <FaRedo className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => refetch()}
-            disabled={isLoading}
-          >
-            <FaRedo className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
         </div>
 
         {/* Jobs List */}
-        <Card className="enhanced-card">
-          <CardHeader>
+        <Card className="enhanced-card border-2">
+          <CardHeader className="border-b bg-gradient-to-r from-muted/30 to-muted/10">
             <CardTitle className="flex items-center justify-between">
-              <span>Recent Jobs</span>
-              <Badge variant="outline">{jobs.length} total</Badge>
+              <div className="flex items-center gap-3">
+                <div className="size-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
+                  <FaChartLine className="size-5 text-white" />
+                </div>
+                <span className="text-xl">Recent Jobs</span>
+              </div>
+              <Badge variant="outline" className="px-3 py-1 text-sm">
+                {jobs.length} total
+              </Badge>
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-6">
             {isLoading && jobs.length === 0 ? (
-              <div className="flex items-center justify-center py-8 text-muted-foreground">
-                <FaSpinner className="size-5 mr-2 animate-spin" />
-                Loading jobs...
+              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                <FaSpinner className="size-12 mb-4 animate-spin text-primary" />
+                <p className="text-lg font-medium">Loading jobs...</p>
+                <p className="text-sm mt-2">Please wait while we fetch your data</p>
               </div>
             ) : jobs.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <p>No jobs found</p>
-                <p className="text-sm mt-2">Create your first video to see it here</p>
+              <div className="text-center py-16">
+                <div className="size-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
+                  <FaChartLine className="size-10 text-muted-foreground" />
+                </div>
+                <p className="text-xl font-semibold text-foreground mb-2">No jobs found</p>
+                <p className="text-sm text-muted-foreground mb-6">Create your first video to see it here</p>
+                <Button asChild className="btn-primary">
+                  <a href="/creator">Create Your First Video</a>
+                </Button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {jobs.map((job) => (
+              <div className="space-y-4">
+                {jobs.map((job, idx) => (
                   <div
                     key={job.id}
-                    className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                    className="flex items-center justify-between p-5 rounded-xl border-2 bg-gradient-to-r from-card to-card/50 hover:from-accent/10 hover:to-accent/5 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group"
+                    style={{ animationDelay: `${idx * 50}ms` }}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-2">
@@ -264,38 +282,64 @@ export default function ActivityPage() {
           </CardContent>
         </Card>
 
-        {/* Stats Card */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">
+        {/* Enhanced Stats Card */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="size-10 rounded-lg bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
+                  <svg className="size-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <div className="text-3xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">
                 {jobs.filter(j => j.status === 'completed' || j.status === 'done').length}
               </div>
-              <p className="text-xs text-muted-foreground">Completed</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">Completed</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">
+          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                  <FaSpinner className="size-5 text-blue-500" />
+                </div>
+              </div>
+              <div className="text-3xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
                 {jobs.filter(j => ['processing', 'running', 'queued'].includes(j.status)).length}
               </div>
-              <p className="text-xs text-muted-foreground">In Progress</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">In Progress</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">
+          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="size-10 rounded-lg bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
+                  <svg className="size-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <div className="text-3xl font-bold text-red-500">
                 {jobs.filter(j => j.status === 'error').length}
               </div>
-              <p className="text-xs text-muted-foreground">Failed</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">Failed</p>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">
+          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
+            <CardContent className="pt-6 pb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="size-10 rounded-lg bg-gray-500/10 flex items-center justify-center group-hover:bg-gray-500/20 transition-colors">
+                  <svg className="size-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+              </div>
+              <div className="text-3xl font-bold text-gray-500">
                 {jobs.filter(j => j.status === 'cancelled').length}
               </div>
-              <p className="text-xs text-muted-foreground">Cancelled</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">Cancelled</p>
             </CardContent>
           </Card>
         </div>

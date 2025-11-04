@@ -309,6 +309,27 @@ html, body, #root { height: 100%; }
     }
   }
 
+  .animate-gradient {
+    background-size: 200% auto;
+    animation: gradientShift 6s ease infinite;
+  }
+
+  @keyframes gradientShift {
+    0%, 100% {
+      background-position: 0% center;
+    }
+    50% {
+      background-position: 100% center;
+    }
+  }
+
+  .bg-grid-pattern {
+    background-image:
+      linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
   .slide-in {
     animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
   }
