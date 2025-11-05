@@ -9,7 +9,11 @@ import { FaCheckCircle, FaEye, FaSpinner } from 'react-icons/fa'
 
 interface JobStartedNotificationProps {
   jobId: string
-  workflow: 'moneyprinter' | 'brainrot'
+  workflow?: 'moneyprinter' | 'brainrot'
+  // optional runtime status fields supplied by callers
+  status?: string
+  progress?: number
+  currentStep?: string
   className?: string
   autoRedirect?: boolean
   redirectDelay?: number
@@ -17,7 +21,10 @@ interface JobStartedNotificationProps {
 
 export default function JobStartedNotification({
   jobId,
-  workflow,
+  workflow = 'moneyprinter',
+  status,
+  progress,
+  currentStep,
   className,
   autoRedirect = true,
   redirectDelay = 3000
@@ -55,7 +62,7 @@ export default function JobStartedNotification({
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Job ID:</span>
             <code className="bg-muted px-2 py-1 rounded text-sm font-mono">
-              {jobId}
+              {shortJobId}
             </code>
           </div>
           
@@ -80,6 +87,30 @@ export default function JobStartedNotification({
           </Button>
         </div>
 
+        {/* If callers supply runtime fields, show a compact status summary */}
+        {(status || progress !== undefined || currentStep) && (
+          <div className="mt-3 text-sm text-muted-foreground">
+            {status && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Runtime Status:</span>
+                <span className="font-medium">{status}</span>
+              </div>
+            )}
+            {progress !== undefined && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Progress:</span>
+                <span className="font-medium">{Math.round(progress)}%</span>
+              </div>
+            )}
+            {currentStep && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Step:</span>
+                <span className="font-medium">{currentStep}</span>
+              </div>
+            )}
+          </div>
+        )}
+
         {autoRedirect ? (
           <div className="text-xs text-center text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30">
             <p className="flex items-center justify-center gap-2">
@@ -90,8 +121,7 @@ export default function JobStartedNotification({
         ) : (
           <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
             <p>
-              This job is currently running in the background. Click "Monitor Progress" 
-              to view detailed progress and logs.
+              This job is currently running in the background. Click &apos;Monitor Progress&apos; to view detailed progress and logs.
             </p>
           </div>
         )}
@@ -99,8 +129,7 @@ export default function JobStartedNotification({
         {autoRedirect && (
           <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
             <p>
-              Your job is now being processed in the background. You'll be redirected to the 
-              monitoring page where you can track progress in real-time and view detailed logs.
+              Your job is now being processed in the background. You will be redirected to the monitoring page where you can track progress in real-time and view detailed logs.
             </p>
           </div>
         )}
