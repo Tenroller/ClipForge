@@ -79,7 +79,7 @@ class FaceTracker:
     def analyze_video(
         self,
         video_path: str,
-        sample_rate: int = 5,
+        sample_rate: int = 2,
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
         progress_callback: Optional[callable] = None
@@ -89,7 +89,7 @@ class FaceTracker:
 
         Args:
             video_path: Path to video file
-            sample_rate: Sample every Nth frame (higher = faster but less accurate)
+            sample_rate: Sample every Nth frame (default 2 = 15fps sampling at 30fps video)
             start_time: Optional start time in seconds (for analyzing specific segments)
             end_time: Optional end time in seconds
             progress_callback: Optional callback function(progress_pct, message) for progress updates
@@ -276,6 +276,131 @@ class FaceTracker:
             height=self.video_height
         )
 
+    def get_face_position_at_time(self, timestamp: float) -> Optional[FaceBox]:
+        """
+        Get interpolated face position at a specific timestamp.
+
+        Uses linear interpolation between detected face positions for smooth tracking.
+
+        Args:
+            timestamp: Time in seconds
+
+        Returns:
+            Interpolated FaceBox, or None if no nearby face positions found
+        """
+        if not self.face_positions:
+            return None
+
+        # Get sorted timestamps
+        timestamps = sorted(self.face_positions.keys())
+
+        # Find exact match
+        if timestamp in self.face_positions:
+            return self.face_positions[timestamp]
+
+        # Find bounding timestamps for interpolation
+        before_ts = None
+        after_ts = None
+
+        for ts in timestamps:
+            if ts <= timestamp:
+                before_ts = ts
+            elif ts > timestamp and after_ts is None:
+                after_ts = ts
+                break
+
+        # If timestamp is before all detections
+        if before_ts is None and after_ts is not None:
+            return self.face_positions[after_ts]
+
+        # If timestamp is after all detections
+        if after_ts is None and before_ts is not None:
+            return self.face_positions[before_ts]
+
+        # If we have no face positions at all
+        if before_ts is None and after_ts is None:
+            return None
+
+        # Interpolate between before and after
+        face_before = self.face_positions[before_ts]
+        face_after = self.face_positions[after_ts]
+
+        # Calculate interpolation factor
+        time_diff = after_ts - before_ts
+        if time_diff == 0:
+            return face_before
+
+        t = (timestamp - before_ts) / time_diff
+
+        # Linear interpolation of face box properties
+        interpolated_x = int(face_before.x + t * (face_after.x - face_before.x))
+        interpolated_y = int(face_before.y + t * (face_after.y - face_before.y))
+        interpolated_w = int(face_before.width + t * (face_after.width - face_before.width))
+        interpolated_h = int(face_before.height + t * (face_after.height - face_before.height))
+        interpolated_conf = face_before.confidence + t * (face_after.confidence - face_before.confidence)
+
+        return FaceBox(
+            x=interpolated_x,
+            y=interpolated_y,
+            width=interpolated_w,
+            height=interpolated_h,
+            confidence=interpolated_conf
+        )
+
+    def get_dynamic_crop_box_at_time(
+        self,
+        timestamp: float,
+        padding_factor: float = 1.5,
+        smoothing_window: float = 0.5
+    ) -> CropBox:
+        """
+        Get crop box for a specific timestamp with smoothing for stable tracking.
+
+        Args:
+            timestamp: Time in seconds
+            padding_factor: How much padding around face (1.0 = tight, 2.0 = loose)
+            smoothing_window: Window in seconds to average face positions (reduces jitter)
+
+        Returns:
+            CropBox for the specified timestamp
+        """
+        # Get face positions within smoothing window
+        relevant_faces = [
+            face for ts, face in self.face_positions.items()
+            if timestamp - smoothing_window / 2 <= ts <= timestamp + smoothing_window / 2
+        ]
+
+        if not relevant_faces:
+            # Fallback to interpolated position
+            face = self.get_face_position_at_time(timestamp)
+            if face:
+                relevant_faces = [face]
+            else:
+                return self._get_center_crop_box()
+
+        # Calculate smoothed face center position
+        avg_face_center_x = int(np.mean([face.center[0] for face in relevant_faces]))
+
+        # Calculate target width for 9:16 aspect ratio
+        target_width = int(self.video_height * self.target_aspect)
+
+        # If video is already narrower than target, use full width
+        if self.video_width <= target_width:
+            return CropBox(x=0, y=0, width=self.video_width, height=self.video_height)
+
+        # Calculate crop box centered on smoothed face position
+        crop_x = avg_face_center_x - target_width // 2
+
+        # Ensure crop box stays within video bounds
+        crop_x = max(0, min(crop_x, self.video_width - target_width))
+
+        return CropBox(
+            x=crop_x,
+            y=0,
+            width=target_width,
+            height=self.video_height
+        )
+
     def get_face_coverage_percentage(self, start_time: float, end_time: float) -> float:
         """
         Calculate what percentage of the time range has face detections.
@@ -300,7 +425,7 @@ class FaceTracker:
 
         # Estimate coverage based on sampled points
         duration = end_time - start_time
-        time_between_samples = 5.0  # Assuming sample_rate=5, ~1 sample per second at 30fps
+        time_between_samples = 2.0 / 30.0  # Assuming sample_rate=2, ~15 samples per second at 30fps
         expected_samples = duration / time_between_samples
 
         coverage = (len(timestamps_in_range) / expected_samples) * 100 if expected_samples > 0 else 0

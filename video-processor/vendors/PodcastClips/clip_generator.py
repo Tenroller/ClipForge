@@ -199,26 +199,78 @@ class ClipGenerator:
     def create_face_tracked_clip(
         self,
         clip: VideoFileClip,
-        crop_box: CropBox
+        start_time: float,
+        dynamic_tracking: bool = True
     ) -> VideoFileClip:
         """
         Create face-tracked vertical clip with 9:16 crop.
 
         Args:
             clip: Source video clip
-            crop_box: Crop box from face tracker
+            start_time: Start time of clip in original video (for face tracking)
+            dynamic_tracking: If True, crop follows face frame-by-frame. If False, use static crop.
 
         Returns:
             Cropped and resized clip in 9:16 format
         """
-        # Apply crop
-        x1, y1, x2, y2 = crop_box.to_moviepy_crop()
-        cropped = clip.cropped(x1, y1, x2, y2)
+        if not dynamic_tracking:
+            # Legacy static crop mode
+            crop_box = self.face_tracker.get_optimal_crop_box(start_time, start_time + clip.duration)
+            x1, y1, x2, y2 = crop_box.to_moviepy_crop()
+            cropped = clip.cropped(x1, y1, x2, y2)
+            resized = cropped.resized(self.target_resolution)
+            return resized
 
-        # Resize to target resolution
-        resized = cropped.resized(self.target_resolution)
+        # Dynamic tracking mode - crop follows face frame-by-frame
+        target_width, target_height = self.target_resolution
+        original_width, original_height = clip.size
 
-        return resized
+        def make_frame(t):
+            """
+            Custom frame function that crops based on face position at time t.
+            """
+            # Get absolute timestamp in original video
+            absolute_time = start_time + t
+
+            # Get dynamic crop box for this timestamp
+            crop_box = self.face_tracker.get_dynamic_crop_box_at_time(absolute_time)
+
+            # Get the frame from the source clip
+            frame = clip.get_frame(t)
+
+            # Apply crop
+            x1, y1 = crop_box.x, crop_box.y
+            x2, y2 = crop_box.x + crop_box.width, crop_box.y + crop_box.height
+
+            # Ensure crop coordinates are within bounds
+            x1 = max(0, min(x1, original_width))
+            y1 = max(0, min(y1, original_height))
+            x2 = max(0, min(x2, original_width))
+            y2 = max(0, min(y2, original_height))
+
+            # Crop the frame
+            cropped_frame = frame[y1:y2, x1:x2]
+
+            # Resize to target resolution using cv2 for better performance
+            import cv2
+            resized_frame = cv2.resize(cropped_frame, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
+
+            return resized_frame
+
+        # Import VideoClip for creating custom clip
+        from moviepy import VideoClip
+
+        # Create new clip with dynamic cropping
+        dynamic_clip = VideoClip(frame_function=make_frame, duration=clip.duration)
+
+        # Preserve audio from original clip
+        if hasattr(clip, 'audio') and clip.audio is not None:
+            dynamic_clip = dynamic_clip.with_audio(clip.audio)
+
+        # Set fps to match original
+        dynamic_clip.fps = clip.fps
+
+        return dynamic_clip
 
     def apply_crossfade_transition(
         self,
@@ -239,7 +291,7 @@ class ClipGenerator:
         """
         if duration <= 0 or duration >= min(clip1.duration, clip2.duration):
             # No transition, just concatenate
-            return concatenate_videoclips([clip1, clip2])
+            return concatenate_videoclips([clip1, clip2], method="compose")
 
         # Split clips at transition point
         clip1_main = clip1.subclipped(0, clip1.duration - duration)
@@ -254,12 +306,21 @@ class ClipGenerator:
         # Composite the fade region
         fade_composite = CompositeVideoClip([clip1_fade, clip2_fade])
 
-        # IMPORTANT: Handle audio crossfade
-        # Mix audio from both clips during transition
+        # IMPORTANT: Handle audio crossfade with proper mixing
+        # Mix audio from both clips during transition with volume ramping
         if hasattr(clip1_fade, 'audio') and clip1_fade.audio is not None:
             if hasattr(clip2_fade, 'audio') and clip2_fade.audio is not None:
-                # Both have audio - use the fade-in clip's audio (simpler than mixing)
-                fade_composite = fade_composite.with_audio(clip2_fade.audio)
+                # Both have audio - perform proper crossfade mixing
+                # Import audio effects
+                from moviepy import afx, CompositeAudioClip
+
+                # Fade out clip1 audio and fade in clip2 audio
+                audio1_fadeout = clip1_fade.audio.with_effects([afx.AudioFadeOut(duration)])
+                audio2_fadein = clip2_fade.audio.with_effects([afx.AudioFadeIn(duration)])
+
+                # Mix both audio streams
+                mixed_audio = CompositeAudioClip([audio1_fadeout, audio2_fadein])
+                fade_composite = fade_composite.with_audio(mixed_audio)
             else:
                 # Only clip1 has audio
                 fade_composite = fade_composite.with_audio(clip1_fade.audio)
@@ -272,7 +333,26 @@ class ClipGenerator:
         # Filter out zero-duration clips
         segments = [s for s in segments if s.duration > 0]
 
-        return concatenate_videoclips(segments)
+        # Ensure all segments have audio for proper concatenation
+        result = concatenate_videoclips(segments, method="compose")
+
+        # Verify audio is preserved
+        if result.audio is None:
+            logger.warning("Crossfade concatenation lost audio, attempting recovery")
+            # Check if original clips had audio
+            if hasattr(clip1, 'audio') and clip1.audio is not None:
+                logger.info("Restoring audio from source clips")
+                # Use audio from full original clips
+                audio_clips = []
+                if hasattr(clip1, 'audio') and clip1.audio is not None:
+                    audio_clips.append(clip1.audio)
+                if hasattr(clip2, 'audio') and clip2.audio is not None:
+                    audio_clips.append(clip2.audio.with_start(clip1.duration))
+                if audio_clips:
+                    from moviepy import CompositeAudioClip
+                    result = result.with_audio(CompositeAudioClip(audio_clips))
+
+        return result
 
     def generate_mixed_mode_clip(
         self,
@@ -329,9 +409,8 @@ class ClipGenerator:
                 # Horizontal content mode - preserve aspect ratio with blurred bg
                 processed = self.create_horizontal_content_clip(segment_clip)
             else:
-                # Face tracking mode - crop to 9:16
-                crop_box = self.face_tracker.get_optimal_crop_box(seg_start, seg_end)
-                processed = self.create_face_tracked_clip(segment_clip, crop_box)
+                # Face tracking mode - crop to 9:16 with dynamic tracking
+                processed = self.create_face_tracked_clip(segment_clip, seg_start)
 
             segment_clips.append(processed)
 
@@ -363,7 +442,20 @@ class ClipGenerator:
             if len(clips_with_transitions) == 1:
                 final_clip = clips_with_transitions[0]
             else:
-                final_clip = concatenate_videoclips(clips_with_transitions)
+                # Validate all clips have audio before concatenation
+                clips_without_audio = [
+                    i for i, clip in enumerate(clips_with_transitions)
+                    if not hasattr(clip, 'audio') or clip.audio is None
+                ]
+                if clips_without_audio:
+                    logger.warning(f"Warning: {len(clips_without_audio)} clips missing audio before concatenation")
+
+                # Use "compose" method to ensure audio is properly handled
+                final_clip = concatenate_videoclips(clips_with_transitions, method="compose")
+
+                # Verify audio was preserved
+                if final_clip.audio is None:
+                    logger.error("Concatenation lost audio! This should not happen.")
 
         return final_clip
 
@@ -387,14 +479,8 @@ class ClipGenerator:
         # Extract segment
         clip = video.subclipped(viral_moment.start_time, viral_moment.end_time)
 
-        # Get crop box
-        crop_box = self.face_tracker.get_optimal_crop_box(
-            viral_moment.start_time,
-            viral_moment.end_time
-        )
-
-        # Apply crop and resize
-        clip = self.create_face_tracked_clip(clip, crop_box)
+        # Apply dynamic face-tracked crop and resize
+        clip = self.create_face_tracked_clip(clip, viral_moment.start_time)
 
         return clip
 
@@ -497,6 +583,17 @@ class ClipGenerator:
             # Get optimal codec settings with full FFmpeg parameters
             codec_settings = get_video_codec_settings(use_gpu=self.use_gpu)
 
+            # Add keyframe parameters to prevent freezing
+            # Force keyframes every 1 second (30 frames at 30fps) for consistent playback
+            keyframe_params = [
+                '-g', '30',           # GOP size: keyframe every 30 frames (1 second)
+                '-keyint_min', '30',  # Minimum keyframe interval
+                '-sc_threshold', '0'  # Disable scene detection for consistent keyframes
+            ]
+
+            # Merge codec params with keyframe params
+            ffmpeg_params = codec_settings.get('ffmpeg_params', []) + keyframe_params
+
             try:
                 # Attempt export with optimal codec settings
                 clip.write_videofile(
@@ -504,7 +601,7 @@ class ClipGenerator:
                     codec=codec_settings['codec'],
                     audio_codec="aac",
                     fps=30,
-                    ffmpeg_params=codec_settings.get('ffmpeg_params', []),
+                    ffmpeg_params=ffmpeg_params,
                     threads=4,
                     logger=None  # Disable MoviePy's verbose logging
                 )
@@ -513,12 +610,14 @@ class ClipGenerator:
                 if codec_settings['codec'] != 'libx264':
                     logger.warning(f"Hardware encoding failed ({e}), falling back to CPU encoding")
                     fallback_settings = get_video_codec_settings(use_gpu=False)
+                    # Add keyframe params to fallback as well
+                    fallback_ffmpeg_params = fallback_settings.get('ffmpeg_params', []) + keyframe_params
                     clip.write_videofile(
                         str(output_path),
                         codec=fallback_settings['codec'],
                         audio_codec="aac",
                         fps=30,
-                        ffmpeg_params=fallback_settings.get('ffmpeg_params', []),
+                        ffmpeg_params=fallback_ffmpeg_params,
                         threads=4,
                         logger=None
                     )
