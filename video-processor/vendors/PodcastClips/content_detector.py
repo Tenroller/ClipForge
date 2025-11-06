@@ -118,28 +118,28 @@ class ContentModeDetector:
             raise ValueError(f"Could not open video: {video_path}")
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        video_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         if end_time is None:
             end_time = total_frames / fps
 
         cap.release()
 
-        # Step 1: Create initial timeline based on face detection
-        face_timeline = self._create_face_detection_timeline(
-            face_positions, fps, start_time, end_time
+        # Step 1: Analyze ALL frames for content presence (content-first approach)
+        content_scores = self._analyze_all_frames_for_content(
+            video_path, fps, start_time, end_time,
+            face_positions, video_width, video_height,
+            progress_callback
         )
 
-        # Step 2: Analyze frames for content detection (optional OCR/visual analysis)
-        if self.use_ocr:
-            content_scores = self._analyze_content_frames(
-                video_path, face_timeline, fps, progress_callback
-            )
-            # Refine timeline with content scores
-            face_timeline = self._refine_timeline_with_content(
-                face_timeline, content_scores
-            )
+        # Step 2: Create timeline based on content scores AND face detection
+        segments = self._create_content_first_timeline(
+            content_scores, face_positions, fps, start_time, end_time,
+            video_width, video_height
+        )
 
         # Step 3: Apply smoothing to avoid rapid mode switching
-        segments = self._smooth_segments(face_timeline, fps)
+        segments = self._smooth_segments(segments, fps)
 
         # Step 4: Merge short segments below minimum duration
         segments = self._merge_short_segments(segments)
@@ -148,6 +148,253 @@ class ContentModeDetector:
         self._log_segment_summary(segments)
 
         return segments
+
+    def _analyze_all_frames_for_content(
+        self,
+        video_path: str,
+        fps: float,
+        start_time: float,
+        end_time: float,
+        face_positions: Dict[float, FaceBox],
+        video_width: int,
+        video_height: int,
+        progress_callback: Optional[callable] = None
+    ) -> Dict[float, float]:
+        """
+        Analyze ALL frames for content presence (not just face-loss frames).
+
+        This is the PRIMARY detection method - content presence matters more than face absence.
+
+        Args:
+            video_path: Path to video
+            fps: Frame rate
+            start_time: Start time
+            end_time: End time
+            face_positions: Face detections (for context)
+            video_width: Video width
+            video_height: Video height
+            progress_callback: Progress callback
+
+        Returns:
+            Dictionary mapping timestamp -> content score (0-1)
+        """
+        content_scores = {}
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            logger.warning(f"Could not open video for content analysis: {video_path}")
+            return content_scores
+
+        try:
+            # Sample frames throughout the entire time range
+            # Use same sampling rate as face detection (every ~5 frames at 30fps = ~6 samples/sec)
+            sample_interval = 5.0 / fps
+            sample_times = []
+            t = start_time
+            while t <= end_time:
+                sample_times.append(t)
+                t += sample_interval
+
+            total_samples = len(sample_times)
+            samples_done = 0
+
+            logger.info(f"Analyzing {total_samples} frames for content detection")
+
+            for sample_time in sample_times:
+                frame_num = int(sample_time * fps)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ret, frame = cap.read()
+
+                if ret:
+                    # Calculate content score for this frame
+                    content_score = self._calculate_content_score(frame)
+
+                    # Adjust score based on face size (if face present)
+                    face_at_time = face_positions.get(sample_time)
+                    if face_at_time:
+                        face_area_ratio = face_at_time.area / (video_width * video_height)
+                        # If face is small (<15% of frame), boost content score
+                        if face_area_ratio < 0.15:
+                            content_score = min(1.0, content_score * 1.3)
+                            logger.debug(f"Small face detected at {sample_time:.1f}s ({face_area_ratio*100:.1f}% of frame), boosting content score to {content_score:.2f}")
+
+                    content_scores[sample_time] = content_score
+
+                samples_done += 1
+                if progress_callback and samples_done % 20 == 0:
+                    progress = int((samples_done / total_samples) * 100)
+                    progress_callback(progress, f"Analyzing content: {progress}%")
+
+        finally:
+            cap.release()
+
+        logger.info(f"Content analysis complete: {len(content_scores)} frames analyzed")
+        return content_scores
+
+    def _create_content_first_timeline(
+        self,
+        content_scores: Dict[float, float],
+        face_positions: Dict[float, FaceBox],
+        fps: float,
+        start_time: float,
+        end_time: float,
+        video_width: int,
+        video_height: int
+    ) -> List[ContentSegment]:
+        """
+        Create timeline with content detection as PRIMARY factor.
+
+        Decision logic:
+        1. High content score (>0.6) → HORIZONTAL mode (even with face present)
+        2. Low content score (<0.3) + face present → FACE mode
+        3. Medium content score (0.3-0.6) → check face size:
+           - Small face (<20% of frame) → HORIZONTAL mode
+           - Large face (>=20% of frame) → FACE mode
+        4. No data → default to FACE mode
+
+        Args:
+            content_scores: Timestamp -> content score mapping
+            face_positions: Timestamp -> face box mapping
+            fps: Frame rate
+            start_time: Start time
+            end_time: End time
+            video_width: Video width
+            video_height: Video height
+
+        Returns:
+            List of content segments
+        """
+        if not content_scores and not face_positions:
+            # No data at all - default to horizontal
+            return [ContentSegment(start_time, end_time, ContentMode.HORIZONTAL, 0.5)]
+
+        segments = []
+        current_mode = ContentMode.FACE
+        segment_start = start_time
+
+        # Get all timestamps and sort
+        all_timestamps = sorted(set(list(content_scores.keys()) + list(face_positions.keys())))
+        all_timestamps = [ts for ts in all_timestamps if start_time <= ts <= end_time]
+
+        if not all_timestamps:
+            return [ContentSegment(start_time, end_time, ContentMode.FACE, 0.5)]
+
+        # Thresholds for content detection
+        HIGH_CONTENT_THRESHOLD = 0.6  # Strong content indicator
+        LOW_CONTENT_THRESHOLD = 0.3   # Weak content indicator
+        SMALL_FACE_THRESHOLD = 0.20   # Face area ratio threshold
+
+        for i, timestamp in enumerate(all_timestamps):
+            # Get content score and face info for this timestamp
+            content_score = content_scores.get(timestamp, 0.0)
+            face_box = face_positions.get(timestamp)
+
+            # Calculate face area ratio if face present
+            face_area_ratio = 0.0
+            if face_box:
+                face_area_ratio = face_box.area / (video_width * video_height)
+
+            # Determine mode based on content-first logic
+            should_be_horizontal = False
+
+            if content_score > HIGH_CONTENT_THRESHOLD:
+                # Strong content signal → horizontal mode
+                should_be_horizontal = True
+                logger.debug(f"[{timestamp:.1f}s] High content score: {content_score:.2f} → HORIZONTAL")
+
+            elif content_score < LOW_CONTENT_THRESHOLD:
+                # Weak content signal
+                if face_box:
+                    # Face present → face mode
+                    should_be_horizontal = False
+                    logger.debug(f"[{timestamp:.1f}s] Low content ({content_score:.2f}) + face → FACE")
+                else:
+                    # No face, low content → could be transition, check context
+                    # Look ahead/behind for pattern
+                    should_be_horizontal = current_mode == ContentMode.HORIZONTAL
+                    logger.debug(f"[{timestamp:.1f}s] Low content, no face → maintain {current_mode.value}")
+
+            else:
+                # Medium content score (0.3-0.6) → check face size
+                if face_box:
+                    if face_area_ratio < SMALL_FACE_THRESHOLD:
+                        # Small face + medium content → horizontal mode (likely PiP)
+                        should_be_horizontal = True
+                        logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}) + small face ({face_area_ratio*100:.1f}%) → HORIZONTAL")
+                    else:
+                        # Large face + medium content → face mode
+                        should_be_horizontal = False
+                        logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}) + large face ({face_area_ratio*100:.1f}%) → FACE")
+                else:
+                    # No face, medium content → horizontal mode
+                    should_be_horizontal = True
+                    logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}), no face → HORIZONTAL")
+
+            # Determine target mode
+            target_mode = ContentMode.HORIZONTAL if should_be_horizontal else ContentMode.FACE
+
+            # Check if mode changed
+            if target_mode != current_mode:
+                # Mode switch - save previous segment
+                if timestamp > segment_start:
+                    confidence = self._calculate_segment_confidence(
+                        content_scores, segment_start, timestamp
+                    )
+                    segments.append(ContentSegment(
+                        segment_start, timestamp, current_mode, confidence
+                    ))
+                    logger.info(f"Segment created: {segment_start:.1f}s-{timestamp:.1f}s [{current_mode.value}] confidence={confidence:.2f}")
+
+                # Start new segment
+                segment_start = timestamp
+                current_mode = target_mode
+
+        # Add final segment
+        if segment_start < end_time:
+            confidence = self._calculate_segment_confidence(
+                content_scores, segment_start, end_time
+            )
+            segments.append(ContentSegment(
+                segment_start, end_time, current_mode, confidence
+            ))
+            logger.info(f"Final segment: {segment_start:.1f}s-{end_time:.1f}s [{current_mode.value}] confidence={confidence:.2f}")
+
+        return segments
+
+    def _calculate_segment_confidence(
+        self,
+        content_scores: Dict[float, float],
+        start_time: float,
+        end_time: float
+    ) -> float:
+        """
+        Calculate confidence score for a segment based on content scores.
+
+        Args:
+            content_scores: Timestamp -> content score mapping
+            start_time: Segment start
+            end_time: Segment end
+
+        Returns:
+            Confidence score (0-1)
+        """
+        scores_in_range = [
+            score for ts, score in content_scores.items()
+            if start_time <= ts <= end_time
+        ]
+
+        if not scores_in_range:
+            return 0.7  # Default moderate confidence
+
+        # High consistency = high confidence
+        avg_score = np.mean(scores_in_range)
+        std_score = np.std(scores_in_range) if len(scores_in_range) > 1 else 0.0
+
+        # Low standard deviation = consistent signal = high confidence
+        consistency_score = 1.0 - min(std_score, 0.3) / 0.3
+        confidence = 0.5 + (consistency_score * 0.5)
+
+        return min(1.0, max(0.5, confidence))
 
     def _create_face_detection_timeline(
         self,
