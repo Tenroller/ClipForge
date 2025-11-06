@@ -1499,7 +1499,7 @@ def suggest_subject_alias(req: SuggestSubjectRequest) -> Dict[str, str]:
 def list_models() -> Dict[str, List[str]]:
     """List available Gemini models using API discovery."""
     try:
-        import google.generativeai as genai
+        from google import genai
         
         # Get API key from environment
         api_key = os.getenv("GEMINI_API_KEY")

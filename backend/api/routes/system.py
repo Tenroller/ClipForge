@@ -92,3 +92,88 @@ def cleanup_temp_files() -> Dict[str, Any]:
     except Exception:
         # Let FastAPI convert to 500 with stacktrace logged by server
         raise
+
+
+# YouTube cache management endpoints
+@router.get("/cache/youtube/stats", summary="Get YouTube cache statistics")
+def get_youtube_cache_stats() -> Dict[str, Any]:
+    """Get statistics about the YouTube video cache."""
+    try:
+        from ...utils.youtube_cache import get_cache_stats
+
+        stats = get_cache_stats()
+        return stats
+    except Exception:
+        raise
+
+
+@router.get("/cache/youtube/videos", summary="List cached YouTube videos")
+def list_cached_videos(limit: int = 100, offset: int = 0, order_by: str = "last_used_at") -> Dict[str, Any]:
+    """
+    List cached YouTube videos.
+
+    Args:
+        limit: Maximum number of videos to return (default: 100)
+        offset: Number of videos to skip (default: 0)
+        order_by: Sort order - "last_used_at", "created_at", or "download_count" (default: "last_used_at")
+    """
+    try:
+        from ...database import get_job_store
+
+        job_store = get_job_store()
+        videos = job_store.list_youtube_videos(limit=limit, offset=offset, order_by=order_by)
+
+        return {
+            "videos": videos,
+            "count": len(videos),
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception:
+        raise
+
+
+@router.post("/cache/youtube/cleanup", summary="Trigger YouTube cache cleanup")
+def trigger_youtube_cache_cleanup(days: int = 30, dry_run: bool = False) -> Dict[str, Any]:
+    """
+    Manually trigger YouTube cache cleanup.
+
+    Args:
+        days: Delete videos unused for this many days (default: 30)
+        dry_run: If true, only report what would be deleted without actually deleting (default: false)
+    """
+    try:
+        from ...utils.youtube_cache import cleanup_old_cache
+
+        result = cleanup_old_cache(days=days, dry_run=dry_run)
+        return result
+    except Exception:
+        raise
+
+
+@router.get("/cache/youtube/service/status", summary="Get cache cleanup service status")
+def get_cache_service_status() -> Dict[str, Any]:
+    """Get the status of the automatic cache cleanup service."""
+    try:
+        from ...services.cache_cleanup import get_cleanup_service
+
+        service = get_cleanup_service()
+        return service.get_status()
+    except Exception:
+        raise
+
+
+@router.post("/cache/youtube/service/run", summary="Run cache cleanup now")
+def run_cache_cleanup_now() -> Dict[str, Any]:
+    """Manually trigger the cache cleanup service to run immediately."""
+    try:
+        from ...services.cache_cleanup import get_cleanup_service
+
+        service = get_cleanup_service()
+        stats = service.run_now()
+        return {
+            "message": "Cache cleanup completed",
+            "stats": stats
+        }
+    except Exception:
+        raise

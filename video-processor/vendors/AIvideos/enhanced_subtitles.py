@@ -11,12 +11,16 @@ import uuid
 import json
 import argparse
 import ffmpeg
+import sys
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any, Union
 from dataclasses import dataclass, asdict
 import pysubs2
 import whisper_timestamped as whisper
 from moviepy import VideoFileClip
+
+# Add path to access video-processor utilities
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 
 @dataclass
@@ -145,7 +149,7 @@ def create_ass_file(word_level_data: dict, ass_path: str, config: SubtitleConfig
 
         # Import centralized color utilities
         try:
-            from ...utils.colors import hex_to_rgb as centralized_hex_to_rgb
+            from utils.colors import hex_to_rgb as centralized_hex_to_rgb
         except ImportError:
             # Fallback to local implementation if centralized utils not available
             def centralized_hex_to_rgb(hex_color: str) -> tuple:

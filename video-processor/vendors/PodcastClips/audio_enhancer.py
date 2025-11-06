@@ -294,7 +294,7 @@ class AudioEnhancer:
             audio_array = audio.to_soundarray(fps=audio.fps)
 
             # Normalize to -14 LUFS equivalent
-            normalized = self._normalize_audio(audio_array, sample_rate=audio.fps, target_loudness=-14.0)
+            normalized = self._normalize_audio(audio_array, target_loudness=-14.0)
             normalized = self._limit_peaks(normalized)
 
             # Create new audio

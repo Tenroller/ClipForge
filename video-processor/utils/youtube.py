@@ -147,7 +147,7 @@ def _build_robust_hq_ydl_opts(output_template: str) -> Dict[str, Any]:
     return {
         "format": (
             "best[height<=1080]/"                                    # Single file 1080p (no merge needed)
-            "bestvideo[height<=1080]+worst[acodec=none]/"            # Video only if audio fails
+            "bestvideo[height<=1080]+bestaudio/"                     # Merged 1080p with audio
             "best[height<=720]/"                                     # Fallback to 720p
             "best"                                                   # Last resort
         ),
@@ -236,7 +236,7 @@ def _build_emergency_ydl_opts(output_template: str) -> Dict[str, Any]:
     }
 
 
-def download_video(url: str, output_dir: str, max_retries: int = 3, sleep_seconds: float = 1.5) -> DownloadResult:
+def download_video(url: str, output_dir: str, max_retries: int = 3, sleep_seconds: float = 1.5, use_cache: bool = True) -> DownloadResult:
     """Download a YouTube video returning structured metadata.
 
     Uses progressive quality-preserving fallback strategies for maximum reliability:
@@ -245,8 +245,18 @@ def download_video(url: str, output_dir: str, max_retries: int = 3, sleep_second
     3. Robust HQ: 1080p single file (no merge complexity)
     4. Medium Quality: 720p with error tolerance
     5. Emergency: Any available format with minimal processing
-    
+
     Prioritizes maintaining quality while handling postprocessing errors intelligently.
+
+    Args:
+        url: YouTube video URL
+        output_dir: Directory to save video (ignored if using cache)
+        max_retries: Maximum number of download attempts
+        sleep_seconds: Seconds to wait between retries
+        use_cache: Whether to use the shared video cache (default: True)
+
+    Returns:
+        DownloadResult with video path and metadata
     """
     try:
         import yt_dlp  # local import so environments without it fail lazily
@@ -254,6 +264,40 @@ def download_video(url: str, output_dir: str, max_retries: int = 3, sleep_second
         raise YouTubeDownloadError("yt_dlp is not installed. pip install yt-dlp") from e
 
     video_id = extract_video_id(url)
+
+    # Check cache first if enabled
+    if use_cache:
+        try:
+            from . import cache_adapter
+            cached_video = cache_adapter.check_cache(video_id)
+
+            if cached_video:
+                logger.info(f"Using cached video for {video_id}")
+                # Update usage statistics
+                cache_adapter.update_usage(video_id)
+
+                # Return cached result
+                return DownloadResult(
+                    video_path=cached_video["file_path"],
+                    title=cached_video["title"],
+                    duration=int(cached_video["duration_seconds"]) if cached_video.get("duration_seconds") else None,
+                    width=cached_video.get("width"),
+                    height=cached_video.get("height"),
+                    video_id=video_id,
+                )
+        except Exception as cache_error:
+            logger.warning(f"Cache check failed for {video_id}: {cache_error}, proceeding with download")
+
+    # Determine download directory
+    if use_cache:
+        try:
+            from . import cache_adapter
+            cache_dir = cache_adapter.get_youtube_cache_dir()
+            if cache_dir:
+                output_dir = str(cache_dir)
+        except Exception as e:
+            logger.warning(f"Failed to get cache directory: {e}, using provided output_dir")
+
     os.makedirs(output_dir, exist_ok=True)
     output_template = os.path.join(output_dir, f"{video_id}.%(ext)s")
     
@@ -339,7 +383,36 @@ def download_video(url: str, output_dir: str, max_retries: int = 3, sleep_second
                 quality_info = f"{width_val}x{height_val}" if width_val and height_val else "unknown resolution"
                 file_size = os.path.getsize(video_path) / (1024 * 1024)  # MB
                 logger.info(f"Successfully downloaded {video_id} using {strategy_name} strategy: {quality_info}, {file_size:.1f}MB")
-                
+
+                # Store in cache if enabled and not already in cache directory
+                if use_cache:
+                    try:
+                        from . import cache_adapter
+
+                        cache_dir = cache_adapter.get_youtube_cache_dir()
+                        if cache_dir:
+                            cache_dir_str = str(cache_dir)
+                            # Only store if not already in cache directory
+                            if not video_path.startswith(cache_dir_str):
+                                logger.debug(f"Video downloaded to temp location, will be referenced from {video_path}")
+                                # Note: We don't move the file since it might be used immediately
+                                # The cache stores the current path
+
+                        # Store metadata in cache database
+                        cache_adapter.store_in_cache(
+                            video_id=video_id,
+                            video_url=url,
+                            file_path=video_path,
+                            title=str(title),
+                            duration=duration_val if isinstance(duration_val, (int, float)) else None,
+                            width=int(width_val) if isinstance(width_val, (int, float)) else None,
+                            height=int(height_val) if isinstance(height_val, (int, float)) else None,
+                            calculate_hash=False  # Skip hash calculation for speed
+                        )
+                        logger.info(f"Stored video {video_id} in cache")
+                    except Exception as cache_store_error:
+                        logger.warning(f"Failed to store video in cache: {cache_store_error}")
+
                 return DownloadResult(
                     video_path=video_path,
                     title=str(title),

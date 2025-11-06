@@ -10,13 +10,17 @@ from .enhanced_subtitles import SubtitleConfig
 
 # Add path to access backend logging
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
-from ...logging_config import get_logger
+from logging_config import get_logger
 
 # Initialize logger for this module
 logger = get_logger("video_generator.ai_videos")
 
 
 from typing import List, Dict, Optional, Union, Any, cast, Tuple
+from pathlib import Path
+from datetime import timedelta
+import inspect
+
 from .utils import determine_optimal_resolution, get_target_aspect_ratio
 from moviepy import (
     VideoFileClip,
@@ -25,7 +29,33 @@ from moviepy import (
     TextClip,
     ColorClip,
     concatenate_videoclips,
+    vfx,
 )
+from moviepy.video.tools.subtitles import SubtitlesClip
+
+# Import ffmpeg locator (module-level to avoid NameError)
+try:
+    from imageio_ffmpeg import get_ffmpeg_exe  # type: ignore
+except Exception:
+    get_ffmpeg_exe = None  # type: ignore
+
+# Import termcolor for colored output
+try:
+    from termcolor import colored
+except ImportError:
+    # Fallback if termcolor is not available
+    def colored(text, color=None):
+        return text
+
+# Load environment variables
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent / ".env")
+except:
+    pass
+
+# Get AssemblyAI API key
+ASSEMBLY_AI_API_KEY = os.getenv("ASSEMBLY_AI_API_KEY")
 
 # Import centralized font utility
 try:
@@ -33,30 +63,10 @@ try:
 except ImportError:
     # Fallback for direct execution
     import sys
-    from pathlib import Path
     backend_dir = Path(__file__).resolve().parent.parent.parent
     if str(backend_dir) not in sys.path:
         sys.path.insert(0, str(backend_dir))
     from font_detection import get_font_fallback_list
-    from termcolor import colored
-    from dotenv import load_dotenv
-    from pathlib import Path
-    from datetime import timedelta
-    from moviepy import vfx
-    from moviepy.video.tools.subtitles import SubtitlesClip
-    import inspect
-    try:
-        # Use imageio-ffmpeg to reliably locate ffmpeg on all platforms
-        from imageio_ffmpeg import get_ffmpeg_exe  # type: ignore
-    except Exception:  # pragma: no cover - optional dependency resolution
-        get_ffmpeg_exe = None  # type: ignore
-
-    try:
-        load_dotenv(Path(__file__).resolve().parent / ".env")
-    except Exception:
-        load_dotenv("../.env")
-
-    ASSEMBLY_AI_API_KEY = os.getenv("ASSEMBLY_AI_API_KEY")
 
 
 def test_gpu_encoding():
@@ -67,9 +77,8 @@ def test_gpu_encoding():
         ffmpeg_path_env = os.getenv('FFMPEG_PATH')
         if ffmpeg_path_env:
             ffmpeg_cmd = ffmpeg_path_env
-        else:
-            from imageio_ffmpeg import get_ffmpeg_exe
-            ffmpeg_cmd = get_ffmpeg_exe() if get_ffmpeg_exe else 'ffmpeg'
+        elif get_ffmpeg_exe is not None:
+            ffmpeg_cmd = get_ffmpeg_exe()
 
         # Test NVENC encoding
         result = subprocess.run([
@@ -103,7 +112,7 @@ def detect_gpu_codec() -> Optional[Dict[str, Union[str, List[str]]]]:
         if ffmpeg_path_env:
             ffmpeg_cmd = ffmpeg_path_env
             print(colored(f"[i] Using FFMPEG_PATH from environment: {ffmpeg_cmd}", "blue"))
-        elif get_ffmpeg_exe:
+        elif get_ffmpeg_exe is not None:
             try:
                 ffmpeg_cmd = get_ffmpeg_exe()  # type: ignore[assignment]
             except Exception:
@@ -499,7 +508,7 @@ def combine_videos(video_paths: List[str], max_duration: int, max_clip_duration:
     # Try streaming mode first if requested
     if use_streaming:
         try:
-            from ...utils.streaming_processor import get_streaming_processor
+            from utils.streaming_processor import get_streaming_processor
             processor = get_streaming_processor()
 
             print(colored("[+] Attempting streaming video combination for memory efficiency...", "blue"))

@@ -9,10 +9,13 @@
       "Bash(npm run build:*)",
       "Bash($null)",
       "Bash(npx shadcn@latest add:*)",
-      "Bash(python test_gemini_models.py:*)",
       "Bash(python:*)",
       "Bash(npm outdated:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(pip show:*)",
+      "Bash(kill:*)",
+      "Bash(ffprobe:*)",
+      "Bash(ffmpeg:*)"
     ],
     "deny": [],
     "ask": []

@@ -7,7 +7,7 @@ from typing import Tuple, List, Optional
 from termcolor import colored
 import logging
 from dotenv import load_dotenv
-import google.generativeai as genai  # type: ignore
+from google import genai  # type: ignore
 
 # Load environment variables
 # Try loading local .env if present (vendored path)
@@ -16,16 +16,23 @@ try:
 except Exception:
     load_dotenv("../.env")
 
-# Configure Gemini
+# Configure Gemini - get API key
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if GEMINI_API_KEY:
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)  # type: ignore[attr-defined]
-    except Exception:
-        pass
-
 
 logger = logging.getLogger("video_generator")
+
+# Initialize client lazily
+_client = None
+
+def _get_client():
+    """Get or create the Gemini client."""
+    global _client
+    if _client is None and GEMINI_API_KEY:
+        try:
+            _client = genai.Client(api_key=GEMINI_API_KEY)
+        except Exception as e:
+            logger.error(f"Failed to create Gemini client: {e}")
+    return _client
 
 
 def generate_response(prompt: str, ai_model: str) -> str:
@@ -47,11 +54,22 @@ def generate_response(prompt: str, ai_model: str) -> str:
     model_name = ai_model or 'gemini-2.0-flash'
     try:
         logger.info("gemini.generate_response: start", extra={"ai_model": model_name, "prompt_len": len(prompt)})
-        model = genai.GenerativeModel(model_name)  # type: ignore[attr-defined]
-        response_model = model.generate_content(prompt)  # type: ignore[call-arg]
+
+        # Get the client
+        client = _get_client()
+        if not client:
+            raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
+
+        # Use new API: client.models.generate_content
+        response_model = client.models.generate_content(
+            model=model_name,
+            contents=prompt
+        )
+
+        # Extract text from response
         response = getattr(response_model, 'text', None)
         if not response:
-            # Some SDK versions return a list of candidates/parts
+            # Try alternative attribute paths
             try:
                 response = response_model.candidates[0].content.parts[0].text  # type: ignore[attr-defined]
             except Exception:

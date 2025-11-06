@@ -5,6 +5,8 @@ Handles video cutting, cropping to 9:16 format, and final composition.
 """
 
 import logging
+import platform
+import sys
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
 from moviepy import VideoFileClip, CompositeVideoClip
@@ -14,6 +16,10 @@ import threading
 
 from .face_tracker import FaceTracker, CropBox
 from .subtitle_generator import SubtitleGenerator
+
+# Import codec detection from AIvideos
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from AIvideos.video import get_video_codec_settings
 
 logger = logging.getLogger(__name__)
 
@@ -177,18 +183,37 @@ class ClipGenerator:
             # Export video
             logger.info(f"Exporting clip to: {output_path}")
 
-            # Determine codec based on GPU availability
-            codec = "h264_nvenc" if self.use_gpu else "libx264"
+            # Get optimal codec settings with full FFmpeg parameters
+            codec_settings = get_video_codec_settings(use_gpu=self.use_gpu)
 
-            clip.write_videofile(
-                str(output_path),
-                codec=codec,
-                audio_codec="aac",
-                fps=30,
-                preset="fast",
-                threads=4,
-                logger=None  # Disable MoviePy's verbose logging
-            )
+            try:
+                # Attempt export with optimal codec settings
+                clip.write_videofile(
+                    str(output_path),
+                    codec=codec_settings['codec'],
+                    audio_codec="aac",
+                    fps=30,
+                    ffmpeg_params=codec_settings.get('ffmpeg_params', []),
+                    threads=4,
+                    logger=None  # Disable MoviePy's verbose logging
+                )
+            except Exception as e:
+                # If hardware encoding fails, fall back to software encoding
+                if codec_settings['codec'] != 'libx264':
+                    logger.warning(f"Hardware encoding failed ({e}), falling back to CPU encoding")
+                    fallback_settings = get_video_codec_settings(use_gpu=False)
+                    clip.write_videofile(
+                        str(output_path),
+                        codec=fallback_settings['codec'],
+                        audio_codec="aac",
+                        fps=30,
+                        ffmpeg_params=fallback_settings.get('ffmpeg_params', []),
+                        threads=4,
+                        logger=None
+                    )
+                else:
+                    # Already using CPU encoding, re-raise the error
+                    raise
 
             # Clean up
             clip.close()

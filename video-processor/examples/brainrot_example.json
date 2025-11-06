@@ -1,0 +1,14 @@
+{
+  "workflow": "brainrot",
+  "description": "Example Brainrot job - creates compilation videos from YouTube source",
+  "request_data": {
+    "youtubeUrl": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    "numCompilations": 2,
+    "minDuration": 30,
+    "maxDuration": 60,
+    "maxReuse": 3,
+    "unlimited": false,
+    "generateNoBackground": true,
+    "blurredPillarboxThreshold": 0.1
+  }
+}

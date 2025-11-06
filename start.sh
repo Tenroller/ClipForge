@@ -31,7 +31,7 @@ if [ ! -d "backend" ]; then
     exit 1
 fi
 
-if [ ! -d "frontend-next" ]; then
+if [ ! -d "frontend" ]; then
     echo -e "${RED}Error: frontend-next directory not found${NC}"
     exit 1
 fi
@@ -79,7 +79,7 @@ sleep 2
 # Start Frontend (Port 3000)
 echo -e "${CYAN}[Frontend]${NC} Starting on port 3000..."
 (
-    cd frontend-next
+    cd frontend
     npm run dev 2>&1 | while IFS= read -r line; do
         echo -e "${CYAN}[Frontend]${NC} $line"
     done

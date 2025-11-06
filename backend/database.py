@@ -126,6 +126,41 @@ class Video(Base):
     )
 
 
+class YouTubeVideo(Base):
+    """YouTube video cache for tracking downloaded source videos."""
+    __tablename__ = "youtube_videos"
+
+    # Primary key - normalized YouTube video ID
+    video_id = Column(String, primary_key=True)
+
+    # Normalized URL
+    normalized_url = Column(Text, nullable=False)
+
+    # File storage
+    file_path = Column(Text, nullable=False)  # Path to cached video
+    file_size_bytes = Column(Integer)
+
+    # Video metadata
+    title = Column(String, nullable=False)
+    duration_seconds = Column(Float)
+    width = Column(Integer)
+    height = Column(Integer)
+
+    # Cache management
+    download_count = Column(Integer, default=1)  # How many jobs used this
+    last_used_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    # Integrity tracking
+    file_hash = Column(String)  # SHA256 of video file
+
+    # PostgreSQL-specific indexes for better query performance
+    __table_args__ = (
+        Index('ix_youtube_videos_last_used', 'last_used_at'),
+        Index('ix_youtube_videos_created', 'created_at'),
+    )
+
+
 class JobTombstone(Base):
     """Tracks purged/expired jobs so we can return 410 (Gone)."""
     __tablename__ = "job_tombstones"
@@ -654,6 +689,160 @@ class JobStore:
                 "unposted_count": int(unposted_count),
                 "recent_24h": int(recent),
                 "total_size_bytes": int(total_size)
+            }
+
+    # YouTube video cache management methods
+    def get_youtube_video(self, video_id: str) -> Optional[Dict[str, Any]]:
+        """Get cached YouTube video by video ID."""
+        with self._get_session() as session:
+            video = session.query(YouTubeVideo).filter(YouTubeVideo.video_id == video_id).first()
+
+            if not video:
+                return None
+
+            return {
+                "video_id": video.video_id,
+                "normalized_url": video.normalized_url,
+                "file_path": video.file_path,
+                "file_size_bytes": video.file_size_bytes,
+                "title": video.title,
+                "duration_seconds": video.duration_seconds,
+                "width": video.width,
+                "height": video.height,
+                "download_count": video.download_count,
+                "last_used_at": video.last_used_at.isoformat() if video.last_used_at is not None else None,
+                "created_at": video.created_at.isoformat() if video.created_at is not None else None,
+                "file_hash": video.file_hash
+            }
+
+    def create_youtube_video(self, video_id: str, normalized_url: str, file_path: str,
+                            title: str, duration_seconds: Optional[float] = None,
+                            width: Optional[int] = None, height: Optional[int] = None,
+                            file_size_bytes: Optional[int] = None, file_hash: Optional[str] = None) -> None:
+        """Create a new YouTube video cache entry."""
+        with self._get_session() as session:
+            video = YouTubeVideo(
+                video_id=video_id,
+                normalized_url=normalized_url,
+                file_path=file_path,
+                title=title,
+                duration_seconds=duration_seconds,
+                width=width,
+                height=height,
+                file_size_bytes=file_size_bytes,
+                file_hash=file_hash,
+                download_count=1
+            )
+            session.add(video)
+            session.commit()
+
+    def update_youtube_video_usage(self, video_id: str) -> bool:
+        """Update last_used_at and increment download_count for a cached video."""
+        with self._get_session() as session:
+            video = session.query(YouTubeVideo).filter(YouTubeVideo.video_id == video_id).first()
+            if not video:
+                return False
+
+            video.last_used_at = func.now()
+            video.download_count = (video.download_count or 0) + 1
+            session.commit()
+            return True
+
+    def list_youtube_videos(self, limit: int = 100, offset: int = 0,
+                           order_by: str = "last_used_at") -> List[Dict[str, Any]]:
+        """List cached YouTube videos."""
+        with self._get_session() as session:
+            query = session.query(YouTubeVideo)
+
+            # Order by specified column
+            if order_by == "created_at":
+                query = query.order_by(YouTubeVideo.created_at.desc())
+            elif order_by == "download_count":
+                query = query.order_by(YouTubeVideo.download_count.desc())
+            else:  # default to last_used_at
+                query = query.order_by(YouTubeVideo.last_used_at.desc())
+
+            videos = query.offset(offset).limit(limit).all()
+
+            video_list = []
+            for video in videos:
+                video_list.append({
+                    "video_id": video.video_id,
+                    "normalized_url": video.normalized_url,
+                    "file_path": video.file_path,
+                    "file_size_bytes": video.file_size_bytes,
+                    "title": video.title,
+                    "duration_seconds": video.duration_seconds,
+                    "width": video.width,
+                    "height": video.height,
+                    "download_count": video.download_count,
+                    "last_used_at": video.last_used_at.isoformat() if video.last_used_at is not None else None,
+                    "created_at": video.created_at.isoformat() if video.created_at is not None else None,
+                    "file_hash": video.file_hash
+                })
+
+            return video_list
+
+    def delete_old_youtube_videos(self, days: int = 30) -> int:
+        """Delete YouTube videos not used in the specified number of days."""
+        from datetime import datetime, timedelta, timezone
+
+        with self._get_session() as session:
+            cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+            result = session.query(YouTubeVideo).filter(
+                YouTubeVideo.last_used_at < cutoff_date
+            ).delete()
+            session.commit()
+            return result
+
+    def delete_youtube_video(self, video_id: str) -> bool:
+        """Delete a specific YouTube video cache entry."""
+        with self._get_session() as session:
+            video = session.query(YouTubeVideo).filter(YouTubeVideo.video_id == video_id).first()
+            if not video:
+                return False
+
+            session.delete(video)
+            session.commit()
+            return True
+
+    def get_youtube_cache_stats(self) -> Dict[str, Any]:
+        """Get YouTube cache statistics."""
+        with self._get_session() as session:
+            # Total cached videos
+            total = session.query(func.count(YouTubeVideo.video_id)).scalar() or 0
+
+            # Total cache size
+            total_size = session.query(func.sum(YouTubeVideo.file_size_bytes)).scalar() or 0
+
+            # Total downloads (sum of download_count)
+            total_downloads = session.query(func.sum(YouTubeVideo.download_count)).scalar() or 0
+
+            # Average downloads per video
+            avg_downloads = total_downloads / total if total > 0 else 0
+
+            # Most downloaded videos
+            top_videos = session.query(YouTubeVideo).order_by(
+                YouTubeVideo.download_count.desc()
+            ).limit(10).all()
+
+            top_list = []
+            for video in top_videos:
+                top_list.append({
+                    "video_id": video.video_id,
+                    "title": video.title,
+                    "download_count": video.download_count,
+                    "file_size_mb": round((video.file_size_bytes or 0) / (1024 * 1024), 2)
+                })
+
+            return {
+                "total_videos": int(total),
+                "total_size_bytes": int(total_size),
+                "total_size_mb": round(total_size / (1024 * 1024), 2) if total_size else 0,
+                "total_downloads": int(total_downloads),
+                "avg_downloads_per_video": round(avg_downloads, 2),
+                "cache_hit_rate": round((total_downloads - total) / total_downloads * 100, 2) if total_downloads > 0 else 0,
+                "top_videos": top_list
             }
 
 

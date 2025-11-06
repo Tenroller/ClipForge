@@ -129,11 +129,48 @@ class MetricsCollector:
             'Total cache operations',
             ['operation', 'level', 'result']
         )
-        
+
         self.cache_hit_ratio = Gauge(
             'cache_hit_ratio',
             'Cache hit ratio',
             ['level']
+        )
+
+        # YouTube cache metrics
+        self.youtube_cache_hits_total = Counter(
+            'youtube_cache_hits_total',
+            'Total YouTube video cache hits'
+        )
+
+        self.youtube_cache_misses_total = Counter(
+            'youtube_cache_misses_total',
+            'Total YouTube video cache misses'
+        )
+
+        self.youtube_cache_size_bytes = Gauge(
+            'youtube_cache_size_bytes',
+            'Total size of YouTube video cache in bytes'
+        )
+
+        self.youtube_cache_videos_count = Gauge(
+            'youtube_cache_videos_count',
+            'Number of videos in YouTube cache'
+        )
+
+        self.youtube_cache_downloads_total = Counter(
+            'youtube_cache_downloads_total',
+            'Total number of YouTube videos downloaded (cache misses)'
+        )
+
+        self.youtube_cache_cleanups_total = Counter(
+            'youtube_cache_cleanups_total',
+            'Total number of YouTube cache cleanup operations',
+            ['status']
+        )
+
+        self.youtube_cache_videos_removed = Counter(
+            'youtube_cache_videos_removed',
+            'Total number of videos removed from cache during cleanup'
         )
         
         # API key usage metrics

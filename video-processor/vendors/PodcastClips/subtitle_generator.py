@@ -5,9 +5,15 @@ Generates professional-style subtitles with word-level timing from Whisper trans
 """
 
 import logging
+import sys
+from pathlib import Path
 from typing import List, Dict, Any, Tuple
 from moviepy import TextClip, CompositeVideoClip, VideoClip
 from dataclasses import dataclass
+
+# Add parent directory to path to import font_detection
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from font_detection import get_font_fallback_list
 
 logger = logging.getLogger(__name__)
 
@@ -170,30 +176,54 @@ class SubtitleGenerator:
         else:  # bottom
             y_pos = video_height - 150  # 150px from bottom
 
+        # Get font fallback list once for all segments
+        font_choices = get_font_fallback_list()
+
         for segment in segments:
-            try:
-                # Create text clip with stroke
-                txt_clip = TextClip(
-                    segment.text,
-                    fontsize=self.font_size,
-                    color=self.color,
-                    stroke_color=self.stroke_color,
-                    stroke_width=self.stroke_width,
-                    font='Arial-Bold',
-                    method='caption',
-                    size=(video_width - 100, None),  # 50px padding on each side
-                    align='center'
-                )
+            txt_clip = None
 
-                # Set timing
-                txt_clip = txt_clip.with_start(segment.start_time)
-                txt_clip = txt_clip.with_duration(segment.duration)
-                txt_clip = txt_clip.with_position(('center', y_pos))
+            # Try each font in fallback list until one works
+            for font_choice in font_choices:
+                try:
+                    # Create text clip with stroke
+                    txt_clip = TextClip(
+                        text=segment.text,
+                        font_size=self.font_size,
+                        color=self.color,
+                        stroke_color=self.stroke_color,
+                        stroke_width=self.stroke_width,
+                        font=font_choice,
+                        method='caption',
+                        size=(video_width - 100, None),  # 50px padding on each side
+                        text_align='center'
+                    )
 
-                subtitle_clips.append(txt_clip)
+                    # Verify the clip was created successfully
+                    if txt_clip and txt_clip.w > 0 and txt_clip.h > 0:
+                        break  # Success! Use this font
+                    else:
+                        txt_clip = None
 
-            except Exception as e:
-                logger.error(f"Failed to create subtitle clip for '{segment.text}': {e}")
+                except Exception as e:
+                    logger.debug(f"Font '{font_choice}' failed for '{segment.text[:20]}...': {e}")
+                    txt_clip = None
+                    continue
+
+            # If we successfully created a text clip, add timing and position
+            if txt_clip:
+                try:
+                    # Set timing
+                    txt_clip = txt_clip.with_start(segment.start_time)
+                    txt_clip = txt_clip.with_duration(segment.duration)
+                    txt_clip = txt_clip.with_position(('center', y_pos))
+
+                    subtitle_clips.append(txt_clip)
+
+                except Exception as e:
+                    logger.error(f"Failed to set timing/position for subtitle '{segment.text}': {e}")
+                    continue
+            else:
+                logger.error(f"Failed to create subtitle clip for '{segment.text}': All fonts failed")
                 continue
 
         logger.info(f"Generated {len(subtitle_clips)} subtitle clips")

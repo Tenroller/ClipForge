@@ -32,21 +32,21 @@ def extract_word_timings_with_stable_ts(
     model_size: str = "base",
     use_gpu: bool = True,
     vad_threshold: float = 0.35,
-    refine_whisper_precision: float = 0.15
+    refine_whisper_precision: float = 0.15  # Deprecated but kept for backwards compatibility
 ) -> List[Dict[str, Any]]:
     """
     Extract word-level timings using stable-ts for enhanced precision.
-    
+
     This implements the research recommendation to use stable-ts for better
     timestamp accuracy through VAD post-processing and timestamp refinement.
-    
+
     Args:
         audio_path: Path to the audio file
         model_size: Whisper model size ("tiny", "base", "small", "medium", "large")
         use_gpu: Whether to use CUDA if available
         vad_threshold: Voice activity detection threshold (0.0-1.0)
-        refine_whisper_precision: Precision threshold for timestamp refinement
-        
+        refine_whisper_precision: (DEPRECATED) No longer used in stable-ts 2.x
+
     Returns:
         List of word timing dictionaries with enhanced timestamps
     """
@@ -89,19 +89,18 @@ def extract_word_timings_with_stable_ts(
             # Basic Whisper options
             task="transcribe",
             language=None,  # Auto-detect
-            
+
             # stable-ts specific enhancements
             vad=True,  # Enable Voice Activity Detection
             vad_threshold=vad_threshold,  # VAD sensitivity
             min_word_dur=0.1,  # Minimum word duration
-            
+
             # Word-level timing options
             word_timestamps=True,
             prepend_punctuations="\"'([{-",
             append_punctuations="\"'.。,!?::)]}、",
-            
-            # Refinement options
-            refine_whisper_precision=refine_whisper_precision,
+
+            # Refinement options (refine_whisper_precision removed in stable-ts 2.x)
             min_silence_dur=0.1  # Minimum silence duration for word boundaries
         )
         
@@ -161,11 +160,13 @@ def extract_word_timings_with_stable_ts(
             sentence_index += 1
     
     # Apply post-processing improvements if available
+    # Note: refinement API may have changed in stable-ts 2.x
     if hasattr(result, 'refine'):
         try:
             print("Applying stable-ts refinement...")
             refine_method = getattr(result, 'refine', None)
             if refine_method:
+                # Try with precision parameter (may not be supported in newer versions)
                 result = refine_method(
                     audio_path,
                     precision=refine_whisper_precision,

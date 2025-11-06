@@ -65,7 +65,8 @@ class PathManager:
             self.temp_root / "videos",
             self.temp_root / "audio",
             self.temp_root / "subtitles",
-            self.temp_root / "streaming"
+            self.temp_root / "streaming",
+            self.output_root / "shared" / "youtube_cache"
         ]
 
         for directory in directories:
@@ -378,6 +379,13 @@ def is_safe_path(path: Union[str, Path]) -> bool:
 def get_temp_file(prefix: str = "tmp", suffix: str = "", subdir: str = "") -> Path:
     """Generate a unique temporary file path."""
     return get_path_manager().get_temp_file_path(prefix, suffix, subdir)
+
+
+def get_youtube_cache_dir() -> Path:
+    """Get the YouTube video cache directory."""
+    cache_dir = get_path_manager().output_root / "shared" / "youtube_cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir
 
 
 def pushd(path: Path):

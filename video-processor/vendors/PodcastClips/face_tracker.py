@@ -81,7 +81,8 @@ class FaceTracker:
         video_path: str,
         sample_rate: int = 5,
         start_time: Optional[float] = None,
-        end_time: Optional[float] = None
+        end_time: Optional[float] = None,
+        progress_callback: Optional[callable] = None
     ) -> Dict[float, FaceBox]:
         """
         Analyze video and detect face positions at sampled frames.
@@ -91,6 +92,7 @@ class FaceTracker:
             sample_rate: Sample every Nth frame (higher = faster but less accurate)
             start_time: Optional start time in seconds (for analyzing specific segments)
             end_time: Optional end time in seconds
+            progress_callback: Optional callback function(progress_pct, message) for progress updates
 
         Returns:
             Dictionary mapping timestamps to face boxes
@@ -113,9 +115,14 @@ class FaceTracker:
         start_frame = int(start_time * fps) if start_time else 0
         end_frame = int(end_time * fps) if end_time else total_frames
 
+        # Calculate total frames to process (with sampling)
+        total_frames_to_process = (end_frame - start_frame) // sample_rate
+        logger.info(f"Will analyze {total_frames_to_process} frames (sampling every {sample_rate} frames)")
+
         face_positions = {}
         frames_processed = 0
         faces_detected = 0
+        last_progress_pct = 0
 
         try:
             for frame_num in range(start_frame, end_frame, sample_rate):
@@ -165,9 +172,21 @@ class FaceTracker:
 
                 frames_processed += 1
 
-                # Log progress every 100 frames
-                if frames_processed % 100 == 0:
-                    logger.debug(f"Processed {frames_processed} frames, detected {faces_detected} faces")
+                # Log progress every 10% or every 50 frames (whichever comes first)
+                progress_pct = int((frames_processed / total_frames_to_process) * 100)
+                if progress_pct >= last_progress_pct + 10 or frames_processed % 50 == 0:
+                    detection_rate = (faces_detected / frames_processed * 100) if frames_processed > 0 else 0
+                    message = f"Face detection: {progress_pct}% ({frames_processed}/{total_frames_to_process} frames) - {faces_detected} faces found ({detection_rate:.1f}% detection rate)"
+                    logger.info(message)
+
+                    # Call progress callback if provided
+                    if progress_callback:
+                        try:
+                            progress_callback(progress_pct, message)
+                        except Exception as e:
+                            logger.warning(f"Progress callback failed: {e}")
+
+                    last_progress_pct = progress_pct
 
         finally:
             cap.release()

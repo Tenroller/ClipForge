@@ -11,16 +11,20 @@ This approach eliminates the MoviePy performance bottleneck identified in the re
 
 import os
 import json
+import sys
 import numpy as np
 from typing import List, Dict, Tuple, Any, Optional, Union
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from moviepy import ImageSequenceClip
 
+# Add path to access video-processor utilities
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # Import centralized utilities
 try:
-    from ...utils.fonts import get_font_manager
-    from ...utils.colors import hex_to_rgb as centralized_hex_to_rgb
+    from utils.fonts import get_font_manager
+    from utils.colors import hex_to_rgb as centralized_hex_to_rgb
 except ImportError:
     # Fallback for direct execution
     import sys

@@ -35,7 +35,7 @@ def get_job_store():
     """Return stub job store for video-processor context."""
     return JobStoreStub()
 
-from .face_tracker import FaceTracker
+from .face_tracker import FaceTracker, FaceBox
 from .subtitle_generator import SubtitleGenerator
 from .clip_generator import ClipGenerator, ViralMoment
 from .thumbnail_generator import ThumbnailGenerator
@@ -117,7 +117,10 @@ class PodcastClipsProcessor:
 
             # Extract parameters
             youtube_url = parameters.get('youtubeUrl')
-            ai_model = parameters.get('aiModel', 'gemini-2.0-flash')
+            if not youtube_url:
+                raise ValueError("YouTube URL is required")
+            
+            ai_model = parameters.get('aiModel', 'gemini-2.5-pro')
             whisper_model = parameters.get('whisperModel', 'base')
             target_clip_count = parameters.get('targetClipCount', 7)
             min_duration = parameters.get('minDuration', 20)
@@ -294,31 +297,89 @@ class PodcastClipsProcessor:
             # Prepare prompt
             keywords_hint = f"\n\nPriority keywords: {', '.join(keywords)}" if keywords else ""
 
-            prompt = f"""You are analyzing a podcast transcript to identify viral-worthy short clips for social media (TikTok, Instagram Reels, YouTube Shorts).
+            prompt = f"""
+            
+            You are an expert content editor and viral-clip scout for social media (TikTok, Reels, Shorts). 
+            You will analyze the provided podcast transcript and identify the {target_count} moments with the highest viral potential.
 
-Analyze this transcript and identify {target_count} moments that have the highest viral potential. Each clip should be {min_duration}-{max_duration} seconds long (ideally 30-60s).
+            Hard rules:
+            - Return ONLY a single valid JSON array (no surrounding text, no markdown).
+            - Array must contain up to {target_count} objects, ordered best-first (highest viral potential first).
+            - Each object MUST follow the JSON schema described below exactly.
+            - Times must be floats in seconds from video start, with precision to at most 2 decimal places.
+            - Each clip's duration MUST be between {min_duration} and {max_duration} seconds inclusive; if none found, return an empty array [].
+            - Do not hallucinate words—use only transcript text provided. If a hook or caption is requested, extract or rephrase from the transcript only (short edits allowed for clarity).
+            - If a clip crosses a speaker turn, that's OK — indicate speaker change in the "notes" field.
+            - If content includes hate/illegal content, exclude it (return fewer clips or empty array).
 
-Look for moments that are:
-- Highly engaging, surprising, or thought-provoking
-- Self-contained and understandable without context
-- Emotionally resonant or controversial
-- Quotable and shareable
-- Have a strong hook in the first 3 seconds
+            Context / heuristics to use:
+            - Prefer moments with immediate hooks in the first ~3s, emotional impact (anger, laughter, awe), surprising facts, concise strong opinions, concrete advice, or controversy.
+            - Prefer lines that are quotable and make sense standalone (no long setup needed).
+            - Prefer moments with clear audio cues (laughter, applause, gasps) or an energetic delivery.
+            - Avoid long setup, multi-step lists that require prior context, and dry technical segments unless they include a surprising insight.
+            - Prioritize moments that map well to vertical video (close-up reactions, punchlines, reveals).
 
-For each moment, provide:
-1. start_time: float (seconds from video start)
-2. end_time: float (seconds)
-3. title: string (catchy title, max 60 chars)
-4. reason: string (why it's viral-worthy, 1-2 sentences)
-5. hook: string (the attention-grabbing first sentence)
+            Keywords (optional): {keywords_hint}
 
-Return ONLY a valid JSON array of moments, ordered by viral potential (best first).
-{keywords_hint}
+            Transcript (do not change): 
+            {transcript_text}
 
-Transcript:
-{transcript_text}
+            JSON output requirements (schema):
+            Return a JSON array of objects with these fields (exact names and types):
 
-JSON output:"""
+            [
+            {{
+                'start_time': float,          // seconds (>=0), 2 decimal precision
+                'end_time': float,            // seconds (> start_time), 2 decimal precision
+                'duration': float,            // end_time - start_time
+                'title': string,              // catchy title, max 60 chars
+                'reason': string,             // 1-2 sentences why it will go viral (use transcript lines to justify)
+                'hook': string,               // attention-grabbing first sentence that should play immediately (max 120 chars)
+                'viral_score': integer,       // 0-100 (higher is more viral potential)
+                'confidence': float,          // 0.0-1.0 (model confidence in selection)
+                'caption': string,            // share caption / subtitle (<= 150 chars)
+                'tags': [string],             // up to 6 tags/hashtags (no '#'), e.g. ["celebrity","take"]
+                'thumbnail_text': string,     // short text for thumbnail (<=25 chars)
+                'recommended_crop': string,   // "close-up" | "mid" | "wide" | "focus-on-person-X"
+                'cut_padding_before': float,  // suggested extra seconds to include before start (0.0-2.0)
+                'cut_padding_after': float,   // suggested extra seconds to include after end (0.0-2.0)
+                'subtitles': string,          // exact transcript excerpt for the clip (max 300 chars)
+                'notes': string               // optional: speaker changes, profanity warnings, or fallback suggestions
+            }},
+
+            ]
+
+            Additional instructions:
+            - Compute "duration" exactly as end_time - start_time.
+            - Keep "hook" short and commanding — it will be the first line shown/said.
+            - Make "caption" usable as social post copy; include one emoji if it helps.
+            - Provide tags that match the moment's theme.
+            - If you cannot find {{target_count}} valid moments, return as many as you can (possibly zero).
+            - If transcript language is not English, produce hook/caption in the transcript language. If mixed, keep each clip consistent with the language used in that clip.
+
+            Example of valid single-element JSON array (for reference only — DO NOT output this example):
+            [{{
+            'start_time': 12.50,
+            'end_time': 40.00,
+            'duration': 27.5,
+            'title': "Why we quit our jobs",
+            'reason': "Surprising confession + emotional honesty makes this relatable and spark debate.",
+            'hook': "I actually quit my job with zero savings.",
+            'viral_score': 92,
+            'confidence': 0.88,
+            'caption': "He quit with $0 and found freedom 😳",
+            'tags': ["work","life","career"],
+            'thumbnail_text': "Quit w/ $0",
+            'recommended_crop': "close-up",
+            'cut_padding_before': 0.8,
+            'cut_padding_after': 1.2,
+            'subtitles': "I actually quit my job with zero savings, and it was the best decision I ever made.",
+            'notes': "laughter at end; contains a short profanity"
+            }}]
+
+            Now output the JSON array.
+            
+            """
 
             logger.info(f"Sending transcript to {ai_model} for analysis")
 
@@ -400,7 +461,12 @@ JSON output:"""
                 logger.info("Found existing face detection data")
                 # Initialize face tracker with existing data
                 self.face_tracker = FaceTracker(use_gpu=use_gpu)
-                self.face_tracker.face_positions = existing.get('face_positions', {})
+                # Convert string keys back to float and reconstruct FaceBox objects
+                face_positions_data = existing.get('face_positions', {})
+                self.face_tracker.face_positions = {
+                    float(k): FaceBox(**v) if isinstance(v, dict) else v
+                    for k, v in face_positions_data.items()
+                }
                 self.face_tracker.video_width = existing.get('video_width', 1920)
                 self.face_tracker.video_height = existing.get('video_height', 1080)
                 return
@@ -408,7 +474,18 @@ JSON output:"""
             logger.info("Starting face detection analysis")
 
             self.face_tracker = FaceTracker(use_gpu=use_gpu)
-            face_positions = self.face_tracker.analyze_video(video_path, sample_rate=5)
+
+            # Define progress callback to update job status
+            def face_detection_progress(progress_pct: int, message: str):
+                # Map face detection progress (0-100%) to job progress (60-70%)
+                job_progress = 60 + int(progress_pct * 0.1)
+                self.update_progress("face_detection", job_progress, message)
+
+            face_positions = self.face_tracker.analyze_video(
+                video_path,
+                sample_rate=5,
+                progress_callback=face_detection_progress
+            )
 
             logger.info(f"Face detection complete: {len(face_positions)} positions detected")
 
@@ -461,6 +538,16 @@ JSON output:"""
         self.update_progress("clip_generation", 75, f"Generating {len(viral_moments)} clips")
 
         try:
+            # Ensure face tracker is available (fallback to basic instance if needed)
+            if self.face_tracker is None:
+                logger.warning("Face tracker not available, initializing fallback instance")
+                self.face_tracker = FaceTracker(use_gpu=True)
+
+            # Ensure subtitle generator is available (fallback to basic instance if needed)
+            if self.subtitle_generator is None:
+                logger.warning("Subtitle generator not available, initializing fallback instance")
+                self.subtitle_generator = SubtitleGenerator()
+
             # Initialize clip generator
             self.clip_generator = ClipGenerator(
                 face_tracker=self.face_tracker,
