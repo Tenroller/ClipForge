@@ -194,6 +194,11 @@ class ClipGenerator:
         if hasattr(clip, 'audio') and clip.audio is not None:
             final_clip = final_clip.with_audio(clip.audio)
 
+        # Ensure FPS is preserved from source clip
+        source_fps = getattr(clip, 'fps', 30)
+        if not hasattr(final_clip, 'fps') or final_clip.fps is None:
+            final_clip = final_clip.with_fps(source_fps)
+
         return final_clip
 
     def create_face_tracked_clip(
@@ -260,15 +265,16 @@ class ClipGenerator:
         # Import VideoClip for creating custom clip
         from moviepy import VideoClip
 
-        # Create new clip with dynamic cropping
+        # Get source FPS (or default to 30)
+        source_fps = getattr(clip, 'fps', 30)
+
+        # Create new clip with dynamic cropping and proper FPS
         dynamic_clip = VideoClip(frame_function=make_frame, duration=clip.duration)
+        dynamic_clip = dynamic_clip.with_fps(source_fps)
 
         # Preserve audio from original clip
         if hasattr(clip, 'audio') and clip.audio is not None:
             dynamic_clip = dynamic_clip.with_audio(clip.audio)
-
-        # Set fps to match original
-        dynamic_clip.fps = clip.fps
 
         return dynamic_clip
 
@@ -450,6 +456,14 @@ class ClipGenerator:
                 if clips_without_audio:
                     logger.warning(f"Warning: {len(clips_without_audio)} clips missing audio before concatenation")
 
+                # Ensure all clips have the same FPS to prevent freezing
+                target_fps = getattr(clips_with_transitions[0], 'fps', 30)
+                for i, clip in enumerate(clips_with_transitions):
+                    clip_fps = getattr(clip, 'fps', None)
+                    if clip_fps is None or clip_fps != target_fps:
+                        logger.warning(f"Clip {i} has mismatched FPS ({clip_fps}), normalizing to {target_fps}")
+                        clips_with_transitions[i] = clip.with_fps(target_fps)
+
                 # Use "compose" method to ensure audio is properly handled
                 final_clip = concatenate_videoclips(clips_with_transitions, method="compose")
 
@@ -583,24 +597,30 @@ class ClipGenerator:
             # Get optimal codec settings with full FFmpeg parameters
             codec_settings = get_video_codec_settings(use_gpu=self.use_gpu)
 
+            # Get the clip's FPS (preserve source FPS to avoid freezing)
+            clip_fps = getattr(clip, 'fps', 30)
+
             # Add keyframe parameters to prevent freezing
-            # Force keyframes every 1 second (30 frames at 30fps) for consistent playback
+            # Force keyframes every 1 second (adjust based on actual FPS)
+            keyframe_interval = int(clip_fps)  # 1 keyframe per second
             keyframe_params = [
-                '-g', '30',           # GOP size: keyframe every 30 frames (1 second)
-                '-keyint_min', '30',  # Minimum keyframe interval
-                '-sc_threshold', '0'  # Disable scene detection for consistent keyframes
+                '-g', str(keyframe_interval),           # GOP size: keyframe every second
+                '-keyint_min', str(keyframe_interval),  # Minimum keyframe interval
+                '-sc_threshold', '0'                     # Disable scene detection for consistent keyframes
             ]
 
             # Merge codec params with keyframe params
             ffmpeg_params = codec_settings.get('ffmpeg_params', []) + keyframe_params
 
+            logger.debug(f"Exporting clip at {clip_fps} FPS with keyframe interval {keyframe_interval}")
+
             try:
-                # Attempt export with optimal codec settings
+                # Attempt export with optimal codec settings and matching FPS
                 clip.write_videofile(
                     str(output_path),
                     codec=codec_settings['codec'],
                     audio_codec="aac",
-                    fps=30,
+                    fps=clip_fps,  # Use clip's actual FPS instead of hardcoded 30
                     ffmpeg_params=ffmpeg_params,
                     threads=4,
                     logger=None  # Disable MoviePy's verbose logging
@@ -616,7 +636,7 @@ class ClipGenerator:
                         str(output_path),
                         codec=fallback_settings['codec'],
                         audio_codec="aac",
-                        fps=30,
+                        fps=clip_fps,  # Use clip's actual FPS, not hardcoded 30
                         ffmpeg_params=fallback_ffmpeg_params,
                         threads=4,
                         logger=None
