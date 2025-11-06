@@ -164,6 +164,14 @@ class PodcastClipsRequest(BaseModel):
     subtitleStrokeWidth: int = Field(default=2, ge=0, le=5, description="Subtitle stroke width")
     viralFocusKeywords: List[str] = Field(default=[], description="Optional keywords to prioritize when detecting viral moments")
 
+    # Mixed-mode content detection options
+    enableMixedMode: bool = Field(default=True, description="Enable horizontal content mode for screen recordings/articles")
+    faceLossThreshold: float = Field(default=1.0, ge=0.5, le=3.0, description="Seconds without face to trigger horizontal mode")
+    faceReturnThreshold: float = Field(default=0.5, ge=0.2, le=2.0, description="Seconds with face to return to face mode")
+    minSegmentDuration: float = Field(default=0.5, ge=0.3, le=2.0, description="Minimum segment duration to avoid flicker (seconds)")
+    useOCR: bool = Field(default=True, description="Use OCR for text-based content detection")
+    transitionDuration: float = Field(default=0.5, ge=0.2, le=1.0, description="Crossfade duration between modes (seconds)")
+
     @field_validator('youtubeUrl')
     @classmethod
     def validate_youtube_url_field(cls, v):

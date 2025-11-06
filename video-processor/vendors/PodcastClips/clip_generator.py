@@ -9,13 +9,16 @@ import platform
 import sys
 from typing import Dict, Any, List, Optional, Tuple
 from pathlib import Path
-from moviepy import VideoFileClip, CompositeVideoClip
+from moviepy import VideoFileClip, CompositeVideoClip, ColorClip, concatenate_videoclips
+from moviepy import vfx
 from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+import numpy as np
 
 from .face_tracker import FaceTracker, CropBox
 from .subtitle_generator import SubtitleGenerator
+from .content_detector import ContentModeDetector, ContentSegment, ContentMode
 
 # Import codec detection from AIvideos
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -76,7 +79,9 @@ class ClipGenerator:
         face_tracker: FaceTracker,
         subtitle_generator: SubtitleGenerator,
         output_dir: Path,
-        use_gpu: bool = True
+        use_gpu: bool = True,
+        content_mode_detector: Optional[ContentModeDetector] = None,
+        enable_mixed_mode: bool = True
     ):
         """
         Initialize clip generator.
@@ -86,17 +91,299 @@ class ClipGenerator:
             subtitle_generator: SubtitleGenerator instance for subtitles
             output_dir: Directory to save generated clips
             use_gpu: Whether to use GPU acceleration for encoding
+            content_mode_detector: Optional ContentModeDetector for mixed-mode support
+            enable_mixed_mode: Whether to enable horizontal content mode detection
         """
         self.face_tracker = face_tracker
         self.subtitle_generator = subtitle_generator
         self.output_dir = Path(output_dir)
         self.use_gpu = use_gpu
+        self.content_mode_detector = content_mode_detector
+        self.enable_mixed_mode = enable_mixed_mode
+
+        # Create content mode detector if not provided and mixed mode enabled
+        if self.enable_mixed_mode and self.content_mode_detector is None:
+            self.content_mode_detector = ContentModeDetector()
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Target resolution for vertical format (9:16)
         self.target_resolution = (1080, 1920)
+
+        # Transition duration between modes (seconds)
+        self.transition_duration = 0.5
+
+    def create_horizontal_content_clip(
+        self,
+        clip: VideoFileClip,
+        blur_background: bool = True,
+        background_color: Tuple[int, int, int] = (20, 20, 20)
+    ) -> VideoFileClip:
+        """
+        Create horizontal content clip centered in 9:16 canvas with blurred background.
+
+        Args:
+            clip: Source video clip (horizontal format)
+            blur_background: Whether to blur the background (True) or use solid color
+            background_color: RGB color for solid background (if blur_background=False)
+
+        Returns:
+            Composite clip in 9:16 format with horizontal content centered
+        """
+        target_width, target_height = self.target_resolution
+        clip_width, clip_height = clip.size
+
+        # Calculate scaling to fit within canvas (preserving aspect ratio)
+        # Leave some padding (90% of height)
+        max_content_height = int(target_height * 0.90)
+        max_content_width = int(target_width * 0.95)
+
+        # Scale clip to fit
+        scale_by_width = max_content_width / clip_width
+        scale_by_height = max_content_height / clip_height
+        scale = min(scale_by_width, scale_by_height)
+
+        scaled_width = int(clip_width * scale)
+        scaled_height = int(clip_height * scale)
+
+        # Resize the content clip
+        content_clip = clip.resized((scaled_width, scaled_height))
+
+        if blur_background:
+            # Create blurred background from the same clip
+            # 1. Resize to full height
+            bg_clip = clip.resized(height=target_height)
+
+            # 2. Apply blur by resizing down and back up
+            blur_strength = 0.15  # 15% of original size
+            small_width = int(bg_clip.w * blur_strength)
+            small_height = int(bg_clip.h * blur_strength)
+
+            bg_clip = bg_clip.resized((small_width, small_height))
+            bg_clip = bg_clip.resized((target_width, target_height))
+
+            # 3. Darken the background (reduce brightness by 50%)
+            bg_clip = bg_clip.with_effects([vfx.MultiplyColor(0.5)])
+
+            # 4. Center content on blurred background
+            content_clip = content_clip.with_position(('center', 'center'))
+
+            # 5. Composite
+            final_clip = CompositeVideoClip(
+                [bg_clip, content_clip],
+                size=self.target_resolution
+            )
+        else:
+            # Use solid color background
+            bg_clip = ColorClip(
+                size=self.target_resolution,
+                color=background_color,
+                duration=clip.duration
+            )
+
+            content_clip = content_clip.with_position(('center', 'center'))
+
+            final_clip = CompositeVideoClip(
+                [bg_clip, content_clip],
+                size=self.target_resolution
+            )
+
+        return final_clip
+
+    def create_face_tracked_clip(
+        self,
+        clip: VideoFileClip,
+        crop_box: CropBox
+    ) -> VideoFileClip:
+        """
+        Create face-tracked vertical clip with 9:16 crop.
+
+        Args:
+            clip: Source video clip
+            crop_box: Crop box from face tracker
+
+        Returns:
+            Cropped and resized clip in 9:16 format
+        """
+        # Apply crop
+        x1, y1, x2, y2 = crop_box.to_moviepy_crop()
+        cropped = clip.cropped(x1, y1, x2, y2)
+
+        # Resize to target resolution
+        resized = cropped.resized(self.target_resolution)
+
+        return resized
+
+    def apply_crossfade_transition(
+        self,
+        clip1: VideoFileClip,
+        clip2: VideoFileClip,
+        duration: float = 0.5
+    ) -> VideoFileClip:
+        """
+        Apply crossfade transition between two clips.
+
+        Args:
+            clip1: First clip (will fade out)
+            clip2: Second clip (will fade in)
+            duration: Transition duration in seconds
+
+        Returns:
+            Concatenated clip with crossfade transition
+        """
+        if duration <= 0 or duration >= min(clip1.duration, clip2.duration):
+            # No transition, just concatenate
+            return concatenate_videoclips([clip1, clip2])
+
+        # Split clips at transition point
+        clip1_main = clip1.subclipped(0, clip1.duration - duration)
+        clip1_fade = clip1.subclipped(clip1.duration - duration, clip1.duration)
+        clip2_fade = clip2.subclipped(0, duration)
+        clip2_main = clip2.subclipped(duration, clip2.duration)
+
+        # Apply fade effects
+        clip1_fade = clip1_fade.with_effects([vfx.FadeOut(duration)])
+        clip2_fade = clip2_fade.with_effects([vfx.FadeIn(duration)])
+
+        # Composite the fade region
+        fade_composite = CompositeVideoClip([clip1_fade, clip2_fade])
+
+        # Concatenate: main1 + fade + main2
+        segments = [clip1_main, fade_composite, clip2_main]
+        # Filter out zero-duration clips
+        segments = [s for s in segments if s.duration > 0]
+
+        return concatenate_videoclips(segments)
+
+    def generate_mixed_mode_clip(
+        self,
+        video_path: str,
+        viral_moment: ViralMoment,
+        word_timings: List[Dict[str, Any]],
+        content_segments: List[ContentSegment]
+    ) -> VideoFileClip:
+        """
+        Generate clip with mixed content modes (face-tracked + horizontal).
+
+        Args:
+            video_path: Path to source video
+            viral_moment: ViralMoment defining overall clip timing
+            word_timings: Word timings for subtitles
+            content_segments: List of ContentSegment defining mode timeline
+
+        Returns:
+            Composite video clip with mixed modes
+        """
+        logger.info(f"Generating mixed-mode clip with {len(content_segments)} segments")
+
+        # Load full video
+        video = VideoFileClip(video_path)
+
+        # Filter segments to those within viral moment timerange
+        relevant_segments = [
+            seg for seg in content_segments
+            if seg.start_time < viral_moment.end_time and seg.end_time > viral_moment.start_time
+        ]
+
+        if not relevant_segments:
+            logger.warning("No relevant segments found, using full face tracking")
+            # Fallback to traditional face tracking
+            return self._generate_traditional_clip(video, viral_moment, word_timings)
+
+        logger.debug(f"Processing {len(relevant_segments)} content segments")
+
+        # Process each segment
+        segment_clips = []
+
+        for i, segment in enumerate(relevant_segments):
+            # Adjust segment times to be relative to viral moment
+            seg_start = max(segment.start_time, viral_moment.start_time)
+            seg_end = min(segment.end_time, viral_moment.end_time)
+
+            if seg_start >= seg_end:
+                continue
+
+            logger.debug(f"Segment {i+1}: {seg_start:.1f}s-{seg_end:.1f}s [{segment.mode.value}]")
+
+            # Extract segment
+            segment_clip = video.subclipped(seg_start, seg_end)
+
+            # Apply appropriate mode
+            if segment.mode == ContentMode.HORIZONTAL:
+                # Horizontal content mode - preserve aspect ratio with blurred bg
+                processed = self.create_horizontal_content_clip(segment_clip)
+            else:
+                # Face tracking mode - crop to 9:16
+                crop_box = self.face_tracker.get_optimal_crop_box(seg_start, seg_end)
+                processed = self.create_face_tracked_clip(segment_clip, crop_box)
+
+            segment_clips.append(processed)
+
+        # Concatenate segments with transitions
+        if len(segment_clips) == 1:
+            final_clip = segment_clips[0]
+        else:
+            # Apply crossfade transitions between mode changes
+            clips_with_transitions = [segment_clips[0]]
+
+            for i in range(1, len(segment_clips)):
+                prev_mode = relevant_segments[i-1].mode
+                curr_mode = relevant_segments[i].mode
+
+                if prev_mode != curr_mode:
+                    # Mode change - apply transition
+                    logger.debug(f"Applying transition between {prev_mode.value} and {curr_mode.value}")
+                    transition = self.apply_crossfade_transition(
+                        clips_with_transitions[-1],
+                        segment_clips[i],
+                        self.transition_duration
+                    )
+                    # Replace last clip with transitioned version
+                    clips_with_transitions[-1] = transition
+                else:
+                    # Same mode - just append
+                    clips_with_transitions.append(segment_clips[i])
+
+            if len(clips_with_transitions) == 1:
+                final_clip = clips_with_transitions[0]
+            else:
+                final_clip = concatenate_videoclips(clips_with_transitions)
+
+        video.close()
+
+        return final_clip
+
+    def _generate_traditional_clip(
+        self,
+        video: VideoFileClip,
+        viral_moment: ViralMoment,
+        word_timings: List[Dict[str, Any]]
+    ) -> VideoFileClip:
+        """
+        Generate traditional face-tracked clip (fallback method).
+
+        Args:
+            video: Source video
+            viral_moment: Timing information
+            word_timings: Word timings for subtitles
+
+        Returns:
+            Processed clip
+        """
+        # Extract segment
+        clip = video.subclipped(viral_moment.start_time, viral_moment.end_time)
+
+        # Get crop box
+        crop_box = self.face_tracker.get_optimal_crop_box(
+            viral_moment.start_time,
+            viral_moment.end_time
+        )
+
+        # Apply crop and resize
+        clip = self.create_face_tracked_clip(clip, crop_box)
+
+        return clip
 
     def generate_clip(
         self,
@@ -106,7 +393,7 @@ class ClipGenerator:
         job_id: str
     ) -> Optional[GeneratedClip]:
         """
-        Generate a single viral clip.
+        Generate a single viral clip with optional mixed-mode support.
 
         Args:
             video_path: Path to source video
@@ -120,7 +407,7 @@ class ClipGenerator:
         try:
             logger.info(f"Generating clip {viral_moment.clip_index}: '{viral_moment.title}' ({viral_moment.start_time:.1f}s - {viral_moment.end_time:.1f}s)")
 
-            # Load video and extract segment
+            # Load video
             logger.debug(f"Loading video: {video_path}")
             video = VideoFileClip(video_path)
 
@@ -129,31 +416,42 @@ class ClipGenerator:
                 logger.warning(f"Clip end time {viral_moment.end_time}s exceeds video duration {video.duration}s, adjusting")
                 viral_moment.end_time = video.duration
 
-            # Extract clip segment
-            logger.debug(f"Extracting segment: {viral_moment.start_time:.1f}s to {viral_moment.end_time:.1f}s")
-            clip = video.subclipped(viral_moment.start_time, viral_moment.end_time)
+            # Check if mixed-mode is enabled and analyze content modes
+            content_segments = None
+            if self.enable_mixed_mode and self.content_mode_detector:
+                logger.debug("Analyzing content modes for mixed-mode generation")
+                try:
+                    content_segments = self.content_mode_detector.analyze_video_segments(
+                        video_path,
+                        self.face_tracker.face_positions,
+                        video.fps,
+                        viral_moment.start_time,
+                        viral_moment.end_time
+                    )
+                except Exception as e:
+                    logger.warning(f"Content mode detection failed: {e}, falling back to face tracking")
+                    content_segments = None
 
-            # Get optimal crop box from face tracker
-            logger.debug("Calculating optimal crop box")
-            crop_box = self.face_tracker.get_optimal_crop_box(
-                viral_moment.start_time,
-                viral_moment.end_time
-            )
+            # Generate clip based on mode
+            if content_segments and len(content_segments) > 0:
+                # Mixed-mode generation
+                logger.info("Using mixed-mode generation (face + horizontal content)")
+                clip = self.generate_mixed_mode_clip(
+                    video_path,
+                    viral_moment,
+                    word_timings,
+                    content_segments
+                )
+            else:
+                # Traditional face-tracking generation
+                logger.info("Using traditional face-tracking mode")
+                clip = self._generate_traditional_clip(video, viral_moment, word_timings)
 
             # Get face coverage percentage for metadata
             face_coverage = self.face_tracker.get_face_coverage_percentage(
                 viral_moment.start_time,
                 viral_moment.end_time
             )
-
-            # Apply crop to 9:16 format
-            logger.debug(f"Applying crop: x={crop_box.x}, width={crop_box.width}")
-            x1, y1, x2, y2 = crop_box.to_moviepy_crop()
-            clip = clip.cropped(x1, y1, x2, y2)
-
-            # Resize to target resolution (1080x1920)
-            logger.debug(f"Resizing to {self.target_resolution[0]}x{self.target_resolution[1]}")
-            clip = clip.resized(self.target_resolution)
 
             # Extract relevant word timings for this clip
             logger.debug("Extracting word timings for subtitle generation")

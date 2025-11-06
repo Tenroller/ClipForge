@@ -10,6 +10,9 @@ This workflow:
 
 Enhanced Features:
 - Parallel clip generation (3x-5x speedup)
+- Mixed-mode content detection (face-tracking + horizontal content)
+- Automatic detection of screen recordings, articles, and visual content
+- Smooth transitions between face-tracked and horizontal modes
 - Thumbnail generation for social media
 - Audio normalization and enhancement
 - Clip quality scoring and ranking
@@ -20,6 +23,7 @@ from .processor import PodcastClipsProcessor
 from .face_tracker import FaceTracker
 from .subtitle_generator import SubtitleGenerator
 from .clip_generator import ClipGenerator, ViralMoment, GeneratedClip
+from .content_detector import ContentModeDetector, ContentSegment, ContentMode
 from .thumbnail_generator import ThumbnailGenerator
 from .audio_enhancer import AudioEnhancer
 from .clip_scorer import ClipScorer
@@ -32,6 +36,9 @@ __all__ = [
     'ClipGenerator',
     'ViralMoment',
     'GeneratedClip',
+    'ContentModeDetector',
+    'ContentSegment',
+    'ContentMode',
     'ThumbnailGenerator',
     'AudioEnhancer',
     'ClipScorer',
