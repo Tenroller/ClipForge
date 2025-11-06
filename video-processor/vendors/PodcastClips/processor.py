@@ -38,6 +38,7 @@ def get_job_store():
 from .face_tracker import FaceTracker, FaceBox
 from .subtitle_generator import SubtitleGenerator
 from .clip_generator import ClipGenerator, ViralMoment
+from .content_detector import ContentModeDetector
 from .thumbnail_generator import ThumbnailGenerator
 from .audio_enhancer import AudioEnhancer
 from .clip_scorer import ClipScorer
@@ -132,6 +133,14 @@ class PodcastClipsProcessor:
             subtitle_stroke_width = parameters.get('subtitleStrokeWidth', 2)
             viral_keywords = parameters.get('viralFocusKeywords', [])
 
+            # Mixed-mode configuration
+            enable_mixed_mode = parameters.get('enableMixedMode', True)
+            face_loss_threshold = parameters.get('faceLossThreshold', 1.0)
+            face_return_threshold = parameters.get('faceReturnThreshold', 0.5)
+            min_segment_duration = parameters.get('minSegmentDuration', 0.5)
+            use_ocr = parameters.get('useOCR', True)
+            transition_duration = parameters.get('transitionDuration', 0.5)
+
             # Step 1: Download video
             video_path = self._download_video(youtube_url)
 
@@ -162,7 +171,11 @@ class PodcastClipsProcessor:
             )
 
             # Step 8: Generate clips (parallel)
-            generated_clips = self._generate_clips(video_path, viral_moments, word_timings)
+            generated_clips = self._generate_clips(
+                video_path, viral_moments, word_timings,
+                enable_mixed_mode, face_loss_threshold, face_return_threshold,
+                min_segment_duration, use_ocr, transition_duration
+            )
 
             # Step 9: Post-processing (audio enhancement & thumbnails)
             generated_clips = self._post_process_clips(generated_clips, viral_moments)
@@ -532,9 +545,28 @@ class PodcastClipsProcessor:
         self,
         video_path: str,
         viral_moments: List[ViralMoment],
-        word_timings: List[Dict[str, Any]]
+        word_timings: List[Dict[str, Any]],
+        enable_mixed_mode: bool = True,
+        face_loss_threshold: float = 1.0,
+        face_return_threshold: float = 0.5,
+        min_segment_duration: float = 0.5,
+        use_ocr: bool = True,
+        transition_duration: float = 0.5
     ) -> List[Dict[str, Any]]:
-        """Generate all video clips."""
+        """
+        Generate all video clips with optional mixed-mode support.
+
+        Args:
+            video_path: Path to video file
+            viral_moments: List of viral moments to generate
+            word_timings: Word-level timings for subtitles
+            enable_mixed_mode: Enable horizontal content mode detection
+            face_loss_threshold: Seconds without face to trigger horizontal mode
+            face_return_threshold: Seconds with face to return to face mode
+            min_segment_duration: Minimum segment duration to avoid flicker
+            use_ocr: Use OCR for content detection
+            transition_duration: Crossfade duration between modes
+        """
         self.update_progress("clip_generation", 75, f"Generating {len(viral_moments)} clips")
 
         try:
@@ -548,13 +580,32 @@ class PodcastClipsProcessor:
                 logger.warning("Subtitle generator not available, initializing fallback instance")
                 self.subtitle_generator = SubtitleGenerator()
 
-            # Initialize clip generator
+            # Initialize content mode detector if mixed mode is enabled
+            content_mode_detector = None
+            if enable_mixed_mode:
+                logger.info(f"Mixed-mode enabled: face_loss={face_loss_threshold}s, face_return={face_return_threshold}s, OCR={use_ocr}")
+                content_mode_detector = ContentModeDetector(
+                    face_loss_threshold=face_loss_threshold,
+                    face_return_threshold=face_return_threshold,
+                    min_segment_duration=min_segment_duration,
+                    use_ocr=use_ocr
+                )
+            else:
+                logger.info("Mixed-mode disabled, using traditional face-tracking only")
+
+            # Initialize clip generator with mixed-mode support
             self.clip_generator = ClipGenerator(
                 face_tracker=self.face_tracker,
                 subtitle_generator=self.subtitle_generator,
                 output_dir=self.output_dir,
-                use_gpu=True
+                use_gpu=True,
+                content_mode_detector=content_mode_detector,
+                enable_mixed_mode=enable_mixed_mode
             )
+
+            # Set transition duration if mixed mode enabled
+            if enable_mixed_mode:
+                self.clip_generator.transition_duration = transition_duration
 
             # Generate clips in parallel (3x-5x speedup)
             logger.info(f"Generating {len(viral_moments)} clips in parallel")
