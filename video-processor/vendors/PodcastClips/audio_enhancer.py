@@ -79,7 +79,7 @@ class AudioEnhancer:
             enhanced_audio = AudioArrayClip(enhanced_array, fps=audio.fps)
 
             # Set enhanced audio to video
-            video_enhanced = video.set_audio(enhanced_audio)
+            video_enhanced = video.with_audio(enhanced_audio)
 
             # Determine output path
             if output_path is None:
@@ -302,7 +302,7 @@ class AudioEnhancer:
             normalized_audio = AudioArrayClip(normalized, fps=audio.fps)
 
             # Set to video
-            video_normalized = video.set_audio(normalized_audio)
+            video_normalized = video.with_audio(normalized_audio)
 
             # Write
             if output_path is None:

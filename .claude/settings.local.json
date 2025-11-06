@@ -15,7 +15,9 @@
       "Bash(pip show:*)",
       "Bash(kill:*)",
       "Bash(ffprobe:*)",
-      "Bash(ffmpeg:*)"
+      "Bash(ffmpeg:*)",
+      "Bash(for:*)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

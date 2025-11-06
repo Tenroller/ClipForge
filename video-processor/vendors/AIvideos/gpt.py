@@ -2,12 +2,13 @@ import re
 import os
 import json
 from pathlib import Path
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Any, Dict
 
 from termcolor import colored
 import logging
 from dotenv import load_dotenv
 from google import genai  # type: ignore
+from pydantic import BaseModel, Field
 
 # Load environment variables
 # Try loading local .env if present (vendored path)
@@ -33,6 +34,32 @@ def _get_client():
         except Exception as e:
             logger.error(f"Failed to create Gemini client: {e}")
     return _client
+
+
+# Pydantic models for structured output (Viral Moments Detection)
+class ViralMomentSchema(BaseModel):
+    """Schema for a single viral moment detected by AI."""
+    start_time: float = Field(description="Start time in seconds (>=0), 2 decimal precision")
+    end_time: float = Field(description="End time in seconds (> start_time), 2 decimal precision")
+    duration: float = Field(description="Duration in seconds (end_time - start_time)")
+    title: str = Field(description="Catchy title for the clip, max 60 chars")
+    reason: str = Field(description="1-2 sentences explaining why this will go viral")
+    hook: str = Field(description="Attention-grabbing first sentence (max 120 chars)")
+    viral_score: int = Field(description="Viral potential score from 0-100 (higher is better)")
+    confidence: float = Field(description="Model confidence in selection (0.0-1.0)")
+    caption: str = Field(description="Share caption/subtitle for social media (<= 150 chars)")
+    tags: List[str] = Field(description="Up to 6 tags/hashtags (without # symbol)")
+    thumbnail_text: str = Field(description="Short text for thumbnail (<=25 chars)")
+    recommended_crop: str = Field(description="Crop recommendation: close-up, mid, wide, or focus-on-person-X")
+    cut_padding_before: float = Field(description="Suggested extra seconds before start (0.0-2.0)")
+    cut_padding_after: float = Field(description="Suggested extra seconds after end (0.0-2.0)")
+    subtitles: str = Field(description="Exact transcript excerpt for this clip (max 300 chars)")
+    notes: str = Field(description="Optional notes: speaker changes, warnings, or fallback suggestions")
+
+
+class ViralMomentsResponse(BaseModel):
+    """Schema for the complete viral moments response."""
+    moments: List[ViralMomentSchema] = Field(description="List of detected viral moments, ordered by viral potential (best first)")
 
 
 def generate_response(prompt: str, ai_model: str) -> str:
@@ -87,6 +114,81 @@ def generate_response(prompt: str, ai_model: str) -> str:
     except Exception:
         pass
     return response or ""
+
+
+def generate_structured_response(prompt: str, ai_model: str, response_schema: type[BaseModel]) -> Dict[str, Any]:
+    """
+    Generate a structured response using Gemini with JSON schema validation.
+
+    This function uses Gemini's Structured Outputs feature to guarantee that
+    the AI returns valid JSON matching the provided Pydantic schema.
+
+    Args:
+        prompt: The prompt to send to the AI
+        ai_model: The AI model to use (e.g., 'gemini-2.5-flash')
+        response_schema: Pydantic BaseModel class defining the expected JSON structure
+
+    Returns:
+        Dictionary containing the validated response data
+
+    Raises:
+        RuntimeError: If client initialization fails or API call fails
+        ValidationError: If response doesn't match schema (unlikely with structured outputs)
+    """
+    model_name = ai_model or 'gemini-2.5-flash'
+
+    try:
+        logger.info("gemini.generate_structured_response: start", extra={
+            "ai_model": model_name,
+            "prompt_len": len(prompt),
+            "schema": response_schema.__name__
+        })
+
+        # Get the client
+        client = _get_client()
+        if not client:
+            raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
+
+        # Generate content with structured output
+        response_model = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config={
+                "response_mime_type": "application/json",
+                "response_json_schema": response_schema.model_json_schema(),
+            }
+        )
+
+        # Extract text from response
+        response_text = getattr(response_model, 'text', None)
+        if not response_text:
+            # Try alternative attribute paths
+            try:
+                response_text = response_model.candidates[0].content.parts[0].text
+            except Exception:
+                response_text = ""
+
+        if not response_text:
+            raise RuntimeError("Empty response from Gemini API")
+
+        # Parse and validate JSON against schema
+        response_data = response_schema.model_validate_json(response_text)
+
+        logger.info("gemini.generate_structured_response: success", extra={
+            "ai_model": model_name,
+            "schema": response_schema.__name__
+        })
+
+        # Return as dictionary
+        return response_data.model_dump()
+
+    except Exception as e:
+        logger.error("gemini.generate_structured_response: error", exc_info=True, extra={
+            "ai_model": model_name,
+            "schema": response_schema.__name__ if response_schema else "None"
+        })
+        print(colored(f"[-] Gemini Structured Output Error: {e}", "red"))
+        raise
 
 def generate_script(video_subject: str, paragraph_number: int, ai_model: str, voice: str, customPrompt: str) -> Optional[str]:
 

@@ -189,6 +189,11 @@ class ClipGenerator:
                 size=self.target_resolution
             )
 
+        # IMPORTANT: Preserve audio from original clip
+        # CompositeVideoClip doesn't automatically inherit audio
+        if hasattr(clip, 'audio') and clip.audio is not None:
+            final_clip = final_clip.with_audio(clip.audio)
+
         return final_clip
 
     def create_face_tracked_clip(
@@ -249,6 +254,19 @@ class ClipGenerator:
         # Composite the fade region
         fade_composite = CompositeVideoClip([clip1_fade, clip2_fade])
 
+        # IMPORTANT: Handle audio crossfade
+        # Mix audio from both clips during transition
+        if hasattr(clip1_fade, 'audio') and clip1_fade.audio is not None:
+            if hasattr(clip2_fade, 'audio') and clip2_fade.audio is not None:
+                # Both have audio - use the fade-in clip's audio (simpler than mixing)
+                fade_composite = fade_composite.with_audio(clip2_fade.audio)
+            else:
+                # Only clip1 has audio
+                fade_composite = fade_composite.with_audio(clip1_fade.audio)
+        elif hasattr(clip2_fade, 'audio') and clip2_fade.audio is not None:
+            # Only clip2 has audio
+            fade_composite = fade_composite.with_audio(clip2_fade.audio)
+
         # Concatenate: main1 + fade + main2
         segments = [clip1_main, fade_composite, clip2_main]
         # Filter out zero-duration clips
@@ -258,7 +276,7 @@ class ClipGenerator:
 
     def generate_mixed_mode_clip(
         self,
-        video_path: str,
+        video: VideoFileClip,
         viral_moment: ViralMoment,
         word_timings: List[Dict[str, Any]],
         content_segments: List[ContentSegment]
@@ -267,7 +285,7 @@ class ClipGenerator:
         Generate clip with mixed content modes (face-tracked + horizontal).
 
         Args:
-            video_path: Path to source video
+            video: Source video clip (already loaded)
             viral_moment: ViralMoment defining overall clip timing
             word_timings: Word timings for subtitles
             content_segments: List of ContentSegment defining mode timeline
@@ -276,9 +294,6 @@ class ClipGenerator:
             Composite video clip with mixed modes
         """
         logger.info(f"Generating mixed-mode clip with {len(content_segments)} segments")
-
-        # Load full video
-        video = VideoFileClip(video_path)
 
         # Filter segments to those within viral moment timerange
         relevant_segments = [
@@ -349,8 +364,6 @@ class ClipGenerator:
                 final_clip = clips_with_transitions[0]
             else:
                 final_clip = concatenate_videoclips(clips_with_transitions)
-
-        video.close()
 
         return final_clip
 
@@ -437,7 +450,7 @@ class ClipGenerator:
                 # Mixed-mode generation
                 logger.info("Using mixed-mode generation (face + horizontal content)")
                 clip = self.generate_mixed_mode_clip(
-                    video_path,
+                    video,
                     viral_moment,
                     word_timings,
                     content_segments

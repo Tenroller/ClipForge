@@ -44,7 +44,7 @@ from .audio_enhancer import AudioEnhancer
 from .clip_scorer import ClipScorer
 from .hook_optimizer import HookOptimizer
 from vendors.AIvideos.stable_ts_enhanced_subtitles import extract_word_timings_with_stable_ts
-from vendors.AIvideos.gpt import generate_response
+from vendors.AIvideos.gpt import generate_structured_response, ViralMomentsResponse
 
 logger = logging.getLogger("video_generator.podcastclips.processor")
 
@@ -307,23 +307,20 @@ class PodcastClipsProcessor:
 
             transcript_text = ' '.join(transcript_lines)
 
-            # Prepare prompt
+            # Prepare prompt (simplified - no need for detailed JSON format instructions)
             keywords_hint = f"\n\nPriority keywords: {', '.join(keywords)}" if keywords else ""
 
             prompt = f"""
-            
-            You are an expert content editor and viral-clip scout for social media (TikTok, Reels, Shorts). 
+            You are an expert content editor and viral-clip scout for social media (TikTok, Reels, Shorts).
             You will analyze the provided podcast transcript and identify the {target_count} moments with the highest viral potential.
 
             Hard rules:
-            - Return ONLY a single valid JSON array (no surrounding text, no markdown).
-            - Array must contain up to {target_count} objects, ordered best-first (highest viral potential first).
-            - Each object MUST follow the JSON schema described below exactly.
-            - Times must be floats in seconds from video start, with precision to at most 2 decimal places.
-            - Each clip's duration MUST be between {min_duration} and {max_duration} seconds inclusive; if none found, return an empty array [].
-            - Do not hallucinate words—use only transcript text provided. If a hook or caption is requested, extract or rephrase from the transcript only (short edits allowed for clarity).
-            - If a clip crosses a speaker turn, that's OK — indicate speaker change in the "notes" field.
-            - If content includes hate/illegal content, exclude it (return fewer clips or empty array).
+            - Return up to {target_count} moments, ordered best-first (highest viral potential first).
+            - Times must be floats in seconds from video start.
+            - Each clip's duration MUST be between {min_duration} and {max_duration} seconds inclusive.
+            - Do not hallucinate words—use only transcript text provided.
+            - If a clip crosses a speaker turn, indicate speaker change in the "notes" field.
+            - If content includes hate/illegal content, exclude it (return fewer clips).
 
             Context / heuristics to use:
             - Prefer moments with immediate hooks in the first ~3s, emotional impact (anger, laughter, awe), surprising facts, concise strong opinions, concrete advice, or controversy.
@@ -334,130 +331,65 @@ class PodcastClipsProcessor:
 
             Keywords (optional): {keywords_hint}
 
-            Transcript (do not change): 
+            Transcript:
             {transcript_text}
-
-            JSON output requirements (schema):
-            Return a JSON array of objects with these fields (exact names and types):
-
-            [
-            {{
-                'start_time': float,          // seconds (>=0), 2 decimal precision
-                'end_time': float,            // seconds (> start_time), 2 decimal precision
-                'duration': float,            // end_time - start_time
-                'title': string,              // catchy title, max 60 chars
-                'reason': string,             // 1-2 sentences why it will go viral (use transcript lines to justify)
-                'hook': string,               // attention-grabbing first sentence that should play immediately (max 120 chars)
-                'viral_score': integer,       // 0-100 (higher is more viral potential)
-                'confidence': float,          // 0.0-1.0 (model confidence in selection)
-                'caption': string,            // share caption / subtitle (<= 150 chars)
-                'tags': [string],             // up to 6 tags/hashtags (no '#'), e.g. ["celebrity","take"]
-                'thumbnail_text': string,     // short text for thumbnail (<=25 chars)
-                'recommended_crop': string,   // "close-up" | "mid" | "wide" | "focus-on-person-X"
-                'cut_padding_before': float,  // suggested extra seconds to include before start (0.0-2.0)
-                'cut_padding_after': float,   // suggested extra seconds to include after end (0.0-2.0)
-                'subtitles': string,          // exact transcript excerpt for the clip (max 300 chars)
-                'notes': string               // optional: speaker changes, profanity warnings, or fallback suggestions
-            }},
-
-            ]
 
             Additional instructions:
             - Compute "duration" exactly as end_time - start_time.
             - Keep "hook" short and commanding — it will be the first line shown/said.
             - Make "caption" usable as social post copy; include one emoji if it helps.
-            - Provide tags that match the moment's theme.
-            - If you cannot find {{target_count}} valid moments, return as many as you can (possibly zero).
-            - If transcript language is not English, produce hook/caption in the transcript language. If mixed, keep each clip consistent with the language used in that clip.
-
-            Example of valid single-element JSON array (for reference only — DO NOT output this example):
-            [{{
-            'start_time': 12.50,
-            'end_time': 40.00,
-            'duration': 27.5,
-            'title': "Why we quit our jobs",
-            'reason': "Surprising confession + emotional honesty makes this relatable and spark debate.",
-            'hook': "I actually quit my job with zero savings.",
-            'viral_score': 92,
-            'confidence': 0.88,
-            'caption': "He quit with $0 and found freedom 😳",
-            'tags': ["work","life","career"],
-            'thumbnail_text': "Quit w/ $0",
-            'recommended_crop': "close-up",
-            'cut_padding_before': 0.8,
-            'cut_padding_after': 1.2,
-            'subtitles': "I actually quit my job with zero savings, and it was the best decision I ever made.",
-            'notes': "laughter at end; contains a short profanity"
-            }}]
-
-            Now output the JSON array.
-            
+            - Provide tags that match the moment's theme (without # symbol).
+            - If you cannot find {target_count} valid moments, return as many as you can.
+            - If transcript language is not English, produce hook/caption in the transcript language.
             """
 
-            logger.info(f"Sending transcript to {ai_model} for analysis")
+            logger.info(f"Sending transcript to {ai_model} for structured analysis")
 
-            response = generate_response(prompt, ai_model)
+            # Use structured output to guarantee valid JSON
+            response_data = generate_structured_response(prompt, ai_model, ViralMomentsResponse)
 
-            # Parse JSON response
-            try:
-                # Extract JSON from response (handle markdown code blocks)
-                response_clean = response.strip()
-                if response_clean.startswith('```'):
-                    # Remove markdown code block markers
-                    response_clean = response_clean.split('```')[1]
-                    if response_clean.startswith('json'):
-                        response_clean = response_clean[4:]
-                    response_clean = response_clean.strip()
+            # Extract moments from response
+            moments_data = response_data.get('moments', [])
 
-                moments_data = json.loads(response_clean)
+            # Convert to ViralMoment objects
+            viral_moments = []
+            for i, moment in enumerate(moments_data):
+                viral_moments.append(ViralMoment(
+                    title=moment.get('title', f'Clip {i+1}'),
+                    start_time=float(moment.get('start_time', 0)),
+                    end_time=float(moment.get('end_time', 30)),
+                    reason=moment.get('reason', 'Engaging content'),
+                    hook=moment.get('hook', ''),
+                    clip_index=i + 1
+                ))
 
-                if not isinstance(moments_data, list):
-                    raise ValueError("AI response is not a JSON array")
+            logger.info(f"AI detected {len(viral_moments)} viral moments")
 
-                # Convert to ViralMoment objects
-                viral_moments = []
-                for i, moment in enumerate(moments_data):
-                    viral_moments.append(ViralMoment(
-                        title=moment.get('title', f'Clip {i+1}'),
-                        start_time=float(moment.get('start_time', 0)),
-                        end_time=float(moment.get('end_time', 30)),
-                        reason=moment.get('reason', 'Engaging content'),
-                        hook=moment.get('hook', ''),
-                        clip_index=i + 1
-                    ))
+            # Persist viral moments
+            persist_artifact(
+                self.job_id,
+                "ai_analysis",
+                "viral_moments",
+                payload={
+                    "moments": [
+                        {
+                            "title": m.title,
+                            "start_time": m.start_time,
+                            "end_time": m.end_time,
+                            "reason": m.reason,
+                            "hook": m.hook,
+                            "clip_index": m.clip_index
+                        }
+                        for m in viral_moments
+                    ],
+                    "ai_model": ai_model,
+                    "target_count": target_count
+                }
+            )
 
-                logger.info(f"AI detected {len(viral_moments)} viral moments")
+            self.update_progress("ai_analysis", 55, f"Detected {len(viral_moments)} viral moments")
 
-                # Persist viral moments
-                persist_artifact(
-                    self.job_id,
-                    "ai_analysis",
-                    "viral_moments",
-                    payload={
-                        "moments": [
-                            {
-                                "title": m.title,
-                                "start_time": m.start_time,
-                                "end_time": m.end_time,
-                                "reason": m.reason,
-                                "hook": m.hook,
-                                "clip_index": m.clip_index
-                            }
-                            for m in viral_moments
-                        ],
-                        "ai_model": ai_model,
-                        "target_count": target_count
-                    }
-                )
-
-                self.update_progress("ai_analysis", 55, f"Detected {len(viral_moments)} viral moments")
-
-                return viral_moments
-
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse AI response as JSON: {e}")
-                logger.error(f"Raw response: {response}")
-                raise RuntimeError("AI returned invalid JSON format")
+            return viral_moments
 
         except Exception as e:
             logger.error(f"Viral moment detection failed: {e}")

@@ -278,6 +278,15 @@ class SubtitleGenerator:
         # Composite video with subtitles
         if subtitle_clips:
             final_clip = CompositeVideoClip([video_clip] + subtitle_clips)
+
+            # IMPORTANT: Preserve audio from original video clip
+            # CompositeVideoClip doesn't automatically inherit audio from the first clip
+            if hasattr(video_clip, 'audio') and video_clip.audio is not None:
+                final_clip = final_clip.with_audio(video_clip.audio)
+                logger.debug("Preserved audio from original video clip")
+            else:
+                logger.warning("Original video has no audio track")
+
             logger.info(f"Added {len(subtitle_clips)} subtitle segments to video")
         else:
             logger.warning("No subtitle clips generated, returning original video")
