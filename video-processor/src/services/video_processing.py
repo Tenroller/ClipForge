@@ -131,13 +131,13 @@ class VideoProcessingService:
         """Process a MoneyPrinter video generation job."""
         job_id = job_data["job_id"]
         request_data = job_data["request_data"]
-        
+
         logger.info(f"Starting MoneyPrinter job {job_id}")
-        
+
         try:
             # Parse request
             req = MoneyPrinterRequest(**request_data)
-            
+
             # Import video generation dependencies from local vendors
             vendor_imports_available = False
             try:
@@ -150,47 +150,48 @@ class VideoProcessingService:
                 logger.warning(f"Job {job_id}: Could not import from local vendors: {e}")
                 logger.info(f"Job {job_id}: Using fallback implementations")
                 from ..utils.backend_fallbacks import check_env_vars, generate_script_fallback as generate_script, tts_fallback as tts
-                
+
                 # Define fallback fetch_songs function
                 def fetch_songs(zip_url):
                     logger.warning(f"Job {job_id}: fetch_songs not available - skipping music download")
                     pass
-            
+
             # Validate environment
             logger.info(f"Job {job_id}: Validating environment")
             try:
                 check_env_vars()
             except SystemExit:
                 raise RuntimeError("Missing required AIvideos environment variables")
-            
+
             # Create job-specific output directory
             job_output_dir = self.config.output_dir / job_id
             job_output_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Music handling
+
+            # Music handling - run in thread pool to avoid blocking
             if req.useMusic and req.zipUrl:
                 logger.info(f"Job {job_id}: Fetching background music")
-                fetch_songs(req.zipUrl)
-            
-            # Generate script
+                await asyncio.to_thread(fetch_songs, req.zipUrl)
+
+            # Generate script - run in thread pool to avoid blocking the event loop
             logger.info(f"Job {job_id}: Generating script")
-            script = generate_script(
-                req.videoSubject, 
-                req.paragraphNumber, 
-                req.aiModel, 
-                req.voice, 
+            script = await asyncio.to_thread(
+                generate_script,
+                req.videoSubject,
+                req.paragraphNumber,
+                req.aiModel,
+                req.voice,
                 req.customPrompt or ""
             )
-            
+
             if not script:
                 raise RuntimeError("Failed to generate script")
-            
+
             logger.info(f"Job {job_id}: Generated script ({len(script)} characters)")
-            
-            # Generate TTS
+
+            # Generate TTS - run in thread pool to avoid blocking
             logger.info(f"Job {job_id}: Generating text-to-speech")
             audio_file = str(job_output_dir / f"{job_id}_audio.wav")
-            tts(script, req.voice, audio_file)
+            await asyncio.to_thread(tts, script, req.voice, audio_file)
             
             # Generate video with background footage or simple background
             logger.info(f"Job {job_id}: Generating video")
@@ -224,41 +225,46 @@ class VideoProcessingService:
                         logger.warning(f"Job {job_id}: Background video search failed: {search_error}")
                         background_videos = []  # Fallback to no background videos
                 
-                # Get audio duration for video length
+                # Get audio duration for video length - run in thread pool
                 duration = 30  # Default fallback
                 try:
-                    probe_cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', audio_file]
-                    result = subprocess.run(probe_cmd, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        probe_data = json.loads(result.stdout)
-                        format_info = probe_data.get('format', {})
-                        duration = float(format_info.get('duration', 0))
-                        logger.info(f"Job {job_id}: Audio duration is {duration:.2f} seconds")
+                    def get_audio_duration():
+                        probe_cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', audio_file]
+                        result = subprocess.run(probe_cmd, capture_output=True, text=True)
+                        if result.returncode == 0:
+                            probe_data = json.loads(result.stdout)
+                            format_info = probe_data.get('format', {})
+                            return float(format_info.get('duration', 0))
+                        return 30
+
+                    duration = await asyncio.to_thread(get_audio_duration)
+                    logger.info(f"Job {job_id}: Audio duration is {duration:.2f} seconds")
                 except Exception as duration_error:
                     logger.warning(f"Job {job_id}: Could not get audio duration: {duration_error}")
                 
-                # Create video using ffmpeg
+                # Create video using ffmpeg - run in thread pool to avoid blocking
                 if background_videos:
                     # Option A: Use background videos
                     logger.info(f"Job {job_id}: Creating video with background footage")
-                    
+
                     # Download first background video for now (simplified)
                     import requests
                     import tempfile
-                    
-                    try:
+
+                    def download_and_process_video():
+                        """Download background video and combine with audio using ffmpeg."""
                         bg_video_url = background_videos[0]
                         logger.info(f"Job {job_id}: Downloading background video")
-                        
+
                         response = requests.get(bg_video_url, stream=True)
                         response.raise_for_status()
-                        
+
                         # Save to temp file
                         temp_bg_video = str(job_output_dir / f"{job_id}_background.mp4")
                         with open(temp_bg_video, 'wb') as f:
                             for chunk in response.iter_content(chunk_size=8192):
                                 f.write(chunk)
-                        
+
                         # Combine background video with audio using ffmpeg
                         ffmpeg_cmd = [
                             'ffmpeg', '-y',
@@ -269,36 +275,42 @@ class VideoProcessingService:
                             '-map', '0:v:0', '-map', '1:a:0',
                             '-shortest', output_video
                         ]
-                        
+
                         result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
                         if result.returncode != 0:
                             raise RuntimeError(f"FFmpeg background video failed: {result.stderr}")
-                            
+
                         # Clean up temp file
                         try:
                             os.unlink(temp_bg_video)
                         except:
                             pass
-                            
+
+                    try:
+                        await asyncio.to_thread(download_and_process_video)
                     except Exception as bg_error:
                         logger.warning(f"Job {job_id}: Background video processing failed: {bg_error}")
                         raise bg_error
-                        
+
                 else:
                     # Option B: Create simple black background video
                     logger.info(f"Job {job_id}: Creating video with black background")
-                    
-                    ffmpeg_cmd = [
-                        'ffmpeg', '-y',
-                        '-f', 'lavfi', '-i', f'color=black:size=1080x1920:duration={duration}:rate=24',
-                        '-i', audio_file,
-                        '-c:v', 'libx264', '-c:a', 'aac',
-                        '-shortest', output_video
-                    ]
-                    
-                    result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
-                    if result.returncode != 0:
-                        raise RuntimeError(f"FFmpeg simple video failed: {result.stderr}")
+
+                    def create_simple_video():
+                        """Create simple black background video with audio."""
+                        ffmpeg_cmd = [
+                            'ffmpeg', '-y',
+                            '-f', 'lavfi', '-i', f'color=black:size=1080x1920:duration={duration}:rate=24',
+                            '-i', audio_file,
+                            '-c:v', 'libx264', '-c:a', 'aac',
+                            '-shortest', output_video
+                        ]
+
+                        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+                        if result.returncode != 0:
+                            raise RuntimeError(f"FFmpeg simple video failed: {result.stderr}")
+
+                    await asyncio.to_thread(create_simple_video)
                 
                 # Verify video file was created
                 if not os.path.exists(output_video):
@@ -363,30 +375,31 @@ class VideoProcessingService:
             
             # Create generator
             generator = TikYouGenerator(output_dir=output_dir_str, tracker=None, request=req)
-            
-            # Process video
+
+            # Process video - run in thread pool to avoid blocking
             logger.info(f"Job {job_id}: Processing source video")
             if req.youtubeUrl:
-                # Process YouTube video (original functionality)
-                video_clips = generator.process_single_video(req.youtubeUrl)
+                # Process YouTube video (original functionality) - run in thread pool
+                video_clips = await asyncio.to_thread(generator.process_single_video, req.youtubeUrl)
             elif req.uploadedVideoPath:
-                # Process uploaded video file
-                video_clips = self._process_uploaded_video(generator, req.uploadedVideoPath, job_id)
+                # Process uploaded video file - run in thread pool
+                video_clips = await asyncio.to_thread(self._process_uploaded_video, generator, req.uploadedVideoPath, job_id)
             else:
                 raise RuntimeError("No video source provided")
-            
+
             if not video_clips:
                 raise RuntimeError("No clips generated from source video")
-            
+
             logger.info(f"Job {job_id}: Generated {len(video_clips)} clips")
-            
-            # Generate compilations
+
+            # Generate compilations - run in thread pool to avoid blocking
             logger.info(f"Job {job_id}: Generating compilation videos")
-            
+
             # Use appropriate video identifier for generate_tikyou_videos
             video_identifier = req.youtubeUrl if req.youtubeUrl else req.uploadedVideoPath
-            
-            generated_videos = generator.generate_tikyou_videos(
+
+            generated_videos = await asyncio.to_thread(
+                generator.generate_tikyou_videos,
                 video_identifier,
                 num_compilations=None if req.unlimited else req.numCompilations,
                 min_duration=req.minDuration,
@@ -439,8 +452,9 @@ class VideoProcessingService:
 
             logger.info(f"Job {job_id}: Processing podcast from {req.youtubeUrl}")
 
-            # Process podcast clips using our processor
-            result = process_podcast_clips(
+            # Process podcast clips using our processor - run in thread pool to avoid blocking
+            result = await asyncio.to_thread(
+                process_podcast_clips,
                 job_id=job_id,
                 parameters=request_data,
                 output_dir=output_dir_str
