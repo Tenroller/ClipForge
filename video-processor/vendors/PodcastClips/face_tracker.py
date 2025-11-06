@@ -351,7 +351,7 @@ class FaceTracker:
         self,
         timestamp: float,
         padding_factor: float = 1.5,
-        smoothing_window: float = 0.5
+        smoothing_window: float = 1.5
     ) -> CropBox:
         """
         Get crop box for a specific timestamp with smoothing for stable tracking.
