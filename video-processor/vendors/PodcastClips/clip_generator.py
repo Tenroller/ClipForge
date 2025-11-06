@@ -795,10 +795,10 @@ class ClipGenerator:
             logger.warning(f"Clip {moment.clip_index} has invalid timing: start={moment.start_time}s >= end={moment.end_time}s")
             return False
 
-        # Check duration is reasonable (at least 5 seconds, max 120 seconds)
+        # Check duration is reasonable (at least 15 seconds for TikTok/Reels, max 120 seconds)
         duration = moment.duration
-        if duration < 5:
-            logger.warning(f"Clip {moment.clip_index} too short: {duration:.1f}s")
+        if duration < 15:
+            logger.warning(f"Clip {moment.clip_index} too short: {duration:.1f}s (minimum 15s for TikTok)")
             return False
 
         if duration > 120:

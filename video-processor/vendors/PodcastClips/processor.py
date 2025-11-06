@@ -124,8 +124,8 @@ class PodcastClipsProcessor:
             ai_model = parameters.get('aiModel', 'gemini-2.5-pro')
             whisper_model = parameters.get('whisperModel', 'base')
             target_clip_count = parameters.get('targetClipCount', 7)
-            min_duration = parameters.get('minDuration', 20)
-            max_duration = parameters.get('maxDuration', 70)
+            min_duration = parameters.get('minDuration', 30)
+            max_duration = parameters.get('maxDuration', 60)
             use_gpu = parameters.get('useGPU', True)
             subtitle_font_size = parameters.get('subtitleFontSize', 40)
             subtitle_color = parameters.get('subtitleColor', '#FFFFFF')
@@ -317,7 +317,9 @@ class PodcastClipsProcessor:
             Hard rules:
             - Return up to {target_count} moments, ordered best-first (highest viral potential first).
             - Times must be floats in seconds from video start.
-            - Each clip's duration MUST be between {min_duration} and {max_duration} seconds inclusive.
+            - CRITICAL: Each clip's duration MUST be AT LEAST {min_duration} seconds and AT MOST {max_duration} seconds.
+            - NEVER create clips shorter than {min_duration} seconds - extend them if needed to meet this minimum.
+            - Target clips around 45-50 seconds for optimal TikTok/Reels engagement (within the {min_duration}-{max_duration}s range).
             - Do not hallucinate words—use only transcript text provided.
             - If a clip crosses a speaker turn, indicate speaker change in the "notes" field.
             - If content includes hate/illegal content, exclude it (return fewer clips).
@@ -428,7 +430,7 @@ class PodcastClipsProcessor:
 
             face_positions = self.face_tracker.analyze_video(
                 video_path,
-                sample_rate=5,
+                sample_rate=10,  # Reduced from 5 to 10 for less sensitive speaker switching
                 progress_callback=face_detection_progress
             )
 
