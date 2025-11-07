@@ -141,6 +141,9 @@ class PodcastClipsProcessor:
             use_ocr = parameters.get('useOCR', True)
             transition_duration = parameters.get('transitionDuration', 0.5)
 
+            # Face tracking smoothing configuration
+            smoothing_strength = parameters.get('smoothingStrength', 11)  # 5=light, 11=medium, 21=strong
+
             # Step 1: Download video
             video_path = self._download_video(youtube_url)
 
@@ -541,8 +544,10 @@ class PodcastClipsProcessor:
             if enable_mixed_mode:
                 self.clip_generator.transition_duration = transition_duration
 
-            # Generate clips in parallel (3x-5x speedup)
-            logger.info(f"Generating {len(viral_moments)} clips in parallel")
+            # Generate clips in parallel
+            # Use environment variable to control parallelism based on hardware
+            max_workers = int(os.getenv("MAX_CLIP_WORKERS", "1"))  # Default: 1 for limited hardware
+            logger.info(f"Generating {len(viral_moments)} clips with max_workers={max_workers}")
 
             generated_clip_objects = self.clip_generator.generate_all_clips(
                 video_path=video_path,
@@ -550,7 +555,8 @@ class PodcastClipsProcessor:
                 word_timings=word_timings,
                 job_id=self.job_id,
                 parallel=True,  # Enable parallel processing
-                max_workers=3   # 3 concurrent clips
+                max_workers=max_workers,  # Configurable via MAX_CLIP_WORKERS env var
+                smoothing_strength=smoothing_strength  # Smoothing for face tracking
             )
 
             # Convert to dict format

@@ -7,6 +7,7 @@ raw OpenAI Whisper for improved timestamp accuracy and post-processing capabilit
 
 import os
 import json
+import threading
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 
@@ -25,6 +26,70 @@ except ImportError:
     TORCH_AVAILABLE = False
     torch = None
     print("PyTorch not available. GPU acceleration disabled.")
+
+
+# Global model cache with thread-safe locking to prevent concurrent model loads
+_model_cache: Dict[str, Any] = {}
+_model_lock = threading.Lock()
+
+
+def _get_or_load_model(model_size: str, device: str) -> Any:
+    """
+    Thread-safe model loader with singleton pattern.
+
+    This prevents multiple concurrent jobs from loading models simultaneously,
+    which can cause GPU memory exhaustion and segmentation faults.
+
+    Args:
+        model_size: Whisper model size (tiny, base, small, medium, large)
+        device: Device to use (cpu or cuda)
+
+    Returns:
+        Loaded stable-whisper model
+    """
+    cache_key = f"{model_size}_{device}"
+
+    # Fast path: check if model already loaded (without lock)
+    if cache_key in _model_cache:
+        print(f"✅ Using cached model: {model_size} on {device}")
+        return _model_cache[cache_key]
+
+    # Slow path: acquire lock and load model
+    with _model_lock:
+        # Double-check after acquiring lock (another thread may have loaded it)
+        if cache_key in _model_cache:
+            print(f"✅ Using cached model: {model_size} on {device}")
+            return _model_cache[cache_key]
+
+        # Load the model (only one thread can reach here at a time)
+        print(f"🔄 Loading stable-ts model: {model_size} on {device} (thread-safe)")
+
+        if not stable_whisper:
+            raise RuntimeError("stable_whisper not available")
+
+        try:
+            model = stable_whisper.load_model(model_size, device=device)
+            _model_cache[cache_key] = model
+            print(f"✅ Model loaded and cached successfully: {model_size} on {device}")
+            return model
+        except Exception as e:
+            print(f"❌ Failed to load model on {device}: {e}")
+
+            # If CUDA failed, try CPU fallback
+            if device == "cuda" and stable_whisper:
+                print("🔄 Falling back to CPU...")
+                try:
+                    model = stable_whisper.load_model(model_size, device="cpu")
+                    # Cache with CPU device key
+                    cpu_cache_key = f"{model_size}_cpu"
+                    _model_cache[cpu_cache_key] = model
+                    print(f"✅ Model loaded on CPU fallback")
+                    return model
+                except Exception as cpu_e:
+                    print(f"❌ CPU fallback also failed: {cpu_e}")
+                    raise
+            else:
+                raise
 
 
 def extract_word_timings_with_stable_ts(
@@ -56,28 +121,20 @@ def extract_word_timings_with_stable_ts(
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
     
-    # Determine device
-    if TORCH_AVAILABLE and torch and use_gpu and torch.cuda.is_available():
+    # Determine device - check environment variable first
+    env_device = os.environ.get("WHISPER_DEVICE", "").lower()
+    if env_device in ["cpu", "cuda"]:
+        device = env_device
+        print(f"Using device from WHISPER_DEVICE env: {device}")
+    elif TORCH_AVAILABLE and torch and use_gpu and torch.cuda.is_available():
         device = "cuda"
     else:
         device = "cpu"
     print(f"Using device: {device}")
-    
-    # Load stable-ts model with GPU support
-    print(f"Loading stable-ts model: {model_size}")
-    try:
-        if not stable_whisper:
-            raise RuntimeError("stable_whisper not available")
-        model = stable_whisper.load_model(model_size, device=device)
-        print(f"✅ Model loaded successfully on {device}")
-    except Exception as e:
-        print(f"Failed to load model on {device}: {e}")
-        if device == "cuda" and stable_whisper:
-            print("Falling back to CPU...")
-            model = stable_whisper.load_model(model_size, device="cpu")
-            device = "cpu"
-        else:
-            raise
+
+    # Load stable-ts model with thread-safe singleton pattern
+    # This prevents concurrent model loads which cause segmentation faults
+    model = _get_or_load_model(model_size, device)
     
     # Transcribe with enhanced options
     print(f"Transcribing audio file: {audio_path}")

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 from moviepy import AudioFileClip, VideoFileClip
 import numpy as np
+from .ffmpeg_pool import run_ffmpeg_command
 
 logger = logging.getLogger(__name__)
 
@@ -304,7 +305,6 @@ class AudioEnhancer:
         Returns:
             Path to normalized video
         """
-        import subprocess
         import tempfile
         import shutil
 
@@ -334,7 +334,13 @@ class AudioEnhancer:
                     str(temp_audio_extract)
                 ]
 
-                result = subprocess.run(extract_cmd, capture_output=True, text=True)
+                result = run_ffmpeg_command(
+                    extract_cmd,
+                    description="Extract audio for normalization",
+                    capture_output=True,
+                    text=True,
+                    check=False  # Don't raise exception, handle error below
+                )
                 if result.returncode != 0:
                     logger.warning(f"FFmpeg audio extraction failed: {result.stderr}")
                     # Video might not have audio or audio is corrupted
@@ -343,28 +349,39 @@ class AudioEnhancer:
 
                 # Step 2: Load and normalize audio with MoviePy
                 logger.debug("Loading and normalizing audio")
-                audio_clip = AudioFileClip(str(temp_audio_extract))
-                audio_array = audio_clip.to_soundarray(fps=audio_clip.fps)
-                sample_rate = audio_clip.fps
+                audio_clip = None
+                normalized_audio = None
+                try:
+                    audio_clip = AudioFileClip(str(temp_audio_extract))
+                    audio_array = audio_clip.to_soundarray(fps=audio_clip.fps)
+                    sample_rate = audio_clip.fps
 
-                # Normalize audio
-                normalized = self._normalize_audio(audio_array, target_loudness=-14.0)
-                normalized = self._limit_peaks(normalized)
+                    # Normalize audio
+                    normalized = self._normalize_audio(audio_array, target_loudness=-14.0)
+                    normalized = self._limit_peaks(normalized)
 
-                # Step 3: Write normalized audio back to file
-                logger.debug("Writing normalized audio")
-                from moviepy.audio.AudioClip import AudioArrayClip
-                normalized_audio = AudioArrayClip(normalized, fps=sample_rate)
-                normalized_audio.write_audiofile(
-                    str(temp_audio_normalized),
-                    fps=sample_rate,
-                    codec='pcm_s16le',
-                    logger=None
-                )
-
-                # Clean up audio clips
-                audio_clip.close()
-                normalized_audio.close()
+                    # Step 3: Write normalized audio back to file
+                    logger.debug("Writing normalized audio")
+                    from moviepy.audio.AudioClip import AudioArrayClip
+                    normalized_audio = AudioArrayClip(normalized, fps=sample_rate)
+                    normalized_audio.write_audiofile(
+                        str(temp_audio_normalized),
+                        fps=sample_rate,
+                        codec='pcm_s16le',
+                        logger=None
+                    )
+                finally:
+                    # Always clean up audio clips, even if error occurs
+                    if audio_clip:
+                        try:
+                            audio_clip.close()
+                        except Exception as e:
+                            logger.warning(f"Failed to close audio_clip: {e}")
+                    if normalized_audio:
+                        try:
+                            normalized_audio.close()
+                        except Exception as e:
+                            logger.warning(f"Failed to close normalized_audio: {e}")
 
                 # Step 4: Merge normalized audio with original video using FFmpeg
                 # Use -c:v copy to avoid re-encoding video (preserves original quality and avoids freezing)
@@ -382,7 +399,13 @@ class AudioEnhancer:
                     str(temp_video_output)
                 ]
 
-                result = subprocess.run(merge_cmd, capture_output=True, text=True)
+                result = run_ffmpeg_command(
+                    merge_cmd,
+                    description="Merge normalized audio with video",
+                    capture_output=True,
+                    text=True,
+                    check=False  # Handle error below
+                )
                 if result.returncode != 0:
                     raise Exception(f"FFmpeg merge failed: {result.stderr}")
 

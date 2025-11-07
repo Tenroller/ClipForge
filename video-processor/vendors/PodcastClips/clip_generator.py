@@ -573,6 +573,8 @@ class ClipGenerator:
         Returns:
             GeneratedClip with metadata, or None if generation failed
         """
+        video = None
+        clip = None
         try:
             logger.info(f"Generating clip {viral_moment.clip_index}: '{viral_moment.title}' ({viral_moment.start_time:.1f}s - {viral_moment.end_time:.1f}s)")
 
@@ -707,10 +709,6 @@ class ClipGenerator:
                     # Already using CPU encoding, re-raise the error
                     raise
 
-            # Clean up
-            clip.close()
-            video.close()
-
             # Get file size
             file_size = output_path.stat().st_size
 
@@ -729,6 +727,19 @@ class ClipGenerator:
         except Exception as e:
             logger.error(f"Failed to generate clip {viral_moment.clip_index}: {e}", exc_info=True)
             return None
+
+        finally:
+            # Always clean up resources, even if error occurs
+            if clip:
+                try:
+                    clip.close()
+                except Exception as e:
+                    logger.warning(f"Failed to close clip: {e}")
+            if video:
+                try:
+                    video.close()
+                except Exception as e:
+                    logger.warning(f"Failed to close video: {e}")
 
     def generate_all_clips(
         self,
