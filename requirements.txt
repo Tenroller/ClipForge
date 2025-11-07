@@ -1,113 +1,176 @@
-# VideoHelper Requirements - Optimized Installation
-# Cleaned up to remove unused dependencies and reduce Docker image size
-
-# =============================================================================
-# CORE REQUIREMENTS (Always needed)
-# =============================================================================
-# Web server & API
-uvicorn
-fastapi
-starlette
-pydantic
-python-multipart
-
-# Video processing (core)
-moviepy
-imageio
-imageio-ffmpeg
-opencv-python
-numpy
-matplotlib
-
-# Audio/TTS (core)
-soundfile
-
-# Data & utils (core)
-requests
-python-dotenv
-termcolor
-tqdm
-psutil
-Pillow
+absl-py
+addict
 aiofiles
-
-# Logging
-structlog
-
-# Authentication & security
-PyJWT
-bcrypt==4.2.0
-
-# Basic TTS support
-espeakng_loader
-
-# Database support
-prometheus-client
-SQLAlchemy
-psycopg2-binary
-
-# =============================================================================
-# AI/ML DEPENDENCIES (For AI-powered video generation)
-# =============================================================================
-
-google-genai
-ultralytics
-
-# Enhanced ASR for better word-level timestamps
-stable-ts
+annotated-doc
+annotated-types
+anyio
+assemblyai
+attrs
+av
+babel
+bcrypt
+blis
+cachetools
+catalogue
+certifi
+cffi
+charset-normalizer
+click
+cloudpathlib
+coloredlogs
+confection
+contourpy
+csvw
+ctranslate2
+curated-tokenizers
+curated-transformers
+cycler
+cymem
+Cython
+decorator
+dlinfo
+docopt
+dtw-python
+espeakng-loader
+exceptiongroup
+fastapi
 faster-whisper
-whisper-timestamped
-pysubs2
 ffmpeg-python
-
-# TTS pipeline (advanced)
+filelock
+flatbuffers
+fonttools
+fsspec
+future
+google-auth
+google-genai
+h11
+hf-xet
+httpcore
+httpx
+huggingface-hub
+humanfriendly
+idna
+ImageIO
+imageio-ffmpeg
+iniconfig
+isodate
+jax
+jaxlib
+Jinja2
+joblib
+jsonschema
+jsonschema-specifications
+kiwisolver
 kokoro
-
-# =============================================================================
-# BRAINROT DEPENDENCIES (For TikTok-style compilations)
-# =============================================================================
-# Video downloading and processing
-yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master
+langcodes
+language-tags
+language_data
+llvmlite
+loguru
+marisa-trie
+markdown-it-py
+MarkupSafe
+matplotlib
+mdurl
+mediapipe
+misaki
+ml_dtypes
+more-itertools
+moviepy
+mpmath
+murmurhash
+networkx
+num2words
+numba
+numpy
+onnxruntime
+openai-whisper
+opencv-contrib-python
+opencv-python
+opt_einsum
+packaging
+phonemizer-fork
+pillow
+platformdirs
+pluggy
+polars
+polars-runtime-32
+preshed
+proglog
+prometheus_client
+protobuf
+psutil
+psycopg2-binary
+pyasn1
+pyasn1_modules
+pycparser
+pydantic
+pydantic_core
+Pygments
+PyJWT
+pyparsing
+pysubs2
+pytesseract
+pytest
+python-dateutil
+python-dotenv
+python-multipart
+PyYAML
+rdflib
+referencing
+regex
+requests
+rfc3986
+rich
+rpds-py
+rsa
+safetensors
 scenedetect
-
-# ML dependencies for brainrot
+scipy
+segments
+sentencepiece
+sentry-sdk
+shellingham==1.5.4
+six
+smart_open
+sniffio
+sounddevice
+soundfile
+spacy
+spacy-curated-transformers
+spacy-legacy
+spacy-loggers
+SQLAlchemy
+srsly
+srt
+srt_equalizer
+stable-ts
+starlette
+structlog
+sympy
+tenacity
+termcolor
+thinc
+tiktoken
+tokenizers
+tomli
 --extra-index-url https://download.pytorch.org/whl/cu126
 torch
 torchaudio
 torchvision
-
-# =============================================================================
-# MONEYPRINTER EXTRAS (For advanced text-to-video features)
-# =============================================================================
-# Subtitle processing
-srt_equalizer
-
-# =============================================================================
-# DEVELOPMENT & TESTING (Optional - not needed in production)
-# =============================================================================
-# Testing (only needed for running tests locally)
-pytest
-httpx
-
-# Observability (optional - only if SENTRY_DSN is configured)
-sentry-sdk
-
-# =============================================================================
-# INSTALLATION INSTRUCTIONS
-# =============================================================================
-
-# Full installation (all features):
-# pip install -r requirements.txt
-
-# Production installation (exclude dev dependencies):
-# pip install -r requirements.txt && pip uninstall -y pytest httpx sentry-sdk
-
-# Note: The following dependencies have been REMOVED as unused:
-# - g4f, curl_cffi, undetected_chromedriver (web scraping - not used)
-# - transformers (~2GB - not used, saves significant space)
-# - spacy, en_core_web_sm (NLP models - not used)
-# - redis, rq (queue system - we use in-memory queue)
-# - flask, flask-cors (legacy MoneyPrinter - not used in current FastAPI app)
-# - rich, proglog, colorama, anyio (indirect deps or not directly used)
-# - playwright (replaced with Pillow for text rendering)
-
+tqdm
+transformers
+typer
+typing-inspection
+typing_extensions
+ultralytics
+ultralytics-thop
+uritemplate
+urllib3
+uvicorn
+wasabi
+weasel
+websockets
+whisper-timestamped
+wrapt
+yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master

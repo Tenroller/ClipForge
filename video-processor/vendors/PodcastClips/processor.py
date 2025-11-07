@@ -177,7 +177,8 @@ class PodcastClipsProcessor:
             generated_clips = self._generate_clips(
                 video_path, viral_moments, word_timings,
                 enable_mixed_mode, face_loss_threshold, face_return_threshold,
-                min_segment_duration, use_ocr, transition_duration
+                min_segment_duration, use_ocr, transition_duration,
+                smoothing_strength
             )
 
             # Step 9: Post-processing (audio enhancement & thumbnails)
@@ -488,7 +489,8 @@ class PodcastClipsProcessor:
         face_return_threshold: float = 0.5,
         min_segment_duration: float = 0.5,
         use_ocr: bool = True,
-        transition_duration: float = 0.5
+        transition_duration: float = 0.5,
+        smoothing_strength: int = 11
     ) -> List[Dict[str, Any]]:
         """
         Generate all video clips with optional mixed-mode support.
@@ -503,6 +505,7 @@ class PodcastClipsProcessor:
             min_segment_duration: Minimum segment duration to avoid flicker
             use_ocr: Use OCR for content detection
             transition_duration: Crossfade duration between modes
+            smoothing_strength: Smoothing strength for face tracking (5=light, 11=medium, 21=strong)
         """
         self.update_progress("clip_generation", 75, f"Generating {len(viral_moments)} clips")
 
