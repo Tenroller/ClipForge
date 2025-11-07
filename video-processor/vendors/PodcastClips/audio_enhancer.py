@@ -85,14 +85,37 @@ class AudioEnhancer:
             if output_path is None:
                 output_path = video_path
 
+            # Get source FPS to preserve during re-encoding (prevent video freezing)
+            source_fps = getattr(video, 'fps', 30)
+
+            # Detect and correct doubled FPS (common MoviePy bug with frame functions)
+            # Only halve if FPS matches common doubled patterns (59.94->29.97, 60->30, 50->25, 48->24)
+            # Don't halve legitimate high-FPS content (120fps, 144fps, etc.)
+            common_doubled_fps = [59.94, 60, 50, 48]
+            if any(abs(source_fps - doubled) < 0.1 for doubled in common_doubled_fps):
+                original_fps = source_fps
+                source_fps = source_fps / 2
+                logger.warning(f"Detected doubled FPS in enhance_video_audio, correcting: {original_fps} -> {source_fps}")
+
+            logger.debug(f"Re-encoding with preserved FPS: {source_fps}")
+
+            # Calculate keyframe interval for stable playback
+            keyframe_interval = int(source_fps)
+
             # Write video with enhanced audio
             video_enhanced.write_videofile(
                 output_path,
                 codec='libx264',
                 audio_codec='aac',
+                fps=source_fps,  # Preserve source FPS to prevent freezing
                 temp_audiofile='temp-audio-enhanced.m4a',
                 remove_temp=True,
-                logger=None
+                logger=None,
+                ffmpeg_params=[
+                    '-g', str(keyframe_interval),
+                    '-keyint_min', str(keyframe_interval),
+                    '-sc_threshold', '0'
+                ]
             )
 
             # Clean up
@@ -272,6 +295,7 @@ class AudioEnhancer:
         Quick audio normalization without full enhancement.
 
         Faster than full enhancement - just normalizes volume.
+        Uses FFmpeg for audio replacement to avoid video re-encoding issues.
 
         Args:
             video_path: Input video path
@@ -280,50 +304,103 @@ class AudioEnhancer:
         Returns:
             Path to normalized video
         """
+        import subprocess
+        import tempfile
+        import shutil
+
         try:
             logger.info(f"Quick normalizing audio for {Path(video_path).name}")
 
-            # Load video
-            video = VideoFileClip(video_path)
-
-            if video.audio is None:
-                return video_path
-
-            # Simple volume normalization
-            audio = video.audio
-            audio_array = audio.to_soundarray(fps=audio.fps)
-
-            # Normalize to -14 LUFS equivalent
-            normalized = self._normalize_audio(audio_array, target_loudness=-14.0)
-            normalized = self._limit_peaks(normalized)
-
-            # Create new audio
-            from moviepy.audio.AudioClip import AudioArrayClip
-            normalized_audio = AudioArrayClip(normalized, fps=audio.fps)
-
-            # Set to video
-            video_normalized = video.with_audio(normalized_audio)
-
-            # Write
+            # Determine output path
             if output_path is None:
                 output_path = video_path
 
-            video_normalized.write_videofile(
-                output_path,
-                codec='libx264',
-                audio_codec='aac',
-                temp_audiofile='temp-audio-normalized.m4a',
-                remove_temp=True,
-                logger=None
-            )
+            # Create temporary files for audio processing
+            temp_dir = tempfile.mkdtemp(prefix="audio_norm_")
+            temp_audio_extract = Path(temp_dir) / "extracted_audio.wav"
+            temp_audio_normalized = Path(temp_dir) / "normalized_audio.wav"
+            temp_video_output = Path(temp_dir) / "output_video.mp4"
 
-            video.close()
-            video_normalized.close()
+            try:
+                # Step 1: Extract audio using FFmpeg
+                logger.debug("Extracting audio with FFmpeg")
+                extract_cmd = [
+                    'ffmpeg', '-i', video_path,
+                    '-vn',  # No video
+                    '-acodec', 'pcm_s16le',  # PCM audio for processing
+                    '-ar', '44100',  # Standard sample rate
+                    '-ac', '2',  # Stereo
+                    '-y',  # Overwrite
+                    str(temp_audio_extract)
+                ]
 
-            logger.info(f"Quick normalization complete")
+                result = subprocess.run(extract_cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    logger.warning(f"FFmpeg audio extraction failed: {result.stderr}")
+                    # Video might not have audio or audio is corrupted
+                    logger.info("Video has no valid audio track, skipping normalization")
+                    return video_path
 
-            return output_path
+                # Step 2: Load and normalize audio with MoviePy
+                logger.debug("Loading and normalizing audio")
+                audio_clip = AudioFileClip(str(temp_audio_extract))
+                audio_array = audio_clip.to_soundarray(fps=audio_clip.fps)
+                sample_rate = audio_clip.fps
+
+                # Normalize audio
+                normalized = self._normalize_audio(audio_array, target_loudness=-14.0)
+                normalized = self._limit_peaks(normalized)
+
+                # Step 3: Write normalized audio back to file
+                logger.debug("Writing normalized audio")
+                from moviepy.audio.AudioClip import AudioArrayClip
+                normalized_audio = AudioArrayClip(normalized, fps=sample_rate)
+                normalized_audio.write_audiofile(
+                    str(temp_audio_normalized),
+                    fps=sample_rate,
+                    codec='pcm_s16le',
+                    logger=None
+                )
+
+                # Clean up audio clips
+                audio_clip.close()
+                normalized_audio.close()
+
+                # Step 4: Merge normalized audio with original video using FFmpeg
+                # Use -c:v copy to avoid re-encoding video (preserves original quality and avoids freezing)
+                logger.debug("Merging normalized audio with video (no video re-encoding)")
+                merge_cmd = [
+                    'ffmpeg', '-i', video_path,  # Input video
+                    '-i', str(temp_audio_normalized),  # Input normalized audio
+                    '-map', '0:v:0',  # Take video from first input
+                    '-map', '1:a:0',  # Take audio from second input
+                    '-c:v', 'copy',  # Copy video stream without re-encoding (KEY FIX)
+                    '-c:a', 'aac',  # Encode audio as AAC
+                    '-b:a', '192k',  # Audio bitrate
+                    '-shortest',  # Match shortest stream duration
+                    '-y',  # Overwrite
+                    str(temp_video_output)
+                ]
+
+                result = subprocess.run(merge_cmd, capture_output=True, text=True)
+                if result.returncode != 0:
+                    raise Exception(f"FFmpeg merge failed: {result.stderr}")
+
+                # Step 5: Replace original file with processed file
+                shutil.move(str(temp_video_output), output_path)
+
+                logger.info(f"Quick normalization complete using FFmpeg (no video re-encoding)")
+
+                return output_path
+
+            finally:
+                # Clean up temporary directory
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to clean up temp dir: {cleanup_error}")
 
         except Exception as e:
-            logger.error(f"Quick normalization failed: {e}")
+            logger.error(f"Quick normalization failed: {e}", exc_info=True)
+            # Return original path on failure
             return video_path

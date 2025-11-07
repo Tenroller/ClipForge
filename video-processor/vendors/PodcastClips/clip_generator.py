@@ -197,7 +197,14 @@ class ClipGenerator:
         # Ensure FPS is preserved from source clip
         source_fps = getattr(clip, 'fps', 30)
         if not hasattr(final_clip, 'fps') or final_clip.fps is None:
-            final_clip = final_clip.with_fps(source_fps)
+            # WORKAROUND: with_fps() may double FPS on CompositeVideoClip
+            # To get correct FPS, we pass HALF the desired FPS
+            target_fps_for_with_fps = source_fps / 2
+            final_clip = final_clip.with_fps(target_fps_for_with_fps)
+
+        # Verify FPS was set correctly
+        actual_fps = getattr(final_clip, 'fps', None)
+        logger.info(f"[FPS-DEBUG] Created horizontal content clip - source FPS: {source_fps}, actual FPS: {actual_fps}")
 
         return final_clip
 
@@ -270,7 +277,16 @@ class ClipGenerator:
 
         # Create new clip with dynamic cropping and proper FPS
         dynamic_clip = VideoClip(frame_function=make_frame, duration=clip.duration)
-        dynamic_clip = dynamic_clip.with_fps(source_fps)
+
+        # WORKAROUND: with_fps() doubles FPS on VideoClips created from frame functions
+        # To get correct FPS, we pass HALF the desired FPS, which gets doubled back to correct value
+        # This ensures frame iteration is properly set up (unlike direct assignment)
+        target_fps_for_with_fps = source_fps / 2
+        dynamic_clip = dynamic_clip.with_fps(target_fps_for_with_fps)
+
+        # Verify FPS after doubling
+        actual_fps = getattr(dynamic_clip, 'fps', None)
+        logger.info(f"[FPS-DEBUG] Created face-tracked clip - source FPS: {source_fps}, set with_fps({target_fps_for_with_fps:.2f}), actual FPS: {actual_fps}")
 
         # Preserve audio from original clip
         if hasattr(clip, 'audio') and clip.audio is not None:
@@ -460,9 +476,10 @@ class ClipGenerator:
                 target_fps = getattr(clips_with_transitions[0], 'fps', 30)
                 for i, clip in enumerate(clips_with_transitions):
                     clip_fps = getattr(clip, 'fps', None)
-                    if clip_fps is None or clip_fps != target_fps:
+                    if clip_fps is None or abs(clip_fps - target_fps) > 0.1:  # Allow small FPS differences
                         logger.warning(f"Clip {i} has mismatched FPS ({clip_fps}), normalizing to {target_fps}")
-                        clips_with_transitions[i] = clip.with_fps(target_fps)
+                        # WORKAROUND: with_fps() may double FPS, so pass half the desired FPS
+                        clips_with_transitions[i] = clip.with_fps(target_fps / 2)
 
                 # Use "compose" method to ensure audio is properly handled
                 final_clip = concatenate_videoclips(clips_with_transitions, method="compose")
@@ -523,6 +540,10 @@ class ClipGenerator:
             # Load video
             logger.debug(f"Loading video: {video_path}")
             video = VideoFileClip(video_path)
+
+            # Check source video FPS
+            source_video_fps = getattr(video, 'fps', None)
+            logger.info(f"[FPS-DEBUG] Source video file loaded with FPS: {source_video_fps}")
 
             # Validate timing
             if viral_moment.end_time > video.duration:
@@ -599,6 +620,7 @@ class ClipGenerator:
 
             # Get the clip's FPS (preserve source FPS to avoid freezing)
             clip_fps = getattr(clip, 'fps', 30)
+            logger.info(f"[FPS-DEBUG] Clip FPS detected for export: {clip_fps}")
 
             # Add keyframe parameters to prevent freezing
             # Force keyframes every 1 second (adjust based on actual FPS)

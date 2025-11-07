@@ -17,9 +17,16 @@
       "Bash(ffprobe:*)",
       "Bash(ffmpeg:*)",
       "Bash(for:*)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(python3:*)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs"
     ],
     "deny": [],
     "ask": []
+  },
+  "sandbox": {
+    "autoAllowBashIfSandboxed": true,
+    "enabled": true
   }
 }
