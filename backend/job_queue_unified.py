@@ -6,12 +6,17 @@ while maintaining compatibility with the current app.py job management system.
 
 Features:
 - In-memory queue with priority scheduling
-- ThreadPoolExecutor for concurrent execution
+- Sequential job processing (one job at a time by default)
+- ThreadPoolExecutor for job execution
 - Job cancellation support
 - Integration with database persistence
 - WebSocket real-time updates
 - Comprehensive error handling and logging
 - No external dependencies (Redis-free)
+
+Note: By default, max_workers is set to 1 to ensure sequential processing
+for resource-constrained environments. This can be increased via the
+VIDEOHELPER_MAX_CONCURRENT_JOBS environment variable if needed.
 """
 
 import json
@@ -79,14 +84,19 @@ class UnifiedJobQueue:
     Features:
     - In-memory job storage with database persistence
     - Priority-based execution
+    - Sequential job processing (one job at a time by default)
     - Background thread execution
     - Job cancellation support
     - WebSocket real-time updates
     - Comprehensive monitoring
     - No external dependencies
+
+    The queue processes jobs sequentially by default (max_workers=1) to ensure
+    compatibility with resource-constrained environments. Jobs are picked from
+    the queue based on priority and processed one at a time.
     """
 
-    def __init__(self, max_workers: int = 2, job_store=None):
+    def __init__(self, max_workers: int = 1, job_store=None):
         self.jobs: Dict[str, Job] = {}
         self.queue: List[str] = []  # Job IDs in priority order
         self.cancel_tokens: Dict[str, threading.Event] = {}
@@ -691,7 +701,7 @@ def get_job_queue() -> UnifiedJobQueue:
     if _job_queue is None:
         from .database import get_job_store
 
-        max_workers = int(os.getenv("VIDEOHELPER_MAX_CONCURRENT_JOBS", "2"))
+        max_workers = int(os.getenv("VIDEOHELPER_MAX_CONCURRENT_JOBS", "1"))
         job_store = get_job_store()
         _job_queue = UnifiedJobQueue(max_workers=max_workers, job_store=job_store)
     return _job_queue
