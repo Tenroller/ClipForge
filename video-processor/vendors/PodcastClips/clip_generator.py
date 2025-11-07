@@ -212,7 +212,8 @@ class ClipGenerator:
         self,
         clip: VideoFileClip,
         start_time: float,
-        dynamic_tracking: bool = True
+        dynamic_tracking: bool = True,
+        smoothing_strength: int = 11
     ) -> VideoFileClip:
         """
         Create face-tracked vertical clip with 9:16 crop.
@@ -221,6 +222,10 @@ class ClipGenerator:
             clip: Source video clip
             start_time: Start time of clip in original video (for face tracking)
             dynamic_tracking: If True, crop follows face frame-by-frame. If False, use static crop.
+            smoothing_strength: Window length for Savitzky-Golay smoothing filter
+                               - 5: Light smoothing (more responsive, slight jitter)
+                               - 11: Medium smoothing (balanced, recommended)
+                               - 21: Strong smoothing (very smooth, may lag on fast motion)
 
         Returns:
             Cropped and resized clip in 9:16 format
@@ -233,6 +238,23 @@ class ClipGenerator:
             resized = cropped.resized(self.target_resolution)
             return resized
 
+        # Get source FPS for trajectory computation
+        source_fps = getattr(clip, 'fps', 30)
+        end_time = start_time + clip.duration
+
+        # Pre-compute smoothed trajectory for professional-quality smooth camera motion
+        smoothed_trajectory = self.face_tracker.compute_smoothed_trajectory(
+            start_time=start_time,
+            end_time=end_time,
+            smoothing_strength=smoothing_strength,
+            fps=source_fps
+        )
+
+        if smoothed_trajectory:
+            logger.info(f"Using smoothed trajectory (strength={smoothing_strength}) for face tracking")
+        else:
+            logger.warning("Smoothed trajectory unavailable, falling back to standard tracking")
+
         # Dynamic tracking mode - crop follows face frame-by-frame
         target_width, target_height = self.target_resolution
         original_width, original_height = clip.size
@@ -244,8 +266,14 @@ class ClipGenerator:
             # Get absolute timestamp in original video
             absolute_time = start_time + t
 
-            # Get dynamic crop box for this timestamp
-            crop_box = self.face_tracker.get_dynamic_crop_box_at_time(absolute_time)
+            # Get crop box using smoothed trajectory (if available) or standard tracking
+            if smoothed_trajectory:
+                # Use pre-computed smoothed trajectory for smooth camera motion
+                smoothed_x = smoothed_trajectory(absolute_time)
+                crop_box = self.face_tracker.get_crop_box_from_position(smoothed_x)
+            else:
+                # Fallback to standard dynamic tracking (with built-in temporal smoothing)
+                crop_box = self.face_tracker.get_dynamic_crop_box_at_time(absolute_time)
 
             # Get the frame from the source clip
             frame = clip.get_frame(t)
@@ -271,9 +299,6 @@ class ClipGenerator:
 
         # Import VideoClip for creating custom clip
         from moviepy import VideoClip
-
-        # Get source FPS (or default to 30)
-        source_fps = getattr(clip, 'fps', 30)
 
         # Create new clip with dynamic cropping and proper FPS
         dynamic_clip = VideoClip(frame_function=make_frame, duration=clip.duration)
@@ -381,7 +406,8 @@ class ClipGenerator:
         video: VideoFileClip,
         viral_moment: ViralMoment,
         word_timings: List[Dict[str, Any]],
-        content_segments: List[ContentSegment]
+        content_segments: List[ContentSegment],
+        smoothing_strength: int = 11
     ) -> VideoFileClip:
         """
         Generate clip with mixed content modes (face-tracked + horizontal).
@@ -391,6 +417,7 @@ class ClipGenerator:
             viral_moment: ViralMoment defining overall clip timing
             word_timings: Word timings for subtitles
             content_segments: List of ContentSegment defining mode timeline
+            smoothing_strength: Smoothing strength for face tracking (5=light, 11=medium, 21=strong)
 
         Returns:
             Composite video clip with mixed modes
@@ -406,7 +433,7 @@ class ClipGenerator:
         if not relevant_segments:
             logger.warning("No relevant segments found, using full face tracking")
             # Fallback to traditional face tracking
-            return self._generate_traditional_clip(video, viral_moment, word_timings)
+            return self._generate_traditional_clip(video, viral_moment, word_timings, smoothing_strength)
 
         logger.debug(f"Processing {len(relevant_segments)} content segments")
 
@@ -431,8 +458,12 @@ class ClipGenerator:
                 # Horizontal content mode - preserve aspect ratio with blurred bg
                 processed = self.create_horizontal_content_clip(segment_clip)
             else:
-                # Face tracking mode - crop to 9:16 with dynamic tracking
-                processed = self.create_face_tracked_clip(segment_clip, seg_start)
+                # Face tracking mode - crop to 9:16 with dynamic tracking and smoothing
+                processed = self.create_face_tracked_clip(
+                    segment_clip,
+                    seg_start,
+                    smoothing_strength=smoothing_strength
+                )
 
             segment_clips.append(processed)
 
@@ -494,7 +525,8 @@ class ClipGenerator:
         self,
         video: VideoFileClip,
         viral_moment: ViralMoment,
-        word_timings: List[Dict[str, Any]]
+        word_timings: List[Dict[str, Any]],
+        smoothing_strength: int = 11
     ) -> VideoFileClip:
         """
         Generate traditional face-tracked clip (fallback method).
@@ -503,6 +535,7 @@ class ClipGenerator:
             video: Source video
             viral_moment: Timing information
             word_timings: Word timings for subtitles
+            smoothing_strength: Smoothing strength for face tracking (5=light, 11=medium, 21=strong)
 
         Returns:
             Processed clip
@@ -510,8 +543,12 @@ class ClipGenerator:
         # Extract segment
         clip = video.subclipped(viral_moment.start_time, viral_moment.end_time)
 
-        # Apply dynamic face-tracked crop and resize
-        clip = self.create_face_tracked_clip(clip, viral_moment.start_time)
+        # Apply dynamic face-tracked crop and resize with smoothing
+        clip = self.create_face_tracked_clip(
+            clip,
+            viral_moment.start_time,
+            smoothing_strength=smoothing_strength
+        )
 
         return clip
 
@@ -520,7 +557,8 @@ class ClipGenerator:
         video_path: str,
         viral_moment: ViralMoment,
         word_timings: List[Dict[str, Any]],
-        job_id: str
+        job_id: str,
+        smoothing_strength: int = 11
     ) -> Optional[GeneratedClip]:
         """
         Generate a single viral clip with optional mixed-mode support.
@@ -530,6 +568,7 @@ class ClipGenerator:
             viral_moment: ViralMoment with timing and metadata
             word_timings: Full list of word timings from transcription
             job_id: Job ID for output filename
+            smoothing_strength: Smoothing strength for face tracking (5=light, 11=medium, 21=strong)
 
         Returns:
             GeneratedClip with metadata, or None if generation failed
@@ -574,12 +613,13 @@ class ClipGenerator:
                     video,
                     viral_moment,
                     word_timings,
-                    content_segments
+                    content_segments,
+                    smoothing_strength
                 )
             else:
                 # Traditional face-tracking generation
                 logger.info("Using traditional face-tracking mode")
-                clip = self._generate_traditional_clip(video, viral_moment, word_timings)
+                clip = self._generate_traditional_clip(video, viral_moment, word_timings, smoothing_strength)
 
             # Get face coverage percentage for metadata
             face_coverage = self.face_tracker.get_face_coverage_percentage(
@@ -697,7 +737,8 @@ class ClipGenerator:
         word_timings: List[Dict[str, Any]],
         job_id: str,
         parallel: bool = True,
-        max_workers: int = 3
+        max_workers: int = 3,
+        smoothing_strength: int = 11
     ) -> List[GeneratedClip]:
         """
         Generate all viral clips from a video (supports parallel processing).
@@ -709,21 +750,23 @@ class ClipGenerator:
             job_id: Job ID for output filenames
             parallel: Whether to use parallel processing (default: True)
             max_workers: Maximum parallel workers (default: 3)
+            smoothing_strength: Smoothing strength for face tracking (5=light, 11=medium, 21=strong)
 
         Returns:
             List of successfully generated clips (sorted by clip_index)
         """
         if parallel and len(viral_moments) > 1:
-            return self._generate_clips_parallel(video_path, viral_moments, word_timings, job_id, max_workers)
+            return self._generate_clips_parallel(video_path, viral_moments, word_timings, job_id, max_workers, smoothing_strength)
         else:
-            return self._generate_clips_sequential(video_path, viral_moments, word_timings, job_id)
+            return self._generate_clips_sequential(video_path, viral_moments, word_timings, job_id, smoothing_strength)
 
     def _generate_clips_sequential(
         self,
         video_path: str,
         viral_moments: List[ViralMoment],
         word_timings: List[Dict[str, Any]],
-        job_id: str
+        job_id: str,
+        smoothing_strength: int = 11
     ) -> List[GeneratedClip]:
         """Sequential clip generation (original method)."""
         generated_clips = []
@@ -731,7 +774,7 @@ class ClipGenerator:
         logger.info(f"Generating {len(viral_moments)} clips sequentially")
 
         for moment in viral_moments:
-            clip = self.generate_clip(video_path, moment, word_timings, job_id)
+            clip = self.generate_clip(video_path, moment, word_timings, job_id, smoothing_strength)
             if clip:
                 generated_clips.append(clip)
 
@@ -745,7 +788,8 @@ class ClipGenerator:
         viral_moments: List[ViralMoment],
         word_timings: List[Dict[str, Any]],
         job_id: str,
-        max_workers: int
+        max_workers: int,
+        smoothing_strength: int = 11
     ) -> List[GeneratedClip]:
         """
         Parallel clip generation for 3x-5x speedup.
@@ -761,7 +805,7 @@ class ClipGenerator:
         def generate_with_logging(moment):
             """Wrapper for thread-safe logging."""
             try:
-                clip = self.generate_clip(video_path, moment, word_timings, job_id)
+                clip = self.generate_clip(video_path, moment, word_timings, job_id, smoothing_strength)
                 if clip:
                     with lock:
                         logger.info(f"✓ Completed clip {moment.clip_index}/{len(viral_moments)}: {moment.title}")

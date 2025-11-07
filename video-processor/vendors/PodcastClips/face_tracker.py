@@ -5,9 +5,11 @@ Face tracking module using MediaPipe for intelligent person-focused cropping.
 import cv2
 import mediapipe as mp
 import numpy as np
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, Callable
 from dataclasses import dataclass
 import logging
+from scipy.signal import savgol_filter
+from scipy.interpolate import interp1d
 
 logger = logging.getLogger(__name__)
 
@@ -390,6 +392,120 @@ class FaceTracker:
 
         # Calculate crop box centered on smoothed face position
         crop_x = avg_face_center_x - target_width // 2
+
+        # Ensure crop box stays within video bounds
+        crop_x = max(0, min(crop_x, self.video_width - target_width))
+
+        return CropBox(
+            x=crop_x,
+            y=0,
+            width=target_width,
+            height=self.video_height
+        )
+
+    def compute_smoothed_trajectory(
+        self,
+        start_time: float,
+        end_time: float,
+        smoothing_strength: int = 11,
+        fps: float = 30.0
+    ) -> Optional[Callable[[float], float]]:
+        """
+        Pre-compute smoothed face trajectory using Savitzky-Golay filter.
+
+        This creates a smooth interpolation function that eliminates jumpy camera motion
+        when tracking faces. The result is professional-quality smooth camera movement.
+
+        Args:
+            start_time: Clip start time in seconds
+            end_time: Clip end time in seconds
+            smoothing_strength: Window length for Savitzky-Golay filter (must be odd)
+                               - 5: Light smoothing (more responsive, slight jitter)
+                               - 11: Medium smoothing (balanced, recommended)
+                               - 21: Strong smoothing (very smooth, may lag on fast motion)
+            fps: Video frame rate (used for interpolation)
+
+        Returns:
+            Interpolation function that takes timestamp and returns smoothed x-coordinate,
+            or None if insufficient face data
+        """
+        # Get face positions within the time range
+        relevant_timestamps = [
+            ts for ts in sorted(self.face_positions.keys())
+            if start_time <= ts <= end_time
+        ]
+
+        if len(relevant_timestamps) < 4:
+            logger.warning(
+                f"Insufficient face data for smoothing ({len(relevant_timestamps)} points), "
+                "falling back to regular tracking"
+            )
+            return None
+
+        # Extract x-coordinates of face centers
+        x_positions = [self.face_positions[ts].center[0] for ts in relevant_timestamps]
+
+        # Ensure smoothing window doesn't exceed data length
+        window_length = min(smoothing_strength, len(x_positions))
+        # Window length must be odd
+        if window_length % 2 == 0:
+            window_length -= 1
+        # Window length must be at least 3
+        window_length = max(3, window_length)
+
+        # Polynomial order must be less than window length
+        polyorder = min(3, window_length - 1)
+
+        try:
+            # Apply Savitzky-Golay filter for smooth trajectory
+            smoothed_x = savgol_filter(
+                x_positions,
+                window_length=window_length,
+                polyorder=polyorder,
+                mode='nearest'
+            )
+
+            # Create cubic spline interpolation for smooth lookup at any timestamp
+            interpolator = interp1d(
+                relevant_timestamps,
+                smoothed_x,
+                kind='cubic',
+                bounds_error=False,
+                fill_value='extrapolate'
+            )
+
+            logger.info(
+                f"Computed smoothed trajectory for {start_time:.1f}s-{end_time:.1f}s "
+                f"({len(relevant_timestamps)} points, window={window_length}, poly={polyorder})"
+            )
+
+            return interpolator
+
+        except Exception as e:
+            logger.error(f"Failed to compute smoothed trajectory: {e}")
+            return None
+
+    def get_crop_box_from_position(self, face_center_x: float) -> CropBox:
+        """
+        Calculate crop box from a face center x-coordinate.
+
+        Helper method for use with pre-computed smoothed trajectories.
+
+        Args:
+            face_center_x: X-coordinate of face center
+
+        Returns:
+            CropBox centered on the face position
+        """
+        # Calculate target width for 9:16 aspect ratio
+        target_width = int(self.video_height * self.target_aspect)
+
+        # If video is already narrower than target, use full width
+        if self.video_width <= target_width:
+            return CropBox(x=0, y=0, width=self.video_width, height=self.video_height)
+
+        # Calculate crop box centered on face position
+        crop_x = int(face_center_x - target_width // 2)
 
         # Ensure crop box stays within video bounds
         crop_x = max(0, min(crop_x, self.video_width - target_width))

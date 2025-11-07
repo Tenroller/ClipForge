@@ -17,6 +17,7 @@ imageio
 imageio-ffmpeg
 opencv-python
 numpy
+scipy
 matplotlib
 
 # Audio/TTS (core)
