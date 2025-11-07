@@ -403,7 +403,10 @@ Migrations are idempotent and safe to re-run.
 - **Cloud GPU:** Modal integration for L40S/A100/H100 acceleration (optional)
 - **Caching:** Multi-level (Memory/Redis/File) via `backend/utils/cache_manager.py`
 - **GPU Management:** Use `backend/utils/gpu_manager.py` for local GPU operations
-- **Parallel Processing:** Use `backend/utils/parallel_processor.py` for batch operations
+- **Job Processing:** Sequential processing by default (1 job at a time) for resource-constrained environments
+  - Configure via `VIDEOHELPER_MAX_CONCURRENT_JOBS` environment variable
+  - Default: 1 (recommended for most deployments)
+  - Increase only if you have sufficient CPU/memory/GPU resources
 
 ## Authentication
 
