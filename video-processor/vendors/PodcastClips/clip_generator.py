@@ -81,7 +81,8 @@ class ClipGenerator:
         output_dir: Path,
         use_gpu: bool = True,
         content_mode_detector: Optional[ContentModeDetector] = None,
-        enable_mixed_mode: bool = True
+        enable_mixed_mode: bool = True,
+        ocr_height: int = 720
     ):
         """
         Initialize clip generator.
@@ -93,6 +94,7 @@ class ClipGenerator:
             use_gpu: Whether to use GPU acceleration for encoding
             content_mode_detector: Optional ContentModeDetector for mixed-mode support
             enable_mixed_mode: Whether to enable horizontal content mode detection
+            ocr_height: Target height for OCR processing (default 720p)
         """
         self.face_tracker = face_tracker
         self.subtitle_generator = subtitle_generator
@@ -100,10 +102,11 @@ class ClipGenerator:
         self.use_gpu = use_gpu
         self.content_mode_detector = content_mode_detector
         self.enable_mixed_mode = enable_mixed_mode
+        self.ocr_height = ocr_height
 
         # Create content mode detector if not provided and mixed mode enabled
         if self.enable_mixed_mode and self.content_mode_detector is None:
-            self.content_mode_detector = ContentModeDetector()
+            self.content_mode_detector = ContentModeDetector(ocr_height=ocr_height)
 
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)

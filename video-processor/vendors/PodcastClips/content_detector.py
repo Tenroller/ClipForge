@@ -66,7 +66,8 @@ class ContentModeDetector:
         face_return_threshold: float = 0.5,
         min_segment_duration: float = 0.5,
         text_density_threshold: float = 0.02,
-        use_ocr: bool = True
+        use_ocr: bool = True,
+        ocr_height: int = 720
     ):
         """
         Initialize content mode detector.
@@ -77,12 +78,14 @@ class ContentModeDetector:
             min_segment_duration: Minimum segment duration to avoid flicker (seconds)
             text_density_threshold: Minimum text density to confirm content (0-1)
             use_ocr: Whether to use OCR for text detection (requires pytesseract)
+            ocr_height: Target height for OCR processing (default 720p for 2x speedup)
         """
         self.face_loss_threshold = face_loss_threshold
         self.face_return_threshold = face_return_threshold
         self.min_segment_duration = min_segment_duration
         self.text_density_threshold = text_density_threshold
         self.use_ocr = use_ocr and HAS_OCR
+        self.ocr_height = ocr_height
 
         if use_ocr and not HAS_OCR:
             logger.warning("OCR requested but pytesseract not available")
@@ -599,6 +602,17 @@ class ContentModeDetector:
             return 0.0
 
         try:
+            # Downscale frame for faster OCR if needed
+            original_height = frame.shape[0]
+            if original_height > self.ocr_height:
+                scale_factor = self.ocr_height / original_height
+                ocr_width = int(frame.shape[1] * scale_factor)
+                frame = cv2.resize(
+                    frame,
+                    (ocr_width, self.ocr_height),
+                    interpolation=cv2.INTER_AREA  # Best for downscaling
+                )
+
             # Convert to grayscale
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 

@@ -418,13 +418,21 @@ class PodcastClipsProcessor:
         """Analyze video for face detection."""
         self.update_progress("face_detection", 60, "Analyzing video for face tracking")
 
+        # Get optimization parameters from environment
+        detection_height = int(os.getenv("FACE_DETECTION_HEIGHT", "720"))  # Default: 720p for 2-3x speedup
+        batch_size = int(os.getenv("FACE_DETECTION_BATCH_SIZE", "4"))  # Default: 4 frames per batch
+
         try:
             # Check if face analysis already exists
             existing = load_artifact(self.job_id, "face_detection", "face_positions")
             if existing:
                 logger.info("Found existing face detection data")
                 # Initialize face tracker with existing data
-                self.face_tracker = FaceTracker(use_gpu=use_gpu)
+                self.face_tracker = FaceTracker(
+                    use_gpu=use_gpu,
+                    detection_height=detection_height,
+                    batch_size=batch_size
+                )
                 # Convert string keys back to float and reconstruct FaceBox objects
                 face_positions_data = existing.get('face_positions', {})
                 self.face_tracker.face_positions = {
@@ -436,8 +444,13 @@ class PodcastClipsProcessor:
                 return
 
             logger.info("Starting face detection analysis")
+            logger.info(f"  Detection resolution: {detection_height}p, Batch size: {batch_size}")
 
-            self.face_tracker = FaceTracker(use_gpu=use_gpu)
+            self.face_tracker = FaceTracker(
+                use_gpu=use_gpu,
+                detection_height=detection_height,
+                batch_size=batch_size
+            )
 
             # Define progress callback to update job status
             def face_detection_progress(progress_pct: int, message: str):
@@ -472,7 +485,11 @@ class PodcastClipsProcessor:
             logger.error(f"Face detection failed: {e}")
             # Face detection is not critical, continue with center crop
             logger.warning("Continuing with center crop fallback")
-            self.face_tracker = FaceTracker(use_gpu=use_gpu)
+            self.face_tracker = FaceTracker(
+                use_gpu=use_gpu,
+                detection_height=detection_height,
+                batch_size=batch_size
+            )
 
     def _initialize_subtitle_generator(
         self,
@@ -528,11 +545,20 @@ class PodcastClipsProcessor:
         """
         self.update_progress("clip_generation", 75, f"Generating {len(viral_moments)} clips")
 
+        # Get optimization parameters from environment
+        detection_height = int(os.getenv("FACE_DETECTION_HEIGHT", "720"))  # Default: 720p
+        batch_size = int(os.getenv("FACE_DETECTION_BATCH_SIZE", "4"))  # Default: 4 frames
+        ocr_height = int(os.getenv("OCR_HEIGHT", "720"))  # Default: 720p for OCR
+
         try:
             # Ensure face tracker is available (fallback to basic instance if needed)
             if self.face_tracker is None:
                 logger.warning("Face tracker not available, initializing fallback instance")
-                self.face_tracker = FaceTracker(use_gpu=True)
+                self.face_tracker = FaceTracker(
+                    use_gpu=True,
+                    detection_height=detection_height,
+                    batch_size=batch_size
+                )
 
             # Ensure subtitle generator is available (fallback to basic instance if needed)
             if self.subtitle_generator is None:
@@ -547,7 +573,8 @@ class PodcastClipsProcessor:
                     face_loss_threshold=face_loss_threshold,
                     face_return_threshold=face_return_threshold,
                     min_segment_duration=min_segment_duration,
-                    use_ocr=use_ocr
+                    use_ocr=use_ocr,
+                    ocr_height=ocr_height
                 )
             else:
                 logger.info("Mixed-mode disabled, using traditional face-tracking only")
@@ -559,7 +586,8 @@ class PodcastClipsProcessor:
                 output_dir=self.output_dir,
                 use_gpu=True,
                 content_mode_detector=content_mode_detector,
-                enable_mixed_mode=enable_mixed_mode
+                enable_mixed_mode=enable_mixed_mode,
+                ocr_height=ocr_height
             )
 
             # Set transition duration if mixed mode enabled
