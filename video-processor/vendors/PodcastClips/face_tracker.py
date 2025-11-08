@@ -10,6 +10,19 @@ from dataclasses import dataclass
 import logging
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
+import os
+import sys
+
+# Import GPU manager for intelligent GPU usage decisions
+try:
+    # Add backend path to import gpu_manager
+    backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'backend'))
+    if backend_path not in sys.path:
+        sys.path.insert(0, backend_path)
+    from utils.gpu_manager import should_use_gpu, get_gpu_stats
+    GPU_MANAGER_AVAILABLE = True
+except ImportError:
+    GPU_MANAGER_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -61,11 +74,42 @@ class FaceTracker:
         Initialize face tracker with MediaPipe.
 
         Args:
-            use_gpu: Whether to use GPU acceleration (if available)
+            use_gpu: Whether to prefer GPU acceleration (will fallback to CPU if GPU unavailable)
         """
-        self.use_gpu = use_gpu
+        self.use_gpu_requested = use_gpu
+        self.use_gpu_actual = False  # Will be set based on GPU manager decision
+
+        # Make intelligent GPU decision using GPU manager
+        if use_gpu and GPU_MANAGER_AVAILABLE:
+            try:
+                # Estimate ~1.5GB GPU memory for face detection
+                gpu_decision = should_use_gpu(estimated_memory_gb=1.5)
+                self.use_gpu_actual = gpu_decision.get('use_gpu', False)
+
+                if self.use_gpu_actual:
+                    logger.info(f"✓ Using GPU for face detection: {gpu_decision.get('reason', 'GPU available')}")
+                    # Try to enable OpenCV GPU acceleration if available
+                    try:
+                        if cv2.cuda.getCudaEnabledDeviceCount() > 0:
+                            logger.info(f"  OpenCV CUDA devices available: {cv2.cuda.getCudaEnabledDeviceCount()}")
+                    except:
+                        pass
+                else:
+                    logger.info(f"→ GPU requested but using CPU: {gpu_decision.get('reason', 'GPU not recommended')}")
+
+            except Exception as e:
+                logger.warning(f"GPU manager check failed, falling back to CPU: {e}")
+                self.use_gpu_actual = False
+        else:
+            if not use_gpu:
+                logger.info("→ CPU mode requested for face detection")
+            else:
+                logger.info("→ GPU manager not available, MediaPipe will auto-detect GPU")
+                self.use_gpu_actual = use_gpu  # Let MediaPipe handle it
 
         # Initialize MediaPipe Face Detection
+        # Note: MediaPipe automatically uses GPU when available through its delegate system
+        # We can't force CPU-only mode easily, but the decision above helps with resource management
         mp_face_detection = mp.solutions.face_detection
         self.face_detection = mp_face_detection.FaceDetection(
             model_selection=1,  # 1 = full range model (better for podcasts), 0 = short range
@@ -100,6 +144,7 @@ class FaceTracker:
             Dictionary mapping timestamps to face boxes
         """
         logger.info(f"Analyzing video for face detection: {video_path}")
+        logger.info(f"  GPU mode: {'Enabled' if self.use_gpu_actual else 'CPU fallback'}")
 
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():

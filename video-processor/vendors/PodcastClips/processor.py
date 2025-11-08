@@ -123,7 +123,7 @@ class PodcastClipsProcessor:
             
             ai_model = parameters.get('aiModel', 'gemini-2.5-pro')
             whisper_model = parameters.get('whisperModel', 'base')
-            target_clip_count = parameters.get('targetClipCount', 7)
+            max_clip_count = parameters.get('maxClipCount', 15)  # Maximum clips, AI decides actual count
             min_duration = parameters.get('minDuration', 30)
             max_duration = parameters.get('maxDuration', 60)
             use_gpu = parameters.get('useGPU', True)
@@ -131,6 +131,9 @@ class PodcastClipsProcessor:
             subtitle_color = parameters.get('subtitleColor', '#FFFFFF')
             subtitle_stroke_color = parameters.get('subtitleStrokeColor', '#000000')
             subtitle_stroke_width = parameters.get('subtitleStrokeWidth', 2)
+            subtitle_vertical_offset = parameters.get('subtitleVerticalOffset', 500)
+            subtitle_highlight_color = parameters.get('subtitleHighlightColor', '#6366f1')
+            subtitle_max_words_visible = parameters.get('subtitleMaxWordsVisible', 5)
             viral_keywords = parameters.get('viralFocusKeywords', [])
 
             # Mixed-mode configuration
@@ -152,13 +155,13 @@ class PodcastClipsProcessor:
 
             # Step 3: Detect viral moments
             viral_moments = self._detect_viral_moments(
-                word_timings, ai_model, target_clip_count,
+                word_timings, ai_model, max_clip_count,
                 min_duration, max_duration, viral_keywords
             )
 
             # Step 4: Score and rank viral moments
             viral_moments = self._score_and_rank_moments(
-                viral_moments, word_timings, target_clip_count
+                viral_moments, word_timings, max_clip_count
             )
 
             # Step 5: Optimize hooks for better engagement
@@ -170,7 +173,9 @@ class PodcastClipsProcessor:
             # Step 7: Initialize subtitle generator
             self._initialize_subtitle_generator(
                 subtitle_font_size, subtitle_color,
-                subtitle_stroke_color, subtitle_stroke_width
+                subtitle_stroke_color, subtitle_stroke_width,
+                subtitle_vertical_offset, subtitle_highlight_color,
+                subtitle_max_words_visible
             )
 
             # Step 8: Generate clips (parallel)
@@ -285,7 +290,7 @@ class PodcastClipsProcessor:
         self,
         word_timings: List[Dict[str, Any]],
         ai_model: str,
-        target_count: int,
+        max_count: int,
         min_duration: int,
         max_duration: int,
         keywords: List[str]
@@ -316,17 +321,24 @@ class PodcastClipsProcessor:
 
             prompt = f"""
             You are an expert content editor and viral-clip scout for social media (TikTok, Reels, Shorts).
-            You will analyze the provided podcast transcript and identify the {target_count} moments with the highest viral potential.
+            You will analyze the provided podcast transcript and identify ALL moments with high viral potential.
 
             Hard rules:
-            - Return up to {target_count} moments, ordered best-first (highest viral potential first).
+            - IMPORTANT: Decide how many clips to create based on the quality of viral moments you find. Generate as many clips as you think are genuinely good, not a fixed number.
+            - Maximum limit: {max_count} clips (only generate this many if there are truly {max_count} great moments).
+            - Order clips best-first (highest viral potential first).
             - Times must be floats in seconds from video start.
             - CRITICAL: Each clip's duration MUST be AT LEAST {min_duration} seconds and AT MOST {max_duration} seconds.
             - NEVER create clips shorter than {min_duration} seconds - extend them if needed to meet this minimum.
             - Target clips around 45-50 seconds for optimal TikTok/Reels engagement (within the {min_duration}-{max_duration}s range).
             - Do not hallucinate words—use only transcript text provided.
             - If a clip crosses a speaker turn, indicate speaker change in the "notes" field.
-            - If content includes hate/illegal content, exclude it (return fewer clips).
+            - If content includes hate/illegal content, exclude it.
+
+            Quality over quantity:
+            - Only create clips for moments that are TRULY viral-worthy. It's better to create 3 excellent clips than 10 mediocre ones.
+            - Each clip should be able to stand alone and grab attention within the first 3 seconds.
+            - Don't force clips just to reach the maximum - if you only find 4 great moments, return 4 clips.
 
             Context / heuristics to use:
             - Prefer moments with immediate hooks in the first ~3s, emotional impact (anger, laughter, awe), surprising facts, concise strong opinions, concrete advice, or controversy.
@@ -345,7 +357,7 @@ class PodcastClipsProcessor:
             - Keep "hook" short and commanding — it will be the first line shown/said.
             - Make "caption" usable as social post copy; include one emoji if it helps.
             - Provide tags that match the moment's theme (without # symbol).
-            - If you cannot find {target_count} valid moments, return as many as you can.
+            - Generate only clips with genuine viral potential - quality over quantity.
             - If transcript language is not English, produce hook/caption in the transcript language.
             """
 
@@ -389,7 +401,8 @@ class PodcastClipsProcessor:
                         for m in viral_moments
                     ],
                     "ai_model": ai_model,
-                    "target_count": target_count
+                    "max_count": max_count,
+                    "actual_count": len(viral_moments)
                 }
             )
 
@@ -466,17 +479,23 @@ class PodcastClipsProcessor:
         font_size: int,
         color: str,
         stroke_color: str,
-        stroke_width: int
+        stroke_width: int,
+        vertical_offset: int = 500,
+        highlight_color: str = "#6366f1",
+        max_words_visible: int = 5
     ):
-        """Initialize subtitle generator."""
-        logger.info("Initializing subtitle generator")
+        """Initialize subtitle generator with karaoke-style highlighting."""
+        logger.info("Initializing subtitle generator with karaoke-style highlighting")
 
         self.subtitle_generator = SubtitleGenerator(
             font_size=font_size,
             color=color,
             stroke_color=stroke_color,
             stroke_width=stroke_width,
-            position="bottom"
+            position="bottom",
+            vertical_offset=vertical_offset,
+            highlight_color=highlight_color,
+            max_words_visible=max_words_visible
         )
 
     def _generate_clips(
@@ -615,7 +634,7 @@ class PodcastClipsProcessor:
         self,
         viral_moments: List[ViralMoment],
         word_timings: List[Dict[str, Any]],
-        target_count: int
+        max_count: int
     ) -> List[ViralMoment]:
         """Score and rank viral moments by quality."""
         self.update_progress("scoring", 56, f"Scoring {len(viral_moments)} viral moments")
@@ -660,13 +679,13 @@ class PodcastClipsProcessor:
             # Filter to top clips (minimum score threshold: 60/100)
             qualified_moments = [m for m in ranked_moments if m.viral_score >= 60.0]
 
-            # If we don't have enough qualified clips, lower the threshold
-            if len(qualified_moments) < target_count:
+            # If we don't have enough qualified clips, include lower-scoring ones up to max_count
+            if len(qualified_moments) < max_count:
                 logger.warning(f"Only {len(qualified_moments)} clips meet quality threshold (60/100)")
-                qualified_moments = ranked_moments[:target_count]
+                qualified_moments = ranked_moments[:max_count]
 
-            # Limit to target count
-            final_moments = qualified_moments[:target_count]
+            # Limit to max count
+            final_moments = qualified_moments[:max_count]
 
             # Re-index clips
             for i, moment in enumerate(final_moments):
@@ -680,8 +699,8 @@ class PodcastClipsProcessor:
 
         except Exception as e:
             logger.error(f"Scoring failed: {e}")
-            # Return original moments if scoring fails
-            return viral_moments[:target_count]
+            # Return original moments if scoring fails (limited to max_count)
+            return viral_moments[:max_count]
 
     def _optimize_hooks(
         self,

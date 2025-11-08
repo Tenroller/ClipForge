@@ -20,7 +20,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Video, Zap, Target } from 'lucide-react';
+import { Sparkles, Video, Zap, Target, ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function PodcastClipsPage() {
   const { toast } = useToast();
@@ -35,10 +35,16 @@ export default function PodcastClipsPage() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [aiModel, setAiModel] = useState('gemini-2.5-flash');
   const [whisperModel, setWhisperModel] = useState('base');
-  const [targetClipCount, setTargetClipCount] = useState(7);
+  const [maxClipCount, setMaxClipCount] = useState(15);
   const [minDuration, setMinDuration] = useState(30);
   const [maxDuration, setMaxDuration] = useState(60);
   const [subtitleFontSize, setSubtitleFontSize] = useState(40);
+
+  // Advanced subtitle settings (karaoke-style)
+  const [subtitleVerticalOffset, setSubtitleVerticalOffset] = useState(500);
+  const [subtitleHighlightColor, setSubtitleHighlightColor] = useState('#6366f1');
+  const [subtitleMaxWordsVisible, setSubtitleMaxWordsVisible] = useState(5);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Organize models into categories for better UX (mutually exclusive)
   const organizedModels = useMemo(() => {
@@ -117,7 +123,7 @@ export default function PodcastClipsPage() {
         youtubeUrl: youtubeUrl.trim(),
         aiModel,
         whisperModel,
-        targetClipCount,
+        maxClipCount,
         minDuration,
         maxDuration,
         useGPU: true,
@@ -125,6 +131,9 @@ export default function PodcastClipsPage() {
         subtitleColor: '#FFFFFF',
         subtitleStrokeColor: '#000000',
         subtitleStrokeWidth: 2,
+        subtitleVerticalOffset,
+        subtitleHighlightColor,
+        subtitleMaxWordsVisible,
         viralFocusKeywords: []
       };
 
@@ -133,7 +142,7 @@ export default function PodcastClipsPage() {
 
       toast({
         title: '🚀 Job Started',
-        description: `Generating ${targetClipCount} viral clips from podcast`,
+        description: `Generating viral clips from podcast (max: ${maxClipCount})`,
       });
     } catch (error: any) {
       toast({
@@ -216,7 +225,7 @@ export default function PodcastClipsPage() {
             <CardHeader>
               <CardTitle>Generate Viral Clips</CardTitle>
               <CardDescription>
-                Enter a YouTube podcast URL to automatically generate 5-10 viral short-form clips
+                Enter a YouTube podcast URL to automatically generate viral short-form clips. AI decides how many clips to create based on quality.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -320,22 +329,22 @@ export default function PodcastClipsPage() {
                   </Select>
                 </div>
 
-                {/* Target Clip Count */}
+                {/* Max Clip Count */}
                 <div className="space-y-2">
-                  <Label htmlFor="targetClipCount">
-                    Target Clip Count: <Badge variant="secondary">{targetClipCount}</Badge>
+                  <Label htmlFor="maxClipCount">
+                    Maximum Clips: <Badge variant="secondary">{maxClipCount}</Badge>
                   </Label>
                   <Slider
-                    id="targetClipCount"
-                    min={5}
-                    max={10}
+                    id="maxClipCount"
+                    min={3}
+                    max={30}
                     step={1}
-                    value={[targetClipCount]}
-                    onValueChange={(value) => setTargetClipCount(value[0])}
+                    value={[maxClipCount]}
+                    onValueChange={(value) => setMaxClipCount(value[0])}
                     disabled={isSubmitting}
                   />
                   <p className="text-xs text-muted-foreground">
-                    AI will generate the best {targetClipCount} clips (5-10 range)
+                    AI will generate as many clips as it finds with genuine viral potential (up to {maxClipCount})
                   </p>
                 </div>
 
@@ -385,6 +394,101 @@ export default function PodcastClipsPage() {
                     onValueChange={(value) => setSubtitleFontSize(value[0])}
                     disabled={isSubmitting}
                   />
+                </div>
+
+                {/* Advanced Subtitle Settings (Collapsible) */}
+                <div className="border rounded-lg">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full flex items-center justify-between p-4 hover:bg-muted/50"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      <span className="font-semibold">Advanced Subtitle Settings</span>
+                      <Badge variant="outline" className="ml-2">Karaoke Style</Badge>
+                    </div>
+                    {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+
+                  {showAdvanced && (
+                    <div className="p-4 pt-0 space-y-4 border-t">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Customize the karaoke-style subtitle appearance with word-by-word highlighting
+                      </p>
+
+                      {/* Vertical Offset */}
+                      <div className="space-y-2">
+                        <Label htmlFor="subtitleVerticalOffset">
+                          Vertical Position: <Badge variant="secondary">{subtitleVerticalOffset}px from bottom</Badge>
+                        </Label>
+                        <Slider
+                          id="subtitleVerticalOffset"
+                          min={100}
+                          max={1000}
+                          step={50}
+                          value={[subtitleVerticalOffset]}
+                          onValueChange={(value) => setSubtitleVerticalOffset(value[0])}
+                          disabled={isSubmitting}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Higher values move subtitles toward center (recommended: 400-600)
+                        </p>
+                      </div>
+
+                      {/* Highlight Color */}
+                      <div className="space-y-2">
+                        <Label htmlFor="subtitleHighlightColor">
+                          Highlight Box Color
+                        </Label>
+                        <div className="flex items-center gap-3">
+                          <Input
+                            id="subtitleHighlightColor"
+                            type="color"
+                            value={subtitleHighlightColor}
+                            onChange={(e) => setSubtitleHighlightColor(e.target.value)}
+                            disabled={isSubmitting}
+                            className="w-20 h-10 cursor-pointer"
+                          />
+                          <Input
+                            type="text"
+                            value={subtitleHighlightColor}
+                            onChange={(e) => setSubtitleHighlightColor(e.target.value)}
+                            disabled={isSubmitting}
+                            placeholder="#6366f1"
+                            className="flex-1 font-mono"
+                          />
+                          <div
+                            className="w-10 h-10 rounded border-2 border-border"
+                            style={{ backgroundColor: subtitleHighlightColor }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Background color for the currently spoken word
+                        </p>
+                      </div>
+
+                      {/* Max Words Visible */}
+                      <div className="space-y-2">
+                        <Label htmlFor="subtitleMaxWordsVisible">
+                          Words in View: <Badge variant="secondary">{subtitleMaxWordsVisible} words</Badge>
+                        </Label>
+                        <Slider
+                          id="subtitleMaxWordsVisible"
+                          min={1}
+                          max={10}
+                          step={1}
+                          value={[subtitleMaxWordsVisible]}
+                          onValueChange={(value) => setSubtitleMaxWordsVisible(value[0])}
+                          disabled={isSubmitting}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Number of words shown at once (current word + context)
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <Button

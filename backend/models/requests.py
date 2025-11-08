@@ -154,7 +154,7 @@ class PodcastClipsRequest(BaseModel):
     youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
     aiModel: str = Field(default="gemini-2.0-flash", description="AI model for viral moment detection")
     whisperModel: str = Field(default="base", description="Whisper model size: tiny, base, small, medium, large")
-    targetClipCount: int = Field(default=7, ge=5, le=10, description="Target number of clips (AI decides final count within range)")
+    maxClipCount: int = Field(default=15, ge=3, le=30, description="Maximum number of clips to generate (AI decides actual count based on viral potential)")
     minDuration: int = Field(default=30, ge=15, le=60, description="Minimum clip duration in seconds")
     maxDuration: int = Field(default=60, ge=30, le=120, description="Maximum clip duration in seconds")
     useGPU: bool = Field(default=True, description="Use GPU acceleration for processing")
@@ -162,6 +162,12 @@ class PodcastClipsRequest(BaseModel):
     subtitleColor: str = Field(default="#FFFFFF", description="Subtitle text color (hex format)")
     subtitleStrokeColor: str = Field(default="#000000", description="Subtitle stroke/outline color")
     subtitleStrokeWidth: int = Field(default=2, ge=0, le=5, description="Subtitle stroke width")
+
+    # Karaoke-style subtitle improvements
+    subtitleVerticalOffset: int = Field(default=500, ge=100, le=1000, description="Distance from bottom of video in pixels")
+    subtitleHighlightColor: str = Field(default="#6366f1", description="Background box color for highlighted word (hex format)")
+    subtitleMaxWordsVisible: int = Field(default=5, ge=1, le=10, description="Maximum words visible at once (karaoke window)")
+
     viralFocusKeywords: List[str] = Field(default=[], description="Optional keywords to prioritize when detecting viral moments")
 
     # Mixed-mode content detection options
@@ -182,7 +188,7 @@ class PodcastClipsRequest(BaseModel):
     def validate_ai_model_field(cls, v):
         return validate_ai_model(v)
 
-    @field_validator('subtitleColor', 'subtitleStrokeColor')
+    @field_validator('subtitleColor', 'subtitleStrokeColor', 'subtitleHighlightColor')
     @classmethod
     def validate_subtitle_color_fields(cls, v):
         return validate_color(v)

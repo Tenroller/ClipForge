@@ -275,7 +275,7 @@ def create_podcastclips_job(youtube_url: str, **kwargs) -> Dict[str, Any]:
     """Create a PodcastClips job configuration."""
     return {
         "youtubeUrl": youtube_url,
-        "aiModel": kwargs.get("model", "gemini-2.0-flash"),
+        "aiModel": kwargs.get("model", "gemini-2.5-pro"),
         "whisperModel": kwargs.get("whisper_model", "base"),
         "targetClipCount": kwargs.get("clip_count", 7),
         "minDuration": kwargs.get("min_duration", 20),

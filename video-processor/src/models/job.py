@@ -71,7 +71,7 @@ class PodcastClipsRequest(BaseModel):
     youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
     aiModel: str = Field("gemini-2.0-flash", description="AI model for viral moment detection")
     whisperModel: str = Field("base", description="Whisper model size: tiny, base, small, medium, large")
-    targetClipCount: int = Field(7, description="Target number of clips (AI decides final count within range)")
+    maxClipCount: int = Field(15, description="Maximum number of clips to generate (AI decides actual count based on viral potential)")
     minDuration: int = Field(20, description="Minimum clip duration in seconds")
     maxDuration: int = Field(70, description="Maximum clip duration in seconds")
     useGPU: bool = Field(True, description="Use GPU acceleration for processing")

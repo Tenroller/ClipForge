@@ -14,8 +14,8 @@ if not exist "backend" (
     exit /b 1
 )
 
-if not exist "frontend-next" (
-    echo Error: frontend-next directory not found
+if not exist "frontend" (
+    echo Error: frontend directory not found
     exit /b 1
 )
 
@@ -38,7 +38,7 @@ start "Video-Processor" cmd /c "cd video-processor && python main.py 2>&1 | pyth
 timeout /t 2 /nobreak >nul
 
 echo [Frontend] Starting on port 3000...
-start "Frontend" cmd /c "cd frontend-next && npm run dev 2>&1 | python -c \"import sys; [print('^[Frontend^]', line.rstrip()) for line in sys.stdin]\""
+start "Frontend" cmd /c "cd frontend && npm run dev 2>&1 | python -c \"import sys; [print('^[Frontend^]', line.rstrip()) for line in sys.stdin]\""
 
 echo.
 echo ========================================

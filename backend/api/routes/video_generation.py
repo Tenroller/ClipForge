@@ -307,7 +307,7 @@ async def podcastclips_generate(
             tracker = get_progress_tracker(job_id)
             tracker.add_log("Podcast clips job created and queued for processing", "info", "podcastclips")
             tracker.add_log(f"Source: {req.youtubeUrl}", "info", "config")
-            tracker.add_log(f"Target: {req.targetClipCount} clips, Duration: {req.minDuration}s-{req.maxDuration}s", "info", "config")
+            tracker.add_log(f"Target: {req.maxClipCount} clips, Duration: {req.minDuration}s-{req.maxDuration}s", "info", "config")
             tracker.add_log(f"AI Model: {req.aiModel}, Whisper: {req.whisperModel}", "info", "config")
 
         except Exception as e:
@@ -355,7 +355,7 @@ async def podcastclips_generate(
         return {
             "status": "success",
             "jobId": job_id,
-            "message": f"Podcast clips generation started. Expecting {req.targetClipCount} clips."
+            "message": f"Podcast clips generation started. Expecting up to {req.maxClipCount} clips."
         }
 
     except Exception as e:

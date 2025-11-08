@@ -2,14 +2,17 @@
 Traditional closed caption subtitle generator for podcast clips.
 
 Generates professional-style subtitles with word-level timing from Whisper transcription.
+Supports karaoke-style highlighting with rounded background boxes.
 """
 
 import logging
 import sys
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
-from moviepy import TextClip, CompositeVideoClip, VideoClip
+from moviepy import TextClip, CompositeVideoClip, VideoClip, ImageClip
 from dataclasses import dataclass
+import numpy as np
+from PIL import Image, ImageDraw
 
 # Add parent directory to path to import font_detection
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -45,7 +48,10 @@ class SubtitleGenerator:
         color: str = "#FFFFFF",
         stroke_color: str = "#000000",
         stroke_width: int = 2,
-        position: str = "bottom"
+        position: str = "bottom",
+        vertical_offset: int = 500,
+        highlight_color: str = "#6366f1",
+        max_words_visible: int = 5
     ):
         """
         Initialize subtitle generator.
@@ -56,12 +62,18 @@ class SubtitleGenerator:
             stroke_color: Stroke/outline color (hex format)
             stroke_width: Stroke width in pixels
             position: Subtitle position ("top", "center", "bottom")
+            vertical_offset: Distance from bottom in pixels (for karaoke mode)
+            highlight_color: Background box color for highlighted word (hex format)
+            max_words_visible: Maximum words visible at once (karaoke window)
         """
         self.font_size = font_size
         self.color = color
         self.stroke_color = stroke_color
         self.stroke_width = stroke_width
         self.position = position
+        self.vertical_offset = vertical_offset
+        self.highlight_color = highlight_color
+        self.max_words_visible = max_words_visible
 
         # Position mapping
         self.position_map = {
@@ -69,6 +81,45 @@ class SubtitleGenerator:
             "center": ("center", "center"),
             "bottom": ("center", 100)  # 100 pixels from bottom
         }
+
+    def create_rounded_rectangle(
+        self,
+        width: int,
+        height: int,
+        radius: int = 15,
+        color: str = "#6366f1"
+    ) -> ImageClip:
+        """
+        Create a rounded rectangle background clip using PIL.
+
+        Args:
+            width: Width of rectangle in pixels
+            height: Height of rectangle in pixels
+            radius: Corner radius in pixels
+            color: Fill color (hex format)
+
+        Returns:
+            ImageClip with rounded rectangle
+        """
+        # Convert hex color to RGB
+        color_rgb = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+
+        # Create image with transparency
+        img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        # Draw rounded rectangle
+        draw.rounded_rectangle(
+            [(0, 0), (width, height)],
+            radius=radius,
+            fill=color_rgb + (255,)  # Add alpha channel (fully opaque)
+        )
+
+        # Convert PIL image to numpy array for MoviePy
+        img_array = np.array(img)
+
+        # Create ImageClip from array
+        return ImageClip(img_array, duration=1, is_mask=False)
 
     def create_subtitle_segments(
         self,
@@ -147,6 +198,180 @@ class SubtitleGenerator:
 
         logger.info(f"Created {len(segments)} subtitle segments from {len(word_timings)} words")
         return segments
+
+    def generate_karaoke_subtitle_clips(
+        self,
+        word_timings: List[Dict[str, Any]],
+        video_size: Tuple[int, int],
+        video_duration: float
+    ) -> List[CompositeVideoClip]:
+        """
+        Generate karaoke-style subtitle clips with word-by-word highlighting.
+
+        Creates a sliding window of words where the current word is highlighted
+        with a rounded background box, and surrounding words are shown in plain text.
+
+        Args:
+            word_timings: List of word timing dicts from Whisper
+            video_size: (width, height) of video
+            video_duration: Total video duration in seconds
+
+        Returns:
+            List of CompositeVideoClip objects with highlighted words
+        """
+        if not word_timings:
+            return []
+
+        video_width, video_height = video_size
+        subtitle_clips = []
+
+        # Calculate vertical position using vertical_offset
+        y_pos = video_height - self.vertical_offset
+
+        # Get font fallback list once
+        font_choices = get_font_fallback_list()
+
+        # Process each word as the "current" highlighted word
+        for i, current_word_data in enumerate(word_timings):
+            current_word = current_word_data.get('word', '').strip()
+            if not current_word:
+                continue
+
+            start_time = current_word_data.get('start_time', 0)
+            end_time = current_word_data.get('end_time', start_time + 0.5)
+            duration = end_time - start_time
+
+            # Determine window of visible words (current word + context)
+            window_start = max(0, i - self.max_words_visible // 2)
+            window_end = min(len(word_timings), window_start + self.max_words_visible)
+
+            # Adjust window if we're near the end
+            if window_end - window_start < self.max_words_visible:
+                window_start = max(0, window_end - self.max_words_visible)
+
+            visible_words = word_timings[window_start:window_end]
+
+            # Create text clips for all visible words
+            word_clips = []
+            current_word_clip = None
+            current_word_index = i - window_start
+
+            for j, word_data in enumerate(visible_words):
+                word = word_data.get('word', '').strip()
+                if not word:
+                    continue
+
+                is_current = (j == current_word_index)
+
+                # Try fonts until one works
+                txt_clip = None
+                for font_choice in font_choices:
+                    try:
+                        # For current word, create without stroke to go on top of background
+                        # For other words, use normal stroke
+                        txt_clip = TextClip(
+                            text=word,
+                            font_size=self.font_size,
+                            color=self.color,
+                            stroke_color=self.stroke_color if not is_current else None,
+                            stroke_width=self.stroke_width if not is_current else 0,
+                            font=font_choice,
+                            method='caption'
+                        )
+
+                        if txt_clip and txt_clip.w > 0 and txt_clip.h > 0:
+                            break
+                        else:
+                            txt_clip = None
+
+                    except Exception as e:
+                        logger.debug(f"Font '{font_choice}' failed for word '{word}': {e}")
+                        txt_clip = None
+                        continue
+
+                if txt_clip:
+                    word_clips.append({
+                        'clip': txt_clip,
+                        'word': word,
+                        'is_current': is_current,
+                        'index': j
+                    })
+
+                    if is_current:
+                        current_word_clip = txt_clip
+
+            if not word_clips:
+                continue
+
+            # Calculate horizontal layout for all words
+            total_width = sum(clip_data['clip'].w for clip_data in word_clips)
+            spacing = 20  # Space between words
+            total_width_with_spacing = total_width + spacing * (len(word_clips) - 1)
+
+            # Start x position (centered)
+            start_x = (video_width - total_width_with_spacing) // 2
+            current_x = start_x
+
+            # Position each word clip
+            positioned_clips = []
+            highlighted_clip_info = None
+
+            for clip_data in word_clips:
+                clip = clip_data['clip']
+                is_current = clip_data['is_current']
+
+                # Set position for this word
+                word_pos = (current_x, y_pos)
+                positioned_clip = clip.with_position(word_pos)
+
+                if is_current:
+                    # Save info for creating background box
+                    highlighted_clip_info = {
+                        'x': current_x,
+                        'y': y_pos,
+                        'width': clip.w,
+                        'height': clip.h
+                    }
+
+                positioned_clips.append(positioned_clip)
+                current_x += clip.w + spacing
+
+            # Create rounded background box for current word
+            if highlighted_clip_info and current_word_clip:
+                padding_x = 20
+                padding_y = 10
+                box_width = highlighted_clip_info['width'] + 2 * padding_x
+                box_height = highlighted_clip_info['height'] + 2 * padding_y
+
+                bg_box = self.create_rounded_rectangle(
+                    width=box_width,
+                    height=box_height,
+                    radius=15,
+                    color=self.highlight_color
+                )
+
+                # Position background box (accounting for padding)
+                box_x = highlighted_clip_info['x'] - padding_x
+                box_y = highlighted_clip_info['y'] - padding_y
+                bg_box = bg_box.with_position((box_x, box_y))
+
+                # Composite: background box first, then all text clips
+                # Create composite with proper layering
+                composite_clips = [bg_box] + positioned_clips
+
+                try:
+                    composite = CompositeVideoClip(composite_clips, size=video_size)
+                    composite = composite.with_start(start_time)
+                    composite = composite.with_duration(duration)
+
+                    subtitle_clips.append(composite)
+
+                except Exception as e:
+                    logger.error(f"Failed to create composite for word '{current_word}': {e}")
+                    continue
+
+        logger.info(f"Generated {len(subtitle_clips)} karaoke subtitle clips")
+        return subtitle_clips
 
     def generate_subtitle_clips(
         self,
@@ -233,7 +458,8 @@ class SubtitleGenerator:
         self,
         video_clip: VideoClip,
         word_timings: List[Dict[str, Any]],
-        clip_start_time: float = 0.0
+        clip_start_time: float = 0.0,
+        use_karaoke_style: bool = True
     ) -> CompositeVideoClip:
         """
         Add subtitles to a video clip.
@@ -242,6 +468,7 @@ class SubtitleGenerator:
             video_clip: MoviePy VideoClip to add subtitles to
             word_timings: List of word timing dicts from Whisper
             clip_start_time: Start time of this clip in original video (for timing adjustment)
+            use_karaoke_style: Use karaoke-style highlighting (default: True)
 
         Returns:
             CompositeVideoClip with subtitles overlaid
@@ -264,16 +491,24 @@ class SubtitleGenerator:
             logger.warning("No word timings within clip duration, returning video without subtitles")
             return video_clip
 
-        # Create subtitle segments
-        segments = self.create_subtitle_segments(adjusted_timings)
-
-        # Generate subtitle clips
+        # Generate subtitle clips based on style preference
         video_size = (video_clip.w, video_clip.h)
-        subtitle_clips = self.generate_subtitle_clips(
-            segments,
-            video_size,
-            video_clip.duration
-        )
+
+        if use_karaoke_style:
+            # Use new karaoke-style subtitle generation
+            subtitle_clips = self.generate_karaoke_subtitle_clips(
+                adjusted_timings,
+                video_size,
+                video_clip.duration
+            )
+        else:
+            # Use traditional segment-based subtitles
+            segments = self.create_subtitle_segments(adjusted_timings)
+            subtitle_clips = self.generate_subtitle_clips(
+                segments,
+                video_size,
+                video_clip.duration
+            )
 
         # Composite video with subtitles
         if subtitle_clips:
@@ -287,7 +522,7 @@ class SubtitleGenerator:
             else:
                 logger.warning("Original video has no audio track")
 
-            logger.info(f"Added {len(subtitle_clips)} subtitle segments to video")
+            logger.info(f"Added {len(subtitle_clips)} karaoke subtitle clips to video" if use_karaoke_style else f"Added {len(subtitle_clips)} subtitle segments to video")
         else:
             logger.warning("No subtitle clips generated, returning original video")
             final_clip = video_clip
