@@ -22,6 +22,8 @@ matplotlib
 
 # Audio/TTS (core)
 soundfile
+librosa>=0.10.0  # Audio analysis for speaker detection
+webrtcvad>=2.0.10  # Voice activity detection
 
 # Data & utils (core)
 requests

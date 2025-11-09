@@ -6,7 +6,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from typing import Dict, Tuple, Optional, List, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import logging
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
@@ -35,6 +35,7 @@ class FaceBox:
     width: int
     height: int
     confidence: float
+    face_id: int = 0  # ID for tracking multiple faces
 
     @property
     def center(self) -> Tuple[int, int]:
@@ -45,6 +46,41 @@ class FaceBox:
     def area(self) -> int:
         """Get area of face box."""
         return self.width * self.height
+
+    def area_ratio(self, frame_width: int, frame_height: int) -> float:
+        """Get face area as ratio of total frame area."""
+        frame_area = frame_width * frame_height
+        return self.area / frame_area if frame_area > 0 else 0.0
+
+
+@dataclass
+class FaceTrack:
+    """Tracks a single person's face across multiple frames."""
+    face_id: int
+    positions: Dict[float, FaceBox] = field(default_factory=dict)  # timestamp -> FaceBox
+    avg_area_ratio: float = 0.0  # Average size relative to frame
+    avg_position: Tuple[int, int] = (0, 0)  # Average center position
+    is_foreground: bool = True  # Whether this is a foreground (main) subject
+    speech_correlation: float = 0.0  # Correlation with speech activity (0-1)
+
+    def update_statistics(self, frame_width: int, frame_height: int):
+        """Update aggregate statistics for this face track."""
+        if not self.positions:
+            return
+
+        # Calculate average area ratio
+        area_ratios = [
+            face.area_ratio(frame_width, frame_height)
+            for face in self.positions.values()
+        ]
+        self.avg_area_ratio = np.mean(area_ratios)
+
+        # Calculate average position
+        centers = [face.center for face in self.positions.values()]
+        self.avg_position = (
+            int(np.mean([c[0] for c in centers])),
+            int(np.mean([c[1] for c in centers]))
+        )
 
 
 @dataclass
@@ -73,7 +109,10 @@ class FaceTracker:
         self,
         use_gpu: bool = True,
         detection_height: int = 720,
-        batch_size: int = 4
+        batch_size: int = 4,
+        min_face_size_ratio: float = 0.02,
+        max_tracked_faces: int = 4,
+        enable_speaker_detection: bool = False
     ):
         """
         Initialize face tracker with MediaPipe.
@@ -88,11 +127,21 @@ class FaceTracker:
                        - 1: No batching (simple, works on CPU)
                        - 4: Balanced batching (recommended for GPU) - DEFAULT
                        - 8: Aggressive batching (best GPU utilization)
+            min_face_size_ratio: Minimum face size as ratio of frame area (0.01-0.1)
+                                Faces smaller than this are filtered out (audience members)
+                                Default: 0.02 (2% of frame)
+            max_tracked_faces: Maximum number of faces to track (1-8)
+                              - 1: Track only largest face (legacy behavior)
+                              - 2-4: Track main subjects (recommended for podcasts)
+            enable_speaker_detection: Enable audio-based speaker detection
         """
         self.use_gpu_requested = use_gpu
         self.use_gpu_actual = False  # Will be set based on GPU manager decision
         self.detection_height = detection_height
         self.batch_size = max(1, min(8, batch_size))  # Clamp to 1-8 range
+        self.min_face_size_ratio = max(0.01, min(0.1, min_face_size_ratio))
+        self.max_tracked_faces = max(1, min(8, max_tracked_faces))
+        self.enable_speaker_detection = enable_speaker_detection
 
         # Make intelligent GPU decision using GPU manager
         if use_gpu and GPU_MANAGER_AVAILABLE:
@@ -132,10 +181,25 @@ class FaceTracker:
         )
 
         # Storage for detected face positions over time
-        self.face_positions: Dict[float, FaceBox] = {}
+        self.face_positions: Dict[float, FaceBox] = {}  # Legacy: single face per timestamp
+        self.face_tracks: List[FaceTrack] = []  # Multi-face tracking
         self.video_width = 0
         self.video_height = 0
         self.target_aspect = 9 / 16  # Vertical format
+        self.speech_segments: List = []  # Will store AudioSegment objects from speaker_detector
+
+        # Speaker detection integration
+        if self.enable_speaker_detection:
+            try:
+                from .speaker_detector import SpeakerDetector
+                self.speaker_detector = SpeakerDetector()
+                logger.info("Speaker detection enabled")
+            except ImportError as e:
+                logger.warning(f"Speaker detection requested but unavailable: {e}")
+                self.speaker_detector = None
+                self.enable_speaker_detection = False
+        else:
+            self.speaker_detector = None
 
     def analyze_video(
         self,
@@ -219,40 +283,56 @@ class FaceTracker:
                 results = self.face_detection.process(frame_rgb)
 
                 if results.detections:
-                    # Use the first (most confident) detection
-                    detection = results.detections[0]
+                    # Process ALL detected faces (up to max_tracked_faces)
+                    valid_faces = []
 
-                    # Get bounding box (normalized coordinates from detection resolution)
-                    bbox = detection.location_data.relative_bounding_box
+                    for detection in results.detections[:self.max_tracked_faces]:
+                        # Get bounding box (normalized coordinates from detection resolution)
+                        bbox = detection.location_data.relative_bounding_box
 
-                    # Convert to pixel coordinates at detection resolution
-                    x_detect = int(bbox.xmin * detection_width)
-                    y_detect = int(bbox.ymin * self.detection_height)
-                    w_detect = int(bbox.width * detection_width)
-                    h_detect = int(bbox.height * self.detection_height)
+                        # Convert to pixel coordinates at detection resolution
+                        x_detect = int(bbox.xmin * detection_width)
+                        y_detect = int(bbox.ymin * self.detection_height)
+                        w_detect = int(bbox.width * detection_width)
+                        h_detect = int(bbox.height * self.detection_height)
 
-                    # Scale back to original resolution
-                    x = int(x_detect * scale_x)
-                    y = int(y_detect * scale_y)
-                    w = int(w_detect * scale_x)
-                    h = int(h_detect * scale_y)
+                        # Scale back to original resolution
+                        x = int(x_detect * scale_x)
+                        y = int(y_detect * scale_y)
+                        w = int(w_detect * scale_x)
+                        h = int(h_detect * scale_y)
 
-                    # Ensure coordinates are within frame bounds
-                    x = max(0, x)
-                    y = max(0, y)
-                    w = min(w, self.video_width - x)
-                    h = min(h, self.video_height - y)
+                        # Ensure coordinates are within frame bounds
+                        x = max(0, x)
+                        y = max(0, y)
+                        w = min(w, self.video_width - x)
+                        h = min(h, self.video_height - y)
 
-                    face_box = FaceBox(
-                        x=x,
-                        y=y,
-                        width=w,
-                        height=h,
-                        confidence=detection.score[0]
-                    )
+                        # Create face box
+                        face_box = FaceBox(
+                            x=x,
+                            y=y,
+                            width=w,
+                            height=h,
+                            confidence=detection.score[0]
+                        )
 
-                    face_positions[timestamp] = face_box
-                    faces_detected += 1
+                        # Filter by size - ignore faces that are too small (audience members)
+                        area_ratio = face_box.area_ratio(self.video_width, self.video_height)
+                        if area_ratio >= self.min_face_size_ratio:
+                            valid_faces.append(face_box)
+
+                    # Store the largest valid face for legacy compatibility
+                    if valid_faces:
+                        # Sort by area (largest first)
+                        valid_faces.sort(key=lambda f: f.area, reverse=True)
+
+                        # Store largest face for legacy single-face tracking
+                        face_positions[timestamp] = valid_faces[0]
+                        faces_detected += 1
+
+                        # Store all valid faces for multi-face tracking
+                        # (Will be processed later in _build_face_tracks)
 
                 frames_processed += 1
 
@@ -318,6 +398,141 @@ class FaceTracker:
         logger.info(f"Face detection complete: {faces_detected}/{frames_processed} frames ({detection_rate:.1f}%)")
 
         return face_positions
+
+    def analyze_audio_for_speech(
+        self,
+        audio_path: str,
+        sr: Optional[int] = None
+    ) -> List:
+        """
+        Analyze audio file for speech activity using speaker detector.
+
+        Args:
+            audio_path: Path to audio file
+            sr: Target sample rate (if None, uses native rate)
+
+        Returns:
+            List of AudioSegment objects
+        """
+        if not self.enable_speaker_detection or not self.speaker_detector:
+            logger.warning("Speaker detection not enabled")
+            return []
+
+        logger.info(f"Analyzing audio for speech detection: {audio_path}")
+        self.speech_segments = self.speaker_detector.detect_speech_segments(audio_path, sr=sr)
+        logger.info(f"Detected {len(self.speech_segments)} speech segments")
+
+        return self.speech_segments
+
+    def get_active_speaker_at_time(
+        self,
+        timestamp: float,
+        min_confidence: float = 0.5
+    ) -> Optional[FaceBox]:
+        """
+        Get the face of the active speaker at a specific timestamp.
+
+        Uses speech correlation to determine which face is most likely speaking.
+
+        Args:
+            timestamp: Time in seconds
+            min_confidence: Minimum speech confidence threshold
+
+        Returns:
+            FaceBox of active speaker, or None if no speaker detected
+        """
+        # If speaker detection disabled, fall back to largest face
+        if not self.enable_speaker_detection or not self.speech_segments:
+            return self.get_face_position_at_time(timestamp)
+
+        # Check if there's speech activity at this time
+        is_speech, energy = self.speaker_detector.is_speech_at_time(
+            timestamp,
+            self.speech_segments,
+            min_confidence=min_confidence
+        )
+
+        if not is_speech:
+            # No speech - just return largest face
+            return self.get_face_position_at_time(timestamp)
+
+        # Get all face tracks that have data near this timestamp
+        active_tracks = [
+            track for track in self.face_tracks
+            if any(abs(ts - timestamp) < 0.5 for ts in track.positions.keys())
+        ]
+
+        if not active_tracks:
+            # Fall back to single face tracking
+            return self.get_face_position_at_time(timestamp)
+
+        # Score each track based on:
+        # 1. Speech correlation (primary factor)
+        # 2. Face size (larger = more likely to be speaking)
+        # 3. Temporal consistency (prefer face we were already tracking)
+        best_track = max(
+            active_tracks,
+            key=lambda t: (
+                t.speech_correlation * 0.6 +
+                t.avg_area_ratio * 0.3 +
+                (0.1 if any(abs(ts - timestamp) < 0.1 for ts in t.positions.keys()) else 0)
+            )
+        )
+
+        # Get face position from best track at this timestamp
+        # Find closest timestamp in track
+        track_timestamps = sorted(best_track.positions.keys())
+        closest_ts = min(track_timestamps, key=lambda ts: abs(ts - timestamp))
+
+        return best_track.positions[closest_ts]
+
+    def correlate_faces_with_speech(self):
+        """
+        Correlate detected face tracks with speech activity.
+
+        Updates speech_correlation scores for each face track based on
+        how well the face's presence aligns with detected speech segments.
+        """
+        if not self.enable_speaker_detection or not self.speech_segments:
+            logger.info("Speaker detection not enabled or no speech segments - skipping correlation")
+            return
+
+        logger.info(f"Correlating {len(self.face_tracks)} face tracks with {len(self.speech_segments)} speech segments")
+
+        for track in self.face_tracks:
+            # Count how many times this face appears during speech vs silence
+            speech_appearances = 0
+            total_appearances = len(track.positions)
+
+            for timestamp in track.positions.keys():
+                is_speech, _ = self.speaker_detector.is_speech_at_time(
+                    timestamp,
+                    self.speech_segments,
+                    min_confidence=0.5
+                )
+                if is_speech:
+                    speech_appearances += 1
+
+            # Calculate correlation ratio
+            track.speech_correlation = (
+                speech_appearances / total_appearances
+                if total_appearances > 0 else 0.0
+            )
+
+            logger.debug(
+                f"Face track {track.face_id}: "
+                f"{speech_appearances}/{total_appearances} appearances during speech "
+                f"(correlation: {track.speech_correlation:.2f})"
+            )
+
+        # Log summary
+        if self.face_tracks:
+            correlations = [t.speech_correlation for t in self.face_tracks]
+            logger.info(
+                f"Speech correlation scores: "
+                f"min={min(correlations):.2f}, max={max(correlations):.2f}, "
+                f"mean={np.mean(correlations):.2f}"
+            )
 
     def get_optimal_crop_box(
         self,
@@ -477,6 +692,8 @@ class FaceTracker:
         """
         Get crop box for a specific timestamp with smoothing for stable tracking.
 
+        If speaker detection is enabled, this will prioritize the active speaker's face.
+
         Args:
             timestamp: Time in seconds
             padding_factor: How much padding around face (1.0 = tight, 2.0 = loose)
@@ -485,6 +702,42 @@ class FaceTracker:
         Returns:
             CropBox for the specified timestamp
         """
+        # If speaker detection enabled, get active speaker's face
+        if self.enable_speaker_detection and self.speech_segments:
+            speaker_face = self.get_active_speaker_at_time(timestamp)
+            if speaker_face:
+                # Use speaker's face with smoothing window
+                relevant_faces = [
+                    face for ts, face in self.face_positions.items()
+                    if timestamp - smoothing_window / 2 <= ts <= timestamp + smoothing_window / 2
+                    # Filter to faces similar in position to speaker (within 20% of frame width)
+                    and abs(face.center[0] - speaker_face.center[0]) < (self.video_width * 0.2)
+                ]
+
+                if relevant_faces:
+                    avg_face_center_x = int(np.mean([face.center[0] for face in relevant_faces]))
+                else:
+                    avg_face_center_x = speaker_face.center[0]
+
+                # Calculate target width for 9:16 aspect ratio
+                target_width = int(self.video_height * self.target_aspect)
+
+                # If video is already narrower than target, use full width
+                if self.video_width <= target_width:
+                    return CropBox(x=0, y=0, width=self.video_width, height=self.video_height)
+
+                # Calculate crop box centered on speaker
+                crop_x = avg_face_center_x - target_width // 2
+                crop_x = max(0, min(crop_x, self.video_width - target_width))
+
+                return CropBox(
+                    x=crop_x,
+                    y=0,
+                    width=target_width,
+                    height=self.video_height
+                )
+
+        # Legacy behavior: use largest face with smoothing
         # Get face positions within smoothing window
         relevant_faces = [
             face for ts, face in self.face_positions.items()

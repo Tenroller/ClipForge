@@ -147,6 +147,11 @@ class PodcastClipsProcessor:
             # Face tracking smoothing configuration
             smoothing_strength = parameters.get('smoothingStrength', 11)  # 5=light, 11=medium, 21=strong
 
+            # Speaker detection configuration
+            enable_speaker_detection = parameters.get('enableSpeakerDetection', True)
+            min_face_size_ratio = parameters.get('minFaceSizeRatio', 0.02)  # Filter out audience (2% of frame)
+            max_tracked_faces = parameters.get('maxTrackedFaces', 4)  # Track up to 4 people
+
             # Step 1: Download video
             video_path = self._download_video(youtube_url)
 
@@ -167,8 +172,14 @@ class PodcastClipsProcessor:
             # Step 5: Optimize hooks for better engagement
             viral_moments = self._optimize_hooks(viral_moments, word_timings)
 
-            # Step 6: Analyze faces
-            self._analyze_faces(video_path, use_gpu)
+            # Step 6: Analyze faces (with speaker detection)
+            self._analyze_faces(
+                video_path,
+                use_gpu,
+                enable_speaker_detection=enable_speaker_detection,
+                min_face_size_ratio=min_face_size_ratio,
+                max_tracked_faces=max_tracked_faces
+            )
 
             # Step 7: Initialize subtitle generator
             self._initialize_subtitle_generator(
@@ -414,8 +425,24 @@ class PodcastClipsProcessor:
             logger.error(f"Viral moment detection failed: {e}")
             raise RuntimeError(f"Failed to detect viral moments: {e}")
 
-    def _analyze_faces(self, video_path: str, use_gpu: bool):
-        """Analyze video for face detection."""
+    def _analyze_faces(
+        self,
+        video_path: str,
+        use_gpu: bool,
+        enable_speaker_detection: bool = True,
+        min_face_size_ratio: float = 0.08,
+        max_tracked_faces: int = 4
+    ):
+        """
+        Analyze video for face detection and speaker tracking.
+
+        Args:
+            video_path: Path to video file
+            use_gpu: Whether to use GPU acceleration
+            enable_speaker_detection: Enable audio-based speaker detection
+            min_face_size_ratio: Minimum face size ratio to filter audience
+            max_tracked_faces: Maximum number of faces to track
+        """
         self.update_progress("face_detection", 60, "Analyzing video for face tracking")
 
         # Get optimization parameters from environment
@@ -431,7 +458,10 @@ class PodcastClipsProcessor:
                 self.face_tracker = FaceTracker(
                     use_gpu=use_gpu,
                     detection_height=detection_height,
-                    batch_size=batch_size
+                    batch_size=batch_size,
+                    min_face_size_ratio=min_face_size_ratio,
+                    max_tracked_faces=max_tracked_faces,
+                    enable_speaker_detection=enable_speaker_detection
                 )
                 # Convert string keys back to float and reconstruct FaceBox objects
                 face_positions_data = existing.get('face_positions', {})
@@ -445,11 +475,18 @@ class PodcastClipsProcessor:
 
             logger.info("Starting face detection analysis")
             logger.info(f"  Detection resolution: {detection_height}p, Batch size: {batch_size}")
+            if enable_speaker_detection:
+                logger.info(f"  Speaker detection: ENABLED (min_face_size={min_face_size_ratio}, max_faces={max_tracked_faces})")
+            else:
+                logger.info(f"  Speaker detection: DISABLED (legacy single-face mode)")
 
             self.face_tracker = FaceTracker(
                 use_gpu=use_gpu,
                 detection_height=detection_height,
-                batch_size=batch_size
+                batch_size=batch_size,
+                min_face_size_ratio=min_face_size_ratio,
+                max_tracked_faces=max_tracked_faces,
+                enable_speaker_detection=enable_speaker_detection
             )
 
             # Define progress callback to update job status
@@ -466,6 +503,34 @@ class PodcastClipsProcessor:
 
             logger.info(f"Face detection complete: {len(face_positions)} positions detected")
 
+            # Step 4b: Speaker detection (if enabled)
+            if enable_speaker_detection:
+                try:
+                    self.update_progress("speaker_detection", 70, "Analyzing audio for speech activity")
+
+                    # Extract audio from video for speaker detection
+                    import moviepy
+                    video_clip = moviepy.VideoFileClip(video_path)
+                    audio_path = str(self.temp_dir / f"{self.job_id}_audio.wav")
+
+                    if video_clip.audio:
+                        video_clip.audio.write_audiofile(audio_path, logger=None)
+                        video_clip.close()
+
+                        # Analyze audio for speech segments
+                        self.face_tracker.analyze_audio_for_speech(audio_path)
+
+                        # Correlate faces with speech
+                        self.face_tracker.correlate_faces_with_speech()
+
+                        logger.info(f"Speaker detection complete: {len(self.face_tracker.speech_segments)} speech segments detected")
+                        self.update_progress("speaker_detection", 72, "Speech-face correlation complete")
+                    else:
+                        logger.warning("No audio track found in video - speaker detection skipped")
+
+                except Exception as e:
+                    logger.warning(f"Speaker detection failed, continuing with face-only tracking: {e}")
+
             # Persist face positions (convert timestamps to strings for JSON)
             persist_artifact(
                 self.job_id,
@@ -475,11 +540,13 @@ class PodcastClipsProcessor:
                     "face_positions": {str(k): v.__dict__ for k, v in face_positions.items()},
                     "video_width": self.face_tracker.video_width,
                     "video_height": self.face_tracker.video_height,
-                    "detection_count": len(face_positions)
+                    "detection_count": len(face_positions),
+                    "speaker_detection_enabled": enable_speaker_detection,
+                    "speech_segments_count": len(self.face_tracker.speech_segments) if enable_speaker_detection else 0
                 }
             )
 
-            self.update_progress("face_detection", 70, f"Detected faces in {len(face_positions)} frames")
+            self.update_progress("face_detection", 75, f"Detected faces in {len(face_positions)} frames")
 
         except Exception as e:
             logger.error(f"Face detection failed: {e}")
@@ -488,7 +555,10 @@ class PodcastClipsProcessor:
             self.face_tracker = FaceTracker(
                 use_gpu=use_gpu,
                 detection_height=detection_height,
-                batch_size=batch_size
+                batch_size=batch_size,
+                min_face_size_ratio=min_face_size_ratio,
+                max_tracked_faces=max_tracked_faces,
+                enable_speaker_detection=False  # Disable speaker detection on fallback
             )
 
     def _initialize_subtitle_generator(
@@ -557,7 +627,10 @@ class PodcastClipsProcessor:
                 self.face_tracker = FaceTracker(
                     use_gpu=True,
                     detection_height=detection_height,
-                    batch_size=batch_size
+                    batch_size=batch_size,
+                    min_face_size_ratio=0.08,
+                    max_tracked_faces=4,
+                    enable_speaker_detection=False  # Fallback mode uses simple tracking
                 )
 
             # Ensure subtitle generator is available (fallback to basic instance if needed)
