@@ -647,7 +647,7 @@ class JobStore:
                 }
 
             # Ensure common workflow keys exist to avoid undefined access in frontend
-            for k in ("moneyprinter", "brainrot"):
+            for k in ("moneyprinter", "brainrot", "podcastclips"):
                 workflows.setdefault(k, {"count": 0, "size_mb": 0})
 
             # Videos by type (ai_generated, compilation)
@@ -666,7 +666,7 @@ class JobStore:
                 }
 
             # Ensure common video type keys
-            for k in ("ai_generated", "compilation"):
+            for k in ("ai_generated", "compilation", "podcast_clip"):
                 video_types.setdefault(k, {"count": 0, "size_mb": 0})
 
             # Videos by posted status

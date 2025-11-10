@@ -190,19 +190,30 @@ class ProcessorManager:
         """Get an available processor using round-robin."""
         if not self.processors:
             return None
-        
-        # Try each processor starting from current index
+
+        # First pass: Try to find a processor with available capacity
         for i in range(len(self.processors)):
             processor_index = (self.current_index + i) % len(self.processors)
             processor = self.processors[processor_index]
-            
+
             if await processor.health_check():
                 status = await processor.get_processor_status()
                 if status and status.get("current_jobs", 0) < status.get("max_concurrent_jobs", 1):
                     # Update current index for next request
                     self.current_index = (processor_index + 1) % len(self.processors)
                     return processor
-        
+
+        # Second pass: If all processors are at capacity, use any healthy processor (jobs will be queued)
+        for i in range(len(self.processors)):
+            processor_index = (self.current_index + i) % len(self.processors)
+            processor = self.processors[processor_index]
+
+            if await processor.health_check():
+                logger.info(f"All processors at capacity, queueing job to processor {processor_index}")
+                # Update current index for next request
+                self.current_index = (processor_index + 1) % len(self.processors)
+                return processor
+
         return None
     
     async def submit_job(self,

@@ -32,6 +32,11 @@ export default function Sidebar({ username, className }: SidebarProps) {
   const activeJobs = useActiveJobs();
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
+  // Filter active jobs by workflow type
+  const moneyprinterJobs = activeJobs.filter(job => job.workflow === 'moneyprinter');
+  const brainrotJobs = activeJobs.filter(job => job.workflow === 'brainrot');
+  const podcastclipsJobs = activeJobs.filter(job => job.workflow === 'podcastclips');
+
   const navItems = [
     {
       id: 'creator',
@@ -39,7 +44,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
       label: 'AI Video Creator',
       icon: <FaFilm className="size-4" />,
       description: 'Generate videos with AI',
-      badge: activeJobs.length > 0 ? activeJobs.length.toString() : undefined,
+      badge: moneyprinterJobs.length > 0 ? moneyprinterJobs.length.toString() : undefined,
     },
     {
       id: 'compilations',
@@ -47,6 +52,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
       label: 'Compilations',
       icon: <FaBrain className="size-4" />,
       description: 'Create from existing videos',
+      badge: brainrotJobs.length > 0 ? brainrotJobs.length.toString() : undefined,
     },
     {
       id: 'podcastclips',
@@ -54,6 +60,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
       label: 'Podcast Clips',
       icon: <FaPodcast className="size-4" />,
       description: 'Generate clips from podcasts',
+      badge: podcastclipsJobs.length > 0 ? podcastclipsJobs.length.toString() : undefined,
     },
   ];
 
@@ -91,7 +98,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'flex flex-col bg-card/80 backdrop-blur-2xl border-r-2 border-border/40 w-64 shadow-2xl',
+        'flex flex-col bg-card/80 backdrop-blur-2xl border-r-2 border-border/40 w-64 shadow-2xl overflow-hidden',
         className
       )}
     >
@@ -122,27 +129,27 @@ export default function Sidebar({ username, className }: SidebarProps) {
                 <Button
                   variant={isActive ? 'secondary' : 'ghost'}
                   className={cn(
-                    'w-full justify-start h-auto p-3 group relative rounded-xl transition-all duration-300',
+                    'w-full justify-start h-auto p-3 group relative rounded-xl transition-all duration-300 overflow-hidden',
                     isActive && 'bg-gradient-to-r from-primary/15 to-accent/15 border-2 border-primary/30 text-primary hover:from-primary/20 hover:to-accent/20 shadow-lg shadow-primary/10'
                   )}
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
-                  <div className="flex items-center gap-3 w-full">
+                  <div className="flex items-center gap-3 w-full min-w-0">
                     <div className={cn(
                       "shrink-0 transition-transform duration-300",
                       isActive && "scale-110"
                     )}>{item.icon}</div>
-                    <div className="flex-1 text-left">
-                      <div className="font-semibold text-sm">{item.label}</div>
-                      <div className="text-xs text-muted-foreground">{item.description}</div>
+                    <div className="flex-1 text-left min-w-0">
+                      <div className="font-semibold text-sm truncate">{item.label}</div>
+                      <div className="text-xs text-muted-foreground truncate">{item.description}</div>
                     </div>
                     {item.badge && (
-                      <Badge variant="secondary" className="ml-auto animate-pulse">
+                      <Badge variant="secondary" className="shrink-0">
                         {item.badge}
                       </Badge>
                     )}
-                    {isActive && <FaChevronRight className="size-3 text-primary animate-pulse" />}
+                    {isActive && !item.badge && <FaChevronRight className="size-3 text-primary animate-pulse shrink-0" />}
                   </div>
                 </Button>
               </Link>
@@ -164,22 +171,22 @@ export default function Sidebar({ username, className }: SidebarProps) {
                 <Button
                   variant={isActive ? 'secondary' : 'ghost'}
                   className={cn(
-                    'w-full justify-start h-auto p-3 group relative rounded-xl transition-all duration-300',
+                    'w-full justify-start h-auto p-3 group relative rounded-xl transition-all duration-300 overflow-hidden',
                     isActive && 'bg-gradient-to-r from-primary/15 to-accent/15 border-2 border-primary/30 text-primary hover:from-primary/20 hover:to-accent/20 shadow-lg shadow-primary/10'
                   )}
                   onMouseEnter={() => setHoveredItem(item.id)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
-                  <div className="flex items-center gap-3 w-full">
+                  <div className="flex items-center gap-3 w-full min-w-0">
                     <div className={cn(
                       "shrink-0 transition-transform duration-300",
                       isActive && "scale-110"
                     )}>{item.icon}</div>
-                    <div className="flex-1 text-left">
-                      <div className="font-semibold text-sm">{item.label}</div>
-                      <div className="text-xs text-muted-foreground">{item.description}</div>
+                    <div className="flex-1 text-left min-w-0">
+                      <div className="font-semibold text-sm truncate">{item.label}</div>
+                      <div className="text-xs text-muted-foreground truncate">{item.description}</div>
                     </div>
-                    {isActive && <FaChevronRight className="size-3 text-primary animate-pulse" />}
+                    {isActive && <FaChevronRight className="size-3 text-primary animate-pulse shrink-0" />}
                   </div>
                 </Button>
               </Link>

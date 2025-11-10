@@ -24,16 +24,65 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from utils.youtube import download_video, extract_video_id
 from utils.artifacts import persist_artifact, load_artifact
 
-# Create stub for job store since video-processor doesn't have database module
-class JobStoreStub:
-    """Stub for job store when running in video-processor context."""
-    def update_job_progress(self, job_id, progress, status, step=None, message=None):
-        # Progress updates are handled by the video-processor's job queue
-        pass
+# Create wrapper for job store that uses the job queue
+class JobQueueWrapper:
+    """Wrapper for job queue to act as job store for progress updates."""
+    def __init__(self, job_queue=None, loop=None):
+        self.job_queue = job_queue
+        self.loop = loop
 
-def get_job_store():
-    """Return stub job store for video-processor context."""
-    return JobStoreStub()
+    def update_job_progress(self, job_id, progress, status, step=None, message=None):
+        """Update job progress through the job queue."""
+        if not self.job_queue:
+            # No job queue available, skip progress updates
+            logger.debug(f"No job queue available for progress update: {step} - {progress}%")
+            return
+
+        try:
+            import asyncio
+            # Import JobStatus from src.models
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+            from src.models.job import JobStatus
+
+            # Map status string to JobStatus enum
+            status_map = {
+                "processing": JobStatus.RUNNING,
+                "completed": JobStatus.COMPLETED,
+                "error": JobStatus.FAILED,
+                "queued": JobStatus.QUEUED
+            }
+            job_status = status_map.get(status, JobStatus.RUNNING)
+
+            # Format progress as string (e.g., "50%")
+            progress_str = f"{progress}%" if progress is not None else None
+
+            # Use run_coroutine_threadsafe to schedule the async call in the main event loop
+            if self.loop and self.loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(
+                    self.job_queue.update_job_status(
+                        job_id=job_id,
+                        status=job_status,
+                        progress=progress_str,
+                        current_step=step,
+                        error_message=message if status == "error" else None
+                    ),
+                    self.loop
+                )
+                # Wait for the result (with timeout to avoid blocking)
+                try:
+                    future.result(timeout=5)
+                    logger.debug(f"Progress update sent: {step} - {progress}%")
+                except Exception as e:
+                    logger.warning(f"Progress update timeout or failed: {e}")
+            else:
+                logger.warning(f"Event loop not available for progress update: {step}")
+
+        except Exception as e:
+            logger.error(f"Failed to update job progress via queue: {e}")
+
+def get_job_store(job_queue=None, loop=None):
+    """Return job store wrapper for video-processor context."""
+    return JobQueueWrapper(job_queue, loop)
 
 from .face_tracker import FaceTracker, FaceBox
 from .subtitle_generator import SubtitleGenerator
@@ -61,7 +110,9 @@ class PodcastClipsProcessor:
         self,
         job_id: str,
         output_dir: str,
-        temp_dir: Optional[str] = None
+        temp_dir: Optional[str] = None,
+        job_queue=None,
+        loop=None
     ):
         """
         Initialize processor.
@@ -70,6 +121,8 @@ class PodcastClipsProcessor:
             job_id: Unique job identifier
             output_dir: Directory for final outputs
             temp_dir: Temporary directory for intermediate files
+            job_queue: Job queue for progress updates (optional)
+            loop: Event loop for async operations (optional)
         """
         self.job_id = job_id
         self.output_dir = Path(output_dir)
@@ -80,7 +133,7 @@ class PodcastClipsProcessor:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Job store for progress tracking
-        self.job_store = get_job_store()
+        self.job_store = get_job_store(job_queue, loop)
 
         # Component instances (initialized during processing)
         self.face_tracker: Optional[FaceTracker] = None
@@ -944,7 +997,7 @@ class PodcastClipsProcessor:
             logger.warning(f"Cleanup encountered error: {e}")
 
 
-def process_podcast_clips(job_id: str, parameters: Dict[str, Any], output_dir: str) -> Dict[str, Any]:
+def process_podcast_clips(job_id: str, parameters: Dict[str, Any], output_dir: str, job_queue=None, loop=None) -> Dict[str, Any]:
     """
     Main entry point for podcast clips processing.
 
@@ -952,9 +1005,11 @@ def process_podcast_clips(job_id: str, parameters: Dict[str, Any], output_dir: s
         job_id: Unique job identifier
         parameters: Request parameters from PodcastClipsRequest
         output_dir: Directory for outputs
+        job_queue: Job queue for progress updates (optional)
+        loop: Event loop for async operations (optional)
 
     Returns:
         Processing results dictionary
     """
-    processor = PodcastClipsProcessor(job_id, output_dir)
+    processor = PodcastClipsProcessor(job_id, output_dir, job_queue=job_queue, loop=loop)
     return processor.process(parameters)

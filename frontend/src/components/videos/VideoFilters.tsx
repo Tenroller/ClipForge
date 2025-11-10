@@ -63,6 +63,7 @@ export default function VideoFilters({
                 <SelectItem value="all">All Workflows</SelectItem>
                 <SelectItem value="moneyprinter">MoneyPrinter</SelectItem>
                 <SelectItem value="brainrot">Brainrot</SelectItem>
+                <SelectItem value="podcastclips">Podcast Clips</SelectItem>
               </SelectContent>
             </Select>
           </div>

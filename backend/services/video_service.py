@@ -194,7 +194,7 @@ class VideoService:
                             for video_data in generated_videos:
                                 if not video_data:
                                     continue
-                                    
+
                                 video_path = video_data.get("path")
                                 if video_path and Path(video_path).exists():
                                     try:
@@ -211,14 +211,49 @@ class VideoService:
                                                 "original_video_data": video_data
                                             }
                                         )
-                                        
+
                                         # Preserve original posted status
                                         if video_data.get("posted", False):
                                             self.mark_video_posted(video_id)
-                                        
+
                                         stats["registered_videos"] += 1
                                     except Exception as e:
                                         stats["errors"].append(f"Brainrot job {job_id}, video {video_path}: {str(e)}")
+                                else:
+                                    stats["skipped_videos"] += 1
+
+                    # Handle PodcastClips workflow
+                    elif workflow == "podcastclips" and "generated_videos" in job_result:
+                        generated_videos = job_result.get("generated_videos", [])
+                        if generated_videos:
+                            for video_data in generated_videos:
+                                if not video_data:
+                                    continue
+
+                                video_path = video_data.get("path")
+                                if video_path and Path(video_path).exists():
+                                    try:
+                                        video_id = self.register_video(
+                                            job_id=job_id,
+                                            file_path=video_path,
+                                            workflow=workflow,
+                                            video_type="podcast_clip",
+                                            compilation_type=video_data.get("compilation_type"),
+                                            compilation_num=video_data.get("compilation_num"),
+                                            metadata={
+                                                "migrated_from_job_result": True,
+                                                "original_posted_status": video_data.get("posted", False),
+                                                "original_video_data": video_data
+                                            }
+                                        )
+
+                                        # Preserve original posted status
+                                        if video_data.get("posted", False):
+                                            self.mark_video_posted(video_id)
+
+                                        stats["registered_videos"] += 1
+                                    except Exception as e:
+                                        stats["errors"].append(f"PodcastClips job {job_id}, video {video_path}: {str(e)}")
                                 else:
                                     stats["skipped_videos"] += 1
                 
@@ -280,12 +315,13 @@ class VideoService:
                     except Exception:
                         job_record = None
 
-                    # Brainrot jobs: only register final compilations, never raw/source/cropped
-                    if (job_record and job_record.get("workflow") == "brainrot") or (not job_record):
+                    # Brainrot/PodcastClips jobs: only register final compilations, never raw/source/cropped
+                    if (job_record and job_record.get("workflow") in ["brainrot", "podcastclips"]) or (not job_record):
                         # If we can't positively identify MoneyPrinter, require explicit compilation naming
                         if "compilation" in filename_lower:
-                            workflow = "brainrot"
-                            video_type = "compilation"
+                            # Use job record workflow if available, otherwise default to brainrot
+                            workflow = job_record.get("workflow", "brainrot") if job_record else "brainrot"
+                            video_type = "podcast_clip" if workflow == "podcastclips" else "compilation"
 
                             # Extract compilation info
                             compilation_type = None

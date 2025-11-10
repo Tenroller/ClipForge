@@ -122,9 +122,9 @@ async def lifespan(app: FastAPI):
         # Initialize job queue
         job_queue = ProcessorJobQueue(config)
         await job_queue.connect()
-        
+
         # Initialize video processing service
-        video_service = VideoProcessingService(config)
+        video_service = VideoProcessingService(config, job_queue=job_queue)
         
         # Register workflow handlers
         job_queue.register_handler(WorkflowType.MONEYPRINTER, video_service.process_moneyprinter_job)

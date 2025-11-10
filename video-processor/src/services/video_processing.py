@@ -35,9 +35,10 @@ logger = logger.bind(name="video_generator")
 
 class VideoProcessingService:
     """Service for processing video generation workflows."""
-    
-    def __init__(self, config: ProcessorConfig):
+
+    def __init__(self, config: ProcessorConfig, job_queue=None):
         self.config = config
+        self.job_queue = job_queue
         self.setup_environment()
     
     def setup_environment(self):
@@ -407,17 +408,46 @@ class VideoProcessingService:
                 video_clips=video_clips
             )
             
-            # Collect output files
-            output_files = []
+            # Collect output files and convert to generated_videos format
+            import os
+            generated_videos = []
             for video_file in job_output_dir.rglob("*.mp4"):
                 if video_file.is_file():
-                    output_files.append(str(video_file))
-            
-            logger.info(f"Job {job_id}: Brainrot compilation completed, generated {len(output_files)} videos")
-            
+                    file_size_mb = os.path.getsize(video_file) / (1024 * 1024)  # Convert to MB
+
+                    # Try to extract compilation info from filename
+                    filename_lower = video_file.name.lower()
+                    compilation_type = None
+                    compilation_num = None
+
+                    if "_normal" in filename_lower:
+                        compilation_type = "normal"
+                    elif "_tts" in filename_lower:
+                        compilation_type = "tts"
+
+                    # Extract compilation number
+                    if "_compilation_" in filename_lower:
+                        try:
+                            parts = filename_lower.split("_compilation_")
+                            if len(parts) > 1:
+                                num_part = parts[1].split("_")[0].split(".")[0]
+                                compilation_num = int(num_part)
+                        except (ValueError, IndexError):
+                            pass
+
+                    generated_videos.append({
+                        "path": str(video_file),
+                        "size_mb": round(file_size_mb, 2),
+                        "compilation_type": compilation_type,
+                        "compilation_num": compilation_num,
+                        "posted": False
+                    })
+
+            logger.info(f"Job {job_id}: Brainrot compilation completed, generated {len(generated_videos)} videos")
+
             return {
                 "status": "completed",
-                "output_files": output_files,
+                "generated_videos": generated_videos,
                 "clips_count": len(video_clips),
                 "job_id": job_id
             }
@@ -452,26 +482,37 @@ class VideoProcessingService:
 
             logger.info(f"Job {job_id}: Processing podcast from {req.youtubeUrl}")
 
+            # Get the current event loop to pass to the processor
+            loop = asyncio.get_event_loop()
+
             # Process podcast clips using our processor - run in thread pool to avoid blocking
             result = await asyncio.to_thread(
                 process_podcast_clips,
                 job_id=job_id,
                 parameters=request_data,
-                output_dir=output_dir_str
+                output_dir=output_dir_str,
+                job_queue=self.job_queue,
+                loop=loop
             )
 
-            # Collect output files
-            output_files = []
+            # Collect output files and convert to generated_videos format
+            import os
+            generated_videos = []
             for video_file in job_output_dir.rglob("*.mp4"):
                 if video_file.is_file() and "_clip_" in video_file.name:
-                    output_files.append(str(video_file))
+                    file_size_mb = os.path.getsize(video_file) / (1024 * 1024)  # Convert to MB
+                    generated_videos.append({
+                        "path": str(video_file),
+                        "size_mb": round(file_size_mb, 2),
+                        "posted": False
+                    })
 
-            logger.info(f"Job {job_id}: PodcastClips job completed, generated {len(output_files)} clips")
+            logger.info(f"Job {job_id}: PodcastClips job completed, generated {len(generated_videos)} clips")
 
             return {
                 "status": "completed",
-                "output_files": output_files,
-                "clips_count": result.get("total_clips_generated", len(output_files)),
+                "generated_videos": generated_videos,
+                "clips_count": result.get("total_clips_generated", len(generated_videos)),
                 "job_id": job_id,
                 "summary": result
             }

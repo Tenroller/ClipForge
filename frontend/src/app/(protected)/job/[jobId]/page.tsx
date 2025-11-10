@@ -108,6 +108,21 @@ function getInitialSteps(workflow: string) {
       { key: 'compile_videos', label: 'Compile Videos', done: false },
       { key: 'done', label: 'Complete', done: false },
     ];
+  } else if (workflow === 'podcastclips') {
+    return [
+      { key: 'initialization', label: 'Initialize', done: false },
+      { key: 'download', label: 'Download Video', done: false },
+      { key: 'transcription', label: 'Transcribe Audio', done: false },
+      { key: 'ai_analysis', label: 'AI Analysis', done: false },
+      { key: 'scoring', label: 'Score Moments', done: false },
+      { key: 'hook_optimization', label: 'Optimize Hooks', done: false },
+      { key: 'face_detection', label: 'Detect Faces', done: false },
+      { key: 'speaker_detection', label: 'Detect Speakers', done: false },
+      { key: 'clip_generation', label: 'Generate Clips', done: false },
+      { key: 'finalization', label: 'Finalize', done: false },
+      { key: 'post_processing', label: 'Post Processing', done: false },
+      { key: 'completed', label: 'Complete', done: false },
+    ];
   } else {
     return [
       { key: 'script', label: 'Generate Script', done: false },
@@ -139,32 +154,14 @@ export default function JobMonitoringPage() {
   const jobId = params?.jobId as string;
 
   const { data: job, isLoading, error } = useJob(jobId, { refetchInterval: 2000 });
-  const [logs, setLogs] = useState<JobLogs | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
-  // Fetch logs separately (backend may not include logs in job status yet)
-  useEffect(() => {
-    if (!jobId || !autoRefresh) return;
-    if (job && ['done', 'completed', 'error', 'cancelled'].includes(job.status)) return;
-
-    const fetchLogs = async () => {
-      try {
-        const response = await fetch(`${API_BASE}/api/jobs/${jobId}/logs`, {
-          credentials: 'include',
-        });
-        if (response.ok) {
-          const logsData = await response.json();
-          setLogs(logsData);
-        }
-      } catch (error) {
-        console.error('Failed to fetch logs:', error);
-      }
-    };
-
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 3000);
-    return () => clearInterval(interval);
-  }, [jobId, autoRefresh, job?.status]);
+  // Logs are included in the job status response from the backend
+  const logs = job?.logs ? {
+    job_id: jobId,
+    logs: Array.isArray(job.logs) ? job.logs : [],
+    total_logs: Array.isArray(job.logs) ? job.logs.length : 0
+  } : null;
 
   const formatJobDuration = () => {
     if (job?.duration_seconds) {
@@ -235,7 +232,9 @@ export default function JobMonitoringPage() {
           <div>
             <h1 className="text-2xl font-bold">Job Monitor</h1>
             <p className="text-sm text-muted-foreground">
-              {job.workflow === 'brainrot' ? 'Brainrot Compilation' : 'AI Video Generation'}
+              {job.workflow === 'brainrot' ? 'Brainrot Compilation' :
+               job.workflow === 'podcastclips' ? 'Podcast Clips' :
+               'AI Video Generation'}
             </p>
           </div>
         </div>
@@ -288,7 +287,9 @@ export default function JobMonitoringPage() {
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Workflow:</span>
               <Badge variant="outline">
-                {job.workflow === 'brainrot' ? 'Brainrot Compilation' : 'AI Video Generation'}
+                {job.workflow === 'brainrot' ? 'Brainrot Compilation' :
+                 job.workflow === 'podcastclips' ? 'Podcast Clips' :
+                 'AI Video Generation'}
               </Badge>
             </div>
 
@@ -335,12 +336,13 @@ export default function JobMonitoringPage() {
           <CardContent>
             <div className="space-y-3">
               {steps.map((step, index) => {
+                const currentStepIndex = steps.findIndex(s => s.key === job.current_step);
                 const isActive =
                   step.key === job.current_step &&
                   (job.status === 'running' || job.status === 'processing');
                 const isDone =
-                  step.done ||
-                  ((job.status === 'done' || job.status === 'completed') && step.key === 'done');
+                  (job.status === 'done' || job.status === 'completed') ||
+                  (currentStepIndex >= 0 && index < currentStepIndex);
 
                 return (
                   <div

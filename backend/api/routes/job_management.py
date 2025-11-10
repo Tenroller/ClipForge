@@ -58,7 +58,11 @@ def job_status(job_id: str):
         # Fallback to empty logs if logs fetch fails
         job['logs'] = []
         job['total_logs'] = 0
-    
+
+    # Map 'step' to 'current_step' for frontend compatibility
+    if 'step' in job:
+        job['current_step'] = job['step']
+
     return job
 
 
@@ -409,6 +413,12 @@ def list_jobs(
 ) -> Dict[str, Any]:
     """List jobs with optional filtering."""
     jobs = job_service.list_jobs(limit=min(limit, 100), status=status)
+
+    # Map 'step' to 'current_step' for frontend compatibility
+    for job in jobs:
+        if 'step' in job:
+            job['current_step'] = job['step']
+
     return {"jobs": jobs, "total": len(jobs)}
 
 

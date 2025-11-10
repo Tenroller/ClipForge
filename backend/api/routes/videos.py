@@ -137,15 +137,29 @@ def scan_orphaned_videos() -> List[Dict[str, Any]]:
                                             continue  # Skip invalid paths
                                 if any(p.exists() and p.samefile(video_file) for p in tracked_paths):
                                     continue  # This video is properly tracked
+
+                        # Check if video is tracked in podcastclips workflow
+                        elif job.get("workflow") == "podcastclips":
+                            if "generated_videos" in job_result and job_result["generated_videos"] is not None:
+                                generated_videos = job_result["generated_videos"]
+                                tracked_paths = []
+                                for v in generated_videos:
+                                    if v and v.get("path"):  # Check if video data and path exist
+                                        try:
+                                            tracked_paths.append(Path(v["path"]))
+                                        except (TypeError, ValueError):
+                                            continue  # Skip invalid paths
+                                if any(p.exists() and p.samefile(video_file) for p in tracked_paths):
+                                    continue  # This video is properly tracked
                 
                 # This video appears to be orphaned
                 stat = video_file.stat()
-                
+
                 # Try to determine video type from path structure
                 video_type = "unknown"
                 compilation_type = None
                 compilation_num = None
-                
+
                 if "compilation" in video_file.name.lower():
                     video_type = "compilation"
                     # Try to extract compilation info from filename
@@ -158,17 +172,26 @@ def scan_orphaned_videos() -> List[Dict[str, Any]]:
                                 compilation_num = int(num_part)
                             except ValueError:
                                 pass
-                    
+
                     if "_normal" in filename_lower:
                         compilation_type = "normal"
                     elif "_tts" in filename_lower:
                         compilation_type = "tts"
                 else:
                     video_type = "ai_generated"
-                
-                # Determine workflow from video type
-                workflow = "brainrot" if video_type == "compilation" else "moneyprinter"
-                
+
+                # Determine workflow from job record if available, otherwise guess from video type
+                workflow = "moneyprinter"  # default
+                if job and job.get("workflow"):
+                    workflow = job["workflow"]
+                elif video_type == "compilation":
+                    # Default to brainrot for compilation videos if no job record
+                    workflow = "brainrot"
+
+                # Adjust video_type based on workflow
+                if workflow == "podcastclips":
+                    video_type = "podcast_clip"
+
                 # Use file modification time as created_at
                 created_at = time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime(stat.st_mtime))
                 
@@ -261,11 +284,13 @@ def get_video_stats() -> Dict[str, Any]:
             "total_size_mb": 0,
             "workflows": {
                 "moneyprinter": {"count": 0, "size_mb": 0},
-                "brainrot": {"count": 0, "size_mb": 0}
+                "brainrot": {"count": 0, "size_mb": 0},
+                "podcastclips": {"count": 0, "size_mb": 0}
             },
             "video_types": {
                 "ai_generated": {"count": 0, "size_mb": 0},
-                "compilation": {"count": 0, "size_mb": 0}
+                "compilation": {"count": 0, "size_mb": 0},
+                "podcast_clip": {"count": 0, "size_mb": 0}
             }
         }
         
@@ -305,6 +330,27 @@ def get_video_stats() -> Dict[str, Any]:
                             stats["workflows"]["brainrot"]["size_mb"] += size_mb
                             stats["video_types"]["compilation"]["count"] += 1
                             stats["video_types"]["compilation"]["size_mb"] += size_mb
+                        except Exception:
+                            continue
+
+            elif job_workflow == "podcastclips" and "generated_videos" in job_result:
+                generated_videos = job_result.get("generated_videos", [])
+                # Handle case where generated_videos could be None
+                if generated_videos is None:
+                    generated_videos = []
+                for video_data in generated_videos:
+                    if video_data is None:  # Skip None video entries
+                        continue
+                    video_path = video_data.get("path")
+                    if video_path and Path(video_path).exists():
+                        try:
+                            size_mb = video_data.get("size_mb", 0)
+                            stats["total_videos"] += 1
+                            stats["total_size_mb"] += size_mb
+                            stats["workflows"]["podcastclips"]["count"] += 1
+                            stats["workflows"]["podcastclips"]["size_mb"] += size_mb
+                            stats["video_types"]["podcast_clip"]["count"] += 1
+                            stats["video_types"]["podcast_clip"]["size_mb"] += size_mb
                         except Exception:
                             continue
         

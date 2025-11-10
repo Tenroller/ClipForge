@@ -414,18 +414,6 @@ export default function PodcastClipsPage() {
                           ))}
                         </>
                       )}
-
-                      {/* Fallback if no models loaded */}
-                      {allModels.length === 0 && organizedModels.recommended.length === 0 && (
-                        <>
-                          <SelectItem key="gemini-2.0-flash-fallback" value="gemini-2.0-flash">
-                            Gemini 2.0 Flash (Default)
-                          </SelectItem>
-                          <SelectItem key="gemini-2.5-flash-fallback" value="gemini-2.5-flash">
-                            Gemini 2.5 Flash (Latest)
-                          </SelectItem>
-                        </>
-                      )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">

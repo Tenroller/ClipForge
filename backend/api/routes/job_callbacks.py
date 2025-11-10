@@ -53,19 +53,23 @@ async def job_callback(payload: JobCallbackPayload) -> Dict[str, str]:
         update_fields = {
             "status": payload.status,
         }
-        
+
         if payload.current_step:
             update_fields["step"] = payload.current_step
-            
+
         if payload.error_message:
             update_fields["error"] = payload.error_message
-            
+
         if payload.result_data:
             update_fields["result"] = payload.result_data
-        
+
+        # Handle job start - set started_at timestamp
+        import datetime
+        if payload.status == "running" and not job.get("started_at"):
+            update_fields["started_at"] = datetime.datetime.now(datetime.timezone.utc)
+
         # Handle job completion
         if payload.status in ["completed", "failed", "cancelled"]:
-            import datetime
             update_fields["ended_at"] = datetime.datetime.now(datetime.timezone.utc)
             if job.get("started_at"):
                 started_at = job["started_at"]
