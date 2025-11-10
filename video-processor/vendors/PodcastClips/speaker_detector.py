@@ -91,7 +91,9 @@ class SpeakerDetector:
     def detect_speech_segments(
         self,
         audio_path: str,
-        sr: Optional[int] = None
+        sr: Optional[int] = None,
+        start_time: Optional[float] = None,
+        end_time: Optional[float] = None
     ) -> List[AudioSegment]:
         """
         Detect speech segments in an audio file.
@@ -99,14 +101,30 @@ class SpeakerDetector:
         Args:
             audio_path: Path to audio file
             sr: Target sample rate (if None, uses native rate)
+            start_time: Optional start time in seconds (for analyzing specific segments)
+            end_time: Optional end time in seconds
 
         Returns:
             List of AudioSegment objects representing detected speech
         """
-        self.logger.info(f"Analyzing audio for speech segments: {audio_path}")
+        if start_time is not None or end_time is not None:
+            self.logger.info(
+                f"Analyzing audio segment for speech: {audio_path} "
+                f"[{start_time or 0:.1f}s - {end_time or 'end'}s]"
+            )
+        else:
+            self.logger.info(f"Analyzing audio for speech segments: {audio_path}")
 
         # Load audio
         y, sample_rate = librosa.load(audio_path, sr=sr)
+
+        # Slice audio if segment specified
+        segment_offset = 0.0
+        if start_time is not None or end_time is not None:
+            start_sample = int(start_time * sample_rate) if start_time else 0
+            end_sample = int(end_time * sample_rate) if end_time else len(y)
+            y = y[start_sample:end_sample]
+            segment_offset = start_time or 0.0
 
         if self.use_vad:
             segments = self._detect_with_vad(y, sample_rate)
@@ -118,6 +136,18 @@ class SpeakerDetector:
             seg for seg in segments
             if seg.duration >= self.min_speech_duration
         ]
+
+        # Adjust timestamps if we processed a segment
+        if segment_offset > 0:
+            filtered_segments = [
+                AudioSegment(
+                    start_time=seg.start_time + segment_offset,
+                    end_time=seg.end_time + segment_offset,
+                    energy=seg.energy,
+                    confidence=seg.confidence
+                )
+                for seg in filtered_segments
+            ]
 
         self.logger.info(
             f"Detected {len(filtered_segments)} speech segments "
