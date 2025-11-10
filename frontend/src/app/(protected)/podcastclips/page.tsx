@@ -5,8 +5,8 @@ import { useJobs, useAvailableModels } from '@/hooks/use-jobs';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import { useToast } from '@/hooks/use-toast';
-import type { JobRecord } from '@/lib/api';
-import { generatePodcastClips } from '@/lib/api';
+import type { JobRecord, YouTubeMetadata } from '@/lib/api';
+import { generatePodcastClips, getYouTubeMetadata } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,7 +20,8 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, Video, Zap, Target, ChevronDown, ChevronUp } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Sparkles, Video, Zap, Target, ChevronDown, ChevronUp, Eye, Clock, User, Play } from 'lucide-react';
 
 export default function PodcastClipsPage() {
   const { toast } = useToast();
@@ -45,6 +46,22 @@ export default function PodcastClipsPage() {
   const [subtitleHighlightColor, setSubtitleHighlightColor] = useState('#6366f1');
   const [subtitleMaxWordsVisible, setSubtitleMaxWordsVisible] = useState(5);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // YouTube metadata preview
+  const [videoMetadata, setVideoMetadata] = useState<YouTubeMetadata | null>(null);
+  const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+
+  // Viral keywords
+  const [viralKeywords, setViralKeywords] = useState('');
+
+  // Mixed-mode content detection
+  const [enableMixedMode, setEnableMixedMode] = useState(true);
+  const [useOCR, setUseOCR] = useState(true);
+  const [faceLossThreshold, setFaceLossThreshold] = useState(1.0);
+  const [faceReturnThreshold, setFaceReturnThreshold] = useState(0.5);
+  const [minSegmentDuration, setMinSegmentDuration] = useState(0.5);
+  const [transitionDuration, setTransitionDuration] = useState(0.5);
+  const [showMixedModeSettings, setShowMixedModeSettings] = useState(false);
 
   // Organize models into categories for better UX (mutually exclusive)
   const organizedModels = useMemo(() => {
@@ -104,6 +121,35 @@ export default function PodcastClipsPage() {
     }
   }, [currentJob, toast]);
 
+  // Fetch YouTube metadata when URL changes
+  useEffect(() => {
+    const fetchMetadata = async () => {
+      const urlTrimmed = youtubeUrl.trim();
+
+      // Check if it's a valid YouTube URL pattern
+      if (!urlTrimmed || !urlTrimmed.includes('youtube.com') && !urlTrimmed.includes('youtu.be')) {
+        setVideoMetadata(null);
+        return;
+      }
+
+      setIsLoadingMetadata(true);
+      try {
+        const metadata = await getYouTubeMetadata(urlTrimmed);
+        setVideoMetadata(metadata);
+      } catch (error: any) {
+        console.error('Failed to fetch YouTube metadata:', error);
+        setVideoMetadata(null);
+        // Don't show error toast yet, only when they try to submit
+      } finally {
+        setIsLoadingMetadata(false);
+      }
+    };
+
+    // Debounce the metadata fetch
+    const timeoutId = setTimeout(fetchMetadata, 800);
+    return () => clearTimeout(timeoutId);
+  }, [youtubeUrl]);
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
@@ -119,6 +165,12 @@ export default function PodcastClipsPage() {
     setIsSubmitting(true);
 
     try {
+      // Parse viral keywords from comma-separated string
+      const keywordsArray = viralKeywords
+        .split(',')
+        .map(k => k.trim())
+        .filter(k => k.length > 0);
+
       const payload = {
         youtubeUrl: youtubeUrl.trim(),
         aiModel,
@@ -134,7 +186,14 @@ export default function PodcastClipsPage() {
         subtitleVerticalOffset,
         subtitleHighlightColor,
         subtitleMaxWordsVisible,
-        viralFocusKeywords: []
+        viralFocusKeywords: keywordsArray,
+        // Mixed-mode content detection settings
+        enableMixedMode,
+        useOCR,
+        faceLossThreshold,
+        faceReturnThreshold,
+        minSegmentDuration,
+        transitionDuration,
       };
 
       const data = await generatePodcastClips(payload);
@@ -242,6 +301,67 @@ export default function PodcastClipsPage() {
                     required
                   />
                 </div>
+
+                {/* YouTube Video Preview */}
+                {isLoadingMetadata && (
+                  <Card className="border-blue-200 bg-blue-50/50">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3">
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+                        <p className="text-sm text-muted-foreground">Loading video details...</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {videoMetadata && !isLoadingMetadata && (
+                  <Card className="border-green-200 bg-green-50/50">
+                    <CardContent className="pt-6">
+                      <div className="flex gap-4">
+                        {/* Thumbnail */}
+                        <div className="relative flex-shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-muted">
+                          {videoMetadata.thumbnail_url ? (
+                            <img
+                              src={videoMetadata.thumbnail_url}
+                              alt={videoMetadata.title}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Video className="h-8 w-8 text-muted-foreground" />
+                            </div>
+                          )}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/10 transition-colors">
+                            <Play className="h-8 w-8 text-white drop-shadow-lg" />
+                          </div>
+                        </div>
+
+                        {/* Video Info */}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm line-clamp-2 mb-2">{videoMetadata.title}</h3>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3" />
+                              <span className="truncate max-w-[150px]">{videoMetadata.channel}</span>
+                            </div>
+                            {videoMetadata.duration && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                <span>{videoMetadata.duration_formatted}</span>
+                              </div>
+                            )}
+                            {videoMetadata.view_count && (
+                              <div className="flex items-center gap-1">
+                                <Eye className="h-3 w-3" />
+                                <span>{(videoMetadata.view_count / 1000000).toFixed(1)}M views</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* AI Model */}
                 <div className="space-y-2">
@@ -394,6 +514,155 @@ export default function PodcastClipsPage() {
                     onValueChange={(value) => setSubtitleFontSize(value[0])}
                     disabled={isSubmitting}
                   />
+                </div>
+
+                {/* Viral Keywords */}
+                <div className="space-y-2">
+                  <Label htmlFor="viralKeywords">
+                    Viral Focus Keywords <Badge variant="outline" className="ml-2">Optional</Badge>
+                  </Label>
+                  <Input
+                    id="viralKeywords"
+                    placeholder="e.g., startup, founder, investment"
+                    value={viralKeywords}
+                    onChange={(e) => setViralKeywords(e.target.value)}
+                    disabled={isSubmitting}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Comma-separated keywords to prioritize when detecting viral moments
+                  </p>
+                </div>
+
+                {/* Mixed-Mode Content Detection */}
+                <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="enableMixedMode">Smart Content Detection</Label>
+                        <Badge variant="secondary">AI-Powered</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically switches between face-focused and horizontal modes for screen recordings
+                      </p>
+                    </div>
+                    <Switch
+                      id="enableMixedMode"
+                      checked={enableMixedMode}
+                      onCheckedChange={setEnableMixedMode}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <Label htmlFor="useOCR">OCR Text Detection</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Detect text-based content (slides, code, articles) for better framing
+                      </p>
+                    </div>
+                    <Switch
+                      id="useOCR"
+                      checked={useOCR}
+                      onCheckedChange={setUseOCR}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  {/* Advanced Mixed-Mode Settings */}
+                  {enableMixedMode && (
+                    <div className="pt-2 border-t">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="w-full flex items-center justify-between hover:bg-muted/50"
+                        onClick={() => setShowMixedModeSettings(!showMixedModeSettings)}
+                      >
+                        <span className="text-sm">Advanced Detection Settings</span>
+                        {showMixedModeSettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+
+                      {showMixedModeSettings && (
+                        <div className="mt-4 space-y-4">
+                          {/* Face Loss Threshold */}
+                          <div className="space-y-2">
+                            <Label htmlFor="faceLossThreshold">
+                              Face Loss Threshold: <Badge variant="secondary">{faceLossThreshold}s</Badge>
+                            </Label>
+                            <Slider
+                              id="faceLossThreshold"
+                              min={0.5}
+                              max={3.0}
+                              step={0.1}
+                              value={[faceLossThreshold]}
+                              onValueChange={(value) => setFaceLossThreshold(value[0])}
+                              disabled={isSubmitting}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Seconds without face to switch to horizontal mode
+                            </p>
+                          </div>
+
+                          {/* Face Return Threshold */}
+                          <div className="space-y-2">
+                            <Label htmlFor="faceReturnThreshold">
+                              Face Return Threshold: <Badge variant="secondary">{faceReturnThreshold}s</Badge>
+                            </Label>
+                            <Slider
+                              id="faceReturnThreshold"
+                              min={0.2}
+                              max={2.0}
+                              step={0.1}
+                              value={[faceReturnThreshold]}
+                              onValueChange={(value) => setFaceReturnThreshold(value[0])}
+                              disabled={isSubmitting}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Seconds with face to return to face-focused mode
+                            </p>
+                          </div>
+
+                          {/* Min Segment Duration */}
+                          <div className="space-y-2">
+                            <Label htmlFor="minSegmentDuration">
+                              Min Segment Duration: <Badge variant="secondary">{minSegmentDuration}s</Badge>
+                            </Label>
+                            <Slider
+                              id="minSegmentDuration"
+                              min={0.3}
+                              max={2.0}
+                              step={0.1}
+                              value={[minSegmentDuration]}
+                              onValueChange={(value) => setMinSegmentDuration(value[0])}
+                              disabled={isSubmitting}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Minimum duration to avoid flickering between modes
+                            </p>
+                          </div>
+
+                          {/* Transition Duration */}
+                          <div className="space-y-2">
+                            <Label htmlFor="transitionDuration">
+                              Transition Duration: <Badge variant="secondary">{transitionDuration}s</Badge>
+                            </Label>
+                            <Slider
+                              id="transitionDuration"
+                              min={0.2}
+                              max={1.0}
+                              step={0.1}
+                              value={[transitionDuration]}
+                              onValueChange={(value) => setTransitionDuration(value[0])}
+                              disabled={isSubmitting}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Crossfade duration when switching between modes
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Advanced Subtitle Settings (Collapsible) */}
