@@ -652,7 +652,9 @@ class FaceTracker:
     def analyze_audio_for_speech(
         self,
         audio_path: str,
-        sr: Optional[int] = None
+        sr: Optional[int] = None,
+        start_time: Optional[float] = None,
+        end_time: Optional[float] = None
     ) -> List:
         """
         Analyze audio file for speech activity using speaker detector.
@@ -660,6 +662,8 @@ class FaceTracker:
         Args:
             audio_path: Path to audio file
             sr: Target sample rate (if None, uses native rate)
+            start_time: Optional start time in seconds (for analyzing specific segments)
+            end_time: Optional end time in seconds
 
         Returns:
             List of AudioSegment objects
@@ -668,8 +672,17 @@ class FaceTracker:
             logger.warning("Speaker detection not enabled")
             return []
 
-        logger.info(f"Analyzing audio for speech detection: {audio_path}")
-        self.speech_segments = self.speaker_detector.detect_speech_segments(audio_path, sr=sr)
+        if start_time is not None or end_time is not None:
+            logger.info(
+                f"Analyzing audio segment for speech: {audio_path} "
+                f"[{start_time or 0:.1f}s - {end_time or 'end'}s]"
+            )
+        else:
+            logger.info(f"Analyzing audio for speech detection: {audio_path}")
+
+        self.speech_segments = self.speaker_detector.detect_speech_segments(
+            audio_path, sr=sr, start_time=start_time, end_time=end_time
+        )
         logger.info(f"Detected {len(self.speech_segments)} speech segments")
 
         return self.speech_segments
