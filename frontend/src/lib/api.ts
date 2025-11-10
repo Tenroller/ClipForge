@@ -232,6 +232,36 @@ export async function generatePodcastClips(params: any): Promise<{
 }
 
 // ============================================================================
+// YouTube Metadata
+// ============================================================================
+
+export type YouTubeMetadata = {
+  video_id: string;
+  title: string;
+  channel: string;
+  channel_url: string;
+  duration: number | null;
+  duration_formatted: string;
+  thumbnail_url: string;
+  description: string;
+  view_count: number | null;
+  upload_date: string | null;
+  resolution: [number, number] | null;
+};
+
+export async function getYouTubeMetadata(url: string): Promise<YouTubeMetadata> {
+  const encodedUrl = encodeURIComponent(url);
+  const res = await apiFetch(`${API_BASE}/api/youtube/metadata?url=${encodedUrl}`);
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to fetch YouTube metadata');
+  }
+
+  return await res.json();
+}
+
+// ============================================================================
 // Cleanup & Maintenance
 // ============================================================================
 

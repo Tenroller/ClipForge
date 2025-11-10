@@ -16,6 +16,7 @@ from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
 from ...services.video_orchestrator import get_video_orchestrator
 from ...utils.paths import get_backend_path, get_temp_path
+from ...utils.youtube import get_video_metadata, YouTubeDownloadError
 
 router = APIRouter()
 logger = get_logger("video_generation")
@@ -25,6 +26,42 @@ job_store = get_job_store()
 video_orchestrator = get_video_orchestrator()
 
 VENDOR_ROOT = get_backend_path("vendors")
+
+
+@router.get(
+    "/youtube/metadata",
+    summary="Get YouTube Video Metadata",
+    description="""
+    Extract metadata from a YouTube video without downloading it.
+
+    This is useful for previewing video information before starting generation.
+    Returns video title, channel, duration, thumbnail URL, and other details.
+    """
+)
+async def get_youtube_metadata(url: str):
+    """Get YouTube video metadata without downloading."""
+    try:
+        metadata = get_video_metadata(url)
+
+        return {
+            "video_id": metadata.video_id,
+            "title": metadata.title,
+            "channel": metadata.channel,
+            "channel_url": metadata.channel_url,
+            "duration": metadata.duration,
+            "duration_formatted": metadata.duration_formatted,
+            "thumbnail_url": metadata.thumbnail_url,
+            "description": metadata.description[:500] if metadata.description else "",  # Limit description length
+            "view_count": metadata.view_count,
+            "upload_date": metadata.upload_date,
+            "resolution": metadata.resolution,
+        }
+    except YouTubeDownloadError as e:
+        logger.error(f"Failed to extract YouTube metadata: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error extracting YouTube metadata: {e}")
+        raise HTTPException(status_code=500, detail="Failed to extract video metadata")
 
 
 @router.post(
