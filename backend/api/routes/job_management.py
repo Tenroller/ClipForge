@@ -9,7 +9,7 @@ import uuid
 from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
 from ...services.video_orchestrator import get_video_orchestrator
-from ...models.requests import MoneyPrinterRequest, BrainrotRequest
+from ...models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest
 
 from ...services.job_management import JobManagementService
 from ...middleware.auth import get_current_user
@@ -121,16 +121,24 @@ async def remake_job(
                 req_model = MoneyPrinterRequest(**request_data)
             except Exception:
                 raise HTTPException(status_code=400, detail="Cannot reconstruct original request data for moneyprinter job")
-            
+
             success = await video_orchestrator.submit_moneyprinter_job(new_job_id, req_model)
-            
+
         elif workflow == "brainrot":
             try:
                 req_model = BrainrotRequest(**request_data)
             except Exception:
                 raise HTTPException(status_code=400, detail="Cannot reconstruct original request data for brainrot job")
-            
+
             success = await video_orchestrator.submit_brainrot_job(new_job_id, req_model)
+
+        elif workflow == "podcastclips":
+            try:
+                req_model = PodcastClipsRequest(**request_data)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Cannot reconstruct original request data for podcastclips job")
+
+            success = await video_orchestrator.submit_podcastclips_job(new_job_id, req_model)
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported workflow '{workflow}' for remake")
 
@@ -251,16 +259,24 @@ async def resume_job(
                 exec_payload = MoneyPrinterRequest(**request_data)
             except Exception:
                 raise HTTPException(status_code=400, detail="Cannot reconstruct MoneyPrinterRequest for resume")
-            
+
             success = await video_orchestrator.submit_moneyprinter_job(new_job_id, exec_payload)
-            
+
         elif workflow == "brainrot":
             try:
                 exec_payload = BrainrotRequest(**request_data)
             except Exception:
                 raise HTTPException(status_code=400, detail="Cannot reconstruct BrainrotRequest for resume")
-            
+
             success = await video_orchestrator.submit_brainrot_job(new_job_id, exec_payload)
+
+        elif workflow == "podcastclips":
+            try:
+                exec_payload = PodcastClipsRequest(**request_data)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Cannot reconstruct PodcastClipsRequest for resume")
+
+            success = await video_orchestrator.submit_podcastclips_job(new_job_id, exec_payload)
         else:
             raise HTTPException(status_code=400, detail=f"Unsupported workflow '{workflow}' for resume")
 

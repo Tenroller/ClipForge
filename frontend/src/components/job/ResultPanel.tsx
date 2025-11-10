@@ -2,17 +2,19 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { 
-  FaTimes, 
-  FaDownload, 
-  FaCheckCircle, 
+import {
+  FaTimes,
+  FaDownload,
+  FaCheckCircle,
   FaClock,
   FaExternalLinkAlt,
   FaCopy,
-  FaCheck
+  FaCheck,
+  FaVideo
 } from "react-icons/fa"
 import type { JobRecord } from "@/lib/api"
 import { formatDuration as formatDurationLib } from "@/lib/formatDuration"
+import { downloadUrl } from "@/lib/api"
 
 interface ResultPanelProps {
   job: JobRecord
@@ -40,6 +42,8 @@ function getWorkflowLabel(workflow: string): string {
       return 'AI Video Generation'
     case 'brainrot':
       return 'Video Compilation'
+    case 'podcastclips':
+      return 'Podcast Clips'
     default:
       return workflow
   }
@@ -71,7 +75,11 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                 <FaCheckCircle className="size-4 text-white" />
               </div>
               <div>
-                <div>Video Generated Successfully</div>
+                <div>
+                  {job.workflow === 'podcastclips' && job.result?.clips_count
+                    ? `${job.result.clips_count} Clips Generated Successfully`
+                    : 'Video Generated Successfully'}
+                </div>
                 <p className="text-sm font-normal text-muted-foreground">
                   {getWorkflowLabel(job.workflow)} completed
                 </p>
@@ -89,16 +97,69 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
         </CardHeader>
         
         <CardContent className="space-y-6">
-          {/* Video Preview */}
-          {job.output_url && (
+          {/* Video Preview - Single Video */}
+          {job.output_url && job.workflow !== 'podcastclips' && (
             <div className="relative">
-              <video 
-                src={job.output_url} 
-                controls 
-                className="video-frame w-full max-h-[400px] rounded-lg shadow-lg" 
+              <video
+                src={job.output_url}
+                controls
+                className="video-frame w-full max-h-[400px] rounded-lg shadow-lg"
                 poster="/api/placeholder/640/360"
                 preload="metadata"
               />
+            </div>
+          )}
+
+          {/* Podcast Clips - Multiple Videos */}
+          {job.workflow === 'podcastclips' && job.result?.clips_count > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <FaVideo className="size-5 text-purple-500" />
+                <h3 className="text-lg font-semibold">
+                  Generated {job.result.clips_count} Viral Clips
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto pr-2">
+                {job.result.output_files?.map((filePath: string, index: number) => {
+                  const fileName = filePath.split('/').pop() || `Clip ${index + 1}`;
+                  const downloadLink = downloadUrl(filePath);
+
+                  return (
+                    <Card key={index} className="overflow-hidden border-muted">
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className="size-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
+                              <FaVideo className="size-4 text-white" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{fileName}</p>
+                              <p className="text-xs text-muted-foreground">Clip {index + 1}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 shrink-0">
+                            <Button
+                              asChild
+                              variant="outline"
+                              size="sm"
+                            >
+                              <a
+                                href={downloadLink}
+                                download
+                                className="flex items-center gap-2"
+                              >
+                                <FaDownload className="size-3" />
+                                Download
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -176,7 +237,9 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                   All steps completed successfully
                 </div>
                 <div className="text-xs text-green-600 dark:text-green-400">
-                  Your video is ready for download
+                  {job.workflow === 'podcastclips' && job.result?.clips_count
+                    ? `Your ${job.result.clips_count} clips are ready for download`
+                    : 'Your video is ready for download'}
                 </div>
               </div>
             </div>
@@ -189,20 +252,21 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               variant="outline"
               className="flex-1 sm:flex-initial"
             >
-              Create Another Video
+              {job.workflow === 'podcastclips' ? 'Create More Clips' : 'Create Another Video'}
             </Button>
-            
-            {job.output_url && (
+
+            {/* Download button for single video workflows */}
+            {job.output_url && job.workflow !== 'podcastclips' && (
               <div className="flex gap-2 flex-1">
                 <Button
                   asChild
                   variant="default"
                   className="flex-1"
                 >
-                  <a 
-                    href={job.output_url} 
-                    download 
-                    target="_blank" 
+                  <a
+                    href={job.output_url}
+                    download
+                    target="_blank"
                     rel="noreferrer"
                     className="flex items-center gap-2"
                   >
@@ -210,16 +274,16 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                     Download Video
                   </a>
                 </Button>
-                
+
                 <Button
                   asChild
                   variant="outline"
                   size="sm"
                   className="px-3"
                 >
-                  <a 
-                    href={job.output_url} 
-                    target="_blank" 
+                  <a
+                    href={job.output_url}
+                    target="_blank"
                     rel="noreferrer"
                   >
                     <FaExternalLinkAlt className="size-4" />
