@@ -389,46 +389,81 @@ class PodcastClipsProcessor:
             # Prepare prompt (simplified - no need for detailed JSON format instructions)
             keywords_hint = f"\n\nPriority keywords: {', '.join(keywords)}" if keywords else ""
 
+            # IMPROVED PROMPT (aligned with ViralMomentsResponse / ViralMomentSchema fields)
             prompt = f"""
-            You are an expert content editor and viral-clip scout for social media (TikTok, Reels, Shorts).
-            You will analyze the provided podcast transcript and identify ALL moments with high viral potential.
+            
+            KEYWORDS (OPTIONAL WEIGHTING):
+            {keywords_hint}
+            
+            ROLE
+            You are an elite short-form editorial strategist for TikTok/Reels/Shorts. You surgically extract only HIGH-CONVICTION viral moments from a podcast transcript.
 
-            Hard rules:
-            - IMPORTANT: Decide how many clips to create based on the quality of viral moments you find. Generate as many clips as you think are genuinely good, not a fixed number.
-            - Maximum limit: {max_count} clips (only generate this many if there are truly {max_count} great moments).
-            - Order clips best-first (highest viral potential first).
-            - Times must be floats in seconds from video start.
-            - CRITICAL: Each clip's duration MUST be AT LEAST {min_duration} seconds and AT MOST {max_duration} seconds.
-            - NEVER create clips shorter than {min_duration} seconds - extend them if needed to meet this minimum.
-            - Target clips around 45-50 seconds for optimal TikTok/Reels engagement (within the {min_duration}-{max_duration}s range).
-            - Do not hallucinate words—use only transcript text provided.
-            - If a clip crosses a speaker turn, indicate speaker change in the "notes" field.
-            - If content includes hate/illegal content, exclude it.
+            OBJECTIVE
+            Return the best possible set of moments (0..{max_count}) ordered BEST-FIRST. Do NOT pad quantity—quality is paramount.
 
-            Quality over quantity:
-            - Only create clips for moments that are TRULY viral-worthy. It's better to create 3 excellent clips than 10 mediocre ones.
-            - Each clip should be able to stand alone and grab attention within the first 3 seconds.
-            - Don't force clips just to reach the maximum - if you only find 4 great moments, return 4 clips.
-
-            Context / heuristics to use:
-            - Prefer moments with immediate hooks in the first ~3s, emotional impact (anger, laughter, awe), surprising facts, concise strong opinions, concrete advice, or controversy.
-            - Prefer lines that are quotable and make sense standalone (no long setup needed).
-            - Prefer moments with clear audio cues (laughter, applause, gasps) or an energetic delivery.
-            - Avoid long setup, multi-step lists that require prior context, and dry technical segments unless they include a surprising insight.
-            - Prioritize moments that map well to vertical video (close-up reactions, punchlines, reveals).
-
-            Keywords (optional): {keywords_hint}
-
-            Transcript:
+            TRANSCRIPT
+            Only use words present below (with periodic timestamps baked in). Never invent, alter, or guess missing words.
             {transcript_text}
 
-            Additional instructions:
-            - Compute "duration" exactly as end_time - start_time.
-            - Keep "hook" short and commanding — it will be the first line shown/said.
-            - Make "caption" usable as social post copy; include one emoji if it helps.
-            - Provide tags that match the moment's theme (without # symbol).
-            - Generate only clips with genuine viral potential - quality over quantity.
-            - If transcript language is not English, produce hook/caption in the transcript language.
+            SELECTION RULES
+            - Dynamic count: Choose any number up to {max_count}; stop when quality drops. 1 amazing clip beats 8 mediocre ones.
+            - Duration: EACH clip MUST be >= {min_duration} seconds AND <= {max_duration} seconds. If a great moment is slightly short, extend start/end to reach the minimum without breaking semantic flow.
+            - Target optimal length: 45–50s when possible (still respecting bounds).
+            - Time values: start_time, end_time, duration use seconds as float with ≤2 decimal places. duration MUST equal end_time - start_time.
+            - Order: Sort strictly by viral potential descending (strongest first).
+            - Overlap: Avoid near-duplicate clips. Merge overlapping segments if they cover the same punchline. Two clips may overlap only if they deliver distinct hooks.
+            - Speaker changes: If a segment crosses a speaker turn OR contains an interruption, note it in notes (e.g., "Speaker change at 23.4s").
+            - Exclusions: Omit hate, illegal activity, private data, or incoherent fragments.
+
+            VIRAL HEURISTICS (PRIORITIZE):
+            1. Immediate hook in first ~3 seconds (shock, controversy, strong opinion, emotional spike, surprising stat, concise advice, punchline setup/reveal).
+            2. Emotional resonance (laughter, anger, awe), audible reactions, tension + release.
+            3. Standalone clarity—clip makes sense with minimal prior context.
+            4. Quotability—memorable lines, shareable phrasing.
+            5. Actionable or contrarian insight.
+            6. Visually compelling moments likely to show facial reactions / emphasis.
+
+            DE-PREFER / AVOID:
+            - Long multi-step setups without payoff.
+            - Dry technical droning unless containing a surprising twist.
+            - Moments requiring niche prior knowledge to understand.
+            - Redundant restatements.
+
+            SCORING & FIELDS (Provide meaningful, non-default values):
+            - viral_score (0–100): Composite of hook strength, emotional impact, shareability, clarity, novelty. Scores ≥60 indicate publishable; ≤50 should generally be excluded unless transcript is very weak.
+            - confidence (0.0–1.0): Your certainty this moment will perform (NOT identical to viral_score—confidence reflects selection reliability).
+            - title: Punchy ≤60 chars, no clickbait fluff words repeated (avoid "insane", "shocking" unless justified).
+            - hook: First spoken line or distilled opener ≤120 chars—must GRAB attention instantly.
+            - reason: 1–2 sentences explaining WHY it will go viral (no generic phrasing like "engaging" alone).
+            - caption: Social-ready copy ≤150 chars; may include 1 relevant emoji IF it enhances, not decorates.
+            - tags: Up to 6 lowercase thematic tags (no #, no duplicates, no generic "podcast", avoid more than 2 ultra-broad terms). If none strong, fewer is better.
+            - thumbnail_text: ≤25 chars, ultra-punchy, no quotation marks.
+            - recommended_crop: one of [close-up, mid, wide, focus-on-person-X]; prefer close-up if emotional emphasis.
+            - cut_padding_before / cut_padding_after: 0.0–2.0s each; add slight breathing room without exceeding bounds.
+            - subtitles: Exact transcript excerpt inside the chosen time window (≤300 chars) — preserve original words only.
+            - notes: Speaker changes, audible cues ("laughter", "applause"), pacing suggestions, or why padding was added.
+
+            TIMING INTEGRITY
+            - Ensure end_time > start_time.
+            - Round all time floats to at most 2 decimal places.
+            - If selected segment slightly exceeds {max_duration}, trim at a natural sentence boundary without killing payoff.
+            - If emotional peak occurs just outside window, shift boundaries minimally to include it (still respect {max_duration}).
+
+            KEYWORDS (OPTIONAL WEIGHTING): {keywords_hint}
+            Use keywords ONLY if they actually align with a strong viral moment; NEVER force irrelevant segments.
+
+            MULTI-LANGUAGE
+            If transcript language != English, produce title/hook/caption in that language. Tags may be in transcript language too.
+
+            OUTPUT QUALITY FILTER
+            - Discard any candidate whose viral_score < 55 unless very few high moments exist—in scarcity, include up to the strongest available.
+            - Final list MUST be sorted by viral_score descending.
+
+            FINAL REMINDERS
+            - Never hallucinate.
+            - No meta-commentary about the task.
+            - Do not mention you are an AI.
+            - Provide ONLY high-quality moments; zero is acceptable if nothing meets criteria.
             """
 
             logger.info(f"Sending transcript to {ai_model} for structured analysis")
