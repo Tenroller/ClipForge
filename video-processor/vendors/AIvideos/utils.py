@@ -2,16 +2,15 @@ import os
 import sys
 import json
 import random
-import logging
 import zipfile
 import requests
 from typing import Tuple, Dict, Any, Optional
 
 from termcolor import colored
+from loguru import logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Bind logger with context for this module
+logger = logger.bind(name="AIvideos.utils")
 
 
 def clean_dir(path: str) -> None:

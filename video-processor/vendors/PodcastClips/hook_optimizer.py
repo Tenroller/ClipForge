@@ -4,11 +4,11 @@ Smart hook optimization for better engagement.
 Analyzes content around detected moments to find the optimal starting point.
 """
 
-import logging
+from loguru import logger as loguru_logger
 import re
 from typing import List, Dict, Any, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.hook_optimizer")
 
 
 class HookOptimizer:

@@ -3,11 +3,15 @@ Gemini API client utilities.
 """
 
 import os
-import logging
 from typing import List, Optional
 from pathlib import Path
 
-logger = logging.getLogger("gemini_client")
+try:
+    from ..logging_config import get_logger
+except ImportError:
+    from logging_config import get_logger
+
+logger = get_logger("gemini_client")
 
 
 def get_available_gemini_models() -> List[str]:

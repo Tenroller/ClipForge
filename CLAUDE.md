@@ -415,3 +415,8 @@ JWT-based authentication with localStorage storage (frontend):
 - Tokens stored in localStorage
 - Protected routes require valid token
 - Session persists until logout or token expiration
+
+
+## Libraries
+
+For libraries documentation use the MCP context7 always

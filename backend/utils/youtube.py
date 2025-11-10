@@ -19,13 +19,17 @@ from __future__ import annotations
 import os
 import re
 import time
-import logging
 import glob
 import subprocess
 from dataclasses import dataclass
 from typing import Optional, Tuple, Any, Dict
 
-logger = logging.getLogger("utils.youtube")
+try:
+    from ..logging_config import get_logger
+except ImportError:
+    from logging_config import get_logger
+
+logger = get_logger("utils.youtube")
 
 YOUTUBE_ID_REGEXES = [
     r"(?:youtube\.com/(?:watch\?v=|embed/|v/)|youtu\.be/)([A-Za-z0-9_-]{6,})",

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Tuple, List, Optional, Any, Dict
 
 from termcolor import colored
-import logging
+from loguru import logger
 from dotenv import load_dotenv
 from google import genai  # type: ignore
 from pydantic import BaseModel, Field
@@ -20,7 +20,8 @@ except Exception:
 # Configure Gemini - get API key
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-logger = logging.getLogger("video_generator")
+# Bind logger with context for this module
+logger = logger.bind(name="AIvideos.gpt")
 
 # Initialize client lazily
 _client = None

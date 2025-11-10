@@ -83,13 +83,17 @@ except Exception:
     # python-dotenv is optional; env vars can be provided by shell or process manager
     pass
 
-# Early logger for module-level initialization (will be replaced in lifespan)
-import logging
-early_logger = logging.getLogger("video_generator")
-early_logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-early_logger.addHandler(handler)
+# Early logger for module-level initialization (will be replaced in lifespan) - using Loguru
+from loguru import logger as early_logger
+import sys
+
+# Configure early logging with Loguru
+early_logger.remove()
+early_logger.add(
+    sys.stderr,
+    format="{time:YYYY-MM-DD HH:mm:ss} - {name} - {level} - {message}",
+    level="INFO"
+)
 
 logger = early_logger  # Use early logger until proper initialization
 

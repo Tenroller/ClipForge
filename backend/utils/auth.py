@@ -5,10 +5,16 @@ Authentication utilities for JWT token management and password hashing.
 import os
 from datetime import datetime, timedelta
 from typing import Optional
-import logging
 
 import jwt
 import bcrypt
+
+try:
+    from ..logging_config import get_logger
+except ImportError:
+    from logging_config import get_logger
+
+logger = get_logger("auth")
 
 # Config will be lazily loaded to avoid circular imports
 _config = None
@@ -110,14 +116,14 @@ class SimpleUserStore:
         # Default user credentials (change via environment variables)
         self.username = os.getenv("AUTH_USERNAME", "admin")
         self._password_plain = os.getenv("AUTH_PASSWORD", "admin123")
-        logging.info(f"Loaded plain password: {self._password_plain} (type: {type(self._password_plain)})")
+        logger.info(f"Loaded plain password: {self._password_plain} (type: {type(self._password_plain)})")
         self._password_hash = None  # Lazy initialization
 
     @property
     def password_hash(self):
         """Lazy hash the password on first access."""
         if self._password_hash is None:
-            logging.info(f"Hashing password: {self._password_plain} (type: {type(self._password_plain)})")
+            logger.info(f"Hashing password: {self._password_plain} (type: {type(self._password_plain)})")
             self._password_hash = hash_password(self._password_plain)
         return self._password_hash
 
@@ -125,7 +131,7 @@ class SimpleUserStore:
         """Verify username and password."""
         if username != self.username:
             return False
-        logging.info(f"Verifying password for user '{username}'")
+        logger.info(f"Verifying password for user '{username}'")
         return verify_password(password, self.password_hash)
 
     def get_user_info(self, username: str) -> Optional[dict]:

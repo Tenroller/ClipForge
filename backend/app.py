@@ -58,13 +58,16 @@ except Exception as e:
     print(f"[ENV] Error loading .env files: {e}")
     pass
 
-# Early logger setup
-import logging
-early_logger = logging.getLogger("video_generator")
-early_logger.setLevel(logging.INFO)
-handler = logging.StreamHandler()
-handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-early_logger.addHandler(handler)
+# Early logger setup with Loguru
+from loguru import logger as early_logger
+
+# Configure early logging
+early_logger.remove()
+early_logger.add(
+    sys.stderr, 
+    format="{time:YYYY-MM-DD HH:mm:ss} - {name} - {level} - {message}",
+    level="INFO"
+)
 
 # Global cleanup state
 _SHUTDOWN_IN_PROGRESS = False

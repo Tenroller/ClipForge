@@ -5,7 +5,7 @@ Generates professional-style subtitles with word-level timing from Whisper trans
 Supports karaoke-style highlighting with rounded background boxes.
 """
 
-import logging
+from loguru import logger as loguru_logger
 import sys
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from font_detection import get_font_fallback_list
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.subtitle_generator")
 
 
 @dataclass
@@ -44,13 +44,13 @@ class SubtitleGenerator:
 
     def __init__(
         self,
-        font_size: int = 40,
+        font_size: int = 70,
         color: str = "#FFFFFF",
         stroke_color: str = "#000000",
-        stroke_width: int = 2,
+        stroke_width: int = 3,
         position: str = "bottom",
-        vertical_offset: int = 500,
-        highlight_color: str = "#6366f1",
+        vertical_offset: int = 300,
+        highlight_color: str = "#FFEB3B",
         max_words_visible: int = 5
     ):
         """
@@ -275,8 +275,7 @@ class SubtitleGenerator:
                             color=self.color,
                             stroke_color=self.stroke_color if not is_current else None,
                             stroke_width=self.stroke_width if not is_current else 0,
-                            font=font_choice,
-                            method='caption'
+                            font=font_choice
                         )
 
                         if txt_clip and txt_clip.w > 0 and txt_clip.h > 0:
@@ -285,7 +284,7 @@ class SubtitleGenerator:
                             txt_clip = None
 
                     except Exception as e:
-                        logger.debug(f"Font '{font_choice}' failed for word '{word}': {e}")
+                        logger.warning(f"Font '{font_choice}' failed for word '{word}': {e}")
                         txt_clip = None
                         continue
 
@@ -301,11 +300,12 @@ class SubtitleGenerator:
                         current_word_clip = txt_clip
 
             if not word_clips:
+                logger.error(f"Failed to create any text clips for word '{current_word}' - all fonts failed")
                 continue
 
             # Calculate horizontal layout for all words
             total_width = sum(clip_data['clip'].w for clip_data in word_clips)
-            spacing = 20  # Space between words
+            spacing = 30  # Space between words
             total_width_with_spacing = total_width + spacing * (len(word_clips) - 1)
 
             # Start x position (centered)
@@ -338,15 +338,15 @@ class SubtitleGenerator:
 
             # Create rounded background box for current word
             if highlighted_clip_info and current_word_clip:
-                padding_x = 20
-                padding_y = 10
+                padding_x = 40
+                padding_y = 20
                 box_width = highlighted_clip_info['width'] + 2 * padding_x
                 box_height = highlighted_clip_info['height'] + 2 * padding_y
 
                 bg_box = self.create_rounded_rectangle(
                     width=box_width,
                     height=box_height,
-                    radius=15,
+                    radius=25,
                     color=self.highlight_color
                 )
 

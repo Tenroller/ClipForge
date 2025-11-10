@@ -4,14 +4,14 @@ Audio enhancement module for podcast clips.
 Provides normalization, noise reduction, and audio quality improvements.
 """
 
-import logging
+from loguru import logger as loguru_logger
 from pathlib import Path
 from typing import Optional
 from moviepy import AudioFileClip, VideoFileClip
 import numpy as np
 from .ffmpeg_pool import run_ffmpeg_command
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.audio_enhancer")
 
 
 class AudioEnhancer:

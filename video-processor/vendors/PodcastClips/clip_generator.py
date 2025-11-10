@@ -4,7 +4,7 @@ Video clip generation module for podcast clips.
 Handles video cutting, cropping to 9:16 format, and final composition.
 """
 
-import logging
+from loguru import logger as loguru_logger
 import platform
 import sys
 from typing import Dict, Any, List, Optional, Tuple
@@ -24,7 +24,7 @@ from .content_detector import ContentModeDetector, ContentSegment, ContentMode
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from AIvideos.video import get_video_codec_settings
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.clip_generator")
 
 
 @dataclass
@@ -200,10 +200,8 @@ class ClipGenerator:
         # Ensure FPS is preserved from source clip
         source_fps = getattr(clip, 'fps', 30)
         if not hasattr(final_clip, 'fps') or final_clip.fps is None:
-            # WORKAROUND: with_fps() may double FPS on CompositeVideoClip
-            # To get correct FPS, we pass HALF the desired FPS
-            target_fps_for_with_fps = source_fps / 2
-            final_clip = final_clip.with_fps(target_fps_for_with_fps)
+            # Set FPS directly to match source (MoviePy 2.x handles this correctly)
+            final_clip = final_clip.with_fps(source_fps)
 
         # Verify FPS was set correctly
         actual_fps = getattr(final_clip, 'fps', None)
@@ -216,7 +214,8 @@ class ClipGenerator:
         clip: VideoFileClip,
         start_time: float,
         dynamic_tracking: bool = True,
-        smoothing_strength: int = 11
+        smoothing_strength: int = 11,
+        use_realtime_speaker: bool = True
     ) -> VideoFileClip:
         """
         Create face-tracked vertical clip with 9:16 crop.
@@ -229,6 +228,7 @@ class ClipGenerator:
                                - 5: Light smoothing (more responsive, slight jitter)
                                - 11: Medium smoothing (balanced, recommended)
                                - 21: Strong smoothing (very smooth, may lag on fast motion)
+            use_realtime_speaker: If True, use real-time audio-visual fusion for speaker detection
 
         Returns:
             Cropped and resized clip in 9:16 format
@@ -265,18 +265,32 @@ class ClipGenerator:
         def make_frame(t):
             """
             Custom frame function that crops based on face position at time t.
+            Uses real-time audio-visual speaker detection for responsive tracking.
             """
             # Get absolute timestamp in original video
             absolute_time = start_time + t
 
-            # Get crop box using smoothed trajectory (if available) or standard tracking
+            # Get crop box using smoothed trajectory (if available) or real-time tracking
             if smoothed_trajectory:
                 # Use pre-computed smoothed trajectory for smooth camera motion
                 smoothed_x = smoothed_trajectory(absolute_time)
                 crop_box = self.face_tracker.get_crop_box_from_position(smoothed_x)
             else:
-                # Fallback to standard dynamic tracking (with built-in temporal smoothing)
-                crop_box = self.face_tracker.get_dynamic_crop_box_at_time(absolute_time)
+                # Use real-time speaker detection if enabled and available
+                if (use_realtime_speaker and
+                    self.face_tracker.enable_speaker_detection and
+                    self.face_tracker.speech_segments):
+                    # Get active speaker using real-time audio-visual fusion
+                    speaker_face = self.face_tracker.get_active_speaker_realtime(absolute_time)
+                    if speaker_face:
+                        # Create crop box centered on real-time speaker
+                        crop_box = self.face_tracker.get_crop_box_from_position(speaker_face.center[0])
+                    else:
+                        # Fallback to standard dynamic tracking
+                        crop_box = self.face_tracker.get_dynamic_crop_box_at_time(absolute_time)
+                else:
+                    # Fallback to standard dynamic tracking (with built-in temporal smoothing)
+                    crop_box = self.face_tracker.get_dynamic_crop_box_at_time(absolute_time)
 
             # Get the frame from the source clip
             frame = clip.get_frame(t)
@@ -306,21 +320,153 @@ class ClipGenerator:
         # Create new clip with dynamic cropping and proper FPS
         dynamic_clip = VideoClip(frame_function=make_frame, duration=clip.duration)
 
-        # WORKAROUND: with_fps() doubles FPS on VideoClips created from frame functions
-        # To get correct FPS, we pass HALF the desired FPS, which gets doubled back to correct value
-        # This ensures frame iteration is properly set up (unlike direct assignment)
-        target_fps_for_with_fps = source_fps / 2
-        dynamic_clip = dynamic_clip.with_fps(target_fps_for_with_fps)
+        # Set FPS to match source (MoviePy 2.x handles this correctly)
+        dynamic_clip = dynamic_clip.with_fps(source_fps)
 
-        # Verify FPS after doubling
+        # Verify FPS was set correctly
         actual_fps = getattr(dynamic_clip, 'fps', None)
-        logger.info(f"[FPS-DEBUG] Created face-tracked clip - source FPS: {source_fps}, set with_fps({target_fps_for_with_fps:.2f}), actual FPS: {actual_fps}")
+        logger.info(f"[FPS-DEBUG] Created face-tracked clip - source FPS: {source_fps}, set with_fps({source_fps:.2f}), actual FPS: {actual_fps}")
 
         # Preserve audio from original clip
         if hasattr(clip, 'audio') and clip.audio is not None:
             dynamic_clip = dynamic_clip.with_audio(clip.audio)
 
         return dynamic_clip
+
+    def create_split_screen_clip(
+        self,
+        clip: VideoFileClip,
+        start_time: float,
+        faces: List,  # List of 2 FaceBox objects
+        split_orientation: str = "vertical"
+    ) -> VideoFileClip:
+        """
+        Create split-screen clip with 2 people zoomed on their faces.
+
+        Args:
+            clip: Source video clip
+            start_time: Start time in original video for face tracking
+            faces: List of 2 FaceBox objects (person 1, person 2)
+            split_orientation: "vertical" (top/bottom) or "horizontal" (left/right)
+
+        Returns:
+            Composite clip in 9:16 format with split-screen layout
+        """
+        target_width, target_height = self.target_resolution  # (1080, 1920)
+
+        if len(faces) < 2:
+            logger.warning("Split-screen requires 2 faces, falling back to face tracking")
+            return self.create_face_tracked_clip(clip, start_time)
+
+        if split_orientation == "vertical":
+            # Top/bottom split (each person gets 1080x960 region)
+            split_height = target_height // 2
+
+            # Create two separate face-tracked clips
+            person1_clip = self._create_face_crop_clip(
+                clip, start_time, faces[0], target_size=(target_width, split_height)
+            )
+            person2_clip = self._create_face_crop_clip(
+                clip, start_time, faces[1], target_size=(target_width, split_height)
+            )
+
+            # Position person 1 at top, person 2 at bottom
+            person1_clip = person1_clip.with_position((0, 0))
+            person2_clip = person2_clip.with_position((0, split_height))
+
+        else:  # horizontal split
+            # Left/right split (each person gets 540x1920 region)
+            split_width = target_width // 2
+
+            person1_clip = self._create_face_crop_clip(
+                clip, start_time, faces[0], target_size=(split_width, target_height)
+            )
+            person2_clip = self._create_face_crop_clip(
+                clip, start_time, faces[1], target_size=(split_width, target_height)
+            )
+
+            person1_clip = person1_clip.with_position((0, 0))
+            person2_clip = person2_clip.with_position((split_width, 0))
+
+        # Composite the two clips
+        final_clip = CompositeVideoClip(
+            [person1_clip, person2_clip],
+            size=self.target_resolution
+        )
+
+        # Preserve audio from original
+        if hasattr(clip, 'audio') and clip.audio is not None:
+            final_clip = final_clip.with_audio(clip.audio)
+
+        # Set FPS to match source
+        source_fps = getattr(clip, 'fps', 30)
+        final_clip = final_clip.with_fps(source_fps)
+
+        logger.info(f"Created split-screen clip: {split_orientation} layout, {clip.duration:.1f}s")
+
+        return final_clip
+
+    def _create_face_crop_clip(
+        self,
+        clip: VideoFileClip,
+        start_time: float,
+        face,  # FaceBox object
+        target_size: Tuple[int, int]
+    ) -> VideoFileClip:
+        """
+        Create a face-focused crop clip for one person in split-screen.
+
+        Zooms in on the face with appropriate padding, then scales to target size.
+
+        Args:
+            clip: Source video clip
+            start_time: Start time in original video
+            face: FaceBox object for the person to track
+            target_size: Target size (width, height) for this split
+
+        Returns:
+            Cropped and resized clip focused on the face
+        """
+        target_width, target_height = target_size
+        original_width, original_height = clip.size
+
+        # Calculate crop box with 1.8x padding around face
+        face_center_x, face_center_y = face.center
+        padding_factor = 1.8
+
+        crop_width = int(face.width * padding_factor)
+        crop_height = int(face.height * padding_factor)
+
+        # Adjust crop to maintain target aspect ratio
+        crop_aspect = crop_width / crop_height if crop_height > 0 else 1.0
+        target_aspect = target_width / target_height if target_height > 0 else 1.0
+
+        if crop_aspect > target_aspect:
+            # Crop is too wide, increase height
+            crop_height = int(crop_width / target_aspect)
+        else:
+            # Crop is too tall, increase width
+            crop_width = int(crop_height * target_aspect)
+
+        # Center crop on face
+        crop_x = face_center_x - crop_width // 2
+        crop_y = face_center_y - crop_height // 2
+
+        # Ensure crop stays within bounds
+        crop_x = max(0, min(crop_x, original_width - crop_width))
+        crop_y = max(0, min(crop_y, original_height - crop_height))
+
+        # Apply crop and resize
+        cropped = clip.cropped(crop_x, crop_y, crop_x + crop_width, crop_y + crop_height)
+        resized = cropped.resized(target_size)
+
+        logger.debug(
+            f"Face crop: center=({face_center_x},{face_center_y}), "
+            f"crop=({crop_x},{crop_y},{crop_width}x{crop_height}), "
+            f"target={target_size}"
+        )
+
+        return resized
 
     def apply_crossfade_transition(
         self,
@@ -460,6 +606,25 @@ class ClipGenerator:
             if segment.mode == ContentMode.HORIZONTAL:
                 # Horizontal content mode - preserve aspect ratio with blurred bg
                 processed = self.create_horizontal_content_clip(segment_clip)
+            elif segment.mode == ContentMode.SPLIT_SCREEN:
+                # Split-screen mode - 2 people in top/bottom layout
+                # Get separated faces for this segment
+                separated_faces = self.face_tracker.get_separated_faces_at_time(seg_start)
+                if separated_faces and len(separated_faces) >= 2:
+                    processed = self.create_split_screen_clip(
+                        segment_clip,
+                        seg_start,
+                        separated_faces,
+                        split_orientation="vertical"
+                    )
+                else:
+                    # Fallback to face tracking if faces not available
+                    logger.warning(f"Split-screen mode requested but faces not available, using face tracking")
+                    processed = self.create_face_tracked_clip(
+                        segment_clip,
+                        seg_start,
+                        smoothing_strength=smoothing_strength
+                    )
             else:
                 # Face tracking mode - crop to 9:16 with dynamic tracking and smoothing
                 processed = self.create_face_tracked_clip(
@@ -512,8 +677,8 @@ class ClipGenerator:
                     clip_fps = getattr(clip, 'fps', None)
                     if clip_fps is None or abs(clip_fps - target_fps) > 0.1:  # Allow small FPS differences
                         logger.warning(f"Clip {i} has mismatched FPS ({clip_fps}), normalizing to {target_fps}")
-                        # WORKAROUND: with_fps() may double FPS, so pass half the desired FPS
-                        clips_with_transitions[i] = clip.with_fps(target_fps / 2)
+                        # Set FPS to match target (MoviePy 2.x handles this correctly)
+                        clips_with_transitions[i] = clip.with_fps(target_fps)
 
                 # Use "compose" method to ensure audio is properly handled
                 final_clip = concatenate_videoclips(clips_with_transitions, method="compose")

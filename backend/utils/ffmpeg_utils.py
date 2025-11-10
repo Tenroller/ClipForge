@@ -4,9 +4,13 @@ FFmpeg utilities for cross-platform compatibility.
 import os
 import platform
 import shutil
-import logging
 
-logger = logging.getLogger(__name__)
+try:
+    from ..logging_config import get_logger
+except ImportError:
+    from logging_config import get_logger
+
+logger = get_logger("ffmpeg_utils")
 
 def setup_ffmpeg_environment():
     """

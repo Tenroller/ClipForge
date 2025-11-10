@@ -218,14 +218,38 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     # Load config to get port
     temp_config = ProcessorConfig.from_env()
-    
+
+    # Configure uvicorn to use loguru (disable default logging)
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(message)s",
+            },
+        },
+        "handlers": {
+            "default": {
+                "formatter": "default",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["default"], "level": "INFO"},
+            "uvicorn.error": {"handlers": ["default"], "level": "INFO"},
+            "uvicorn.access": {"handlers": ["default"], "level": "INFO"},
+        },
+    }
+
     uvicorn.run(
         "src.main:app",
         host=temp_config.host,
         port=temp_config.port,
         reload=False,  # Don't use reload in production
-        log_level=temp_config.log_level.lower()
+        log_level=temp_config.log_level.lower(),
+        log_config=log_config
     )

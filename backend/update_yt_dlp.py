@@ -10,7 +10,6 @@ Or integrate into startup by importing in app.py:
 """
 
 import sys
-import logging
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -18,12 +17,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.utils.youtube import update_yt_dlp, check_yt_dlp_version
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+try:
+    from logging_config import get_logger
+except ImportError:
+    from backend.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("update_yt_dlp")
 
 
 def auto_update_on_startup(check_interval_days: int = 7):

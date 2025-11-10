@@ -13,11 +13,11 @@ leading to system instability and segmentation faults.
 import os
 import subprocess
 import threading
-import logging
+from loguru import logger as loguru_logger
 from typing import List, Optional, Any
 from contextlib import contextmanager
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.ffmpeg_pool")
 
 # Global semaphore to limit concurrent FFmpeg processes
 _MAX_FFMPEG_PROCESSES = int(os.getenv("MAX_FFMPEG_PROCESSES", "2"))

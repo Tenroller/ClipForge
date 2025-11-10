@@ -17,8 +17,10 @@ from ..models import (
 from ..core.simple_queue import ProcessorJobQueue
 from ..services.video_processing import VideoProcessingService
 
-import logging
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+# Bind logger with context for this module
+logger = logger.bind(name="api.routes")
 
 router = APIRouter()
 

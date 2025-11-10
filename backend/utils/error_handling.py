@@ -242,16 +242,16 @@ def _get_error_severity(error: Exception) -> ErrorSeverity:
     return ErrorSeverity.MEDIUM
 
 
-def _get_log_level(severity: ErrorSeverity) -> int:
-    """Convert error severity to logging level."""
+def _get_log_level(severity: ErrorSeverity) -> str:
+    """Convert error severity to Loguru logging level."""
     severity_mapping = {
-        ErrorSeverity.LOW: 20,      # logging.INFO
-        ErrorSeverity.MEDIUM: 30,   # logging.WARNING
-        ErrorSeverity.HIGH: 40,     # logging.ERROR
-        ErrorSeverity.CRITICAL: 50, # logging.CRITICAL
+        ErrorSeverity.LOW: "INFO",
+        ErrorSeverity.MEDIUM: "WARNING", 
+        ErrorSeverity.HIGH: "ERROR",
+        ErrorSeverity.CRITICAL: "CRITICAL",
     }
 
-    return severity_mapping.get(severity, 40)  # Default to ERROR
+    return severity_mapping.get(severity, "ERROR")  # Default to ERROR
 
 
 def create_error_response(error: Exception, status_code: int = 500,

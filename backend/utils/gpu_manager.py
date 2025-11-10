@@ -5,7 +5,6 @@ GPU memory management utilities for video processing.
 import subprocess
 import os
 import sys
-import logging
 import time
 import threading
 import psutil

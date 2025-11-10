@@ -9,9 +9,9 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 from pathlib import Path
 from typing import Optional, Tuple
-import logging
+from loguru import logger as loguru_logger
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.thumbnail_generator")
 
 
 class ThumbnailGenerator:

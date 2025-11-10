@@ -5,13 +5,14 @@ Face tracking module using MediaPipe for intelligent person-focused cropping.
 import cv2
 import mediapipe as mp
 import numpy as np
-from typing import Dict, Tuple, Optional, List, Callable
+from typing import Dict, Tuple, Optional, List, Callable, Any
 from dataclasses import dataclass, field
-import logging
+from loguru import logger as loguru_logger
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
 import os
 import sys
+from .face_tracker_filters import OneEuroFilter, smooth_trajectory_with_one_euro
 
 # Import GPU manager for intelligent GPU usage decisions
 try:
@@ -24,7 +25,7 @@ try:
 except ImportError:
     GPU_MANAGER_AVAILABLE = False
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.face_tracker")
 
 
 @dataclass
@@ -62,6 +63,8 @@ class FaceTrack:
     avg_position: Tuple[int, int] = (0, 0)  # Average center position
     is_foreground: bool = True  # Whether this is a foreground (main) subject
     speech_correlation: float = 0.0  # Correlation with speech activity (0-1)
+    lip_activity_scores: Dict[float, float] = field(default_factory=dict)  # timestamp -> lip movement score (0-1)
+    avg_lip_activity: float = 0.0  # Average lip movement activity
 
     def update_statistics(self, frame_width: int, frame_height: int):
         """Update aggregate statistics for this face track."""
@@ -81,6 +84,10 @@ class FaceTrack:
             int(np.mean([c[0] for c in centers])),
             int(np.mean([c[1] for c in centers]))
         )
+
+        # Calculate average lip activity if available
+        if self.lip_activity_scores:
+            self.avg_lip_activity = np.mean(list(self.lip_activity_scores.values()))
 
 
 @dataclass
@@ -112,7 +119,8 @@ class FaceTracker:
         batch_size: int = 4,
         min_face_size_ratio: float = 0.02,
         max_tracked_faces: int = 4,
-        enable_speaker_detection: bool = False
+        enable_speaker_detection: bool = False,
+        enable_lip_detection: bool = False
     ):
         """
         Initialize face tracker with MediaPipe.
@@ -134,6 +142,7 @@ class FaceTracker:
                               - 1: Track only largest face (legacy behavior)
                               - 2-4: Track main subjects (recommended for podcasts)
             enable_speaker_detection: Enable audio-based speaker detection
+            enable_lip_detection: Enable lip movement detection with MediaPipe Face Mesh
         """
         self.use_gpu_requested = use_gpu
         self.use_gpu_actual = False  # Will be set based on GPU manager decision
@@ -142,6 +151,7 @@ class FaceTracker:
         self.min_face_size_ratio = max(0.01, min(0.1, min_face_size_ratio))
         self.max_tracked_faces = max(1, min(8, max_tracked_faces))
         self.enable_speaker_detection = enable_speaker_detection
+        self.enable_lip_detection = enable_lip_detection
 
         # Make intelligent GPU decision using GPU manager
         if use_gpu and GPU_MANAGER_AVAILABLE:
@@ -180,6 +190,24 @@ class FaceTracker:
             min_detection_confidence=0.5
         )
 
+        # Initialize MediaPipe Face Mesh for lip detection (if enabled)
+        self.face_mesh = None
+        if self.enable_lip_detection:
+            try:
+                mp_face_mesh = mp.solutions.face_mesh
+                self.face_mesh = mp_face_mesh.FaceMesh(
+                    static_image_mode=False,
+                    max_num_faces=self.max_tracked_faces,
+                    refine_landmarks=True,  # Enables iris and lip landmarks
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+                logger.info("Lip detection enabled with MediaPipe Face Mesh")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Face Mesh for lip detection: {e}")
+                self.enable_lip_detection = False
+                self.face_mesh = None
+
         # Storage for detected face positions over time
         self.face_positions: Dict[float, FaceBox] = {}  # Legacy: single face per timestamp
         self.face_tracks: List[FaceTrack] = []  # Multi-face tracking
@@ -200,6 +228,70 @@ class FaceTracker:
                 self.enable_speaker_detection = False
         else:
             self.speaker_detector = None
+
+        # Speaker switching hysteresis state
+        self.current_active_speaker_id: Optional[int] = None
+        self.last_speaker_switch_time: float = 0.0
+        self.speaker_switch_debounce: float = 0.2  # 200ms debounce
+        self.speaker_switch_hysteresis: float = 0.15  # 15% confidence margin
+
+    def _calculate_lip_movement(
+        self,
+        face_landmarks,
+        frame_width: int,
+        frame_height: int
+    ) -> float:
+        """
+        Calculate lip movement score from Face Mesh landmarks.
+
+        Uses the distance between upper and lower lip to detect mouth opening.
+
+        Args:
+            face_landmarks: MediaPipe Face Mesh landmarks
+            frame_width: Video frame width
+            frame_height: Video frame height
+
+        Returns:
+            Lip movement score (0-1), where higher = more movement
+        """
+        # MediaPipe Face Mesh landmark indices for lips
+        # Upper lip: 13 (center top)
+        # Lower lip: 14 (center bottom)
+        # Mouth corners: 61 (left), 291 (right)
+        try:
+            # Get key lip landmarks
+            upper_lip = face_landmarks.landmark[13]
+            lower_lip = face_landmarks.landmark[14]
+            left_corner = face_landmarks.landmark[61]
+            right_corner = face_landmarks.landmark[291]
+
+            # Convert normalized coordinates to pixels
+            upper_y = upper_lip.y * frame_height
+            lower_y = lower_lip.y * frame_height
+            left_x = left_corner.x * frame_width
+            right_x = right_corner.x * frame_width
+
+            # Calculate vertical mouth opening (distance between upper and lower lip)
+            mouth_opening = abs(lower_y - upper_y)
+
+            # Calculate mouth width for normalization
+            mouth_width = abs(right_x - left_x)
+
+            # Normalize: opening relative to mouth width
+            # Typical mouth opening ratio: 0.0 (closed) to 0.5+ (wide open)
+            if mouth_width > 0:
+                opening_ratio = mouth_opening / mouth_width
+                # Clamp and scale to 0-1 range
+                # Assume 0.3 ratio = maximum typical speaking movement
+                lip_score = min(1.0, opening_ratio / 0.3)
+            else:
+                lip_score = 0.0
+
+            return lip_score
+
+        except (IndexError, AttributeError) as e:
+            logger.debug(f"Failed to calculate lip movement: {e}")
+            return 0.0
 
     def analyze_video(
         self,
@@ -260,6 +352,7 @@ class FaceTracker:
             logger.info(f"  Batch processing enabled: {self.batch_size} frames per batch")
 
         face_positions = {}
+        all_faces_by_timestamp = {}  # Store ALL detected faces for multi-face tracking
         frames_processed = 0
         faces_detected = 0
         last_progress_pct = 0
@@ -331,8 +424,38 @@ class FaceTracker:
                         face_positions[timestamp] = valid_faces[0]
                         faces_detected += 1
 
-                        # Store all valid faces for multi-face tracking
-                        # (Will be processed later in _build_face_tracks)
+                        # Store ALL valid faces for multi-face tracking
+                        all_faces_by_timestamp[timestamp] = valid_faces
+
+                # Lip movement detection (if enabled)
+                if self.enable_lip_detection and self.face_mesh and results.detections:
+                    try:
+                        # Process frame with Face Mesh
+                        mesh_results = self.face_mesh.process(frame_rgb)
+
+                        if mesh_results.multi_face_landmarks:
+                            # Calculate lip movement for each detected face
+                            # Store temporarily - will be associated with face tracks later
+                            if timestamp not in all_faces_by_timestamp:
+                                all_faces_by_timestamp[timestamp] = []
+
+                            # For each face mesh detection, calculate lip score
+                            for face_landmarks in mesh_results.multi_face_landmarks:
+                                lip_score = self._calculate_lip_movement(
+                                    face_landmarks,
+                                    self.detection_height,  # Use detection resolution
+                                    self.detection_height
+                                )
+
+                                # Store lip score with timestamp
+                                # Note: We'll associate these with face tracks later in _build_face_tracks
+                                # For now, just log for the first face
+                                if lip_score > 0.2:  # Only log significant lip movement
+                                    logger.debug(f"Lip movement at t={timestamp:.2f}s: {lip_score:.3f}")
+                                break  # Only process first face for now (most prominent)
+
+                    except Exception as e:
+                        logger.debug(f"Lip detection failed at t={timestamp:.2f}s: {e}")
 
                 frames_processed += 1
 
@@ -394,10 +517,137 @@ class FaceTracker:
 
         self.face_positions = face_positions
 
+        # Build face tracks from all detected faces for multi-face support
+        if self.max_tracked_faces > 1:
+            self._build_face_tracks(all_faces_by_timestamp)
+
         detection_rate = (faces_detected / frames_processed * 100) if frames_processed > 0 else 0
         logger.info(f"Face detection complete: {faces_detected}/{frames_processed} frames ({detection_rate:.1f}%)")
+        if self.face_tracks:
+            logger.info(f"Built {len(self.face_tracks)} face tracks for multi-person tracking")
 
         return face_positions
+
+    def _build_face_tracks(self, all_faces_by_timestamp: Dict[float, List[FaceBox]]):
+        """
+        Build face tracks from detected faces across all frames.
+
+        Uses spatial proximity AND velocity constraints to track faces.
+        Rejects impossible position jumps to improve person identity persistence.
+
+        Args:
+            all_faces_by_timestamp: Dict mapping timestamp -> List[FaceBox]
+        """
+        if not all_faces_by_timestamp:
+            return
+
+        logger.info("Building face tracks with velocity constraints...")
+
+        # Track faces with velocity-aware matching
+        current_tracks: List[FaceTrack] = []
+        track_id_counter = 0
+
+        # Maximum velocity in pixels per second (50% of frame width per second = very fast movement)
+        MAX_VELOCITY = self.video_width * 0.5
+
+        # Process frames in chronological order
+        for timestamp in sorted(all_faces_by_timestamp.keys()):
+            faces = all_faces_by_timestamp[timestamp]
+
+            for face in faces:
+                # Try to assign this face to an existing track
+                best_track = None
+                best_score = float('inf')
+                POSITION_THRESHOLD = self.video_width * 0.3  # 30% of frame width
+
+                for track in current_tracks:
+                    # Get the most recent face in this track
+                    if track.positions:
+                        recent_timestamps = sorted(track.positions.keys())
+                        last_timestamp = recent_timestamps[-1]
+                        last_face = track.positions[last_timestamp]
+
+                        # Calculate time elapsed since last detection
+                        time_elapsed = timestamp - last_timestamp
+
+                        # Skip if too much time has passed (face might have left and returned)
+                        if time_elapsed > 2.0:  # More than 2 seconds gap
+                            continue
+
+                        # Calculate distance from current face to last known position
+                        face_x, face_y = face.center
+                        last_x, last_y = last_face.center
+                        distance = np.sqrt((face_x - last_x)**2 + (face_y - last_y)**2)
+
+                        # Velocity constraint: reject impossible movements
+                        if time_elapsed > 0:
+                            velocity = distance / time_elapsed
+                            if velocity > MAX_VELOCITY:
+                                # Movement too fast - likely a different person
+                                logger.debug(
+                                    f"Rejected track match: velocity {velocity:.1f} px/s "
+                                    f"exceeds max {MAX_VELOCITY:.1f} px/s"
+                                )
+                                continue
+
+                        # Calculate average position of recent faces for stability
+                        recent_window = recent_timestamps[-5:]  # Last 5 positions
+                        recent_faces = [track.positions[ts] for ts in recent_window]
+
+                        avg_x = np.mean([f.center[0] for f in recent_faces])
+                        avg_y = np.mean([f.center[1] for f in recent_faces])
+
+                        # Combined distance score: weighted average of instant and average distance
+                        instant_dist = distance
+                        avg_dist = np.sqrt((face_x - avg_x)**2 + (face_y - avg_y)**2)
+                        combined_distance = instant_dist * 0.7 + avg_dist * 0.3
+
+                        # Check position threshold
+                        if combined_distance < POSITION_THRESHOLD:
+                            # Calculate match score (lower is better)
+                            # Factor in size similarity for additional confidence
+                            size_diff = abs(face.area - last_face.area) / max(face.area, last_face.area)
+                            match_score = combined_distance + size_diff * 100  # Weight size difference
+
+                            if match_score < best_score:
+                                best_score = match_score
+                                best_track = track
+
+                if best_track:
+                    # Assign face to existing track
+                    face.face_id = best_track.face_id
+                    best_track.positions[timestamp] = face
+                else:
+                    # Create new track
+                    new_track = FaceTrack(
+                        face_id=track_id_counter,
+                        positions={timestamp: face}
+                    )
+                    face.face_id = track_id_counter
+                    current_tracks.append(new_track)
+                    track_id_counter += 1
+
+        # Filter tracks: only keep tracks with significant duration
+        MIN_TRACK_FRAMES = 10  # Must appear in at least 10 frames
+        self.face_tracks = [
+            track for track in current_tracks
+            if len(track.positions) >= MIN_TRACK_FRAMES
+        ]
+
+        # Update statistics for each track
+        for track in self.face_tracks:
+            track.update_statistics(self.video_width, self.video_height)
+
+        # Sort tracks by average size (largest first)
+        self.face_tracks.sort(key=lambda t: t.avg_area_ratio, reverse=True)
+
+        logger.info(f"Built {len(self.face_tracks)} face tracks from {len(all_faces_by_timestamp)} frames")
+        if self.face_tracks:
+            for i, track in enumerate(self.face_tracks[:3]):  # Log top 3 tracks
+                logger.debug(
+                    f"  Track {track.face_id}: {len(track.positions)} frames, "
+                    f"avg_size={track.avg_area_ratio:.3f}, pos=({track.avg_position[0]}, {track.avg_position[1]})"
+                )
 
     def analyze_audio_for_speech(
         self,
@@ -432,7 +682,8 @@ class FaceTracker:
         """
         Get the face of the active speaker at a specific timestamp.
 
-        Uses speech correlation to determine which face is most likely speaking.
+        Uses speech correlation to determine which face is most likely speaking,
+        with hysteresis to prevent rapid switching between speakers.
 
         Args:
             timestamp: Time in seconds
@@ -470,17 +721,194 @@ class FaceTracker:
         # 1. Speech correlation (primary factor)
         # 2. Face size (larger = more likely to be speaking)
         # 3. Temporal consistency (prefer face we were already tracking)
-        best_track = max(
-            active_tracks,
-            key=lambda t: (
-                t.speech_correlation * 0.6 +
-                t.avg_area_ratio * 0.3 +
-                (0.1 if any(abs(ts - timestamp) < 0.1 for ts in t.positions.keys()) else 0)
+        def calculate_score(track: FaceTrack) -> float:
+            """Calculate composite score for speaker selection."""
+            score = (
+                track.speech_correlation * 0.6 +
+                track.avg_area_ratio * 0.3 +
+                (0.1 if any(abs(ts - timestamp) < 0.1 for ts in track.positions.keys()) else 0)
             )
-        )
+            return score
+
+        # Calculate scores for all tracks
+        track_scores = {track.face_id: calculate_score(track) for track in active_tracks}
+
+        # Find best candidate
+        best_track_id = max(track_scores.keys(), key=lambda tid: track_scores[tid])
+        best_score = track_scores[best_track_id]
+
+        # Apply hysteresis: require significant confidence margin before switching speakers
+        if self.current_active_speaker_id is not None:
+            # Check if we should stay with current speaker
+            current_track_id = self.current_active_speaker_id
+
+            # Check if current speaker still exists in active tracks
+            if current_track_id in track_scores:
+                current_score = track_scores[current_track_id]
+
+                # Apply hysteresis margin: new speaker must be significantly better
+                # Also check debounce timer to prevent rapid oscillation
+                time_since_switch = timestamp - self.last_speaker_switch_time
+
+                if (best_track_id != current_track_id and
+                    time_since_switch < self.speaker_switch_debounce):
+                    # Within debounce period - stick with current speaker
+                    best_track_id = current_track_id
+                    logger.debug(
+                        f"Staying with speaker {current_track_id} due to debounce "
+                        f"(elapsed: {time_since_switch:.3f}s)"
+                    )
+                elif (best_track_id != current_track_id and
+                      best_score < current_score + self.speaker_switch_hysteresis):
+                    # New speaker not significantly better - stick with current
+                    best_track_id = current_track_id
+                    logger.debug(
+                        f"Staying with speaker {current_track_id} due to hysteresis "
+                        f"(best: {best_score:.3f}, current: {current_score:.3f}, "
+                        f"margin: {self.speaker_switch_hysteresis:.3f})"
+                    )
+                elif best_track_id != current_track_id:
+                    # Legitimate switch - update tracking state
+                    logger.debug(
+                        f"Switching from speaker {current_track_id} to {best_track_id} "
+                        f"at t={timestamp:.2f}s (scores: {current_score:.3f} -> {best_score:.3f})"
+                    )
+                    self.current_active_speaker_id = best_track_id
+                    self.last_speaker_switch_time = timestamp
+        else:
+            # First speaker assignment
+            self.current_active_speaker_id = best_track_id
+            self.last_speaker_switch_time = timestamp
+            logger.debug(f"Initial speaker assignment: {best_track_id} at t={timestamp:.2f}s")
+
+        # Get the selected track
+        best_track = next(t for t in active_tracks if t.face_id == best_track_id)
 
         # Get face position from best track at this timestamp
         # Find closest timestamp in track
+        track_timestamps = sorted(best_track.positions.keys())
+        closest_ts = min(track_timestamps, key=lambda ts: abs(ts - timestamp))
+
+        return best_track.positions[closest_ts]
+
+    def get_active_speaker_realtime(
+        self,
+        timestamp: float,
+        min_confidence: float = 0.5,
+        historical_weight: float = 0.4,
+        current_weight: float = 0.6
+    ) -> Optional[FaceBox]:
+        """
+        Get active speaker using real-time audio-visual fusion.
+
+        Combines historical speech correlation with current audio energy
+        for more responsive speaker tracking during clip generation.
+
+        Args:
+            timestamp: Time in seconds
+            min_confidence: Minimum speech confidence threshold
+            historical_weight: Weight for historical speech_correlation (0-1)
+            current_weight: Weight for current audio energy (0-1)
+
+        Returns:
+            FaceBox of active speaker, or None if no speaker detected
+        """
+        # If speaker detection disabled, fall back to largest face
+        if not self.enable_speaker_detection or not self.speech_segments:
+            return self.get_face_position_at_time(timestamp)
+
+        # Check if there's speech activity at this time with energy level
+        is_speech, current_energy = self.speaker_detector.is_speech_at_time(
+            timestamp,
+            self.speech_segments,
+            min_confidence=min_confidence
+        )
+
+        if not is_speech:
+            # No speech - just return largest face
+            return self.get_face_position_at_time(timestamp)
+
+        # Get all face tracks that have data near this timestamp
+        active_tracks = [
+            track for track in self.face_tracks
+            if any(abs(ts - timestamp) < 0.5 for ts in track.positions.keys())
+        ]
+
+        if not active_tracks:
+            # Fall back to single face tracking
+            return self.get_face_position_at_time(timestamp)
+
+        # Normalize current energy to 0-1 range (energy is typically 0-100+)
+        normalized_energy = min(1.0, current_energy / 50.0)  # Assume 50 is high energy
+
+        # Score each track combining historical and current data
+        def calculate_realtime_score(track: FaceTrack) -> float:
+            """Calculate real-time score with audio-visual fusion."""
+            # Historical component: speech correlation
+            historical_score = track.speech_correlation
+
+            # Current component: assume track with highest correlation is likely speaking
+            # Weight by current audio energy
+            current_score = normalized_energy
+
+            # Lip activity component (if available)
+            lip_bonus = 0.0
+            if self.enable_lip_detection and track.lip_activity_scores:
+                # Find lip score at current timestamp (within 0.2s window)
+                nearby_lip_scores = [
+                    score for ts, score in track.lip_activity_scores.items()
+                    if abs(ts - timestamp) < 0.2
+                ]
+                if nearby_lip_scores:
+                    lip_bonus = np.mean(nearby_lip_scores) * 0.15  # 15% weight for lip movement
+
+            # Combine scores
+            composite_score = (
+                historical_score * historical_weight +
+                current_score * current_weight +
+                track.avg_area_ratio * 0.15 +  # Face size bonus (reduced to make room for lip)
+                lip_bonus +  # Lip movement bonus
+                (0.1 if any(abs(ts - timestamp) < 0.1 for ts in track.positions.keys()) else 0)  # Temporal proximity
+            )
+
+            return composite_score
+
+        # Calculate scores for all tracks
+        track_scores = {track.face_id: calculate_realtime_score(track) for track in active_tracks}
+
+        # Find best candidate
+        best_track_id = max(track_scores.keys(), key=lambda tid: track_scores[tid])
+        best_score = track_scores[best_track_id]
+
+        # Apply hysteresis (same as get_active_speaker_at_time)
+        if self.current_active_speaker_id is not None:
+            current_track_id = self.current_active_speaker_id
+
+            if current_track_id in track_scores:
+                current_score = track_scores[current_track_id]
+                time_since_switch = timestamp - self.last_speaker_switch_time
+
+                if (best_track_id != current_track_id and
+                    time_since_switch < self.speaker_switch_debounce):
+                    best_track_id = current_track_id
+                elif (best_track_id != current_track_id and
+                      best_score < current_score + self.speaker_switch_hysteresis):
+                    best_track_id = current_track_id
+                elif best_track_id != current_track_id:
+                    logger.debug(
+                        f"[Realtime] Switching speaker {current_track_id} -> {best_track_id} "
+                        f"at t={timestamp:.2f}s (energy={current_energy:.1f})"
+                    )
+                    self.current_active_speaker_id = best_track_id
+                    self.last_speaker_switch_time = timestamp
+        else:
+            self.current_active_speaker_id = best_track_id
+            self.last_speaker_switch_time = timestamp
+
+        # Get the selected track
+        best_track = next(t for t in active_tracks if t.face_id == best_track_id)
+
+        # Get face position from best track at this timestamp
         track_timestamps = sorted(best_track.positions.keys())
         closest_ts = min(track_timestamps, key=lambda ts: abs(ts - timestamp))
 
@@ -533,6 +961,162 @@ class FaceTracker:
                 f"min={min(correlations):.2f}, max={max(correlations):.2f}, "
                 f"mean={np.mean(correlations):.2f}"
             )
+
+    def detect_face_groups(
+        self,
+        timestamp: float,
+        separation_threshold: float = 0.60
+    ) -> Dict[str, Any]:
+        """
+        Analyze faces at timestamp to detect spatial grouping.
+
+        Determines if faces are separated (far apart), grouped (close together),
+        or if there's only a single face.
+
+        Args:
+            timestamp: Time in seconds to analyze
+            separation_threshold: Distance threshold (as fraction of frame width)
+                                 for considering faces "separated" (default: 0.60 = 60%)
+                                 Increased from 0.40 to reduce false split-screen triggers
+
+        Returns:
+            Dictionary with:
+                - mode: "single", "grouped", or "separated"
+                - faces: List of FaceBox objects detected
+                - separation_score: 0-1, higher means more separated
+        """
+        # Get all detected faces near this timestamp (within 0.5s window)
+        nearby_timestamps = [
+            ts for ts in sorted(self.face_positions.keys())
+            if abs(ts - timestamp) <= 0.5
+        ]
+
+        if not nearby_timestamps:
+            return {
+                "mode": "single",
+                "faces": [],
+                "separation_score": 0.0
+            }
+
+        # Get the closest timestamp
+        closest_ts = min(nearby_timestamps, key=lambda ts: abs(ts - timestamp))
+
+        # For now, we only have single-face tracking in face_positions
+        # But we can detect if there are multiple face_tracks with data
+        if not self.face_tracks:
+            # Fallback to legacy single-face mode
+            face = self.face_positions.get(closest_ts)
+            return {
+                "mode": "single",
+                "faces": [face] if face else [],
+                "separation_score": 0.0
+            }
+
+        # Get all faces from tracks that have data near this timestamp
+        active_faces = []
+        for track in self.face_tracks:
+            # Find closest timestamp in this track
+            track_timestamps = [ts for ts in track.positions.keys() if abs(ts - timestamp) <= 0.5]
+            if track_timestamps:
+                closest_track_ts = min(track_timestamps, key=lambda ts: abs(ts - timestamp))
+                active_faces.append(track.positions[closest_track_ts])
+
+        if len(active_faces) <= 1:
+            return {
+                "mode": "single",
+                "faces": active_faces,
+                "separation_score": 0.0
+            }
+
+        # Sort faces by size (largest first)
+        active_faces.sort(key=lambda f: f.area, reverse=True)
+
+        # Analyze top 2 faces for separation
+        face1, face2 = active_faces[0], active_faces[1]
+        separation_score = self._calculate_face_separation_score(face1, face2)
+
+        # Determine mode based on separation
+        if separation_score >= separation_threshold:
+            mode = "separated"
+        else:
+            mode = "grouped"
+
+        return {
+            "mode": mode,
+            "faces": active_faces[:2],  # Return top 2 faces
+            "separation_score": separation_score
+        }
+
+    def _calculate_face_separation_score(
+        self,
+        face1: FaceBox,
+        face2: FaceBox
+    ) -> float:
+        """
+        Calculate spatial separation score between two faces.
+
+        Args:
+            face1: First face bounding box
+            face2: Second face bounding box
+
+        Returns:
+            Separation score (0-1), where:
+                - 0.0 = faces overlap or very close
+                - 0.5 = moderate separation
+                - 1.0 = faces are on opposite sides of frame
+        """
+        if not self.video_width or self.video_width == 0:
+            return 0.0
+
+        center1_x, center1_y = face1.center
+        center2_x, center2_y = face2.center
+
+        # Calculate horizontal distance as percentage of frame width
+        horizontal_distance = abs(center2_x - center1_x) / self.video_width
+
+        # Calculate gap between faces (if they don't overlap)
+        if face1.x < face2.x:
+            # face1 is on the left
+            face1_right = face1.x + face1.width
+            gap = max(0, face2.x - face1_right)
+        else:
+            # face2 is on the left
+            face2_right = face2.x + face2.width
+            gap = max(0, face1.x - face2_right)
+
+        gap_ratio = gap / self.video_width
+
+        # Separation score is the maximum of distance and gap
+        # (either metric can indicate separation)
+        # Reduced gap weight from 2.0 to 0.5 to prevent oversensitivity
+        separation_score = max(horizontal_distance, gap_ratio * 0.5)
+
+        # Clamp to [0, 1]
+        return min(1.0, separation_score)
+
+    def get_separated_faces_at_time(
+        self,
+        timestamp: float,
+        separation_threshold: float = 0.60
+    ) -> Optional[List[FaceBox]]:
+        """
+        Get the 2 most prominent separated faces at a timestamp.
+
+        This is used by the clip generator to create split-screen layouts.
+
+        Args:
+            timestamp: Time in seconds
+            separation_threshold: Minimum separation score required (default: 0.60)
+
+        Returns:
+            List of 2 FaceBox objects if faces are separated, None otherwise
+        """
+        face_group = self.detect_face_groups(timestamp, separation_threshold)
+
+        if face_group["mode"] == "separated" and len(face_group["faces"]) >= 2:
+            return face_group["faces"][:2]  # Return top 2 faces
+
+        return None
 
     def get_optimal_crop_box(
         self,
@@ -687,21 +1271,52 @@ class FaceTracker:
         self,
         timestamp: float,
         padding_factor: float = 1.5,
-        smoothing_window: float = 1.5
+        smoothing_window: float = 1.5,
+        content_timeline: Optional[List] = None
     ) -> CropBox:
         """
-        Get crop box for a specific timestamp with smoothing for stable tracking.
+        Get crop box for a specific timestamp with adaptive smoothing for stable tracking.
 
         If speaker detection is enabled, this will prioritize the active speaker's face.
+        Smoothing window is automatically reduced near mode transitions to prevent jitter.
 
         Args:
             timestamp: Time in seconds
             padding_factor: How much padding around face (1.0 = tight, 2.0 = loose)
             smoothing_window: Window in seconds to average face positions (reduces jitter)
+                            Default 1.5s, reduced to 0.5s near mode transitions
+            content_timeline: Optional list of ContentSegment objects for adaptive smoothing
 
         Returns:
             CropBox for the specified timestamp
         """
+        # Adaptive smoothing: reduce window near mode transitions
+        if content_timeline:
+            # Find if we're near a segment boundary (within 0.5s)
+            for i, segment in enumerate(content_timeline):
+                # Check distance to segment start/end
+                dist_to_start = abs(timestamp - segment.start_time)
+                dist_to_end = abs(timestamp - segment.end_time)
+
+                # Check if mode changes at this boundary
+                mode_changes = False
+                if i > 0 and dist_to_start < 0.5:
+                    # Near start boundary - check if mode changed from previous
+                    if content_timeline[i-1].mode != segment.mode:
+                        mode_changes = True
+                if i < len(content_timeline) - 1 and dist_to_end < 0.5:
+                    # Near end boundary - check if mode changes to next
+                    if content_timeline[i+1].mode != segment.mode:
+                        mode_changes = True
+
+                if mode_changes:
+                    # Near a mode transition - use tighter smoothing window
+                    smoothing_window = 0.5
+                    logger.debug(
+                        f"Adaptive smoothing: reduced window to 0.5s near mode transition at t={timestamp:.2f}s"
+                    )
+                    break
+
         # If speaker detection enabled, get active speaker's face
         if self.enable_speaker_detection and self.speech_segments:
             speaker_face = self.get_active_speaker_at_time(timestamp)
@@ -780,10 +1395,11 @@ class FaceTracker:
         start_time: float,
         end_time: float,
         smoothing_strength: int = 11,
-        fps: float = 30.0
+        fps: float = 30.0,
+        filter_type: str = "savgol"
     ) -> Optional[Callable[[float], float]]:
         """
-        Pre-compute smoothed face trajectory using Savitzky-Golay filter.
+        Pre-compute smoothed face trajectory using advanced filtering.
 
         This creates a smooth interpolation function that eliminates jumpy camera motion
         when tracking faces. The result is professional-quality smooth camera movement.
@@ -796,6 +1412,10 @@ class FaceTracker:
                                - 11: Medium smoothing (balanced, recommended)
                                - 21: Strong smoothing (very smooth, may lag on fast motion)
             fps: Video frame rate (used for interpolation)
+            filter_type: Type of filter to use
+                        - "savgol": Savitzky-Golay filter (default, good for general use)
+                        - "one_euro": One-Euro filter (adaptive, best for variable motion)
+                        - "both": Apply both filters in sequence (maximum smoothness)
 
         Returns:
             Interpolation function that takes timestamp and returns smoothed x-coordinate,
@@ -815,27 +1435,76 @@ class FaceTracker:
             return None
 
         # Extract x-coordinates of face centers
-        x_positions = [self.face_positions[ts].center[0] for ts in relevant_timestamps]
-
-        # Ensure smoothing window doesn't exceed data length
-        window_length = min(smoothing_strength, len(x_positions))
-        # Window length must be odd
-        if window_length % 2 == 0:
-            window_length -= 1
-        # Window length must be at least 3
-        window_length = max(3, window_length)
-
-        # Polynomial order must be less than window length
-        polyorder = min(3, window_length - 1)
+        x_positions = np.array([self.face_positions[ts].center[0] for ts in relevant_timestamps])
+        timestamps_array = np.array(relevant_timestamps)
 
         try:
-            # Apply Savitzky-Golay filter for smooth trajectory
-            smoothed_x = savgol_filter(
-                x_positions,
-                window_length=window_length,
-                polyorder=polyorder,
-                mode='nearest'
-            )
+            # Apply selected filtering method
+            if filter_type == "one_euro":
+                # Use One-Euro filter for adaptive smoothing
+                smoothed_x = smooth_trajectory_with_one_euro(
+                    timestamps_array,
+                    x_positions,
+                    fps=fps,
+                    min_cutoff=1.0,  # Balanced smoothing
+                    beta=0.007  # Moderate adaptation to velocity
+                )
+                logger.info(
+                    f"Computed One-Euro smoothed trajectory for {start_time:.1f}s-{end_time:.1f}s "
+                    f"({len(relevant_timestamps)} points)"
+                )
+
+            elif filter_type == "both":
+                # Apply One-Euro first, then Savitzky-Golay for maximum smoothness
+                intermediate_x = smooth_trajectory_with_one_euro(
+                    timestamps_array,
+                    x_positions,
+                    fps=fps,
+                    min_cutoff=1.0,
+                    beta=0.007
+                )
+
+                # Then apply Savitzky-Golay
+                window_length = min(smoothing_strength, len(intermediate_x))
+                if window_length % 2 == 0:
+                    window_length -= 1
+                window_length = max(3, window_length)
+                polyorder = min(3, window_length - 1)
+
+                smoothed_x = savgol_filter(
+                    intermediate_x,
+                    window_length=window_length,
+                    polyorder=polyorder,
+                    mode='nearest'
+                )
+                logger.info(
+                    f"Computed dual-filtered trajectory for {start_time:.1f}s-{end_time:.1f}s "
+                    f"(One-Euro + Savitzky-Golay, {len(relevant_timestamps)} points)"
+                )
+
+            else:  # "savgol" (default)
+                # Ensure smoothing window doesn't exceed data length
+                window_length = min(smoothing_strength, len(x_positions))
+                # Window length must be odd
+                if window_length % 2 == 0:
+                    window_length -= 1
+                # Window length must be at least 3
+                window_length = max(3, window_length)
+
+                # Polynomial order must be less than window length
+                polyorder = min(3, window_length - 1)
+
+                # Apply Savitzky-Golay filter for smooth trajectory
+                smoothed_x = savgol_filter(
+                    x_positions,
+                    window_length=window_length,
+                    polyorder=polyorder,
+                    mode='nearest'
+                )
+                logger.info(
+                    f"Computed Savitzky-Golay smoothed trajectory for {start_time:.1f}s-{end_time:.1f}s "
+                    f"({len(relevant_timestamps)} points, window={window_length}, poly={polyorder})"
+                )
 
             # Create cubic spline interpolation for smooth lookup at any timestamp
             interpolator = interp1d(
@@ -846,15 +1515,10 @@ class FaceTracker:
                 fill_value='extrapolate'
             )
 
-            logger.info(
-                f"Computed smoothed trajectory for {start_time:.1f}s-{end_time:.1f}s "
-                f"({len(relevant_timestamps)} points, window={window_length}, poly={polyorder})"
-            )
-
             return interpolator
 
         except Exception as e:
-            logger.error(f"Failed to compute smoothed trajectory: {e}")
+            logger.error(f"Failed to compute smoothed trajectory with {filter_type}: {e}")
             return None
 
     def get_crop_box_from_position(self, face_center_x: float) -> CropBox:
@@ -923,4 +1587,6 @@ class FaceTracker:
         """Clean up resources."""
         if hasattr(self, 'face_detection'):
             self.face_detection.close()
+        if hasattr(self, 'face_mesh') and self.face_mesh is not None:
+            self.face_mesh.close()
         self.face_positions.clear()

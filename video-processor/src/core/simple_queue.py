@@ -13,8 +13,10 @@ from dataclasses import dataclass, field
 from ..models import JobStatus, JobPriority, WorkflowType, JobStatusResponse
 from ..core.config import ProcessorConfig
 
-import logging
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+# Bind logger with context for this module
+logger = logger.bind(name="core.simple_queue")
 
 
 @dataclass

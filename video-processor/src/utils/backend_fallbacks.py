@@ -2,8 +2,10 @@
 Fallback implementations for backend modules that may not be available in containers
 """
 
-import logging
-logger = logging.getLogger(__name__)
+from loguru import logger
+
+# Bind logger with context for this module
+logger = logger.bind(name="utils.backend_fallbacks")
 
 def check_env_vars():
     """Fallback implementation for environment variable checking."""

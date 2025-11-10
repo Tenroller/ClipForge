@@ -12,7 +12,6 @@ import os
 import random
 import subprocess
 import sys
-import logging
 from pathlib import Path
 from scenedetect import open_video, SceneManager
 from scenedetect.detectors import ContentDetector
@@ -27,9 +26,10 @@ import re
 import time
 import yt_dlp
 import shutil
+from loguru import logger
 
 # Initialize logger for this module
-logger = logging.getLogger("video_generator.compilation.processor")
+logger = logger.bind(name="Compilation.processor")
 
 # Define placeholder logging functions that were imported but may not exist
 def log_generation_step(logger, *args, **kwargs):

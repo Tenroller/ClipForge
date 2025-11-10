@@ -13,7 +13,6 @@ import random
 import tempfile
 import hashlib
 import warnings
-import logging
 import soundfile as sf
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -21,9 +20,10 @@ from google import genai
 from google.genai import types
 from kokoro import KPipeline
 import torch
+from loguru import logger
 
 # Initialize logger for this module
-logger = logging.getLogger("video_generator.compilation.tts_phrase_manager")
+logger = logger.bind(name="Compilation.tts_phrase_manager")
 
 
 class TTSPhraseManager:

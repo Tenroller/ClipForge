@@ -1,215 +1,169 @@
 """
-Enhanced logging configuration for the video generator API.
+Enhanced logging configuration for the video generator API using Loguru.
 """
 
-import logging
-import logging.handlers
 import os
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from loguru import logger
 
 
-class JSONFormatter(logging.Formatter):
-    """JSON formatter for structured logging."""
-    
-    def format(self, record: logging.LogRecord) -> str:
-        import json
-        
-        log_entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-            "module": record.module,
-            "function": record.funcName,
-            "line": record.lineno,
-        }
-        
-        # Add extra fields if present
-        if hasattr(record, "job_id"):
-            log_entry["job_id"] = getattr(record, "job_id")
-        
-        if hasattr(record, "workflow"):
-            log_entry["workflow"] = getattr(record, "workflow")
-        if hasattr(record, "user_ip"):
-            log_entry["user_ip"] = getattr(record, "user_ip")
-            
-        if hasattr(record, "duration"):
-            log_entry["duration"] = getattr(record, "duration")
-        
-        # Add exception info if present
-        if record.exc_info:
-            log_entry["exception"] = self.formatException(record.exc_info)
-        
-        return json.dumps(log_entry)
+# === Integration with standard logging (for libraries that use it) ===
+def intercept_standard_logging():
+    """
+    Intercept standard library logging and redirect to Loguru.
 
+    Call this if you have third-party libraries using standard logging
+    and want their logs to appear in Loguru format.
+    """
+    import logging
+    import inspect
 
-class ColoredConsoleFormatter(logging.Formatter):
-    """Colored console formatter for better readability."""
-    
-    COLORS = {
-        'DEBUG': '\033[36m',    # Cyan
-        'INFO': '\033[32m',     # Green
-        'WARNING': '\033[33m',  # Yellow
-        'ERROR': '\033[31m',    # Red
-        'CRITICAL': '\033[35m', # Magenta
-    }
-    RESET = '\033[0m'
-    
-    def format(self, record: logging.LogRecord) -> str:
-        color = self.COLORS.get(record.levelname, '')
-        record.levelname = f"{color}{record.levelname}{self.RESET}"
-        return super().format(record)
-
-
-class WindowsSafeConsoleHandler(logging.StreamHandler):
-    """Console handler that safely handles Unicode on Windows."""
-    
-    def __init__(self, stream=None):
-        super().__init__(stream)
-        # Force UTF-8 encoding for the stream on Windows
-        if sys.platform == "win32":
+    class InterceptHandler(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            # Get corresponding Loguru level if it exists
             try:
-                # Try to set UTF-8 encoding for the stream
-                if hasattr(self.stream, 'reconfigure'):
-                    self.stream.reconfigure(encoding='utf-8', errors='replace')
-                elif hasattr(self.stream, 'encoding'):
-                    # For older Python versions, we'll handle encoding in emit
-                    pass
-            except Exception:
-                # Fallback to error handling in emit
-                pass
-    
-    def emit(self, record):
-        try:
-            super().emit(record)
-        except UnicodeEncodeError:
-            # Fallback: replace problematic characters
-            try:
-                msg = self.format(record)
-                # Replace common problematic Unicode characters
-                safe_msg = msg.encode('utf-8', errors='replace').decode('utf-8')
-                if hasattr(self.stream, 'write'):
-                    self.stream.write(safe_msg + self.terminator)
-                    self.flush()
-            except Exception:
-                # Last resort: write ASCII-only message
-                try:
-                    safe_msg = record.getMessage().encode('ascii', errors='replace').decode('ascii')
-                    fallback_msg = f"{record.asctime} - {record.name} - {record.levelname} - {safe_msg}\n"
-                    self.stream.write(fallback_msg)
-                    self.flush()
-                except Exception:
-                    pass
+                level = logger.level(record.levelname).name
+            except ValueError:
+                level = record.levelno
+
+            # Find caller from where originated the logged message
+            frame, depth = inspect.currentframe(), 0
+            while frame and (depth == 0 or frame.f_code.co_filename == logging.__file__):
+                frame = frame.f_back
+                depth += 1
+
+            logger.opt(depth=depth, exception=record.exc_info).log(
+                level, record.getMessage()
+            )
+
+    # Replace all standard logging handlers with Loguru interceptor
+    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
+
+    # Suppress some noisy loggers
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("multipart").setLevel(logging.WARNING)
+    logging.getLogger("watchfiles").setLevel(logging.WARNING)
 
 
-def setup_logging() -> logging.Logger:
-    """Setup unified application logging with console and single comprehensive file handler."""
-    # Always use the root logs directory
+def setup_logging() -> logger:
+    """
+    Setup unified application logging with Loguru.
+
+    Configures:
+    - Console output with colors (INFO and above)
+    - File output with rotation and retention (DEBUG and above)
+    - JSON structured logging (optional via env var)
+    - Interception of standard logging (automatically enabled)
+
+    Returns:
+        Configured loguru logger instance
+    """
+    # Determine log directory (project root / logs)
     root_dir = Path(__file__).resolve().parents[1]
     log_dir = root_dir / "logs"
     log_dir.mkdir(exist_ok=True)
 
-    # Get root logger
-    logger = logging.getLogger("video_generator")
-    logger.setLevel(logging.DEBUG)  # Set to DEBUG to capture all levels
+    # Remove default handler to avoid duplicates
+    logger.remove()
 
-    # Clear existing handlers
-    logger.handlers.clear()
-
-    # Create unified formatter for all logs
-    unified_formatter = logging.Formatter(
-        fmt="%(asctime)s [%(levelname)8s] %(name)s - %(module)s:%(funcName)s:%(lineno)d - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+    # === Console Handler (Colored) ===
+    # Shows INFO and above with colors and simplified format
+    logger.add(
+        sys.stdout,
+        level="INFO",
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> - <level>{message}</level>",
+        colorize=True,
+        backtrace=True,
+        diagnose=True
     )
 
-    # Console handler with Windows-safe Unicode handling
-    if sys.platform == "win32":
-        console_handler = WindowsSafeConsoleHandler(sys.stdout)
-    else:
-        console_handler = logging.StreamHandler(sys.stdout)
+    # === Intercept standard library logging ===
+    # This must be done BEFORE any libraries that use standard logging are initialized
+    intercept_standard_logging()
 
-    console_handler.setLevel(logging.INFO)  # Console shows INFO and above
-    console_formatter = ColoredConsoleFormatter(
-        fmt="%(asctime)s [%(levelname)8s] %(name)s - %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
-
-    # Single unified file handler - captures ALL logs (DEBUG and above)
-    unified_file_handler = logging.handlers.RotatingFileHandler(
+    # === File Handler (Detailed, Rotating) ===
+    # Captures everything (DEBUG and above) with full details
+    logger.add(
         log_dir / "video_generator.log",
-        maxBytes=50 * 1024 * 1024,  # 50MB - larger for comprehensive logging
-        backupCount=10,  # Keep more backups for debugging
-        encoding='utf-8'  # Explicitly set UTF-8 encoding
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+        rotation="50 MB",  # Rotate when file reaches 50MB
+        retention="10 days",  # Keep logs for 10 days
+        compression="zip",  # Compress rotated logs
+        encoding="utf-8",
+        backtrace=True,
+        diagnose=True,
+        enqueue=True  # Thread-safe, async writing
     )
-    unified_file_handler.setLevel(logging.DEBUG)  # File captures everything
-    unified_file_handler.setFormatter(unified_formatter)
-    logger.addHandler(unified_file_handler)
 
-    # JSON handler for structured logging (if enabled) - also unified
+    # === JSON Structured Logging (Optional) ===
+    # Enable with: export ENABLE_JSON_LOGGING=true
     if os.getenv("ENABLE_JSON_LOGGING", "").lower() == "true":
-        json_handler = logging.handlers.RotatingFileHandler(
+        logger.add(
             log_dir / "video_generator.json.log",
-            maxBytes=25 * 1024 * 1024,  # 25MB
-            backupCount=5,
-            encoding='utf-8'
+            level="INFO",
+            format="{message}",
+            serialize=True,  # Output as JSON
+            rotation="25 MB",
+            retention="7 days",
+            compression="zip",
+            encoding="utf-8",
+            enqueue=True
         )
-        json_handler.setLevel(logging.DEBUG)  # Capture all structured logs
-        json_handler.setFormatter(JSONFormatter())
-        logger.addHandler(json_handler)
 
-    # Create child loggers for specific components
-    _setup_child_loggers(logger, unified_file_handler, unified_formatter)
+    # === Error-Only Handler ===
+    # Separate file for errors and above for quick debugging
+    logger.add(
+        log_dir / "errors.log",
+        level="ERROR",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} - {message}",
+        rotation="10 MB",
+        retention="30 days",  # Keep error logs longer
+        compression="zip",
+        encoding="utf-8",
+        backtrace=True,
+        diagnose=True,
+        enqueue=True
+    )
+
+    # Log successful initialization
+    logger.info("Loguru logging system initialized")
+    logger.debug(f"Log directory: {log_dir}")
 
     return logger
 
 
-def _setup_child_loggers(parent_logger: logging.Logger, unified_handler: logging.Handler, formatter: logging.Formatter):
-    """Setup child loggers for specific components that inherit the unified logging."""
-    child_loggers = [
-        "video_generator.api",
-        "video_generator.generation",
-        "video_generator.job_queue",
-        "video_generator.database",
-        "video_generator.metrics",
-        "video_generator.websocket",
-        "video_generator.cache",
-        "video_generator.ffmpeg",
-        "video_generator.ai_videos",
-        "video_generator.brainrot"
-    ]
+def get_logger(name: str = "video_generator") -> logger:
+    """
+    Get a logger with the specified name.
 
-    for logger_name in child_loggers:
-        child_logger = logging.getLogger(logger_name)
-        child_logger.setLevel(logging.DEBUG)
-        # Child loggers will inherit handlers from parent, so no need to add handlers explicitly
-        # unless we want different formatting or levels
+    Note: With Loguru, the logger is global, but you can use .bind()
+    to add contextual information.
+
+    Args:
+        name: Logger name (used for contextual binding)
+
+    Returns:
+        Loguru logger with name context
+    """
+    return logger.bind(name=name)
 
 
-def get_logger(name: str = "video_generator") -> logging.Logger:
-    """Get a logger with the specified name."""
-    return logging.getLogger(name)
-
-
-def log_request(logger: logging.Logger, method: str, path: str,
+def log_request(log: logger, method: str, path: str,
                 status_code: int, duration: float, user_ip: str = "",
                 request_size: int = 0, response_size: int = 0,
                 user_agent: str = "", request_id: str = "") -> None:
     """Log HTTP request with comprehensive details."""
     # Determine log level based on status code
     if status_code >= 500:
-        log_level = logging.ERROR
-        log_method = logger.error
+        log_func = log.error
     elif status_code >= 400:
-        log_level = logging.WARNING
-        log_method = logger.warning
+        log_func = log.warning
     else:
-        log_level = logging.INFO
-        log_method = logger.info
+        log_func = log.info
 
     # Create detailed message
     message = f"HTTP {method} {path} -> {status_code} ({duration:.3f}s)"
@@ -220,7 +174,8 @@ def log_request(logger: logging.Logger, method: str, path: str,
     if user_ip:
         message += f" | IP: {user_ip}"
 
-    log_method(
+    # Log with extra context
+    log_func(
         message,
         extra={
             "request_id": request_id,
@@ -231,13 +186,13 @@ def log_request(logger: logging.Logger, method: str, path: str,
             "path": path,
             "request_size": request_size,
             "response_size": response_size,
-            "user_agent": user_agent[:200] if user_agent else "",  # Truncate long user agents
+            "user_agent": user_agent[:200] if user_agent else "",
             "http_request": True
         }
     )
 
 
-def log_job_event(logger: logging.Logger, job_id: str, workflow: str,
+def log_job_event(log: logger, job_id: str, workflow: str,
                   event: str, **kwargs) -> None:
     """Log job-related events with enhanced details."""
     message = f"Job {job_id} ({workflow}): {event}"
@@ -258,15 +213,15 @@ def log_job_event(logger: logging.Logger, job_id: str, workflow: str,
 
     # Determine log level based on event type
     if event in ["failed", "error", "cancelled"]:
-        log_method = logger.error
+        log_func = log.error
     elif event in ["completed", "finished"]:
-        log_method = logger.info
+        log_func = log.info
     elif event in ["started", "queued", "running"]:
-        log_method = logger.info
+        log_func = log.info
     else:
-        log_method = logger.debug
+        log_func = log.debug
 
-    log_method(
+    log_func(
         message,
         extra={
             "job_id": job_id,
@@ -278,7 +233,7 @@ def log_job_event(logger: logging.Logger, job_id: str, workflow: str,
     )
 
 
-def log_generation_step(logger: logging.Logger, job_id: str, workflow: str,
+def log_generation_step(log: logger, job_id: str, workflow: str,
                        step: str, status: str = "started", **kwargs) -> None:
     """Log video generation process steps with detailed information."""
     message = f"Generation {job_id} ({workflow}): Step '{step}' - {status}"
@@ -301,15 +256,15 @@ def log_generation_step(logger: logging.Logger, job_id: str, workflow: str,
 
     # Determine log level
     if status in ["failed", "error"]:
-        log_method = logger.error
+        log_func = log.error
     elif status in ["completed", "success"]:
-        log_method = logger.info
+        log_func = log.info
     elif status == "warning":
-        log_method = logger.warning
+        log_func = log.warning
     else:
-        log_method = logger.debug
+        log_func = log.debug
 
-    log_method(
+    log_func(
         message,
         extra={
             "job_id": job_id,
@@ -322,7 +277,7 @@ def log_generation_step(logger: logging.Logger, job_id: str, workflow: str,
     )
 
 
-def log_api_call(logger: logging.Logger, service: str, endpoint: str,
+def log_api_call(log: logger, service: str, endpoint: str,
                  method: str = "GET", status_code: int = 0,
                  duration: float = 0.0, **kwargs) -> None:
     """Log external API calls."""
@@ -335,13 +290,13 @@ def log_api_call(logger: logging.Logger, service: str, endpoint: str,
 
     # Determine log level based on status
     if status_code >= 500 or status_code == 0:
-        log_method = logger.error if status_code >= 500 else logger.warning
+        log_func = log.error if status_code >= 500 else log.warning
     elif status_code >= 400:
-        log_method = logger.warning
+        log_func = log.warning
     else:
-        log_method = logger.debug
+        log_func = log.debug
 
-    log_method(
+    log_func(
         message,
         extra={
             "api_service": service,
@@ -355,7 +310,7 @@ def log_api_call(logger: logging.Logger, service: str, endpoint: str,
     )
 
 
-def log_file_operation(logger: logging.Logger, operation: str, file_path: str,
+def log_file_operation(log: logger, operation: str, file_path: str,
                       file_size: int = 0, duration: float = 0.0, **kwargs) -> None:
     """Log file operations with details."""
     message = f"File {operation}: {file_path}"
@@ -365,7 +320,7 @@ def log_file_operation(logger: logging.Logger, operation: str, file_path: str,
     if duration > 0:
         message += f" ({duration:.3f}s)"
 
-    logger.debug(
+    log.debug(
         message,
         extra={
             "file_operation": operation,
@@ -378,14 +333,14 @@ def log_file_operation(logger: logging.Logger, operation: str, file_path: str,
     )
 
 
-def log_performance_metric(logger: logging.Logger, metric_name: str,
+def log_performance_metric(log: logger, metric_name: str,
                           value: float, unit: str = "", **tags) -> None:
     """Log performance metrics."""
     message = f"Performance: {metric_name} = {value}"
     if unit:
         message += f" {unit}"
 
-    logger.info(
+    log.info(
         message,
         extra={
             "metric_name": metric_name,
@@ -397,42 +352,22 @@ def log_performance_metric(logger: logging.Logger, metric_name: str,
     )
 
 
-def log_error(logger: logging.Logger, error: Exception, context: Dict[str, Any] = {}) -> None:
-    """Log errors with context."""
-    logger.error(
+def log_error(log: logger, error: Exception, context: Dict[str, Any] = {}) -> None:
+    """Log errors with context and full traceback."""
+    log.opt(exception=True).error(
         f"Error: {str(error)}",
-        exc_info=True,
         extra=context
     )
 
 
-def log_performance_metric(logger: logging.Logger, metric_name: str, 
-                          value: float, unit: str = "", **tags) -> None:
-    """Log performance metrics."""
-    message = f"Metric: {metric_name} = {value}"
-    if unit:
-        message += f" {unit}"
-    
-    logger.info(
-        message,
-        extra={
-            "metric_name": metric_name,
-            "metric_value": value,
-            "metric_unit": unit,
-            **tags
-        }
-    )
-
-
-# Security-related logging
-def log_security_event(logger: logging.Logger, event_type: str, 
+def log_security_event(log: logger, event_type: str,
                       user_ip: str = "", details: str = "") -> None:
     """Log security-related events."""
     message = f"Security event: {event_type}"
     if details:
         message += f" - {details}"
-    
-    logger.warning(
+
+    log.warning(
         message,
         extra={
             "security_event": event_type,
@@ -442,12 +377,16 @@ def log_security_event(logger: logging.Logger, event_type: str,
     )
 
 
-# Export initialization function - don't auto-initialize to avoid duplicates in reload mode
-def initialize_logging() -> logging.Logger:
-    """Initialize logging system and return the main logger."""
-    logger = setup_logging()
-    logger.info("Logging system initialized")
-    return logger
+def initialize_logging() -> logger:
+    """
+    Initialize logging system and return the main logger.
 
-# Keep backwards compatibility - this will be None until initialized
-main_logger = None
+    This is the main entry point for setting up logging.
+    """
+    configured_logger = setup_logging()
+    logger.info("Logging system initialized")
+    return configured_logger
+
+
+# Backwards compatibility: expose logger as main_logger
+main_logger = logger

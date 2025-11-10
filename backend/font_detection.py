@@ -11,9 +11,9 @@ try:
     from .logging_config import get_logger
 except ImportError:
     # Fallback logger if logging_config is not available
-    import logging
+    from loguru import logger as fallback_logger
     def get_logger(name):
-        return logging.getLogger(name)
+        return fallback_logger.bind(name=name)
 
 logger = get_logger("font_detection")
 

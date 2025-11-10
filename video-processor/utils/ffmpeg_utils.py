@@ -4,9 +4,10 @@ FFmpeg utilities for cross-platform compatibility.
 import os
 import platform
 import shutil
-import logging
+from loguru import logger
 
-logger = logging.getLogger(__name__)
+# Bind logger with context for this module
+logger = logger.bind(name="utils.ffmpeg")
 
 def setup_ffmpeg_environment():
     """

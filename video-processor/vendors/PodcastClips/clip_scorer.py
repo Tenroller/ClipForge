@@ -4,12 +4,12 @@ Clip quality scoring and ranking system.
 Scores clips based on viral potential using multiple engagement factors.
 """
 
-import logging
+from loguru import logger as loguru_logger
 import re
 from typing import List, Dict, Any
 import math
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.clip_scorer")
 
 
 class ClipScorer:

@@ -5,7 +5,7 @@ Uses audio analysis (librosa + optionally WebRTC VAD) to detect speech activity
 and correlate it with video timestamps to identify who is speaking.
 """
 
-import logging
+from loguru import logger as loguru_logger
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 import numpy as np
@@ -16,14 +16,14 @@ try:
     LIBROSA_AVAILABLE = True
 except ImportError:
     LIBROSA_AVAILABLE = False
-    logging.warning("librosa not available - speaker detection disabled")
+    loguru_logger.warning("librosa not available - speaker detection disabled")
 
 try:
     import webrtcvad
     VAD_AVAILABLE = True
 except ImportError:
     VAD_AVAILABLE = False
-    logging.info("webrtcvad not available - using librosa-only speech detection")
+    loguru_logger.info("webrtcvad not available - using librosa-only speech detection")
 
 
 @dataclass
@@ -79,7 +79,7 @@ class SpeakerDetector:
         self.frame_duration = frame_duration
         self.use_vad = use_vad and VAD_AVAILABLE
         self.vad_aggressiveness = vad_aggressiveness
-        self.logger = logging.getLogger(__name__)
+        self.logger = loguru_logger.bind(name="PodcastClips.speaker_detector")
 
         if self.use_vad:
             self.vad = webrtcvad.Vad(vad_aggressiveness)

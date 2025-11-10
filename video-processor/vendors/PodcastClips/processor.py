@@ -12,7 +12,7 @@ Generates viral short-form videos from podcast content:
 import os
 import sys
 import json
-import logging
+from loguru import logger
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import tempfile
@@ -46,7 +46,8 @@ from .hook_optimizer import HookOptimizer
 from vendors.AIvideos.stable_ts_enhanced_subtitles import extract_word_timings_with_stable_ts
 from vendors.AIvideos.gpt import generate_structured_response, ViralMomentsResponse
 
-logger = logging.getLogger("video_generator.podcastclips.processor")
+# Logger is now imported from loguru
+logger = logger.bind(name="PodcastClips.processor")
 
 
 class PodcastClipsProcessor:
@@ -127,12 +128,12 @@ class PodcastClipsProcessor:
             min_duration = parameters.get('minDuration', 30)
             max_duration = parameters.get('maxDuration', 60)
             use_gpu = parameters.get('useGPU', True)
-            subtitle_font_size = parameters.get('subtitleFontSize', 40)
+            subtitle_font_size = parameters.get('subtitleFontSize', 70)
             subtitle_color = parameters.get('subtitleColor', '#FFFFFF')
             subtitle_stroke_color = parameters.get('subtitleStrokeColor', '#000000')
-            subtitle_stroke_width = parameters.get('subtitleStrokeWidth', 2)
-            subtitle_vertical_offset = parameters.get('subtitleVerticalOffset', 500)
-            subtitle_highlight_color = parameters.get('subtitleHighlightColor', '#6366f1')
+            subtitle_stroke_width = parameters.get('subtitleStrokeWidth', 3)
+            subtitle_vertical_offset = parameters.get('subtitleVerticalOffset', 300)
+            subtitle_highlight_color = parameters.get('subtitleHighlightColor', '#FFEB3B')
             subtitle_max_words_visible = parameters.get('subtitleMaxWordsVisible', 5)
             viral_keywords = parameters.get('viralFocusKeywords', [])
 
@@ -151,6 +152,11 @@ class PodcastClipsProcessor:
             enable_speaker_detection = parameters.get('enableSpeakerDetection', True)
             min_face_size_ratio = parameters.get('minFaceSizeRatio', 0.02)  # Filter out audience (2% of frame)
             max_tracked_faces = parameters.get('maxTrackedFaces', 4)  # Track up to 4 people
+
+            # Split-screen configuration
+            enable_split_screen = parameters.get('enableSplitScreen', True)  # Enable split-screen mode
+            separation_threshold = parameters.get('separationThreshold', 0.40)  # 40% of frame width
+            split_orientation = parameters.get('splitOrientation', 'vertical')  # 'vertical' or 'horizontal'
 
             # Step 1: Download video
             video_path = self._download_video(youtube_url)
@@ -647,7 +653,8 @@ class PodcastClipsProcessor:
                     face_return_threshold=face_return_threshold,
                     min_segment_duration=min_segment_duration,
                     use_ocr=use_ocr,
-                    ocr_height=ocr_height
+                    ocr_height=ocr_height,
+                    face_tracker=self.face_tracker
                 )
             else:
                 logger.info("Mixed-mode disabled, using traditional face-tracking only")

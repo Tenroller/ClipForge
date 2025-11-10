@@ -13,7 +13,6 @@ import os
 import random
 import tempfile
 import warnings
-import logging
 import soundfile as sf
 from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, afx
 from google import genai
@@ -24,6 +23,8 @@ import torch
 
 import uuid
 import sys
+from loguru import logger
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -32,7 +33,7 @@ except ImportError:
     pass
 
 # Initialize logger for this module
-logger = logging.getLogger("video_generator.compilation.tts")
+logger = logger.bind(name="Compilation.tts_generator")
 
 # Define placeholder logging functions that were imported but may not exist
 def log_generation_step(logger, *args, **kwargs):

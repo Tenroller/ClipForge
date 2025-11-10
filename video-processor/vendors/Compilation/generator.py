@@ -15,7 +15,6 @@ import argparse
 import shutil
 import gc
 import psutil
-import logging
 from pathlib import Path
 import multiprocessing
 from tqdm import tqdm
@@ -26,9 +25,10 @@ import concurrent.futures
 import hashlib
 import subprocess
 import signal
+from loguru import logger
 
 # Initialize logger for this module
-logger = logging.getLogger("video_generator.compilation")
+logger = logger.bind(name="Compilation.generator")
 
 # Define placeholder logging functions if they don't exist in logging_config
 def log_generation_step(logger, *args, **kwargs):

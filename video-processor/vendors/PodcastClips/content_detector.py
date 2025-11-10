@@ -10,24 +10,25 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
-import logging
+from loguru import logger as loguru_logger
 
 try:
     import pytesseract
     HAS_OCR = True
 except ImportError:
     HAS_OCR = False
-    logging.warning("pytesseract not available - OCR-based content detection disabled")
+    loguru_logger.warning("pytesseract not available - OCR-based content detection disabled")
 
 from .face_tracker import FaceBox
 
-logger = logging.getLogger(__name__)
+logger = loguru_logger.bind(name="PodcastClips.content_detector")
 
 
 class ContentMode(Enum):
     """Video content display mode."""
     FACE = "face"  # Face-tracked vertical crop
     HORIZONTAL = "horizontal"  # Full horizontal content display
+    SPLIT_SCREEN = "split_screen"  # Multi-person split-screen layout
 
 
 @dataclass
@@ -67,7 +68,8 @@ class ContentModeDetector:
         min_segment_duration: float = 0.5,
         text_density_threshold: float = 0.02,
         use_ocr: bool = True,
-        ocr_height: int = 720
+        ocr_height: int = 720,
+        face_tracker: Optional['FaceTracker'] = None
     ):
         """
         Initialize content mode detector.
@@ -79,6 +81,7 @@ class ContentModeDetector:
             text_density_threshold: Minimum text density to confirm content (0-1)
             use_ocr: Whether to use OCR for text detection (requires pytesseract)
             ocr_height: Target height for OCR processing (default 720p for 2x speedup)
+            face_tracker: Optional FaceTracker for split-screen detection
         """
         self.face_loss_threshold = face_loss_threshold
         self.face_return_threshold = face_return_threshold
@@ -86,6 +89,7 @@ class ContentModeDetector:
         self.text_density_threshold = text_density_threshold
         self.use_ocr = use_ocr and HAS_OCR
         self.ocr_height = ocr_height
+        self.face_tracker = face_tracker
 
         if use_ocr and not HAS_OCR:
             logger.warning("OCR requested but pytesseract not available")
@@ -285,7 +289,7 @@ class ContentModeDetector:
         # Thresholds for content detection
         HIGH_CONTENT_THRESHOLD = 0.6  # Strong content indicator
         LOW_CONTENT_THRESHOLD = 0.3   # Weak content indicator
-        SMALL_FACE_THRESHOLD = 0.20   # Face area ratio threshold
+        SMALL_FACE_THRESHOLD = 0.12   # Face area ratio threshold (reduced from 0.20 to only detect true PiP, not normal podcasts)
 
         for i, timestamp in enumerate(all_timestamps):
             # Get content score and face info for this timestamp
@@ -297,13 +301,35 @@ class ContentModeDetector:
             if face_box:
                 face_area_ratio = face_box.area / (video_width * video_height)
 
-            # Determine mode based on content-first logic
+            # Determine mode based on content-first logic, with split-screen detection
             should_be_horizontal = False
+            should_be_split_screen = False
 
-            if content_score > HIGH_CONTENT_THRESHOLD:
-                # Strong content signal → horizontal mode
+            # PRIORITY 0: Check for extreme content (overrides everything)
+            if content_score > 0.7:
+                # Extreme content signal → horizontal mode (definitely real content)
                 should_be_horizontal = True
-                logger.debug(f"[{timestamp:.1f}s] High content score: {content_score:.2f} → HORIZONTAL")
+                logger.debug(f"[{timestamp:.1f}s] Extreme content score: {content_score:.2f} → HORIZONTAL")
+
+            # PRIORITY 1: Large face presence override (prevents false positives from background text)
+            elif face_box and face_area_ratio > 0.15:
+                # Large face present → default to FACE mode (prevents podcast backgrounds from triggering horizontal)
+                should_be_horizontal = False
+                logger.debug(f"[{timestamp:.1f}s] Face override (size={face_area_ratio*100:.1f}%, score={content_score:.2f}) → FACE")
+
+            # PRIORITY 2: Check for split-screen scenario (2 separated people)
+            elif hasattr(self.face_tracker, 'detect_face_groups') and self.face_tracker:
+                face_group_info = self.face_tracker.detect_face_groups(timestamp)
+                if (face_group_info["mode"] == "separated" and
+                    len(face_group_info["faces"]) >= 2):
+                    should_be_split_screen = True
+                    logger.debug(
+                        f"[{timestamp:.1f}s] Separated faces detected "
+                        f"(separation={face_group_info['separation_score']:.2f}) → SPLIT_SCREEN"
+                    )
+                else:
+                    # Not split-screen, continue with content-based logic
+                    should_be_horizontal = False
 
             elif content_score < LOW_CONTENT_THRESHOLD:
                 # Weak content signal
@@ -334,7 +360,12 @@ class ContentModeDetector:
                     logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}), no face → HORIZONTAL")
 
             # Determine target mode
-            target_mode = ContentMode.HORIZONTAL if should_be_horizontal else ContentMode.FACE
+            if should_be_horizontal:
+                target_mode = ContentMode.HORIZONTAL
+            elif should_be_split_screen:
+                target_mode = ContentMode.SPLIT_SCREEN
+            else:
+                target_mode = ContentMode.FACE
 
             # Check if mode changed
             if target_mode != current_mode:
@@ -571,7 +602,7 @@ class ContentModeDetector:
         # 1. Text density via OCR
         if self.use_ocr:
             text_score = self._detect_text_density(frame)
-            scores.append(text_score * 2.0)  # Weight text heavily
+            scores.append(text_score * 1.5)  # Weight text moderately (reduced from 2.0 to prevent OCR false positives from dominating)
 
         # 2. Edge density (sharp edges indicate UI/text)
         edge_score = self._calculate_edge_density(frame)
@@ -622,19 +653,43 @@ class ContentModeDetector:
             # Get bounding boxes of detected text
             data = pytesseract.image_to_data(binary, output_type=pytesseract.Output.DICT)
 
-            # Calculate text coverage
+            # Calculate text coverage and collect region centers for clustering analysis
             text_area = 0
+            text_regions = []
+            frame_height, frame_width = frame.shape[0], frame.shape[1]
+
             for i, conf in enumerate(data['conf']):
-                if int(conf) > 30:  # Confidence threshold
+                if int(conf) > 65:  # Confidence threshold (increased to reduce false positives from background text)
                     w = data['width'][i]
                     h = data['height'][i]
-                    text_area += w * h
+                    x = data['left'][i]
+                    y = data['top'][i]
 
-            frame_area = frame.shape[0] * frame.shape[1]
+                    text_area += w * h
+                    # Store region center (normalized to 0-1 range)
+                    center_x = (x + w / 2) / frame_width
+                    center_y = (y + h / 2) / frame_height
+                    text_regions.append((center_x, center_y))
+
+            frame_area = frame_height * frame_width
             text_density = text_area / frame_area if frame_area > 0 else 0
 
-            # Normalize to 0-1 range (assume 10% coverage = maximum)
-            normalized = text_density / 0.1
+            # Apply spatial clustering penalty for scattered text (decorative vs content)
+            if len(text_regions) >= 3:
+                # Calculate spatial variance (std dev of region centers)
+                centers_array = np.array(text_regions)
+                spatial_variance = np.std(centers_array)
+
+                # High variance = scattered decorative text → reduce density score
+                # Low variance = clustered content text → keep full score
+                # Threshold: variance > 0.25 indicates scattered text
+                if spatial_variance > 0.25:
+                    scatter_penalty = 0.3  # Reduce to 30% of original score
+                    text_density *= scatter_penalty
+                    logger.debug(f"Spatial clustering: variance={spatial_variance:.2f} → scattered text penalty applied")
+
+            # Normalize to 0-1 range (assume 15% coverage = maximum, more realistic for actual content)
+            normalized = text_density / 0.15
             return min(1.0, normalized)
 
         except Exception as e:
@@ -822,11 +877,13 @@ class ContentModeDetector:
         """Log summary of detected segments."""
         face_duration = sum(s.duration() for s in segments if s.mode == ContentMode.FACE)
         horizontal_duration = sum(s.duration() for s in segments if s.mode == ContentMode.HORIZONTAL)
-        total_duration = face_duration + horizontal_duration
+        split_screen_duration = sum(s.duration() for s in segments if s.mode == ContentMode.SPLIT_SCREEN)
+        total_duration = face_duration + horizontal_duration + split_screen_duration
 
         logger.info(f"Segment summary:")
         logger.info(f"  Total duration: {total_duration:.1f}s")
         logger.info(f"  Face mode: {face_duration:.1f}s ({face_duration/total_duration*100:.1f}%)")
+        logger.info(f"  Split-screen mode: {split_screen_duration:.1f}s ({split_screen_duration/total_duration*100:.1f}%)")
         logger.info(f"  Horizontal mode: {horizontal_duration:.1f}s ({horizontal_duration/total_duration*100:.1f}%)")
         logger.info(f"  Segments: {len(segments)}")
 

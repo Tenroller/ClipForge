@@ -27,10 +27,10 @@ else:
 from ..models import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest, WorkflowType
 from ..core.config import ProcessorConfig
 
-import logging
+from loguru import logger
 
-# Use the proper logger from the logging configuration
-logger = logging.getLogger("video_generator")
+# Bind logger with context for this module
+logger = logger.bind(name="video_generator")
 
 
 class VideoProcessingService:
