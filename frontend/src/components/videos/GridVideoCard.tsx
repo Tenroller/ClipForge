@@ -4,8 +4,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FaDownload, FaPlay, FaFilm, FaBrain, FaVideo, FaCheck, FaClock } from 'react-icons/fa';
+import { Download, Play, Film, Brain, Video as VideoIcon, Check, Clock } from "lucide-react";
 import { useState } from 'react';
+import Image from 'next/image';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -62,13 +63,13 @@ export default function GridVideoCard({
   const getWorkflowIcon = () => {
     switch (video.workflow) {
       case 'moneyprinter':
-        return <FaFilm className="size-3" />;
+        return <Film className="size-3" />;
       case 'brainrot':
-        return <FaBrain className="size-3" />;
+        return <Brain className="size-3" />;
       case 'podcastclips':
-        return <FaVideo className="size-3" />;
+        return <VideoIcon className="size-3" />;
       default:
-        return <FaVideo className="size-3" />;
+        return <VideoIcon className="size-3" />;
     }
   };
 
@@ -106,13 +107,15 @@ export default function GridVideoCard({
             <>
               {!imageLoaded && (
                 <div className="absolute inset-0 flex items-center justify-center bg-muted animate-pulse">
-                  <FaVideo className="size-12 text-muted-foreground" />
+                  <VideoIcon className="size-12 text-muted-foreground" />
                 </div>
               )}
-              <img
+              <Image
                 src={`${API_BASE}${video.thumbnail_url}`}
                 alt={video.filename}
-                className={`w-full h-full object-cover transition-all duration-300 group-hover:scale-105 ${
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                className={`object-cover transition-all duration-300 group-hover:scale-105 ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 }`}
                 onLoad={() => setImageLoaded(true)}
@@ -120,7 +123,7 @@ export default function GridVideoCard({
             </>
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <FaVideo className="size-12 text-muted-foreground" />
+              <VideoIcon className="size-12 text-muted-foreground" />
             </div>
           )}
 
@@ -131,7 +134,7 @@ export default function GridVideoCard({
               onClick={() => onPlay(video)}
             >
               <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center transform transition-transform group-hover:scale-110">
-                <FaPlay className="size-6 text-gray-900 ml-1" />
+                <Play className="size-6 text-gray-900 ml-1" />
               </div>
             </div>
           )}
@@ -147,7 +150,7 @@ export default function GridVideoCard({
           {video.posted && (
             <div className="absolute top-2 right-2">
               <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700">
-                <FaCheck className="size-3 mr-1" />
+                <Check className="size-3 mr-1" />
                 Posted
               </Badge>
             </div>
@@ -174,7 +177,7 @@ export default function GridVideoCard({
           {/* Metadata */}
           <div className="space-y-1 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
-              <FaClock className="size-3 shrink-0" />
+              <Clock className="size-3 shrink-0" />
               <span>{formatDate(video.created_at)}</span>
             </div>
             <div className="flex items-center justify-between">
@@ -190,7 +193,7 @@ export default function GridVideoCard({
               onClick={() => onDownload(video)}
               className="flex-1 h-8 text-xs"
             >
-              <FaDownload className="size-3 mr-1" />
+              <Download className="size-3 mr-1" />
               Download
             </Button>
             {onMarkPosted && !video.posted && (
@@ -201,7 +204,7 @@ export default function GridVideoCard({
                 className="h-8 text-xs"
                 title="Mark as Posted"
               >
-                <FaCheck className="size-3" />
+                <Check className="size-3" />
               </Button>
             )}
           </div>

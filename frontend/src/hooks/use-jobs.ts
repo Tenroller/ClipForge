@@ -23,7 +23,7 @@ export function useJobs(options?: {
   limit?: number;
   refetchInterval?: number | false;
 }) {
-  return useQuery({
+  return useQuery<JobRecord[]>({
     queryKey: ['jobs', options?.limit],
     queryFn: () => listJobs(options?.limit),
     refetchInterval: options?.refetchInterval,
@@ -36,7 +36,7 @@ export function useJobs(options?: {
 export function useJob(jobId: string | undefined | null, options?: {
   refetchInterval?: number | false;
 }) {
-  return useQuery({
+  return useQuery<JobRecord | null>({
     queryKey: ['job', jobId],
     queryFn: () => (jobId ? getJob(jobId) : null),
     enabled: !!jobId,

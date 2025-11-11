@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { FaDownload, FaCheck, FaTimes, FaTrash } from 'react-icons/fa';
+import { Download, Check, X, Trash2 } from "lucide-react";
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -46,7 +46,7 @@ export default function BulkActionsBar({
               onClick={onDownloadAll}
               className="h-9"
             >
-              <FaDownload className="size-4 mr-2" />
+              <Download className="size-4 mr-2" />
               Download All
             </Button>
 
@@ -57,7 +57,7 @@ export default function BulkActionsBar({
                 onClick={onMarkAllPosted}
                 className="h-9"
               >
-                <FaCheck className="size-4 mr-2" />
+                <Check className="size-4 mr-2" />
                 Mark {totalUnposted} as Posted
               </Button>
             )}
@@ -68,7 +68,7 @@ export default function BulkActionsBar({
               onClick={onClearSelection}
               className="h-9"
             >
-              <FaTimes className="size-4 mr-2" />
+              <X className="size-4 mr-2" />
               Clear
             </Button>
           </div>

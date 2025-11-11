@@ -7,16 +7,17 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import {
-  FaSitemap,
-  FaSpinner,
-  FaRedo,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaPause,
-  FaClock,
-  FaChevronRight,
-  FaCopy,
-} from 'react-icons/fa';
+  Network,
+  Loader2,
+  RotateCw,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Pause,
+  Clock,
+  ChevronRight,
+  Copy,
+} from "lucide-react";
 import { useJobLineage } from '@/hooks/use-jobs';
 import type { LineageRecord } from '@/lib/api';
 
@@ -42,32 +43,32 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
       case 'completed':
         return (
           <Badge variant="secondary" className="gap-1">
-            <FaCheckCircle className="size-3" /> done
+            <CheckCircle className="size-3" /> done
           </Badge>
         );
       case 'error':
         return (
           <Badge variant="destructive" className="gap-1">
-            <FaTimesCircle className="size-3" /> error
+            <XCircle className="size-3" /> error
           </Badge>
         );
       case 'cancelled':
         return (
           <Badge variant="outline" className="gap-1">
-            <FaPause className="size-3" /> cancelled
+            <Pause className="size-3" /> cancelled
           </Badge>
         );
       case 'running':
       case 'processing':
         return (
           <Badge variant="default" className="gap-1">
-            <FaSpinner className="size-3 animate-spin" /> running
+            <Loader2 className="size-3 animate-spin" /> running
           </Badge>
         );
       case 'queued':
         return (
           <Badge variant="outline" className="gap-1">
-            <FaClock className="size-3" /> queued
+            <Clock className="size-3" /> queued
           </Badge>
         );
       default:
@@ -102,7 +103,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
           <CardTitle className="flex items-center gap-2">
-            <FaSitemap className="size-5" />
+            <Network className="size-5" />
             Lineage
           </CardTitle>
           <CardDescription>Ancestry & resume attempts for this job</CardDescription>
@@ -114,7 +115,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
             </span>
           )}
           <Button size="sm" variant="outline" onClick={handleRefresh} disabled={isLoading}>
-            <FaRedo className={`size-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`size-3 mr-1 ${isLoading ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
         </div>
@@ -133,7 +134,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
           </div>
           {isLoading && chain.length === 1 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <FaSpinner className="size-4 animate-spin" /> Loading lineage...
+              <Loader2 className="size-4 animate-spin" /> Loading lineage...
             </div>
           ) : chain.length === 1 && ancestors.length === 0 ? (
             <div className="text-sm text-muted-foreground">This job has no ancestors (root of its chain).</div>
@@ -174,10 +175,10 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
                         className="opacity-40 group-hover:opacity-100 transition"
                         title="Copy job ID"
                       >
-                        <FaCopy className="size-3" />
+                        <Copy className="size-3" />
                       </button>
                     </div>
-                    {idx < chain.length - 1 && <FaChevronRight className="size-3 text-muted-foreground" />}
+                    {idx < chain.length - 1 && <ChevronRight className="size-3 text-muted-foreground" />}
                   </div>
                 );
               })}
@@ -197,7 +198,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
           </div>
           {isLoading && descendants.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <FaSpinner className="size-4 animate-spin" /> Loading descendants...
+              <Loader2 className="size-4 animate-spin" /> Loading descendants...
             </div>
           ) : descendants.length === 0 ? (
             <div className="text-sm text-muted-foreground">No descendant (resumed) jobs yet.</div>
@@ -231,7 +232,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
                       className="opacity-40 hover:opacity-100 transition"
                       title="Copy job ID"
                     >
-                      <FaCopy className="size-3" />
+                      <Copy className="size-3" />
                     </button>
                   </div>
                 </div>

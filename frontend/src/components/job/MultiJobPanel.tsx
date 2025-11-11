@@ -6,18 +6,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import {
-  FaSpinner,
-  FaChevronDown,
-  FaChevronUp,
-  FaEye,
-  FaTimes,
-  FaTrash,
-  FaPlay,
-  FaClock,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaPause,
-} from 'react-icons/fa';
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  X,
+  Trash2,
+  Play,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Pause,
+} from "lucide-react";
 import type { JobRecord } from '@/lib/api';
 import { formatDuration } from '@/lib/formatDuration';
 
@@ -31,19 +31,19 @@ interface MultiJobPanelProps {
 function getStatusIcon(status: string) {
   switch (status) {
     case 'queued':
-      return <FaClock className="size-3" />;
+      return <Clock className="size-3" />;
     case 'running':
     case 'processing':
-      return <FaSpinner className="size-3 animate-spin" />;
+      return <Loader2 className="size-3 animate-spin" />;
     case 'done':
     case 'completed':
-      return <FaCheckCircle className="size-3" />;
+      return <CheckCircle className="size-3" />;
     case 'error':
-      return <FaTimesCircle className="size-3" />;
+      return <XCircle className="size-3" />;
     case 'cancelled':
-      return <FaPause className="size-3" />;
+      return <Pause className="size-3" />;
     default:
-      return <FaPlay className="size-3" />;
+      return <Play className="size-3" />;
   }
 }
 
@@ -95,7 +95,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-3">
             <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-              <FaSpinner className={`size-4 text-white ${activeJobs.length > 0 ? 'animate-spin' : ''}`} />
+              <Loader2 className={`size-4 text-white ${activeJobs.length > 0 ? 'animate-spin' : ''}`} />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -129,7 +129,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                   onClick={onClearCompleted}
                   className="text-xs h-7 text-muted-foreground hover:text-destructive"
                 >
-                  <FaTrash className="size-3 mr-1" />
+                  <Trash2 className="size-3 mr-1" />
                   Clear
                 </Button>
               </>
@@ -140,7 +140,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
               onClick={() => setIsExpanded(!isExpanded)}
               className="p-1 h-7 w-7"
             >
-              {isExpanded ? <FaChevronUp className="size-4" /> : <FaChevronDown className="size-4" />}
+              {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
             </Button>
           </div>
         </div>
@@ -174,7 +174,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                     onClick={() => onRemoveJob(job.id)}
                     className="absolute top-2 right-2 p-1 h-6 w-6 opacity-60 hover:opacity-100 text-muted-foreground hover:text-destructive"
                   >
-                    <FaTimes className="size-3" />
+                    <X className="size-3" />
                   </Button>
 
                   <div className="space-y-3 pr-8">
@@ -224,7 +224,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                             onClick={() => onViewResult(job)}
                             className="h-8 px-3 text-xs"
                           >
-                            <FaEye className="size-3 mr-1" />
+                            <Eye className="size-3 mr-1" />
                             See Result
                           </Button>
                         )}

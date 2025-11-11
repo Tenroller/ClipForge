@@ -11,16 +11,16 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { formatDuration } from '@/lib/formatDuration';
 import {
-  FaArrowLeft,
-  FaSpinner,
-  FaCheckCircle,
-  FaTimesCircle,
-  FaPause,
-  FaClock,
-  FaPlay,
-  FaEye,
-  FaDownload,
-} from 'react-icons/fa';
+  ArrowLeft,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Pause,
+  Clock,
+  Play,
+  Eye,
+  Download,
+} from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -40,19 +40,19 @@ type JobLogs = {
 function getStatusIcon(status: string) {
   switch (status) {
     case 'queued':
-      return <FaClock className="size-4" />;
+      return <Clock className="size-4" />;
     case 'running':
     case 'processing':
-      return <FaSpinner className="size-4 animate-spin" />;
+      return <Loader2 className="size-4 animate-spin" />;
     case 'done':
     case 'completed':
-      return <FaCheckCircle className="size-4 text-green-600" />;
+      return <CheckCircle className="size-4 text-green-600" />;
     case 'error':
-      return <FaTimesCircle className="size-4 text-red-600" />;
+      return <XCircle className="size-4 text-red-600" />;
     case 'cancelled':
-      return <FaPause className="size-4 text-gray-600" />;
+      return <Pause className="size-4 text-gray-600" />;
     default:
-      return <FaPlay className="size-4" />;
+      return <Play className="size-4" />;
   }
 }
 
@@ -186,7 +186,7 @@ export default function JobMonitoringPage() {
       <div className="container-page fade-in">
         <div className="flex items-center justify-center min-h-[50vh]">
           <div className="text-center">
-            <FaSpinner className="size-8 animate-spin text-primary mx-auto mb-4" />
+            <Loader2 className="size-8 animate-spin text-primary mx-auto mb-4" />
             <p className="text-muted-foreground">Loading job details...</p>
           </div>
         </div>
@@ -198,13 +198,13 @@ export default function JobMonitoringPage() {
     return (
       <div className="container-page fade-in">
         <div className="text-center py-12">
-          <FaTimesCircle className="size-12 text-red-500 mx-auto mb-4" />
+          <XCircle className="size-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Job Not Found</h2>
           <p className="text-muted-foreground mb-6">
             The job you're looking for doesn't exist or has been removed.
           </p>
           <Button onClick={() => router.push('/activity')}>
-            <FaArrowLeft className="size-4 mr-2" />
+            <ArrowLeft className="size-4 mr-2" />
             Back to Activity
           </Button>
         </div>
@@ -226,7 +226,7 @@ export default function JobMonitoringPage() {
             onClick={() => router.push('/activity')}
             className="flex items-center gap-2"
           >
-            <FaArrowLeft className="size-4" />
+            <ArrowLeft className="size-4" />
             Back to Activity
           </Button>
           <div>
@@ -252,12 +252,12 @@ export default function JobMonitoringPage() {
           {(job.status === 'done' || job.status === 'completed') && job.output_url && (
             <>
               <Button onClick={handleViewResult} className="flex items-center gap-2">
-                <FaEye className="size-4" />
+                <Eye className="size-4" />
                 View Result
               </Button>
               <Button asChild variant="outline">
                 <a href={job.output_url} download target="_blank" rel="noreferrer">
-                  <FaDownload className="size-4 mr-2" />
+                  <Download className="size-4 mr-2" />
                   Download
                 </a>
               </Button>
@@ -365,9 +365,9 @@ export default function JobMonitoringPage() {
                       }`}
                     >
                       {isDone ? (
-                        <FaCheckCircle className="size-3" />
+                        <CheckCircle className="size-3" />
                       ) : isActive ? (
-                        <FaSpinner className="size-3 animate-spin" />
+                        <Loader2 className="size-3 animate-spin" />
                       ) : (
                         <span className="text-xs font-medium">{index + 1}</span>
                       )}
@@ -392,7 +392,7 @@ export default function JobMonitoringPage() {
           <CardTitle className="flex items-center justify-between">
             <span>Job Logs</span>
             <div className="flex items-center gap-2">
-              {isLoading && <FaSpinner className="size-4 animate-spin" />}
+              {isLoading && <Loader2 className="size-4 animate-spin" />}
               <Badge variant="secondary">{logs?.total_logs || logs?.logs?.length || 0} entries</Badge>
             </div>
           </CardTitle>
@@ -423,7 +423,7 @@ export default function JobMonitoringPage() {
               <div className="text-center py-8 text-muted-foreground">
                 {isLoading ? (
                   <div className="flex items-center justify-center gap-2">
-                    <FaSpinner className="size-4 animate-spin" />
+                    <Loader2 className="size-4 animate-spin" />
                     <span>Loading logs...</span>
                   </div>
                 ) : (

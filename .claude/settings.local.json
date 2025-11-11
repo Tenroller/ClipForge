@@ -25,13 +25,14 @@
       "WebSearch",
       "Bash(curl:*)",
       "Bash(PGPASSWORD=\"senhalegal\" psql:*)",
-      "WebFetch(domain:fonts.gstatic.com)"
+      "WebFetch(domain:fonts.gstatic.com)",
+      "WebFetch(domain:fonts.googleapis.com)"
     ],
     "deny": [],
     "ask": []
   },
   "sandbox": {
-    "autoAllowBashIfSandboxed": true,
-    "enabled": true
+    "autoAllowBashIfSandboxed": false,
+    "enabled": false
   }
 }

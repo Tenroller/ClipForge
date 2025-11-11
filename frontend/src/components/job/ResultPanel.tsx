@@ -3,15 +3,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
-  FaTimes,
-  FaDownload,
-  FaCheckCircle,
-  FaClock,
-  FaExternalLinkAlt,
-  FaCopy,
-  FaCheck,
-  FaVideo
-} from "react-icons/fa"
+  X,
+  Download,
+  CheckCircle,
+  Clock,
+  ExternalLink,
+  Copy,
+  Check,
+  Video
+} from "lucide-react"
 import type { JobRecord } from "@/lib/api"
 import { formatDuration as formatDurationLib } from "@/lib/formatDuration"
 import { downloadUrl } from "@/lib/api"
@@ -52,6 +52,20 @@ function getWorkflowLabel(workflow: string): string {
 export default function ResultPanel({ job, onClose }: ResultPanelProps) {
   const [copied, setCopied] = useState(false)
 
+  // Helper to safely extract clips data from job result
+  const getClipsData = () => {
+    if (job.result && typeof job.result === 'object' && 'clips_count' in job.result) {
+      const result = job.result as { clips_count?: unknown; output_files?: unknown };
+      return {
+        clips_count: typeof result.clips_count === 'number' ? result.clips_count : 0,
+        output_files: Array.isArray(result.output_files) ? result.output_files : []
+      };
+    }
+    return { clips_count: 0, output_files: [] };
+  };
+
+  const clipsData = getClipsData();
+
   const copyJobId = async () => {
     try {
       await navigator.clipboard.writeText(job.id)
@@ -66,18 +80,18 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
   const totalSteps = 0 // job.steps?.length ?? 0
 
   return (
-    <div className="result-panel-enter">
-      <Card className="enhanced-card result-success border-l-4 border-l-green-500">
+    <div>
+      <Card className="border-l-4 border-l-green-500">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-3">
               <div className="size-8 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 flex items-center justify-center">
-                <FaCheckCircle className="size-4 text-white" />
+                <CheckCircle className="size-4 text-white" />
               </div>
               <div>
                 <div>
-                  {job.workflow === 'podcastclips' && job.result?.clips_count
-                    ? `${job.result.clips_count} Clips Generated Successfully`
+                  {job.workflow === 'podcastclips' && clipsData.clips_count > 0
+                    ? `${clipsData.clips_count} Clips Generated Successfully`
                     : 'Video Generated Successfully'}
                 </div>
                 <p className="text-sm font-normal text-muted-foreground">
@@ -91,7 +105,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               onClick={onClose}
               className="p-1 h-8 w-8"
             >
-              <FaTimes className="size-4" />
+              <X className="size-4" />
             </Button>
           </div>
         </CardHeader>
@@ -103,7 +117,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               <video
                 src={job.output_url}
                 controls
-                className="video-frame w-full max-h-[400px] rounded-lg shadow-lg"
+                className="w-full max-h-[400px] rounded-lg shadow-lg border bg-black"
                 poster="/api/placeholder/640/360"
                 preload="metadata"
               />
@@ -111,17 +125,18 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
           )}
 
           {/* Podcast Clips - Multiple Videos */}
-          {job.workflow === 'podcastclips' && job.result?.clips_count > 0 && (
-            <div className="space-y-4">
+          {job.workflow === 'podcastclips' && clipsData.clips_count > 0 && (
+            <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <FaVideo className="size-5 text-purple-500" />
+                <Video className="size-5 text-purple-500" />
                 <h3 className="text-lg font-semibold">
-                  Generated {job.result.clips_count} Viral Clips
+                  Generated {clipsData.clips_count} Viral Clips
                 </h3>
               </div>
-
-              <div className="grid grid-cols-1 gap-3 max-h-[500px] overflow-y-auto pr-2">
-                {job.result.output_files?.map((filePath: string, index: number) => {
+              
+              {/* Grid of clips */}
+              <div className="space-y-2">
+                {clipsData.output_files.map((filePath: string, index: number) => {
                   const fileName = filePath.split('/').pop() || `Clip ${index + 1}`;
                   const downloadLink = downloadUrl(filePath);
 
@@ -131,7 +146,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div className="size-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
-                              <FaVideo className="size-4 text-white" />
+                              <Video className="size-4 text-white" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <p className="text-sm font-medium truncate">{fileName}</p>
@@ -149,7 +164,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                                 download
                                 className="flex items-center gap-2"
                               >
-                                <FaDownload className="size-3" />
+                                <Download className="size-3" />
                                 Download
                               </a>
                             </Button>
@@ -176,7 +191,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                     onClick={copyJobId}
                     className="p-1 h-6 w-6"
                   >
-                    {copied ? <FaCheck className="size-3 text-green-600" /> : <FaCopy className="size-3" />}
+                    {copied ? <Check className="size-3 text-green-600" /> : <Copy className="size-3" />}
                   </Button>
                 </div>
               </div>
@@ -193,8 +208,8 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               <div className="p-3 rounded-lg bg-muted/30 border">
                 <div className="text-xs text-muted-foreground mb-1">Processing Time</div>
                 <div className="flex items-center gap-2 text-sm">
-                  <FaClock className="size-3" />
-                  {job.duration_seconds ? formatDurationLib(job.duration_seconds) : formatDuration(job.createdAt ?? Date.now())}
+                  <Clock className="size-3" />
+                  {job.duration_seconds ? formatDurationLib(job.duration_seconds) : formatDuration(job.createdAt ?? 0)}
                 </div>
               </div>
               
@@ -230,15 +245,15 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
           <div className="p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border border-green-200 dark:border-green-800">
             <div className="flex items-center gap-3 mb-3">
               <div className="size-6 rounded-full bg-green-500 flex items-center justify-center">
-                <FaCheckCircle className="size-3 text-white" />
+                <CheckCircle className="size-3 text-white" />
               </div>
               <div>
                 <div className="font-medium text-green-800 dark:text-green-200 text-sm">
                   All steps completed successfully
                 </div>
                 <div className="text-xs text-green-600 dark:text-green-400">
-                  {job.workflow === 'podcastclips' && job.result?.clips_count
-                    ? `Your ${job.result.clips_count} clips are ready for download`
+                  {job.workflow === 'podcastclips' && clipsData.clips_count > 0
+                    ? `Your ${clipsData.clips_count} clips are ready for download`
                     : 'Your video is ready for download'}
                 </div>
               </div>
@@ -270,7 +285,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                     rel="noreferrer"
                     className="flex items-center gap-2"
                   >
-                    <FaDownload className="size-4" />
+                    <Download className="size-4" />
                     Download Video
                   </a>
                 </Button>
@@ -286,7 +301,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                     target="_blank"
                     rel="noreferrer"
                   >
-                    <FaExternalLinkAlt className="size-4" />
+                    <ExternalLink className="size-4" />
                   </a>
                 </Button>
               </div>

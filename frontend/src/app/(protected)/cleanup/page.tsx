@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { FaTrash, FaSpinner, FaCheck, FaExclamationTriangle, FaFile, FaFolder, FaRedo } from 'react-icons/fa';
+import { Trash2, Loader2, Check, AlertTriangle, File, Folder, RefreshCw } from "lucide-react";
 import { getTempFilesStats, cleanupTempFiles, type TempFileStats, type CleanupResult } from '@/lib/api';
 
 export default function CleanupPage() {
@@ -104,7 +104,7 @@ export default function CleanupPage() {
             variant="outline"
             className="flex items-center gap-2"
           >
-            {loading ? <FaSpinner className="size-4 animate-spin" /> : <FaRedo className="size-4" />}
+            {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
             Refresh Stats
           </Button>
         </div>
@@ -115,7 +115,7 @@ export default function CleanupPage() {
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="flex-shrink-0">
-                  <FaCheck className="size-5 text-green-600" />
+                  <Check className="size-5 text-green-600" />
                 </div>
                 <div>
                   <div className="font-semibold text-green-800 dark:text-green-200">Cleanup completed successfully!</div>
@@ -137,14 +137,14 @@ export default function CleanupPage() {
         <Card className="enhanced-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <FaFolder className="size-5" />
+              <Folder className="size-5" />
               Temporary Files Overview
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <FaSpinner className="size-6 animate-spin text-muted-foreground" />
+                <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 <span className="ml-2 text-muted-foreground">Loading statistics...</span>
               </div>
             ) : stats ? (
@@ -176,12 +176,12 @@ export default function CleanupPage() {
                   >
                     {cleaning ? (
                       <>
-                        <FaSpinner className="size-5 animate-spin" />
+                        <Loader2 className="size-5 animate-spin" />
                         Cleaning up files...
                       </>
                     ) : (
                       <>
-                        <FaTrash className="size-5" />
+                        <Trash2 className="size-5" />
                         Clean Up All Temp Files
                       </>
                     )}
@@ -190,7 +190,7 @@ export default function CleanupPage() {
 
                 {stats.total_files === 0 && (
                   <div className="text-center py-4 text-muted-foreground">
-                    <FaCheck className="size-8 mx-auto mb-2 text-green-500" />
+                    <Check className="size-8 mx-auto mb-2 text-green-500" />
                     No temporary files found. Your system is clean!
                   </div>
                 )}
@@ -211,7 +211,7 @@ export default function CleanupPage() {
               <Card key={dir.path} className="enhanced-card">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2 text-base">
-                    <FaFolder className="size-4" />
+                    <Folder className="size-4" />
                     {dir.path.split(/[/\\]/).pop() || dir.path}
                   </CardTitle>
                 </CardHeader>
@@ -244,7 +244,7 @@ export default function CleanupPage() {
                           {dir.files.map((file) => (
                             <div key={file.name} className="flex items-center justify-between py-1 px-2 rounded bg-muted/20">
                               <div className="flex items-center gap-2 flex-1 min-w-0">
-                                <FaFile className="size-3 text-muted-foreground shrink-0" />
+                                <File className="size-3 text-muted-foreground shrink-0" />
                                 <span className="text-sm font-mono truncate">{file.name}</span>
                               </div>
                               <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0 ml-2">
@@ -256,7 +256,7 @@ export default function CleanupPage() {
                         </div>
                       ) : (
                         <div className="text-sm text-muted-foreground py-2">
-                          <FaFolder className="inline size-3 mr-2" />
+                          <Folder className="inline size-3 mr-2" />
                           Directory details not available
                         </div>
                       )}
@@ -273,7 +273,7 @@ export default function CleanupPage() {
           <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 dark:border-yellow-800/30">
             <CardHeader>
               <CardTitle className="text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
-                <FaExclamationTriangle className="size-4" />
+                <AlertTriangle className="size-4" />
                 Cleanup Warnings
               </CardTitle>
             </CardHeader>

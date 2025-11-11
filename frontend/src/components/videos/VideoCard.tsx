@@ -4,7 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FaDownload, FaPlay, FaFilm, FaBrain, FaVideo, FaCheck, FaClock } from 'react-icons/fa';
+import { Download, Play, Film, Brain, Video, Check, Clock } from "lucide-react";
+import Image from 'next/image';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -54,13 +55,13 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
   const getWorkflowIcon = () => {
     switch (video.workflow) {
       case 'moneyprinter':
-        return <FaFilm className="size-4" />;
+        return <Film className="size-4" />;
       case 'brainrot':
-        return <FaBrain className="size-4" />;
+        return <Brain className="size-4" />;
       case 'podcastclips':
-        return <FaVideo className="size-4" />;
+        return <Video className="size-4" />;
       default:
-        return <FaVideo className="size-4" />;
+        return <Video className="size-4" />;
     }
   };
 
@@ -81,14 +82,16 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
               </div>
             )}
             {video.thumbnail_url ? (
-              <img
+              <Image
                 src={`${API_BASE}${video.thumbnail_url}`}
                 alt={video.filename}
-                className="w-full h-full object-cover"
+                fill
+                sizes="128px"
+                className="object-cover"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
-                <FaVideo className="size-8 text-muted-foreground" />
+                <Video className="size-8 text-muted-foreground" />
               </div>
             )}
             {video.duration_seconds && (
@@ -112,7 +115,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
                   </Badge>
                   {video.posted && (
                     <Badge variant="default" className="text-xs">
-                      <FaCheck className="size-3 mr-1" />
+                      <Check className="size-3 mr-1" />
                       Posted
                     </Badge>
                   )}
@@ -122,7 +125,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
 
             <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground mb-3">
               <div className="flex items-center gap-1">
-                <FaClock className="size-3" />
+                <Clock className="size-3" />
                 {formatDate(video.created_at)}
               </div>
               <div>
@@ -137,17 +140,17 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
             <div className="flex gap-2">
               {onPlay && (
                 <Button variant="outline" size="sm" onClick={() => onPlay(video)}>
-                  <FaPlay className="size-3 mr-1" />
+                  <Play className="size-3 mr-1" />
                   Play
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => onDownload(video)}>
-                <FaDownload className="size-3 mr-1" />
+                <Download className="size-3 mr-1" />
                 Download
               </Button>
               {onMarkPosted && !video.posted && (
                 <Button variant="outline" size="sm" onClick={() => onMarkPosted(video)}>
-                  <FaCheck className="size-3 mr-1" />
+                  <Check className="size-3 mr-1" />
                   Mark Posted
                 </Button>
               )}

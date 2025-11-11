@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
-import { FaSpinner, FaBrain, FaQuestionCircle, FaMicrochip, FaVideo } from 'react-icons/fa';
+import { Brain, Cpu, File, HelpCircle, Loader2, Video as VideoIcon } from "lucide-react";
 import type { JobRecord } from '@/lib/api';
 
 const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
@@ -195,7 +195,7 @@ export default function CompilationsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
                   <div className="size-8 rounded-lg bg-gradient-to-r from-green-500 to-blue-600 flex items-center justify-center">
-                    <FaBrain className="size-4 text-white" />
+                    <Brain className="size-4 text-white" />
                   </div>
                   Brainrot Generator
                 </CardTitle>
@@ -290,7 +290,7 @@ export default function CompilationsPage() {
                     <div className="space-y-2">
                       <Label htmlFor="numCompilations">
                         Compilations
-                        <FaQuestionCircle className="inline size-3 ml-1 opacity-60" />
+                        <HelpCircle className="inline size-3 ml-1 opacity-60" />
                       </Label>
                       <Input
                         id="numCompilations"
@@ -307,7 +307,7 @@ export default function CompilationsPage() {
                     <div className="space-y-2">
                       <Label htmlFor="maxReuse">
                         Max Reuse
-                        <FaQuestionCircle className="inline size-3 ml-1 opacity-60" />
+                        <HelpCircle className="inline size-3 ml-1 opacity-60" />
                       </Label>
                       <Input
                         id="maxReuse"
@@ -325,7 +325,7 @@ export default function CompilationsPage() {
                   <div className="space-y-2">
                     <Label htmlFor="unlimited">
                       Unlimited Generation
-                      <FaQuestionCircle className="inline size-3 ml-1 opacity-60" />
+                      <HelpCircle className="inline size-3 ml-1 opacity-60" />
                     </Label>
                     <div className="flex items-center space-x-2">
                       <input
@@ -373,7 +373,7 @@ export default function CompilationsPage() {
                   {/* No-Background Variation Controls */}
                   <div className="space-y-4 p-4 rounded-lg border bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
-                      <FaVideo className="size-4 text-purple-600" />
+                      <VideoIcon className="size-4 text-purple-600" />
                       No-Background Variation Settings
                     </h3>
 
@@ -429,9 +429,9 @@ export default function CompilationsPage() {
                   <div className="flex items-center justify-between p-4 rounded-lg border bg-muted/30">
                     <div className="flex items-center gap-3">
                       {useGpu ? (
-                        <FaMicrochip className="size-5 text-green-500" />
+                        <Cpu className="size-5 text-green-500" />
                       ) : (
-                        <FaMicrochip className="size-5 text-gray-500" />
+                        <Cpu className="size-5 text-gray-500" />
                       )}
                       <div>
                         <Label htmlFor="use-gpu-brainrot" className="font-medium">
@@ -459,12 +459,12 @@ export default function CompilationsPage() {
                   >
                     {busy ? (
                       <>
-                        <FaSpinner className="size-4 mr-2 animate-spin" />
+                        <Loader2 className="size-4 mr-2 animate-spin" />
                         Starting Compilation...
                       </>
                     ) : (
                       <>
-                        <FaBrain className="size-4 mr-2" />
+                        <Brain className="size-4 mr-2" />
                         Generate Compilation
                       </>
                     )}
@@ -478,7 +478,7 @@ export default function CompilationsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-3">
                   <div className="size-8 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center">
-                    <FaQuestionCircle className="size-4 text-white" />
+                    <HelpCircle className="size-4 text-white" />
                   </div>
                   How It Works
                 </CardTitle>

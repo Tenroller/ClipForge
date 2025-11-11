@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { FaSync, FaDatabase, FaSpinner } from 'react-icons/fa';
+import { RefreshCw, Database, Loader2 } from "lucide-react";
 
 interface SyncPanelProps {
   onSyncFromJobs: () => void;
@@ -15,7 +15,7 @@ export default function SyncPanel({ onSyncFromJobs, onSyncOrphaned, syncing }: S
     <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/30">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <FaSync className="size-4" />
+          <RefreshCw className="size-4" />
           Sync Videos
         </CardTitle>
         <CardDescription>
@@ -32,12 +32,12 @@ export default function SyncPanel({ onSyncFromJobs, onSyncOrphaned, syncing }: S
           >
             {syncing ? (
               <>
-                <FaSpinner className="size-4 mr-2 animate-spin" />
+                <Loader2 className="size-4 mr-2 animate-spin" />
                 Syncing...
               </>
             ) : (
               <>
-                <FaDatabase className="size-4 mr-2" />
+                <Database className="size-4 mr-2" />
                 Sync from Jobs
               </>
             )}
@@ -50,12 +50,12 @@ export default function SyncPanel({ onSyncFromJobs, onSyncOrphaned, syncing }: S
           >
             {syncing ? (
               <>
-                <FaSpinner className="size-4 mr-2 animate-spin" />
+                <Loader2 className="size-4 mr-2 animate-spin" />
                 Syncing...
               </>
             ) : (
               <>
-                <FaSync className="size-4 mr-2" />
+                <RefreshCw className="size-4 mr-2" />
                 Sync Orphaned
               </>
             )}

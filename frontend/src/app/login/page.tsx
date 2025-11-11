@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { FaFilm, FaLock, FaUser } from 'react-icons/fa';
+import { Film, Lock, User } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { loginAction } from './actions';
 
@@ -74,7 +74,7 @@ export default function LoginPage() {
           {/* Logo and Title */}
           <div className="flex flex-col items-center mb-8">
             <div className="size-20 rounded-3xl bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center shadow-2xl mb-4 hover:scale-110 transition-transform">
-              <FaFilm className="size-10 text-white" />
+              <Film className="size-10 text-white" />
             </div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent">
               VideoHelper
@@ -92,7 +92,7 @@ export default function LoginPage() {
               </Label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-primary transition-colors">
-                  <FaUser className="h-5 w-5 text-muted-foreground" />
+                  <User className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <Input
                   id="username"
@@ -113,7 +113,7 @@ export default function LoginPage() {
               </Label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-primary transition-colors">
-                  <FaLock className="h-5 w-5 text-muted-foreground" />
+                  <Lock className="h-5 w-5 text-muted-foreground" />
                 </div>
                 <Input
                   id="password"

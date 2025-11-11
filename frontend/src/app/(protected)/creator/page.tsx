@@ -174,11 +174,11 @@ export default function CreatorPage() {
   };
 
   return (
-    <div className="container-page">
-      <div className="glass-header">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="mb-6">
         <div>
-          <h1 className="section-title">AI Video Creator</h1>
-          <p className="section-subtitle">
+          <h1 className="text-3xl font-bold tracking-tight">AI Video Creator</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Generate videos with AI-powered scripts and stock footage
           </p>
         </div>
@@ -254,7 +254,7 @@ export default function CreatorPage() {
           )}
 
           {/* Recent Jobs Card */}
-          <div className="enhanced-card p-4">
+          <div className="border rounded-lg bg-card p-4 shadow-sm">
             <h3 className="text-sm font-semibold mb-3">Recent Jobs</h3>
             <div className="space-y-2">
               {recentJobs.length === 0 ? (
@@ -271,10 +271,10 @@ export default function CreatorPage() {
                       </code>
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         job.status === 'completed'
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                          ? 'bg-green-100 text-green-800'
                           : job.status === 'error' || job.status === 'cancelled'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-blue-100 text-blue-800'
                       }`}>
                         {job.status}
                       </span>

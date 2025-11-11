@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { FaCheckCircle, FaEye, FaSpinner } from 'react-icons/fa'
+import { CheckCircle, Eye, Loader2 } from "lucide-react"
 
 interface JobStartedNotificationProps {
   jobId: string
@@ -53,7 +53,7 @@ export default function JobStartedNotification({
     <Card className={`border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800/30 ${className}`}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-3">
-          <FaCheckCircle className="size-5 text-green-600" />
+          <CheckCircle className="size-5 text-green-600" />
           {autoRedirect ? 'Job Started Successfully' : 'Job In Progress'}
         </CardTitle>
       </CardHeader>
@@ -74,7 +74,7 @@ export default function JobStartedNotification({
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Status:</span>
             <div className="flex items-center gap-2">
-              <FaSpinner className="size-3 animate-spin text-blue-500" />
+              <Loader2 className="size-3 animate-spin text-blue-500" />
               <span className="text-sm font-medium">Processing...</span>
             </div>
           </div>
@@ -82,7 +82,7 @@ export default function JobStartedNotification({
 
         <div className="flex gap-2 pt-2">
           <Button onClick={handleMonitorJob} className="flex-1">
-            <FaEye className="size-4 mr-2" />
+            <Eye className="size-4 mr-2" />
             Monitor Progress
           </Button>
         </div>
@@ -114,7 +114,7 @@ export default function JobStartedNotification({
         {autoRedirect ? (
           <div className="text-xs text-center text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30">
             <p className="flex items-center justify-center gap-2">
-              <FaSpinner className="size-3 animate-spin" />
+              <Loader2 className="size-3 animate-spin" />
               Redirecting to job monitoring in {Math.ceil(redirectDelay / 1000)} seconds...
             </p>
           </div>

@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FaDownload, FaCheck, FaFilm, FaBrain, FaVideo, FaClock, FaDatabase } from 'react-icons/fa';
+import { Download, Check, Film, Brain, Video as VideoIcon, Clock, Database } from "lucide-react";
 import type { Video } from './GridVideoCard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
@@ -51,13 +51,13 @@ export default function VideoPreviewModal({
   const getWorkflowIcon = () => {
     switch (video.workflow) {
       case 'moneyprinter':
-        return <FaFilm className="size-4" />;
+        return <Film className="size-4" />;
       case 'brainrot':
-        return <FaBrain className="size-4" />;
+        return <Brain className="size-4" />;
       case 'podcastclips':
-        return <FaVideo className="size-4" />;
+  return <VideoIcon className="size-4" />;
       default:
-        return <FaVideo className="size-4" />;
+  return <VideoIcon className="size-4" />;
     }
   };
 
@@ -88,7 +88,7 @@ export default function VideoPreviewModal({
             </Badge>
             {video.posted && (
               <Badge variant="default" className="bg-green-600">
-                <FaCheck className="size-3 mr-1" />
+                <Check className="size-3 mr-1" />
                 Posted
               </Badge>
             )}
@@ -112,7 +112,7 @@ export default function VideoPreviewModal({
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-muted-foreground">
-                <FaClock className="size-4" />
+                <Clock className="size-4" />
                 <span className="font-medium">Created:</span>
               </div>
               <div className="pl-6">{formatDate(video.created_at)}</div>
@@ -120,7 +120,7 @@ export default function VideoPreviewModal({
 
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-muted-foreground">
-                <FaDatabase className="size-4" />
+                <Database className="size-4" />
                 <span className="font-medium">Size:</span>
               </div>
               <div className="pl-6">{formatFileSize(video.size_bytes)}</div>
@@ -129,7 +129,7 @@ export default function VideoPreviewModal({
             {video.duration_seconds && (
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <FaVideo className="size-4" />
+                  <VideoIcon className="size-4" />
                   <span className="font-medium">Duration:</span>
                 </div>
                 <div className="pl-6">
@@ -140,7 +140,7 @@ export default function VideoPreviewModal({
 
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-muted-foreground">
-                <FaFilm className="size-4" />
+                <Film className="size-4" />
                 <span className="font-medium">Job ID:</span>
               </div>
               <div className="pl-6 truncate" title={video.job_id}>
@@ -151,7 +151,7 @@ export default function VideoPreviewModal({
             {video.posted_at && (
               <div className="space-y-1 col-span-2">
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <FaCheck className="size-4" />
+                  <Check className="size-4" />
                   <span className="font-medium">Posted At:</span>
                 </div>
                 <div className="pl-6">{formatDate(video.posted_at)}</div>
@@ -168,7 +168,7 @@ export default function VideoPreviewModal({
               }}
               className="flex-1"
             >
-              <FaDownload className="size-4 mr-2" />
+              <Download className="size-4 mr-2" />
               Download Video
             </Button>
             {onMarkPosted && !video.posted && (
@@ -179,7 +179,7 @@ export default function VideoPreviewModal({
                   onClose();
                 }}
               >
-                <FaCheck className="size-4 mr-2" />
+                <Check className="size-4 mr-2" />
                 Mark as Posted
               </Button>
             )}

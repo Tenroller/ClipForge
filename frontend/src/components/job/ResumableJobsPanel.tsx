@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { FaRedo, FaPlay, FaExclamationTriangle, FaCheckCircle, FaClock } from 'react-icons/fa';
+import { RotateCw, RefreshCw, Play, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 import { useResumableJobs, useResumeJob } from '@/hooks/use-jobs';
 import type { JobRecord } from '@/lib/api';
 
@@ -57,11 +57,11 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'error':
-        return <FaExclamationTriangle className="size-4 text-red-500" />;
+        return <AlertTriangle className="size-4 text-red-500" />;
       case 'cancelled':
-        return <FaClock className="size-4 text-orange-500" />;
+        return <Clock className="size-4 text-orange-500" />;
       default:
-        return <FaCheckCircle className="size-4 text-gray-500" />;
+        return <CheckCircle className="size-4 text-gray-500" />;
     }
   };
 
@@ -100,7 +100,7 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <FaRedo className="size-5 animate-spin" />
+            <RefreshCw className="size-5 animate-spin" />
             Loading resumable jobs...
           </CardTitle>
         </CardHeader>
@@ -116,14 +116,14 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
           <p className="text-sm text-muted-foreground">Restart video generation from where it was interrupted</p>
         </div>
         <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
-          <FaRedo className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
       {resumableJobs.length === 0 ? (
         <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-950/20 dark:border-green-800/30">
-          <FaCheckCircle className="size-4 text-green-600" />
+          <CheckCircle className="size-4 text-green-600" />
           <span className="text-green-800 dark:text-green-200">
             No resumable jobs found. Jobs that fail or are cancelled will appear here if they can be resumed.
           </span>
@@ -150,9 +150,9 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
                       title="Resume this job from where it left off"
                     >
                       {resumingJobs.has(job.id) ? (
-                        <FaRedo className="size-4 mr-2 animate-spin" />
+                        <RefreshCw className="size-4 mr-2 animate-spin" />
                       ) : (
-                        <FaPlay className="size-4 mr-2" />
+                        <Play className="size-4 mr-2" />
                       )}
                       Resume
                     </Button>
@@ -184,7 +184,7 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
 
                   {job.error_message && (
                     <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg dark:bg-red-950/20 dark:border-red-800/30">
-                      <FaExclamationTriangle className="size-4 text-red-600" />
+                      <AlertTriangle className="size-4 text-red-600" />
                       <div className="text-red-800 dark:text-red-200 text-sm">
                         <strong>Error:</strong> {job.error_message}
                       </div>

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import ResultPanel from '@/components/job/ResultPanel';
-import { FaEye, FaRedo, FaSpinner, FaChartLine, FaDownload } from 'react-icons/fa';
+import { Download, Eye, Loader2, RefreshCw, TrendingUp } from "lucide-react";
 import type { JobRecord } from '@/lib/api';
 
 export default function ActivityPage() {
@@ -40,10 +40,11 @@ export default function ActivityPage() {
 
       // Refresh jobs list
       refetch();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
         title: 'Failed to Remake Job',
-        description: error.message || 'Unknown error',
+        description: message,
         variant: 'destructive',
       });
     } finally {
@@ -57,7 +58,7 @@ export default function ActivityPage() {
 
   const canRemakeJob = (job: JobRecord) => {
     // Can remake jobs that are completed, error, or cancelled and have request_data
-    return ['completed', 'done', 'error', 'cancelled'].includes(job.status) && job.request_data;
+    return ['completed', 'done', 'error', 'cancelled'].includes(job.status) && !!job.request_data;
   };
 
   const getStatusVariant = (status: string): 'default' | 'destructive' | 'secondary' | 'outline' => {
@@ -123,7 +124,7 @@ export default function ActivityPage() {
               disabled={isLoading}
               className="hover:bg-primary/10 hover:border-primary/50 transition-all"
             >
-              <FaRedo className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
           </div>
@@ -135,7 +136,7 @@ export default function ActivityPage() {
             <CardTitle className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="size-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-                  <FaChartLine className="size-5 text-white" />
+                  <TrendingUp className="size-5 text-white" />
                 </div>
                 <span className="text-xl">Recent Jobs</span>
               </div>
@@ -147,14 +148,14 @@ export default function ActivityPage() {
           <CardContent className="p-6">
             {isLoading && jobs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <FaSpinner className="size-12 mb-4 animate-spin text-primary" />
+                <Loader2 className="size-12 mb-4 animate-spin text-primary" />
                 <p className="text-lg font-medium">Loading jobs...</p>
                 <p className="text-sm mt-2">Please wait while we fetch your data</p>
               </div>
             ) : jobs.length === 0 ? (
               <div className="text-center py-16">
                 <div className="size-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
-                  <FaChartLine className="size-10 text-muted-foreground" />
+                  <TrendingUp className="size-10 text-muted-foreground" />
                 </div>
                 <p className="text-xl font-semibold text-foreground mb-2">No jobs found</p>
                 <p className="text-sm text-muted-foreground mb-6">Create your first video to see it here</p>
@@ -219,25 +220,25 @@ export default function ActivityPage() {
                         className="h-8 px-3 text-xs"
                         title="Monitor job progress"
                       >
-                        <FaChartLine className="size-3 mr-1" />
+                        <TrendingUp className="size-3 mr-1" />
                         Monitor
                       </Button>
 
                       {/* View button for completed jobs with output */}
-                      {(job.status === 'completed' || job.status === 'done') && job.output_url && (
+                      {(job.status === 'completed' || job.status === 'done') && typeof job.output_url === 'string' && (
                         <Button
                           variant="default"
                           size="sm"
                           onClick={() => handleViewResult(job)}
                           className="h-8 px-3 text-xs"
                         >
-                          <FaEye className="size-3 mr-1" />
+                          <Eye className="size-3 mr-1" />
                           View
                         </Button>
                       )}
 
                       {/* Download button for completed jobs */}
-                      {(job.status === 'completed' || job.status === 'done') && job.output_url && (
+                      {(job.status === 'completed' || job.status === 'done') && typeof job.output_url === 'string' && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -250,7 +251,7 @@ export default function ActivityPage() {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            <FaDownload className="size-3 mr-1" />
+                            <Download className="size-3 mr-1" />
                             Download
                           </a>
                         </Button>
@@ -267,9 +268,9 @@ export default function ActivityPage() {
                           title="Remake with same parameters"
                         >
                           {remakingJobs.has(job.id) ? (
-                            <FaSpinner className="size-3 mr-1 animate-spin" />
+                            <Loader2 className="size-3 mr-1 animate-spin" />
                           ) : (
-                            <FaRedo className="size-3 mr-1" />
+                            <RefreshCw className="size-3 mr-1" />
                           )}
                           Remake
                         </Button>
@@ -303,7 +304,7 @@ export default function ActivityPage() {
             <CardContent className="pt-6 pb-6">
               <div className="flex items-center justify-between mb-2">
                 <div className="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
-                  <FaSpinner className="size-5 text-blue-500" />
+                  <Loader2 className="size-5 text-blue-500" />
                 </div>
               </div>
               <div className="text-3xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">

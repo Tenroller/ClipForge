@@ -244,7 +244,7 @@ export default function PreviewPanel({
   })()
 
   return (
-    <Card className="enhanced-card">
+    <Card>
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-3">
           <div className="size-8 rounded-lg bg-gradient-to-br from-orange-500 to-pink-600 flex items-center justify-center">

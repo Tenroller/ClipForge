@@ -11,15 +11,22 @@ export type JobRecord = {
   status: string;
   step?: string;
   current_step?: string;
-  params?: any;
-  result?: any;
+  // Optional runtime logs returned by the backend for live monitoring
+  logs?: Array<{
+    timestamp: string;
+    level: string;
+    source?: string;
+    message: string;
+  }>;
+  params?: unknown;
+  result?: unknown;
   error_message?: string;
   createdAt?: number;
   updatedAt?: number;
   created_at?: string;
   updated_at?: string;
   started_at?: string;
-  request_data?: any;
+  request_data?: unknown;
   output_url?: string;
   duration_seconds?: number;
   progress?: number;
@@ -172,13 +179,13 @@ export function downloadUrl(path: string): string {
 // Video Generation
 // ============================================================================
 
-export async function generateMoneyPrinterVideo(params: any): Promise<{
+export async function generateMoneyPrinterVideo(params: unknown): Promise<{
   status: string;
   jobId: string;
 }> {
   const res = await apiFetch(`${API_BASE}/api/moneyprinter/generate`, {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify(params as unknown),
   });
 
   if (!res.ok) {
@@ -189,13 +196,13 @@ export async function generateMoneyPrinterVideo(params: any): Promise<{
   return await res.json();
 }
 
-export async function generateBrainrotVideo(params: any): Promise<{
+export async function generateBrainrotVideo(params: unknown): Promise<{
   status: string;
   jobId: string;
 }> {
   const res = await apiFetch(`${API_BASE}/api/brainrot/generate`, {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify(params as unknown),
   });
 
   if (!res.ok) {
@@ -214,13 +221,13 @@ export async function generateBrainrotVideo(params: any): Promise<{
   return await res.json();
 }
 
-export async function generatePodcastClips(params: any): Promise<{
+export async function generatePodcastClips(params: unknown): Promise<{
   status: string;
   jobId: string;
 }> {
   const res = await apiFetch(`${API_BASE}/api/podcastclips/generate`, {
     method: 'POST',
-    body: JSON.stringify(params),
+    body: JSON.stringify(params as unknown),
   });
 
   if (!res.ok) {
@@ -374,7 +381,7 @@ export const api = {
       method: 'GET',
     }),
 
-  post: (endpoint: string, body?: any, options?: RequestInit) =>
+  post: (endpoint: string, body?: unknown, options?: RequestInit) =>
     apiFetch(endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`, {
       ...options,
       method: 'POST',
@@ -382,10 +389,10 @@ export const api = {
         'Content-Type': 'application/json',
         ...options?.headers,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? JSON.stringify(body as unknown) : undefined,
     }),
 
-  put: (endpoint: string, body?: any, options?: RequestInit) =>
+  put: (endpoint: string, body?: unknown, options?: RequestInit) =>
     apiFetch(endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`, {
       ...options,
       method: 'PUT',
@@ -393,7 +400,7 @@ export const api = {
         'Content-Type': 'application/json',
         ...options?.headers,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? JSON.stringify(body as unknown) : undefined,
     }),
 
   delete: (endpoint: string, options?: RequestInit) =>
@@ -402,7 +409,7 @@ export const api = {
       method: 'DELETE',
     }),
 
-  patch: (endpoint: string, body?: any, options?: RequestInit) =>
+  patch: (endpoint: string, body?: unknown, options?: RequestInit) =>
     apiFetch(endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`, {
       ...options,
       method: 'PATCH',
@@ -410,7 +417,7 @@ export const api = {
         'Content-Type': 'application/json',
         ...options?.headers,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: body ? JSON.stringify(body as unknown) : undefined,
     }),
 };
 

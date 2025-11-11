@@ -22,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Sparkles, Video, Zap, Target, ChevronDown, ChevronUp, Eye, Clock, User, Play } from 'lucide-react';
+import { ChevronDown, ChevronUp, Clock, Eye, Play, Sparkles, Target, User, Video as VideoIcon, Zap } from "lucide-react";
 
 export default function PodcastClipsPage() {
   const { toast } = useToast();
@@ -107,9 +107,12 @@ export default function PodcastClipsPage() {
       if (currentJob.status === 'completed') {
         setCompletedJob(currentJob);
         setCurrentJobId(null);
+        const clipsCount = (currentJob.result && typeof currentJob.result === 'object' && 'clips_count' in currentJob.result) 
+          ? (currentJob.result as { clips_count?: unknown }).clips_count 
+          : 'multiple';
         toast({
           title: '🎉 Clips Generated!',
-          description: `Successfully created ${currentJob.result?.clips_count || 'multiple'} viral clips`,
+          description: `Successfully created ${clipsCount} viral clips`,
         });
       } else if (currentJob.status === 'error' || currentJob.status === 'cancelled') {
         toast({
@@ -137,7 +140,7 @@ export default function PodcastClipsPage() {
       try {
         const metadata = await getYouTubeMetadata(urlTrimmed);
         setVideoMetadata(metadata);
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to fetch YouTube metadata:', error);
         setVideoMetadata(null);
         // Don't show error toast yet, only when they try to submit
@@ -204,10 +207,11 @@ export default function PodcastClipsPage() {
         title: '🚀 Job Started',
         description: `Generating viral clips from podcast (max: ${maxClipCount})`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to start podcast clips generation';
       toast({
         title: 'Error',
-        description: error.message || 'Failed to start podcast clips generation',
+        description: message,
         variant: 'destructive',
       });
     } finally {
@@ -268,7 +272,7 @@ export default function PodcastClipsPage() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <Video className="h-5 w-5 text-green-500" />
+              <VideoIcon className="h-5 w-5 text-green-500" />
               <div>
                 <p className="font-semibold text-sm">9:16 Format</p>
                 <p className="text-xs text-muted-foreground">Social ready</p>
@@ -331,7 +335,7 @@ export default function PodcastClipsPage() {
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                              <Video className="h-8 w-8 text-muted-foreground" />
+                              <VideoIcon className="h-8 w-8 text-muted-foreground" />
                             </div>
                           )}
                           <div className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/10 transition-colors">

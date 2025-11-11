@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { FaSearch, FaFilter } from 'react-icons/fa';
+import { Search, Filter } from "lucide-react";
 
 interface VideoFiltersProps {
   searchTerm: string;
@@ -38,7 +38,7 @@ export default function VideoFilters({
           {/* Search */}
           <div className="md:col-span-2">
             <Label htmlFor="search" className="flex items-center gap-2 mb-2">
-              <FaSearch className="size-3" />
+              <Search className="size-3" />
               Search
             </Label>
             <Input
@@ -52,7 +52,7 @@ export default function VideoFilters({
           {/* Workflow Filter */}
           <div>
             <Label className="flex items-center gap-2 mb-2">
-              <FaFilter className="size-3" />
+              <Filter className="size-3" />
               Workflow
             </Label>
             <Select value={workflowFilter} onValueChange={onWorkflowFilterChange}>

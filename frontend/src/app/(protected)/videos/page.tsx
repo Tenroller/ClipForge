@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import VideoCard, { type Video } from '@/components/videos/VideoCard';
@@ -11,7 +11,7 @@ import BulkActionsBar from '@/components/videos/BulkActionsBar';
 import VideoStats, { type VideoStatsData } from '@/components/videos/VideoStats';
 import VideoFilters from '@/components/videos/VideoFilters';
 import SyncPanel from '@/components/videos/SyncPanel';
-import { FaRedo, FaSpinner, FaChevronDown, FaTh, FaList } from 'react-icons/fa';
+import { ChevronDown, LayoutGrid, List, Loader2, RefreshCw} from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -61,7 +61,7 @@ export default function VideosPage() {
   };
 
   // Load videos
-  const loadVideos = async (resetOffset = false) => {
+  const loadVideos = useCallback(async (resetOffset = false) => {
     try {
       if (resetOffset) {
         setLoading(true);
@@ -116,10 +116,10 @@ export default function VideosPage() {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, offset, limit, toast]);
 
   // Load stats
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const response = await fetch(`${API_BASE}/api/videos/stats/managed`, {
         credentials: 'include',
@@ -144,7 +144,7 @@ export default function VideosPage() {
         },
       });
     }
-  };
+  }, []);
 
   // Sync videos from jobs
   const syncVideosFromJobs = async () => {
@@ -254,7 +254,7 @@ export default function VideosPage() {
         )
       );
       loadStats();
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to mark video as posted.',
@@ -274,14 +274,6 @@ export default function VideosPage() {
       }
       return newSet;
     });
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedVideos(new Set(filteredVideos.map((v) => v.id)));
-    } else {
-      setSelectedVideos(new Set());
-    }
   };
 
   const handleClearSelection = () => {
@@ -308,7 +300,7 @@ export default function VideosPage() {
         title: 'Bulk Operation Complete',
         description: `Marked ${selected.length} videos as posted.`,
       });
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Some videos failed to be marked as posted.',
@@ -321,7 +313,7 @@ export default function VideosPage() {
   useEffect(() => {
     loadVideos(true);
     loadStats();
-  }, [workflowFilter, postedFilter, sortBy, sortOrder]);
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, loadVideos, loadStats]);
 
   // Filter videos by search term
   const filteredVideos = videos.filter(
@@ -358,7 +350,7 @@ export default function VideosPage() {
               onClick={() => handleViewModeChange('grid')}
               className="h-8 px-3"
             >
-              <FaTh className="size-4" />
+              <LayoutGrid className="size-4" />
             </Button>
             <Button
               variant={viewMode === 'list' ? 'default' : 'ghost'}
@@ -366,7 +358,7 @@ export default function VideosPage() {
               onClick={() => handleViewModeChange('list')}
               className="h-8 px-3"
             >
-              <FaList className="size-4" />
+              <List className="size-4" />
             </Button>
           </div>
           <Button
@@ -378,9 +370,9 @@ export default function VideosPage() {
           </Button>
           <Button variant="outline" size="sm" onClick={() => loadVideos(true)} disabled={loading}>
             {loading ? (
-              <FaSpinner className="size-4 animate-spin" />
+              <Loader2 className="size-4 animate-spin" />
             ) : (
-              <FaRedo className="size-4" />
+              <RefreshCw className="size-4" />
             )}
           </Button>
         </div>
@@ -479,12 +471,12 @@ export default function VideosPage() {
                 >
                   {loadingMore ? (
                     <>
-                      <FaSpinner className="size-4 mr-2 animate-spin" />
+                      <Loader2 className="size-4 mr-2 animate-spin" />
                       Loading...
                     </>
                   ) : (
                     <>
-                      <FaChevronDown className="size-4 mr-2" />
+                      <ChevronDown className="size-4 mr-2" />
                       Load More
                     </>
                   )}

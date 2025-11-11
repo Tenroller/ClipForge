@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
-import { FaVideo, FaFilm, FaBrain, FaHdd } from 'react-icons/fa';
+import { Video as VideoIcon, Film, Brain, HardDrive } from "lucide-react";
 
 export interface VideoStatsData {
   total_videos: number;
@@ -48,7 +48,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
         <CardContent className="pt-6">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-600 flex items-center justify-center">
-              <FaVideo className="size-5 text-white" />
+              <VideoIcon className="size-5 text-white" />
             </div>
             <div>
               <div className="text-2xl font-bold">{stats.total_videos}</div>
@@ -62,7 +62,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
         <CardContent className="pt-6">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-purple-500 to-pink-600 flex items-center justify-center">
-              <FaHdd className="size-5 text-white" />
+              <HardDrive className="size-5 text-white" />
             </div>
             <div>
               <div className="text-2xl font-bold">{formatSize(stats.total_size_mb)}</div>
@@ -76,7 +76,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
         <CardContent className="pt-6">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 flex items-center justify-center">
-              <FaFilm className="size-5 text-white" />
+              <Film className="size-5 text-white" />
             </div>
             <div>
               <div className="text-2xl font-bold">{stats.workflows.moneyprinter.count}</div>
@@ -90,7 +90,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
         <CardContent className="pt-6">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center">
-              <FaBrain className="size-5 text-white" />
+              <Brain className="size-5 text-white" />
             </div>
             <div>
               <div className="text-2xl font-bold">{stats.workflows.brainrot.count}</div>

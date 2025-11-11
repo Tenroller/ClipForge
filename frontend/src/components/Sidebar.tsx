@@ -6,19 +6,18 @@ import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import ThemeToggle from '@/components/ThemeToggle';
 import { useActiveJobs } from '@/hooks/use-jobs';
 import {
-  FaFilm,
-  FaBrain,
-  FaImages,
-  FaChartLine,
-  FaDownload,
-  FaTrash,
-  FaChevronRight,
-  FaSignOutAlt,
-  FaPodcast,
-} from 'react-icons/fa';
+  Film,
+  Brain,
+  Images,
+  TrendingUp,
+  Download,
+  Trash2,
+  ChevronRight,
+  LogOut,
+  Radio,
+} from "lucide-react";
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/app/login/actions';
 
@@ -42,7 +41,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
       id: 'creator',
       href: '/creator',
       label: 'AI Video Creator',
-      icon: <FaFilm className="size-4" />,
+      icon: <Film className="size-4" />,
       description: 'Generate videos with AI',
       badge: moneyprinterJobs.length > 0 ? moneyprinterJobs.length.toString() : undefined,
     },
@@ -50,7 +49,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
       id: 'compilations',
       href: '/compilations',
       label: 'Compilations',
-      icon: <FaBrain className="size-4" />,
+      icon: <Brain className="size-4" />,
       description: 'Create from existing videos',
       badge: brainrotJobs.length > 0 ? brainrotJobs.length.toString() : undefined,
     },
@@ -58,7 +57,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
       id: 'podcastclips',
       href: '/podcastclips',
       label: 'Podcast Clips',
-      icon: <FaPodcast className="size-4" />,
+      icon: <Radio className="size-4" />,
       description: 'Generate clips from podcasts',
       badge: podcastclipsJobs.length > 0 ? podcastclipsJobs.length.toString() : undefined,
     },
@@ -69,28 +68,28 @@ export default function Sidebar({ username, className }: SidebarProps) {
       id: 'videos',
       href: '/videos',
       label: 'Video Gallery',
-      icon: <FaImages className="size-4" />,
+      icon: <Images className="size-4" />,
       description: 'View all videos',
     },
     {
       id: 'activity',
       href: '/activity',
       label: 'Activity',
-      icon: <FaChartLine className="size-4" />,
+      icon: <TrendingUp className="size-4" />,
       description: 'Job history & status',
     },
     {
       id: 'downloads',
       href: '/downloads',
       label: 'Downloads',
-      icon: <FaDownload className="size-4" />,
+      icon: <Download className="size-4" />,
       description: 'Manage your videos',
     },
     {
       id: 'cleanup',
       href: '/cleanup',
       label: 'Cleanup',
-      icon: <FaTrash className="size-4" />,
+      icon: <Trash2 className="size-4" />,
       description: 'Clean temp files',
     },
   ];
@@ -106,7 +105,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
       <div className="p-5 border-b-2 border-border/30">
         <div className="flex items-center gap-3">
           <div className="size-10 rounded-xl bg-gradient-to-br from-primary via-accent to-secondary flex items-center justify-center shadow-xl shadow-primary/20">
-            <FaFilm className="size-5 text-white" />
+            <Film className="size-5 text-white" />
           </div>
           <div>
             <h2 className="font-bold text-base">VideoHelper</h2>
@@ -149,7 +148,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
                         {item.badge}
                       </Badge>
                     )}
-                    {isActive && !item.badge && <FaChevronRight className="size-3 text-primary animate-pulse shrink-0" />}
+                    {isActive && !item.badge && <ChevronRight className="size-3 text-primary animate-pulse shrink-0" />}
                   </div>
                 </Button>
               </Link>
@@ -186,7 +185,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
                       <div className="font-semibold text-sm truncate">{item.label}</div>
                       <div className="text-xs text-muted-foreground truncate">{item.description}</div>
                     </div>
-                    {isActive && <FaChevronRight className="size-3 text-primary animate-pulse shrink-0" />}
+                    {isActive && <ChevronRight className="size-3 text-primary animate-pulse shrink-0" />}
                   </div>
                 </Button>
               </Link>
@@ -197,15 +196,10 @@ export default function Sidebar({ username, className }: SidebarProps) {
 
       {/* Footer */}
       <div className="p-4 border-t-2 border-border/30 space-y-3">
-        {/* Theme Toggle */}
-        <div className="flex justify-center">
-          <ThemeToggle />
-        </div>
-
         {/* Logout Button */}
         <form action={logoutAction}>
           <Button type="submit" variant="outline" className="w-full flex items-center gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50">
-            <FaSignOutAlt className="size-4" />
+            <LogOut className="size-4" />
             Logout
           </Button>
         </form>

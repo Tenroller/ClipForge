@@ -9,12 +9,11 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden">
         {/* Animated background gradients */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-purple-50/80 to-emerald-50/80 dark:from-blue-950/20 dark:via-purple-950/20 dark:to-emerald-950/20" />
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-purple-50/80 to-emerald-50/80" />
 
-        <div className="container-page relative">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="mx-auto max-w-6xl pt-20 pb-24 sm:pt-28 sm:pb-32">
-            <div className="text-center space-y-8 fade-in">
+            <div className="text-center space-y-8">
               {/* Badge */}
               <div className="flex justify-center">
                 <Badge className="px-4 py-2 text-sm bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-emerald-500/10 border-primary/20 hover:border-primary/40 transition-all">
@@ -27,7 +26,7 @@ export default function HomePage() {
               {/* Main Heading */}
               <h1 className="text-5xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl xl:text-8xl">
                 <span className="block mb-2">Create Videos with</span>
-                <span className="block bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent animate-gradient">
+                <span className="block bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent">
                   Artificial Intelligence
                 </span>
               </h1>
@@ -39,7 +38,7 @@ export default function HomePage() {
 
               {/* CTA Buttons */}
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-                <Button asChild size="lg" className="btn-primary text-base px-8 h-12 shadow-2xl">
+                <Button asChild size="lg" className="text-base px-8 h-12 shadow-lg">
                   <Link href="/login">
                     Start Creating Free
                     <span className="ml-2">→</span>
@@ -76,9 +75,9 @@ export default function HomePage() {
       </section>
 
       {/* Dual Workflows Section */}
-      <section className="container-page py-20 sm:py-28">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
         <div className="mx-auto max-w-6xl space-y-12">
-          <div className="text-center space-y-4 fade-in">
+          <div className="text-center space-y-4">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
               <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
                 Two Powerful Workflows
@@ -91,7 +90,7 @@ export default function HomePage() {
 
           <div className="grid md:grid-cols-2 gap-8">
             {/* MoneyPrinter Card */}
-            <Card className="enhanced-card overflow-hidden group cursor-pointer hover:scale-[1.02] transition-all duration-300">
+            <Card className="overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-300">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
               <CardContent className="p-8 space-y-6 relative">
                 <div className="size-14 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
@@ -126,7 +125,7 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                <Button asChild className="w-full btn-primary">
+                <Button asChild className="w-full">
                   <Link href="/login">
                     Try AI Video Creator
                   </Link>
@@ -135,7 +134,7 @@ export default function HomePage() {
             </Card>
 
             {/* Brainrot/Compilations Card */}
-            <Card className="enhanced-card overflow-hidden group cursor-pointer hover:scale-[1.02] transition-all duration-300">
+            <Card className="overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-300">
               <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
               <CardContent className="p-8 space-y-6 relative">
                 <div className="size-14 rounded-2xl bg-gradient-to-br from-purple-500 to-emerald-500 flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
@@ -182,7 +181,7 @@ export default function HomePage() {
       </section>
 
       {/* Features Grid */}
-      <section className="container-page py-20 sm:py-28 bg-muted/30">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28 bg-muted/30">
         <div className="mx-auto max-w-6xl space-y-12">
           <div className="text-center space-y-4">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
@@ -241,7 +240,7 @@ export default function HomePage() {
                 description: 'Full-featured API with JWT authentication for integration with your tools',
               },
             ].map((feature, i) => (
-              <Card key={i} className="enhanced-card p-6 hover:scale-105 transition-transform">
+              <Card key={i} className="p-6 hover:shadow-lg transition-all">
                 <CardContent className="p-0 space-y-3">
                   <div className="text-4xl">{feature.icon}</div>
                   <h3 className="text-lg font-semibold">{feature.title}</h3>
@@ -256,7 +255,7 @@ export default function HomePage() {
       </section>
 
       {/* How It Works */}
-      <section className="container-page py-20 sm:py-28">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
         <div className="mx-auto max-w-5xl space-y-12">
           <div className="text-center space-y-4">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
@@ -308,9 +307,9 @@ export default function HomePage() {
       </section>
 
       {/* Final CTA */}
-      <section className="container-page py-20 sm:py-28">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
         <div className="mx-auto max-w-4xl">
-          <Card className="enhanced-card overflow-hidden">
+          <Card className="overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-emerald-500/10" />
             <CardContent className="relative p-12 text-center space-y-6">
               <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
@@ -320,7 +319,7 @@ export default function HomePage() {
                 Join creators using VideoHelper to automate their video production workflow
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                <Button asChild size="lg" className="btn-primary text-base px-8 h-12">
+                <Button asChild size="lg" className="text-base px-8 h-12">
                   <Link href="/login">
                     Get Started Now
                     <span className="ml-2">→</span>
@@ -338,8 +337,8 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-border/50 bg-card/50 backdrop-blur-xl">
-        <div className="container-page py-12">
+      <footer className="border-t border-border/50 bg-card/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
             <div className="space-y-4">
               <div className="flex items-center gap-2">

@@ -4,7 +4,7 @@ import { useJobs } from '@/hooks/use-jobs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { FaDownload, FaSpinner, FaVideo, FaRedo } from 'react-icons/fa';
+import { Download, Loader2, Video as VideoIcon, RefreshCw } from "lucide-react";
 
 export default function DownloadsPage() {
   const { data: jobs = [], isLoading, refetch } = useJobs({ limit: 100 });
@@ -55,7 +55,7 @@ export default function DownloadsPage() {
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-3">
             <div className="size-8 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-              <FaVideo className="size-4 text-white" />
+              <VideoIcon className="size-4 text-white" />
             </div>
             <div>
               <div>Completed Videos</div>
@@ -67,12 +67,12 @@ export default function DownloadsPage() {
           <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isLoading}>
             {isLoading ? (
               <>
-                <FaSpinner className="size-4 mr-2 animate-spin" />
+                <Loader2 className="size-4 mr-2 animate-spin" />
                 Refreshing...
               </>
             ) : (
               <>
-                <FaRedo className="size-4 mr-2" />
+                <RefreshCw className="size-4 mr-2" />
                 Refresh
               </>
             )}
@@ -81,12 +81,12 @@ export default function DownloadsPage() {
         <CardContent>
           {isLoading && completedJobs.length === 0 ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <FaSpinner className="size-5 mr-2 animate-spin" />
+              <Loader2 className="size-5 mr-2 animate-spin" />
               Loading videos...
             </div>
           ) : completedJobs.length === 0 ? (
             <div className="text-center py-12">
-              <FaVideo className="size-12 text-muted-foreground/50 mx-auto mb-4" />
+              <VideoIcon className="size-12 text-muted-foreground/50 mx-auto mb-4" />
               <p className="text-muted-foreground">No completed videos found</p>
               <p className="text-sm text-muted-foreground mt-2">
                 Generate your first video to see it here
@@ -106,7 +106,7 @@ export default function DownloadsPage() {
                   >
                     <div className="flex-1 min-w-0 space-y-2">
                       <div className="flex items-center gap-3">
-                        <FaVideo className="size-4 text-muted-foreground shrink-0" />
+                        <VideoIcon className="size-4 text-muted-foreground shrink-0" />
                         <span
                           className="text-sm font-medium truncate max-w-[50ch]"
                           title={filename}
@@ -136,7 +136,7 @@ export default function DownloadsPage() {
                           rel="noreferrer"
                           className="flex items-center gap-2"
                         >
-                          <FaVideo className="size-3" />
+                          <VideoIcon className="size-3" />
                           View
                         </a>
                       </Button>
@@ -148,7 +148,7 @@ export default function DownloadsPage() {
                           rel="noreferrer"
                           className="flex items-center gap-2"
                         >
-                          <FaDownload className="size-3" />
+                          <Download className="size-3" />
                           Download
                         </a>
                       </Button>
