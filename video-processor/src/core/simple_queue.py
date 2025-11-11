@@ -1,5 +1,7 @@
 """
-Simple in-memory job queue for video processing API
+Persistent job queue for video processing API with automatic recovery.
+
+Jobs are persisted to PostgreSQL or Redis to ensure recovery after crashes or restarts.
 """
 
 import asyncio
@@ -12,6 +14,7 @@ from dataclasses import dataclass, field
 
 from ..models import JobStatus, JobPriority, WorkflowType, JobStatusResponse
 from ..core.config import ProcessorConfig
+from ..core.persistence import JobPersistenceManager
 
 from loguru import logger
 
@@ -41,31 +44,217 @@ class ProcessingJob:
 
 
 class ProcessorJobQueue:
-    """In-memory job queue for video processing."""
-    
+    """Persistent job queue for video processing with automatic recovery."""
+
     def __init__(self, config: ProcessorConfig):
         self.config = config
         self.processor_id = config.processor_id
         self.running = False
-        
-        # Job storage
+
+        # Job storage (in-memory cache)
         self.jobs: Dict[str, ProcessingJob] = {}
         self.queue: List[str] = []  # Job IDs in priority order
         self.active_jobs: Dict[str, ProcessingJob] = {}
-        
+
         # Job handlers
         self.job_handlers: Dict[WorkflowType, Callable] = {}
-        
+
         # Processing control
         self._processing_tasks: List[asyncio.Task] = []
+
+        # Persistence layer
+        self.persistence: Optional[JobPersistenceManager] = None
+        if config.enable_job_persistence:
+            self.persistence = JobPersistenceManager(
+                database_url=config.database_url if config.database_url else None,
+                redis_url=config.redis_url,
+                redis_db=config.redis_db
+            )
         
     async def connect(self):
-        """Initialize the queue (no external connections needed)."""
-        logger.info(f"Initialized in-memory job queue for processor {self.processor_id}")
+        """Initialize the queue and connect to persistence backend."""
+        # Connect to persistence backend
+        if self.persistence:
+            try:
+                await self.persistence.connect()
+                if self.persistence.is_available():
+                    logger.info(f"Connected to persistent job storage for processor {self.processor_id}")
+
+                    # Recover jobs from persistent storage
+                    await self._recover_jobs()
+                else:
+                    logger.warning(f"No persistence backend available - jobs will not survive restarts")
+            except Exception as e:
+                logger.error(f"Failed to connect to persistence backend: {e}")
+                logger.warning("Continuing with in-memory-only queue")
+        else:
+            logger.info(f"Initialized in-memory-only job queue for processor {self.processor_id}")
+
+    async def _recover_jobs(self):
+        """Recover jobs from persistent storage after restart."""
+        try:
+            if not self.persistence or not self.persistence.is_available():
+                return
+
+            logger.info("Recovering jobs from persistent storage...")
+
+            # Get all jobs from storage
+            all_jobs = await self.persistence.list_jobs()
+
+            recovered_queued = 0
+            recovered_running = 0
+            cancelled_orphaned = 0
+
+            for job_data in all_jobs:
+                job_id = job_data.get('job_id')
+                status = job_data.get('status')
+
+                if not job_id:
+                    continue
+
+                # Parse workflow and priority
+                try:
+                    workflow = WorkflowType(job_data.get('workflow'))
+                    priority = JobPriority(job_data.get('priority'))
+                except (ValueError, KeyError) as e:
+                    logger.error(f"Invalid workflow or priority for job {job_id}: {e}")
+                    continue
+
+                # Reconstruct the job object
+                created_at = job_data.get('created_at')
+                if isinstance(created_at, str):
+                    created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                elif not created_at:
+                    created_at = datetime.now(timezone.utc)
+
+                started_at = job_data.get('started_at')
+                if isinstance(started_at, str):
+                    started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+
+                completed_at = job_data.get('completed_at')
+                if isinstance(completed_at, str):
+                    completed_at = datetime.fromisoformat(completed_at.replace('Z', '+00:00'))
+
+                job = ProcessingJob(
+                    job_id=job_id,
+                    workflow=workflow,
+                    priority=priority,
+                    request_data=job_data.get('request_data', {}),
+                    callback_url=job_data.get('callback_url'),
+                    status=JobStatus(status),
+                    created_at=created_at,
+                    started_at=started_at,
+                    completed_at=completed_at,
+                    duration_seconds=job_data.get('duration_seconds'),
+                    progress=job_data.get('progress'),
+                    current_step=job_data.get('current_step'),
+                    error_message=job_data.get('error_message'),
+                    result_data=job_data.get('result_data'),
+                    logs=job_data.get('logs', []),
+                    cancelled=job_data.get('cancelled', False)
+                )
+
+                # Add to in-memory storage
+                self.jobs[job_id] = job
+
+                # Handle recovery based on status
+                if status == 'queued':
+                    # Re-queue the job
+                    queue_position = job_data.get('queue_position', len(self.queue))
+                    if queue_position is not None and queue_position < len(self.queue):
+                        self.queue.insert(queue_position, job_id)
+                    else:
+                        self.queue.append(job_id)
+                    recovered_queued += 1
+                    logger.info(f"Recovered queued job {job_id} (workflow: {workflow.value})")
+
+                elif status == 'running':
+                    # Job was running when processor crashed - mark as cancelled
+                    job.status = JobStatus.CANCELLED
+                    job.error_message = "Processor restarted while job was running - automatically cancelled"
+                    job.completed_at = datetime.now(timezone.utc)
+                    if job.started_at:
+                        job.duration_seconds = int((job.completed_at - job.started_at).total_seconds())
+
+                    # Update in persistence
+                    await self._persist_job(job)
+
+                    # Send callback to backend
+                    await self.send_callback(
+                        job_id=job_id,
+                        status='cancelled',
+                        error_message=job.error_message
+                    )
+
+                    cancelled_orphaned += 1
+                    logger.warning(f"Cancelled orphaned running job {job_id} (was running when processor crashed)")
+
+            # Restore queue order from persistence
+            if recovered_queued > 0:
+                queue_order = await self.persistence.get_queue_order()
+                if queue_order:
+                    # Rebuild queue in correct order
+                    self.queue = [jid for jid in queue_order if jid in self.jobs and self.jobs[jid].status == JobStatus.QUEUED]
+
+            logger.info(f"Job recovery complete: {recovered_queued} queued jobs recovered, "
+                       f"{cancelled_orphaned} running jobs cancelled, "
+                       f"{len(all_jobs) - recovered_queued - cancelled_orphaned} completed/failed jobs loaded")
+
+        except Exception as e:
+            logger.error(f"Failed to recover jobs: {e}")
+            # Continue with empty queue rather than failing startup
     
     async def disconnect(self):
         """Clean shutdown."""
         await self.stop_processing()
+
+        # Disconnect from persistence
+        if self.persistence:
+            await self.persistence.disconnect()
+
+    async def _persist_job(self, job: ProcessingJob) -> bool:
+        """Persist a job to storage."""
+        if not self.persistence or not self.persistence.is_available():
+            return False
+
+        try:
+            job_data = {
+                'job_id': job.job_id,
+                'workflow': job.workflow.value,
+                'priority': job.priority.value,
+                'status': job.status.value,
+                'request_data': job.request_data,
+                'callback_url': job.callback_url,
+                'created_at': job.created_at.isoformat() if job.created_at else None,
+                'started_at': job.started_at.isoformat() if job.started_at else None,
+                'completed_at': job.completed_at.isoformat() if job.completed_at else None,
+                'duration_seconds': job.duration_seconds,
+                'progress': job.progress,
+                'current_step': job.current_step,
+                'error_message': job.error_message,
+                'result_data': job.result_data,
+                'logs': job.logs,
+                'cancelled': job.cancelled,
+                'processor_id': self.processor_id,
+                'queue_position': self.queue.index(job.job_id) if job.job_id in self.queue else None
+            }
+
+            return await self.persistence.save_job(job.job_id, job_data)
+
+        except Exception as e:
+            logger.error(f"Failed to persist job {job.job_id}: {e}")
+            return False
+
+    async def _persist_queue_order(self) -> bool:
+        """Persist the current queue order."""
+        if not self.persistence or not self.persistence.is_available():
+            return False
+
+        try:
+            return await self.persistence.save_queue_order(self.queue)
+        except Exception as e:
+            logger.error(f"Failed to persist queue order: {e}")
+            return False
         
     def register_handler(self, workflow: WorkflowType, handler: Callable):
         """Register a handler function for a workflow type."""
@@ -99,7 +288,11 @@ class ProcessorJobQueue:
                     break
             
             self.queue.insert(insert_pos, job_id)
-            
+
+            # Persist job and queue order
+            await self._persist_job(job)
+            await self._persist_queue_order()
+
             logger.info(f"Added job {job_id} to queue with priority {priority}")
             return True
             
@@ -175,23 +368,27 @@ class ProcessorJobQueue:
             # Remove from queue if queued
             if job_id in self.queue:
                 self.queue.remove(job_id)
-            
+
             # Update job status
             job = self.jobs.get(job_id)
             if job:
                 job.status = JobStatus.CANCELLED
                 job.error_message = reason or "Job cancelled"
                 job.cancelled = True
-                
+
                 if job.status == JobStatus.RUNNING:
                     job.completed_at = datetime.now(timezone.utc)
                     if job.started_at:
                         job.duration_seconds = int((job.completed_at - job.started_at).total_seconds())
-                
+
                 # Remove from active jobs if running
                 if job_id in self.active_jobs:
                     del self.active_jobs[job_id]
-            
+
+                # Persist changes
+                await self._persist_job(job)
+                await self._persist_queue_order()
+
             logger.info(f"Cancelled job {job_id}: {reason}")
             return True
             
@@ -236,7 +433,10 @@ class ProcessorJobQueue:
                     job.duration_seconds = int((now - job.started_at).total_seconds())
             
             logger.debug(f"Updated job {job_id} status to {status}")
-            
+
+            # Persist changes
+            await self._persist_job(job)
+
             # Send callback to backend API
             await self.send_callback(
                 job_id=job_id,
@@ -313,8 +513,13 @@ class ProcessorJobQueue:
             self.active_jobs[job_id] = job
             job.status = JobStatus.RUNNING
             job.started_at = datetime.now(timezone.utc)
+
+            # Persist state change
+            asyncio.create_task(self._persist_job(job))
+            asyncio.create_task(self._persist_queue_order())
+
             return job
-        
+
         return None
     
     async def start_processing(self):
