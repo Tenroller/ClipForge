@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useActiveJobs } from '@/hooks/use-jobs';
+import { ThemeToggle } from '@/components/theme-toggle';
 import {
   Film,
   Brain,
@@ -196,6 +197,12 @@ export default function Sidebar({ username, className }: SidebarProps) {
 
       {/* Footer */}
       <div className="p-4 border-t-2 border-border/30 space-y-3">
+        {/* Theme Toggle */}
+        <div className="flex items-center justify-between px-2">
+          <span className="text-xs font-medium text-muted-foreground">Theme</span>
+          <ThemeToggle />
+        </div>
+
         {/* Logout Button */}
         <form action={logoutAction}>
           <Button type="submit" variant="outline" className="w-full flex items-center gap-2 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50">
