@@ -60,20 +60,14 @@ export default function VideosPage() {
     localStorage.setItem('videosViewMode', mode);
   };
 
-  // Load videos
-  const loadVideos = useCallback(async (resetOffset = false) => {
+  // Load more videos (for pagination)
+  const loadMoreVideos = useCallback(async () => {
     try {
-      if (resetOffset) {
-        setLoading(true);
-        setOffset(0);
-      } else {
-        setLoadingMore(true);
-      }
+      setLoadingMore(true);
 
-      const currentOffset = resetOffset ? 0 : offset;
       const params = new URLSearchParams({
         limit: limit.toString(),
-        offset: currentOffset.toString(),
+        offset: offset.toString(),
         sort_by: sortBy,
         sort_order: sortOrder,
       });
@@ -95,28 +89,65 @@ export default function VideosPage() {
       }
 
       const data: VideosResponse = await response.json();
-
-      if (resetOffset) {
-        setVideos(data.videos);
-        setOffset(data.limit);
-      } else {
-        setVideos((prev) => [...prev, ...data.videos]);
-        setOffset((prev) => prev + data.limit);
-      }
-
+      setVideos((prev) => [...prev, ...data.videos]);
+      setOffset((prev) => prev + data.limit);
       setHasMore(data.has_more);
     } catch (error) {
-      console.error('Failed to load videos:', error);
+      console.error('Failed to load more videos:', error);
       toast({
         title: 'Error',
-        description: 'Failed to load videos. Please try again.',
+        description: 'Failed to load more videos. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, offset, toast]);
+
+  // Refresh function for manual refresh
+  const refreshVideos = useCallback(async () => {
+    try {
+      setLoading(true);
+      setOffset(0);
+
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+        offset: '0',
+        sort_by: sortBy,
+        sort_order: sortOrder,
+      });
+
+      if (workflowFilter !== 'all') {
+        params.append('workflow', workflowFilter);
+      }
+
+      if (postedFilter !== 'all') {
+        params.append('posted', postedFilter === 'posted' ? 'true' : 'false');
+      }
+
+      const response = await fetch(`${API_BASE}/api/videos/managed?${params}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load videos: ${response.statusText}`);
+      }
+
+      const data: VideosResponse = await response.json();
+      setVideos(data.videos);
+      setOffset(data.limit);
+      setHasMore(data.has_more);
+    } catch (error) {
+      console.error('Failed to refresh videos:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to refresh videos. Please try again.',
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, offset, limit, toast]);
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast]);
 
   // Load stats
   const loadStats = useCallback(async () => {
@@ -166,7 +197,7 @@ export default function VideosPage() {
         description: `Successfully synced ${result.registered_videos} videos from ${result.processed_jobs} jobs.`,
       });
 
-      loadVideos(true);
+      refreshVideos();
       loadStats();
     } catch (error) {
       console.error('Failed to sync videos:', error);
@@ -200,7 +231,7 @@ export default function VideosPage() {
         description: `Registered ${result.registered_videos} orphaned videos from ${result.scanned_files} files.`,
       });
 
-      loadVideos(true);
+      refreshVideos();
       loadStats();
     } catch (error) {
       console.error('Failed to sync orphaned videos:', error);
@@ -309,11 +340,79 @@ export default function VideosPage() {
     }
   };
 
-  // Initial load
+  // Initial load effect
   useEffect(() => {
-    loadVideos(true);
-    loadStats();
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, loadVideos, loadStats]);
+    const initialLoad = async () => {
+      try {
+        setLoading(true);
+        setOffset(0);
+
+        const params = new URLSearchParams({
+          limit: limit.toString(),
+          offset: '0',
+          sort_by: sortBy,
+          sort_order: sortOrder,
+        });
+
+        if (workflowFilter !== 'all') {
+          params.append('workflow', workflowFilter);
+        }
+
+        if (postedFilter !== 'all') {
+          params.append('posted', postedFilter === 'posted' ? 'true' : 'false');
+        }
+
+        // Load videos and stats in parallel
+        const [videosResponse, statsResponse] = await Promise.all([
+          fetch(`${API_BASE}/api/videos/managed?${params}`, {
+            credentials: 'include',
+          }),
+          fetch(`${API_BASE}/api/videos/stats/managed`, {
+            credentials: 'include',
+          }),
+        ]);
+
+        if (!videosResponse.ok) {
+          throw new Error(`Failed to load videos: ${videosResponse.statusText}`);
+        }
+
+        const videosData: VideosResponse = await videosResponse.json();
+        setVideos(videosData.videos);
+        setOffset(videosData.limit);
+        setHasMore(videosData.has_more);
+
+        if (statsResponse.ok) {
+          const statsData: VideoStatsData = await statsResponse.json();
+          setStats(statsData);
+        } else {
+          console.error('Failed to load stats:', statsResponse.statusText);
+          setStats({
+            total_videos: 0,
+            total_size_mb: 0,
+            workflows: {
+              moneyprinter: { count: 0, size_mb: 0 },
+              brainrot: { count: 0, size_mb: 0 },
+            },
+            video_types: {
+              ai_generated: { count: 0, size_mb: 0 },
+              compilation: { count: 0, size_mb: 0 },
+            },
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load initial data:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load videos. Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initialLoad();
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast]);
 
   // Filter videos by search term
   const filteredVideos = videos.filter(
@@ -368,7 +467,7 @@ export default function VideosPage() {
           >
             {showSyncPanel ? 'Hide' : 'Show'} Sync
           </Button>
-          <Button variant="outline" size="sm" onClick={() => loadVideos(true)} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={refreshVideos} disabled={loading}>
             {loading ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -466,7 +565,7 @@ export default function VideosPage() {
               <div className="flex justify-center pt-6">
                 <Button
                   variant="outline"
-                  onClick={() => loadVideos(false)}
+                  onClick={loadMoreVideos}
                   disabled={loadingMore}
                 >
                   {loadingMore ? (
