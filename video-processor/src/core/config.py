@@ -25,11 +25,13 @@ class ProcessorConfig:
     backend_api_url: str = "http://localhost:9000"
     backend_api_key: str = ""
     
-    # Job queue
+    # Job queue persistence (PostgreSQL takes priority over Redis)
+    database_url: str = ""  # PostgreSQL URL for job persistence
     redis_url: str = "redis://localhost:6379"
     redis_db: int = 1
-    
-    # Directories  
+    enable_job_persistence: bool = True  # Enable persistent job storage
+
+    # Directories
     output_dir: Path = Path("./output")  # Docker will mount shared volume here
     temp_dir: Path = Path("./temp")
     
@@ -59,6 +61,10 @@ class ProcessorConfig:
             except ValueError:
                 return default
         
+        def get_bool(key: str, default: bool) -> bool:
+            value = os.getenv(key, str(default)).lower()
+            return value in ('true', '1', 'yes', 'on')
+
         return cls(
             processor_id=os.getenv("PROCESSOR_ID", "processor-1"),
             host=os.getenv("PROCESSOR_HOST", "0.0.0.0"),
@@ -67,8 +73,10 @@ class ProcessorConfig:
             job_timeout_seconds=get_int("PROCESSOR_JOB_TIMEOUT_SECONDS", 3600),
             backend_api_url=os.getenv("BACKEND_API_URL", "http://localhost:9000"),
             backend_api_key=os.getenv("BACKEND_API_KEY", ""),
+            database_url=os.getenv("DATABASE_URL", ""),
             redis_url=os.getenv("REDIS_URL", "redis://localhost:6379"),
             redis_db=get_int("REDIS_DB", 1),
+            enable_job_persistence=get_bool("PROCESSOR_ENABLE_PERSISTENCE", True),
             output_dir=Path(os.getenv("OUTPUT_DIR", "./output")),
             temp_dir=Path(os.getenv("TEMP_DIR", "./temp")),
             pexels_api_key=os.getenv("PEXELS_API_KEY", ""),
