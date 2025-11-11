@@ -305,6 +305,21 @@ class ClipGenerator:
             x2 = max(0, min(x2, original_width))
             y2 = max(0, min(y2, original_height))
 
+            # Validate crop box has non-zero dimensions
+            if x2 <= x1 or y2 <= y1:
+                # Invalid crop box - fall back to center crop
+                logger.warning(
+                    f"Invalid crop box at t={absolute_time:.2f}s: "
+                    f"x=[{x1},{x2}] y=[{y1},{y2}]. Using center crop."
+                )
+                # Calculate center crop
+                crop_width = int(original_height * self.target_resolution[0] / self.target_resolution[1])
+                crop_height = original_height
+                x1 = max(0, (original_width - crop_width) // 2)
+                y1 = 0
+                x2 = min(original_width, x1 + crop_width)
+                y2 = original_height
+
             # Crop the frame
             cropped_frame = frame[y1:y2, x1:x2]
 
@@ -455,6 +470,15 @@ class ClipGenerator:
         # Ensure crop stays within bounds
         crop_x = max(0, min(crop_x, original_width - crop_width))
         crop_y = max(0, min(crop_y, original_height - crop_height))
+
+        # Validate crop dimensions are positive
+        if crop_width <= 0 or crop_height <= 0:
+            logger.warning(
+                f"Invalid crop dimensions for face at start_time={start_time:.2f}s: "
+                f"width={crop_width}, height={crop_height}. Using full frame."
+            )
+            crop_x, crop_y = 0, 0
+            crop_width, crop_height = original_width, original_height
 
         # Apply crop and resize
         cropped = clip.cropped(crop_x, crop_y, crop_x + crop_width, crop_y + crop_height)
