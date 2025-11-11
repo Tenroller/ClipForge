@@ -48,8 +48,9 @@ def _is_allowed_path(file_path: Path) -> bool:
             (project_root / "temp").resolve(),
             (project_root / "backend" / "temp").resolve(),
             (project_root / "backend" / "final_videos").resolve(),
+            (project_root / "video-processor" / "output").resolve(),
         ]
-        
+
         # Also check vendor directories
         vendor_root = project_root / "backend" / "vendors"
         if vendor_root.exists():
@@ -409,7 +410,7 @@ def download_file(path: str):
         
         # If the path doesn't exist as-is, try to resolve it relative to allowed directories
         if not file_path.exists() or not file_path.is_file():
-            # Define allowed root directories  
+            # Define allowed root directories
             project_root = get_project_root()
             allowed_roots = [
                 get_output_path().resolve(),
@@ -417,8 +418,9 @@ def download_file(path: str):
                 (project_root / "temp").resolve(),
                 (project_root / "backend" / "temp").resolve(),
                 (project_root / "backend" / "final_videos").resolve(),
+                (project_root / "video-processor" / "output").resolve(),
             ]
-            
+
             # Also check vendor directories
             vendor_root = project_root / "backend" / "vendors"
             if vendor_root.exists():

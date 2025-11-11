@@ -22,7 +22,10 @@
       "mcp__context7__resolve-library-id",
       "mcp__context7__get-library-docs",
       "Bash(npx tsc:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(curl:*)",
+      "Bash(PGPASSWORD=\"senhalegal\" psql:*)",
+      "WebFetch(domain:fonts.gstatic.com)"
     ],
     "deny": [],
     "ask": []

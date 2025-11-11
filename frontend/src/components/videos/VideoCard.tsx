@@ -3,12 +3,15 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { FaDownload, FaPlay, FaFilm, FaBrain, FaVideo, FaCheck, FaClock } from 'react-icons/fa';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
 export interface Video {
   id: string;
   job_id: string;
-  workflow: 'moneyprinter' | 'brainrot';
+  workflow: 'moneyprinter' | 'brainrot' | 'podcastclips';
   filename: string;
   file_path?: string;
   size_bytes: number;
@@ -25,9 +28,11 @@ interface VideoCardProps {
   onDownload: (video: Video) => void;
   onPlay?: (video: Video) => void;
   onMarkPosted?: (video: Video) => void;
+  selected?: boolean;
+  onSelect?: (video: Video, selected: boolean) => void;
 }
 
-export default function VideoCard({ video, onDownload, onPlay, onMarkPosted }: VideoCardProps) {
+export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, selected = false, onSelect }: VideoCardProps) {
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -52,20 +57,32 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted }: V
         return <FaFilm className="size-4" />;
       case 'brainrot':
         return <FaBrain className="size-4" />;
+      case 'podcastclips':
+        return <FaVideo className="size-4" />;
       default:
         return <FaVideo className="size-4" />;
     }
   };
 
   return (
-    <Card className="hover:shadow-lg transition-shadow">
+    <Card className={`hover:shadow-lg transition-shadow ${selected ? 'ring-2 ring-primary' : ''}`}>
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
           {/* Thumbnail */}
-          <div className="relative w-32 h-20 bg-muted rounded-lg overflow-hidden shrink-0">
+          <div className="relative w-32 h-20 bg-muted rounded-lg overflow-hidden shrink-0 group">
+            {/* Selection Checkbox */}
+            {onSelect && (
+              <div className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Checkbox
+                  checked={selected}
+                  onCheckedChange={(checked) => onSelect(video, checked as boolean)}
+                  className="bg-white/90 border-2"
+                />
+              </div>
+            )}
             {video.thumbnail_url ? (
               <img
-                src={video.thumbnail_url}
+                src={`${API_BASE}${video.thumbnail_url}`}
                 alt={video.filename}
                 className="w-full h-full object-cover"
               />

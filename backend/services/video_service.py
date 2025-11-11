@@ -141,8 +141,8 @@ class VideoService:
         This is useful for migrating existing videos to the new tracking system.
         """
         try:
-            # Get all completed jobs
-            jobs = self.job_store.list_jobs(limit=10000, status="done")
+            # Get all completed jobs (use "completed" which is the database status)
+            jobs = self.job_store.list_jobs(limit=10000, status="completed")
             
             stats = {
                 "processed_jobs": 0,
@@ -231,29 +231,39 @@ class VideoService:
                                     continue
 
                                 video_path = video_data.get("path")
-                                if video_path and Path(video_path).exists():
-                                    try:
-                                        video_id = self.register_video(
-                                            job_id=job_id,
-                                            file_path=video_path,
-                                            workflow=workflow,
-                                            video_type="podcast_clip",
-                                            compilation_type=video_data.get("compilation_type"),
-                                            compilation_num=video_data.get("compilation_num"),
-                                            metadata={
-                                                "migrated_from_job_result": True,
-                                                "original_posted_status": video_data.get("posted", False),
-                                                "original_video_data": video_data
-                                            }
-                                        )
+                                if video_path:
+                                    # Resolve relative paths (from video-processor)
+                                    # Video-processor uses video-processor/output, not output/
+                                    if not Path(video_path).is_absolute():
+                                        project_root = get_output_path().parent  # Get project root
+                                        absolute_path = project_root / "video-processor" / video_path
+                                    else:
+                                        absolute_path = Path(video_path)
+                                    if absolute_path.exists():
+                                        try:
+                                            video_id = self.register_video(
+                                                job_id=job_id,
+                                                file_path=str(absolute_path),
+                                                workflow=workflow,
+                                                video_type="podcast_clip",
+                                                compilation_type=video_data.get("compilation_type"),
+                                                compilation_num=video_data.get("compilation_num"),
+                                                metadata={
+                                                    "migrated_from_job_result": True,
+                                                    "original_posted_status": video_data.get("posted", False),
+                                                    "original_video_data": video_data
+                                                }
+                                            )
 
-                                        # Preserve original posted status
-                                        if video_data.get("posted", False):
-                                            self.mark_video_posted(video_id)
+                                            # Preserve original posted status
+                                            if video_data.get("posted", False):
+                                                self.mark_video_posted(video_id)
 
-                                        stats["registered_videos"] += 1
-                                    except Exception as e:
-                                        stats["errors"].append(f"PodcastClips job {job_id}, video {video_path}: {str(e)}")
+                                            stats["registered_videos"] += 1
+                                        except Exception as e:
+                                            stats["errors"].append(f"PodcastClips job {job_id}, video {video_path}: {str(e)}")
+                                    else:
+                                        stats["skipped_videos"] += 1
                                 else:
                                     stats["skipped_videos"] += 1
                 

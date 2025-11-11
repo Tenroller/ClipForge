@@ -94,10 +94,9 @@ def _get_or_load_model(model_size: str, device: str) -> Any:
 
 def extract_word_timings_with_stable_ts(
     audio_path: str,
-    model_size: str = "base",
+    model_size: str = "turbo",
     use_gpu: bool = True,
-    vad_threshold: float = 0.35,
-    refine_whisper_precision: float = 0.15  # Deprecated but kept for backwards compatibility
+    vad_threshold: float = 0.35
 ) -> List[Dict[str, Any]]:
     """
     Extract word-level timings using stable-ts for enhanced precision.
@@ -107,10 +106,9 @@ def extract_word_timings_with_stable_ts(
 
     Args:
         audio_path: Path to the audio file
-        model_size: Whisper model size ("tiny", "base", "small", "medium", "large")
+        model_size: Whisper model size ("tiny", "base", "small", "medium", "large", "turbo")
         use_gpu: Whether to use CUDA if available
         vad_threshold: Voice activity detection threshold (0.0-1.0)
-        refine_whisper_precision: (DEPRECATED) No longer used in stable-ts 2.x
 
     Returns:
         List of word timing dictionaries with enhanced timestamps
@@ -226,7 +224,6 @@ def extract_word_timings_with_stable_ts(
                 # Try with precision parameter (may not be supported in newer versions)
                 result = refine_method(
                     audio_path,
-                    precision=refine_whisper_precision,
                     rel_prob_decrease=0.05,  # Relative probability decrease threshold
                 )
             
@@ -282,7 +279,7 @@ def create_enhanced_subtitles_with_stable_ts(
     audio_path: str,
     output_path: Optional[str] = None,
     video_size: Tuple[int, int] = (1080, 1920),
-    model_size: str = "base",
+    model_size: str = "turbo",
     use_gpu: bool = True,
     config_overrides: Optional[Dict[str, Any]] = None
 ) -> str:

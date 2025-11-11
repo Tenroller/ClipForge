@@ -4,10 +4,14 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import VideoCard, { type Video } from '@/components/videos/VideoCard';
+import GridVideoCard from '@/components/videos/GridVideoCard';
+import VideoCardSkeleton from '@/components/videos/VideoCardSkeleton';
+import VideoPreviewModal from '@/components/videos/VideoPreviewModal';
+import BulkActionsBar from '@/components/videos/BulkActionsBar';
 import VideoStats, { type VideoStatsData } from '@/components/videos/VideoStats';
 import VideoFilters from '@/components/videos/VideoFilters';
 import SyncPanel from '@/components/videos/SyncPanel';
-import { FaRedo, FaSpinner, FaChevronDown } from 'react-icons/fa';
+import { FaRedo, FaSpinner, FaChevronDown, FaTh, FaList } from 'react-icons/fa';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -35,7 +39,26 @@ export default function VideosPage() {
   const [syncing, setSyncing] = useState(false);
   const [showSyncPanel, setShowSyncPanel] = useState(false);
 
+  // View mode and bulk selection
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+  const [previewVideo, setPreviewVideo] = useState<Video | null>(null);
+
   const limit = 20;
+
+  // Load view mode from localStorage
+  useEffect(() => {
+    const savedViewMode = localStorage.getItem('videosViewMode') as 'grid' | 'list' | null;
+    if (savedViewMode) {
+      setViewMode(savedViewMode);
+    }
+  }, []);
+
+  // Save view mode to localStorage
+  const handleViewModeChange = (mode: 'grid' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('videosViewMode', mode);
+  };
 
   // Load videos
   const loadVideos = async (resetOffset = false) => {
@@ -210,7 +233,7 @@ export default function VideosPage() {
   // Handle mark as posted
   const handleMarkPosted = async (video: Video) => {
     try {
-      const response = await fetch(`${API_BASE}/api/videos/${video.id}/mark-posted`, {
+      const response = await fetch(`${API_BASE}/api/videos/managed/${video.id}/mark-posted`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -240,6 +263,60 @@ export default function VideosPage() {
     }
   };
 
+  // Handle bulk selection
+  const handleVideoSelect = (video: Video, selected: boolean) => {
+    setSelectedVideos((prev) => {
+      const newSet = new Set(prev);
+      if (selected) {
+        newSet.add(video.id);
+      } else {
+        newSet.delete(video.id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedVideos(new Set(filteredVideos.map((v) => v.id)));
+    } else {
+      setSelectedVideos(new Set());
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedVideos(new Set());
+  };
+
+  // Bulk operations
+  const handleBulkDownload = () => {
+    const selected = filteredVideos.filter((v) => selectedVideos.has(v.id));
+    selected.forEach((video) => handleDownload(video));
+    toast({
+      title: 'Bulk Download Started',
+      description: `Downloading ${selected.length} videos...`,
+    });
+  };
+
+  const handleBulkMarkPosted = async () => {
+    const selected = filteredVideos.filter((v) => selectedVideos.has(v.id) && !v.posted);
+
+    try {
+      await Promise.all(selected.map((video) => handleMarkPosted(video)));
+      setSelectedVideos(new Set());
+      toast({
+        title: 'Bulk Operation Complete',
+        description: `Marked ${selected.length} videos as posted.`,
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Some videos failed to be marked as posted.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Initial load
   useEffect(() => {
     loadVideos(true);
@@ -253,14 +330,45 @@ export default function VideosPage() {
       video.job_id.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Count selected unposted videos
+  const selectedUnpostedCount = filteredVideos.filter(
+    (v) => selectedVideos.has(v.id) && !v.posted
+  ).length;
+
   return (
     <div className="container-page">
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Video Gallery</h1>
-          <p className="text-muted-foreground mt-2">Browse and manage generated videos</p>
+          <p className="text-muted-foreground mt-2">
+            Browse and manage generated videos
+            {selectedVideos.size > 0 && (
+              <span className="ml-2 text-primary font-medium">
+                · {selectedVideos.size} selected
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
+          {/* View Toggle */}
+          <div className="flex gap-1 border rounded-md p-1">
+            <Button
+              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('grid')}
+              className="h-8 px-3"
+            >
+              <FaTh className="size-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('list')}
+              className="h-8 px-3"
+            >
+              <FaList className="size-4" />
+            </Button>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -307,9 +415,19 @@ export default function VideosPage() {
 
         {/* Videos List */}
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <FaSpinner className="size-8 animate-spin text-primary" />
-          </div>
+          viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <VideoCardSkeleton key={i} variant="grid" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <VideoCardSkeleton key={i} variant="list" />
+              ))}
+            </div>
+          )
         ) : filteredVideos.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-muted-foreground">No videos found</p>
@@ -320,19 +438,40 @@ export default function VideosPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredVideos.map((video) => (
-              <VideoCard
-                key={video.id}
-                video={video}
-                onDownload={handleDownload}
-                onMarkPosted={handleMarkPosted}
-              />
-            ))}
+          <>
+            {viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredVideos.map((video) => (
+                  <GridVideoCard
+                    key={video.id}
+                    video={video}
+                    onDownload={handleDownload}
+                    onPlay={setPreviewVideo}
+                    onMarkPosted={handleMarkPosted}
+                    selected={selectedVideos.has(video.id)}
+                    onSelect={handleVideoSelect}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {filteredVideos.map((video) => (
+                  <VideoCard
+                    key={video.id}
+                    video={video}
+                    onDownload={handleDownload}
+                    onPlay={setPreviewVideo}
+                    onMarkPosted={handleMarkPosted}
+                    selected={selectedVideos.has(video.id)}
+                    onSelect={handleVideoSelect}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* Load More Button */}
             {hasMore && !searchTerm && (
-              <div className="flex justify-center pt-4">
+              <div className="flex justify-center pt-6">
                 <Button
                   variant="outline"
                   onClick={() => loadVideos(false)}
@@ -352,9 +491,44 @@ export default function VideosPage() {
                 </Button>
               </div>
             )}
-          </div>
+
+            {/* Loading More Skeletons */}
+            {loadingMore && (
+              viewMode === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <VideoCardSkeleton key={i} variant="grid" />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4 mt-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <VideoCardSkeleton key={i} variant="list" />
+                  ))}
+                </div>
+              )
+            )}
+          </>
         )}
       </div>
+
+      {/* Video Preview Modal */}
+      <VideoPreviewModal
+        video={previewVideo}
+        open={!!previewVideo}
+        onClose={() => setPreviewVideo(null)}
+        onDownload={handleDownload}
+        onMarkPosted={handleMarkPosted}
+      />
+
+      {/* Bulk Actions Bar */}
+      <BulkActionsBar
+        selectedCount={selectedVideos.size}
+        onDownloadAll={handleBulkDownload}
+        onMarkAllPosted={handleBulkMarkPosted}
+        onClearSelection={handleClearSelection}
+        totalUnposted={selectedUnpostedCount}
+      />
     </div>
   );
 }

@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
@@ -321,9 +322,11 @@ export default function PodcastClipsPage() {
                         {/* Thumbnail */}
                         <div className="relative flex-shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-muted">
                           {videoMetadata.thumbnail_url ? (
-                            <img
+                            <Image
                               src={videoMetadata.thumbnail_url}
                               alt={videoMetadata.title}
+                              width={128}
+                              height={80}
                               className="w-full h-full object-cover"
                             />
                           ) : (
@@ -433,6 +436,7 @@ export default function PodcastClipsPage() {
                       <SelectItem key="base" value="base">Base (Recommended)</SelectItem>
                       <SelectItem key="small" value="small">Small (Better)</SelectItem>
                       <SelectItem key="medium" value="medium">Medium (Best)</SelectItem>
+                      <SelectItem key="turbo" value="turbo">Turbo (Fastest)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

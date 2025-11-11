@@ -78,6 +78,8 @@ def list_managed_videos(
                 return True
             if workflow == "brainrot" and video_type == "compilation":
                 return True
+            if workflow == "podcastclips" and video_type == "podcast_clip":
+                return True
             return False
 
         videos = [v for v in videos if is_final_output(v)]

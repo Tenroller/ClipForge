@@ -176,7 +176,7 @@ class PodcastClipsProcessor:
                 raise ValueError("YouTube URL is required")
             
             ai_model = parameters.get('aiModel', 'gemini-2.5-pro')
-            whisper_model = parameters.get('whisperModel', 'base')
+            whisper_model = parameters.get('whisperModel', 'turbo')
             max_clip_count = parameters.get('maxClipCount', 15)  # Maximum clips, AI decides actual count
             min_duration = parameters.get('minDuration', 30)
             max_duration = parameters.get('maxDuration', 60)
@@ -323,7 +323,6 @@ class PodcastClipsProcessor:
                 model_size=model_size,
                 use_gpu=use_gpu,
                 vad_threshold=0.35,
-                refine_whisper_precision=0.15
             )
 
             logger.info(f"Transcription complete: {len(word_timings)} words")
