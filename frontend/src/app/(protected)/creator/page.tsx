@@ -174,14 +174,18 @@ export default function CreatorPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="mb-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">AI Video Creator</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Generate videos with AI-powered scripts and stock footage
-          </p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+      {/* Header Section with Gradient */}
+      <div className="mb-8 space-y-2">
+        <div className="inline-block">
+          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
+            AI Video Creator
+          </h1>
+          <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
         </div>
+        <p className="text-base text-muted-foreground max-w-2xl">
+          Generate professional videos with AI-powered scripts and stock footage in minutes
+        </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
@@ -254,44 +258,55 @@ export default function CreatorPage() {
           )}
 
           {/* Recent Jobs Card */}
-          <div className="border rounded-lg bg-card p-4 shadow-sm">
-            <h3 className="text-sm font-semibold mb-3">Recent Jobs</h3>
+          <div className="border rounded-xl bg-card/50 backdrop-blur-sm p-5 shadow-md hover:shadow-lg transition-all duration-300">
+            <h3 className="text-base font-bold mb-4 flex items-center gap-2">
+              <div className="size-2 rounded-full bg-primary animate-pulse" />
+              Recent Jobs
+            </h3>
             <div className="space-y-2">
               {recentJobs.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No recent jobs</p>
+                <div className="text-center py-8">
+                  <div className="size-12 rounded-full bg-muted mx-auto mb-3 flex items-center justify-center">
+                    <svg className="size-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <p className="text-sm text-muted-foreground">No recent jobs</p>
+                  <p className="text-xs text-muted-foreground mt-1">Start creating to see jobs here</p>
+                </div>
               ) : (
                 recentJobs.slice(0, 5).map((job) => (
                   <div
                     key={job.id}
-                    className="p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                    className="p-3 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/30 transition-all duration-200 cursor-pointer hover:-translate-y-0.5 hover:shadow-md group"
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <code className="text-xs font-mono">
+                    <div className="flex items-center justify-between mb-2">
+                      <code className="text-xs font-mono text-muted-foreground group-hover:text-foreground transition-colors">
                         {job.id.substring(0, 8)}...
                       </code>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
                         job.status === 'completed'
-                          ? 'bg-green-100 text-green-800'
+                          ? 'bg-success/10 text-success border border-success/20'
                           : job.status === 'error' || job.status === 'cancelled'
-                          ? 'bg-red-100 text-red-800'
-                          : 'bg-blue-100 text-blue-800'
+                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
+                          : 'bg-info/10 text-info border border-info/20 animate-pulse'
                       }`}>
                         {job.status}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {job.workflow === 'moneyprinter' ? 'AI Video' : 'Compilation'}
+                    <p className="text-xs text-muted-foreground truncate mb-1">
+                      {job.workflow === 'moneyprinter' ? '🎬 AI Video' : '🎞️ Compilation'}
                     </p>
                     {job.current_step && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Step: {job.current_step}
+                      <p className="text-xs text-muted-foreground mt-1.5 truncate">
+                        <span className="font-medium">Step:</span> {job.current_step}
                       </p>
                     )}
                     {job.progress !== undefined && job.progress >= 0 && (
                       <div className="mt-2">
-                        <div className="h-1 bg-muted rounded-full overflow-hidden">
+                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-primary transition-all duration-300"
+                            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-300 rounded-full"
                             style={{ width: `${job.progress}%` }}
                           />
                         </div>
