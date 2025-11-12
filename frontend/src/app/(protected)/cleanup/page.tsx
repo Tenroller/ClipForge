@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +10,7 @@ import { Trash2, Loader2, Check, AlertTriangle, File, Folder, RefreshCw } from "
 import { getTempFilesStats, cleanupTempFiles, type TempFileStats, type CleanupResult } from '@/lib/api';
 
 export default function CleanupPage() {
+  const t = useTranslations('cleanup');
   const { toast } = useToast();
   const [stats, setStats] = useState<TempFileStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,13 +23,13 @@ export default function CleanupPage() {
       const data = await getTempFilesStats();
       setStats(data);
       toast({
-        title: 'Statistics Refreshed',
-        description: 'Temporary file statistics have been updated',
+        title: t('statisticsRefreshed'),
+        description: t('statsUpdated'),
       });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to load temp file statistics';
+      const errorMessage = err instanceof Error ? err.message : t('failedToLoad');
       toast({
-        title: 'Failed to Refresh Statistics',
+        title: t('failedToRefresh'),
         description: errorMessage,
         variant: 'destructive',
       });
@@ -51,13 +53,13 @@ export default function CleanupPage() {
 
       // Show success toast
       toast({
-        title: 'Cleanup Completed',
-        description: `Deleted ${result.deleted_files} files, freed ${result.freed_space_mb.toFixed(2)} MB`,
+        title: t('cleanupCompleted'),
+        description: t('deletedFiles', { count: result.deleted_files, size: result.freed_space_mb.toFixed(2) }),
       });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to cleanup temp files';
+      const errorMessage = err instanceof Error ? err.message : t('failedToCleanup');
       toast({
-        title: 'Cleanup Failed',
+        title: t('cleanupFailed'),
         description: errorMessage,
         variant: 'destructive',
       });
@@ -97,12 +99,12 @@ export default function CleanupPage() {
           <div className="flex-1 space-y-2">
             <div className="inline-block">
               <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-                System Cleanup
+                {t('title')}
               </h1>
               <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
             </div>
             <p className="text-base text-muted-foreground max-w-2xl">
-              Manage temporary files and free up disk space
+              {t('description')}
             </p>
           </div>
           <Button
@@ -111,7 +113,7 @@ export default function CleanupPage() {
             variant="outline"
           >
             {loading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <RefreshCw className="size-4 mr-2" />}
-            Refresh Stats
+            {t('refreshStats')}
           </Button>
         </div>
 
@@ -124,12 +126,12 @@ export default function CleanupPage() {
                   <Check className="size-5 text-green-600" />
                 </div>
                 <div>
-                  <div className="font-semibold text-green-800 dark:text-green-200">Cleanup completed successfully!</div>
+                  <div className="font-semibold text-green-800 dark:text-green-200">{t('cleanupSuccess')}</div>
                   <div className="text-sm text-green-700 dark:text-green-300 mt-1">
-                    Deleted {cleanupResult.deleted_files} files, freed {cleanupResult.freed_space_mb.toFixed(2)} MB of space
+                    {t('deletedFiles', { count: cleanupResult.deleted_files, size: cleanupResult.freed_space_mb.toFixed(2) })}
                     {cleanupResult.errors.length > 0 && (
                       <div className="mt-2 text-yellow-700 dark:text-yellow-400">
-                        {cleanupResult.errors.length} error(s) occurred during cleanup
+                        {t('errorsOccurred', { count: cleanupResult.errors.length })}
                       </div>
                     )}
                   </div>
@@ -144,14 +146,14 @@ export default function CleanupPage() {
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <Folder className="size-5" />
-              Temporary Files Overview
+              {t('overview.title')}
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="size-6 animate-spin text-muted-foreground" />
-                <span className="ml-2 text-muted-foreground">Loading statistics...</span>
+                <span className="ml-2 text-muted-foreground">{t('loading')}</span>
               </div>
             ) : stats ? (
               <div className="space-y-5">
@@ -159,15 +161,15 @@ export default function CleanupPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
                   <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
                     <div className="text-2xl font-bold text-primary">{stats.total_files}</div>
-                    <div className="text-sm text-muted-foreground mt-1">Total Files</div>
+                    <div className="text-sm text-muted-foreground mt-1">{t('overview.totalFiles')}</div>
                   </div>
                   <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
                     <div className="text-2xl font-bold text-primary">{formatFileSize(stats.total_size_mb)}</div>
-                    <div className="text-sm text-muted-foreground mt-1">Total Size</div>
+                    <div className="text-sm text-muted-foreground mt-1">{t('overview.totalSize')}</div>
                   </div>
                   <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
                     <div className="text-2xl font-bold text-primary">{stats.directories.length}</div>
-                    <div className="text-sm text-muted-foreground mt-1">Directories</div>
+                    <div className="text-sm text-muted-foreground mt-1">{t('overview.directories')}</div>
                   </div>
                 </div>
 
@@ -183,12 +185,12 @@ export default function CleanupPage() {
                     {cleaning ? (
                       <>
                         <Loader2 className="size-5 animate-spin" />
-                        Cleaning up files...
+                        {t('actions.cleaning')}
                       </>
                     ) : (
                       <>
                         <Trash2 className="size-5" />
-                        Clean Up All Temp Files
+                        {t('actions.cleanAll')}
                       </>
                     )}
                   </Button>
@@ -197,13 +199,13 @@ export default function CleanupPage() {
                 {stats.total_files === 0 && (
                   <div className="text-center py-4 text-muted-foreground">
                     <Check className="size-8 mx-auto mb-2 text-green-500" />
-                    No temporary files found. Your system is clean!
+                    {t('overview.noFiles')}
                   </div>
                 )}
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
-                Failed to load temporary file statistics
+                {t('overview.failed')}
               </div>
             )}
           </CardContent>
@@ -212,7 +214,7 @@ export default function CleanupPage() {
         {/* Directory Details */}
         {stats && stats.directories.length > 0 && (
           <div className="grid gap-5">
-            <h2 className="text-xl font-semibold">Directory Details</h2>
+            <h2 className="text-xl font-semibold">{t('directoryDetails.title')}</h2>
             {stats.directories.map((dir) => (
               <Card key={dir.path} className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
                 <CardHeader className="pb-4">
@@ -224,7 +226,7 @@ export default function CleanupPage() {
                 <CardContent className="pt-0">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-4">
-                      <Badge variant="outline">{dir.file_count} files</Badge>
+                      <Badge variant="outline">{dir.file_count} {t('directoryDetails.files')}</Badge>
                       <span className="text-sm text-muted-foreground">
                         {formatFileSize(dir.total_size_mb)}
                       </span>
@@ -233,15 +235,15 @@ export default function CleanupPage() {
 
                   {/* Directory Information */}
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium text-muted-foreground">Directory Information:</h4>
+                    <h4 className="text-sm font-medium text-muted-foreground">{t('directoryDetails.directoryInfo')}</h4>
                     <div className="space-y-1">
                       <div className="text-sm text-muted-foreground">
                         <div className="flex items-center gap-2">
-                          <span><strong>Path:</strong> {dir.path}</span>
+                          <span><strong>{t('directoryDetails.path')}</strong> {dir.path}</span>
                         </div>
                         {dir.oldest_file_age_hours != null && (
                           <div className="flex items-center gap-2 mt-1">
-                            <span><strong>Oldest file:</strong> {dir.oldest_file_age_hours.toFixed(1)} hours old</span>
+                            <span><strong>{t('directoryDetails.oldestFile')}</strong> {t('directoryDetails.hoursOld', { hours: dir.oldest_file_age_hours.toFixed(1) })}</span>
                           </div>
                         )}
                       </div>
@@ -263,7 +265,7 @@ export default function CleanupPage() {
                       ) : (
                         <div className="text-sm text-muted-foreground py-2">
                           <Folder className="inline size-3 mr-2" />
-                          Directory details not available
+                          {t('directoryDetails.notAvailable')}
                         </div>
                       )}
                     </div>
@@ -280,7 +282,7 @@ export default function CleanupPage() {
             <CardHeader className="pb-4">
               <CardTitle className="text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
                 <AlertTriangle className="size-4" />
-                Cleanup Warnings
+                {t('warnings.title')}
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
