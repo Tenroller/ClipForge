@@ -226,7 +226,6 @@ class JobStore:
                 workflow=workflow,
                 user_id=user_id,
                 request_data=request_data,
-                logs=[],
                 resume_attempt=1,
                 resumed_to=[]
             )
@@ -244,9 +243,7 @@ class JobStore:
                 return
 
             for field, value in fields.items():
-                if field == "logs" and isinstance(value, list):
-                    setattr(job, 'logs', value)
-                elif field == "result" and isinstance(value, dict):
+                if field == "result" and isinstance(value, dict):
                     setattr(job, 'result', value)  # Changed from result_data to result
                 elif field == "error":
                     setattr(job, 'error_message', str(value) if value else None)
@@ -901,8 +898,7 @@ def migrate_from_json(json_file: Path, job_store: Optional[JobStore] = None) -> 
                 update_fields["result"] = job_data["result"]
             if "error" in job_data:
                 update_fields["error"] = job_data["error"]
-            if "logs" in job_data:
-                update_fields["logs"] = job_data["logs"]
+
             if "user_id" in job_data:
                 update_fields["user_id"] = job_data["user_id"]
             if "resume_data" in job_data:

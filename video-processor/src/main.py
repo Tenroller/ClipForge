@@ -97,6 +97,22 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Video Processing API...")
 
+    # Setup FFmpeg environment before any video processing
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from utils.ffmpeg_utils import setup_ffmpeg_environment, verify_ffmpeg_installation
+
+    logger.info("Setting up FFmpeg environment...")
+    ffmpeg_path, ffprobe_path = setup_ffmpeg_environment()
+
+    # Verify FFmpeg installation
+    ffmpeg_status = verify_ffmpeg_installation()
+    if not ffmpeg_status["ffmpeg_available"]:
+        logger.error(f"FFmpeg not found! Error: {ffmpeg_status.get('error', 'Unknown error')}")
+        logger.error("Please install FFmpeg: https://ffmpeg.org/download.html")
+        raise RuntimeError("FFmpeg is required but not found")
+
+    logger.info(f"FFmpeg setup complete: ffmpeg={ffmpeg_status['ffmpeg_path']}, ffprobe={ffmpeg_status['ffprobe_path']}")
+
     # Auto-update yt-dlp on startup
     _auto_update_yt_dlp(check_interval_days=1)
 
