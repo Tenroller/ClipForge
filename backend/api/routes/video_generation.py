@@ -397,12 +397,84 @@ async def podcastclips_generate(
         raise HTTPException(status_code=500, detail=f"Failed to generate podcast clips: {e}")
 
 
-# NOTE: The following endpoints have been removed as they accessed vendor code directly.
-# The video-processor service should provide equivalent APIs for these features:
-# - POST /AIvideos/suggest-subject - AI-powered subject suggestions
-# - GET /AIvideos/models - List available AI models
-# - GET /AIvideos/gpu-info - GPU acceleration information
-# - GET /voices - List available TTS voices
-# - GET /voice-sample - Generate TTS voice samples
-#
-# Frontend should be updated to call video-processor APIs directly for these features.
+@router.get("/AIvideos/models", summary="List AI Models")
+async def list_models() -> Dict[str, list]:
+    """
+    List available AI models.
+
+    This endpoint queries the video-processor service for available models.
+    Falls back to a static list if the processor is unavailable.
+    """
+    # Default fallback models
+    fallback_models = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-pro",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+    ]
+
+    try:
+        # Try to get models from video processor
+        from ...services.video_orchestrator import get_video_orchestrator
+        orchestrator = get_video_orchestrator()
+
+        # Query processor for available models
+        models = await orchestrator.processor_manager.get_available_models()
+
+        if models and len(models) > 0:
+            logger.info(f"Retrieved {len(models)} models from video-processor")
+            return {"models": models}
+        else:
+            logger.warning("No models returned from video-processor, using fallback list")
+            return {"models": fallback_models}
+
+    except Exception as e:
+        logger.error(f"Failed to list models from video-processor: {e}")
+        # Fallback to default models
+        return {"models": fallback_models}
+
+
+@router.get("/voices", summary="List TTS Voices")
+async def list_voices() -> Dict[str, list]:
+    """
+    List available TTS voices.
+
+    This endpoint queries the video-processor service for available voices.
+    Falls back to a static list if the processor is unavailable.
+    """
+    # Default fallback voices
+    fallback_voices = [
+        "af_bella",
+        "af_nicole",
+        "af_sarah",
+        "af_sky",
+        "am_adam",
+        "am_michael",
+        "bf_emma",
+        "bf_isabella",
+        "bm_george",
+        "bm_lewis",
+        "en_male_jomboy",
+        "en_female_samc",
+    ]
+
+    try:
+        # Try to get voices from video processor
+        from ...services.video_orchestrator import get_video_orchestrator
+        orchestrator = get_video_orchestrator()
+
+        # Query processor for available voices
+        voices = await orchestrator.processor_manager.get_available_voices()
+
+        if voices and len(voices) > 0:
+            logger.info(f"Retrieved {len(voices)} voices from video-processor")
+            return {"voices": voices}
+        else:
+            logger.warning("No voices returned from video-processor, using fallback list")
+            return {"voices": fallback_voices}
+
+    except Exception as e:
+        logger.error(f"Failed to list voices from video-processor: {e}")
+        # Fallback to default voices
+        return {"voices": fallback_voices}
