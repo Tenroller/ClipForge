@@ -40,6 +40,7 @@ class ViralMoment:
     engagement_factors: Dict[str, float] = field(default_factory=dict)  # Breakdown of score
     optimized_start: Optional[float] = None  # Hook-optimized start time
     optimized_end: Optional[float] = None  # Hook-optimized end time
+    thumbnail_text: Optional[str] = None  # AI-generated catchy phrase for thumbnail (<=25 chars)
 
     @property
     def duration(self) -> float:

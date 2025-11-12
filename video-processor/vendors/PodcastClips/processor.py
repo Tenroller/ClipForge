@@ -525,7 +525,8 @@ class PodcastClipsProcessor:
                     end_time=float(moment.get('end_time', 30)),
                     reason=moment.get('reason', 'Engaging content'),
                     hook=moment.get('hook', ''),
-                    clip_index=i + 1
+                    clip_index=i + 1,
+                    thumbnail_text=moment.get('thumbnail_text', '')
                 ))
 
             logger.info(f"AI detected {len(viral_moments)} viral moments")
@@ -543,7 +544,8 @@ class PodcastClipsProcessor:
                             "end_time": m.end_time,
                             "reason": m.reason,
                             "hook": m.hook,
-                            "clip_index": m.clip_index
+                            "clip_index": m.clip_index,
+                            "thumbnail_text": m.thumbnail_text
                         }
                         for m in viral_moments
                     ],
