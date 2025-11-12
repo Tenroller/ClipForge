@@ -3,18 +3,22 @@ Job callback endpoints for video processor notifications.
 """
 
 from typing import Dict, Any, Optional
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from ...logging_config import get_logger
 from ...database import get_job_store
 from ...utils.progress_tracker import get_progress_tracker
+from ...services.video_service import get_video_service
+from ...utils.paths import get_output_path
 
 router = APIRouter()
 logger = get_logger("job_callbacks")
 
 # Get database instance
 job_store = get_job_store()
+video_service = get_video_service()
 
 
 class JobCallbackPayload(BaseModel):
@@ -25,6 +29,97 @@ class JobCallbackPayload(BaseModel):
     current_step: Optional[str] = None
     error_message: Optional[str] = None
     result_data: Optional[Dict[str, Any]] = None
+
+
+def _auto_register_videos(job_id: str, workflow: Optional[str], result_data: Dict[str, Any]) -> None:
+    """
+    Automatically register videos when a job completes.
+
+    This ensures videos appear in the gallery immediately without requiring manual sync.
+    """
+    if not workflow or not result_data:
+        return
+
+    registered_count = 0
+
+    try:
+        # Check if videos are already registered for this job
+        existing_videos = video_service.list_videos(job_id=job_id, limit=1)
+        if existing_videos:
+            logger.debug(f"Videos already registered for job {job_id}, skipping auto-registration")
+            return
+
+        # Handle MoneyPrinter workflow
+        if workflow == "moneyprinter" and "output" in result_data:
+            video_path = result_data["output"]
+            if video_path and Path(video_path).exists():
+                video_service.register_video(
+                    job_id=job_id,
+                    file_path=video_path,
+                    workflow=workflow,
+                    video_type="ai_generated",
+                    metadata={"auto_registered": True}
+                )
+                registered_count += 1
+                logger.info(f"Auto-registered MoneyPrinter video for job {job_id}: {video_path}")
+
+        # Handle Brainrot workflow
+        elif workflow == "brainrot" and "generated_videos" in result_data:
+            generated_videos = result_data.get("generated_videos", [])
+            for video_data in generated_videos:
+                if not video_data:
+                    continue
+
+                video_path = video_data.get("path")
+                if video_path and Path(video_path).exists():
+                    video_service.register_video(
+                        job_id=job_id,
+                        file_path=video_path,
+                        workflow=workflow,
+                        video_type="compilation",
+                        compilation_type=video_data.get("compilation_type"),
+                        compilation_num=video_data.get("compilation_num"),
+                        metadata={"auto_registered": True}
+                    )
+                    registered_count += 1
+
+            if registered_count > 0:
+                logger.info(f"Auto-registered {registered_count} Brainrot videos for job {job_id}")
+
+        # Handle PodcastClips workflow
+        elif workflow == "podcastclips" and "generated_videos" in result_data:
+            generated_videos = result_data.get("generated_videos", [])
+            for video_data in generated_videos:
+                if not video_data:
+                    continue
+
+                video_path = video_data.get("path")
+                if video_path:
+                    # Resolve relative paths (from video-processor)
+                    if not Path(video_path).is_absolute():
+                        project_root = get_output_path().parent  # Get project root
+                        absolute_path = project_root / "video-processor" / video_path
+                    else:
+                        absolute_path = Path(video_path)
+
+                    if absolute_path.exists():
+                        video_service.register_video(
+                            job_id=job_id,
+                            file_path=str(absolute_path),
+                            workflow=workflow,
+                            video_type="podcast_clip",
+                            compilation_type=video_data.get("compilation_type"),
+                            compilation_num=video_data.get("compilation_num"),
+                            metadata={"auto_registered": True}
+                        )
+                        registered_count += 1
+
+            if registered_count > 0:
+                logger.info(f"Auto-registered {registered_count} PodcastClips videos for job {job_id}")
+
+    except Exception as e:
+        logger.error(f"Error in auto-registration for job {job_id}: {e}")
+        raise
 
 
 @router.post(
@@ -80,21 +175,28 @@ async def job_callback(payload: JobCallbackPayload) -> Dict[str, str]:
         
         job_store.update_job(job_id, **update_fields)
         logger.info(f"Updated job {job_id} status to {payload.status}")
-        
+
+        # Auto-register videos when job completes successfully
+        if payload.status == "completed" and payload.result_data:
+            try:
+                _auto_register_videos(job_id, job.get("workflow"), payload.result_data)
+            except Exception as e:
+                logger.error(f"Failed to auto-register videos for job {job_id}: {e}")
+
         # Update progress tracker if available
         try:
             tracker = get_progress_tracker(job_id)
-            
+
             if payload.status == "completed":
                 # Just update step, no logging
                 pass
             elif payload.status == "failed":
                 # Just update status, no logging
                 pass
-                
+
         except Exception as e:
             logger.warning(f"Failed to update progress tracker for job {job_id}: {e}")
-        
+
         return {"status": "success", "job_id": job_id}
         
     except HTTPException:
