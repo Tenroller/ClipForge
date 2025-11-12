@@ -12,8 +12,8 @@ interface SyncPanelProps {
 
 export default function SyncPanel({ onSyncFromJobs, onSyncOrphaned, syncing }: SyncPanelProps) {
   return (
-    <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800/30">
-      <CardHeader>
+    <Card className="border rounded-xl border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800/30 shadow-md backdrop-blur-sm">
+      <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-base">
           <RefreshCw className="size-4" />
           Sync Videos
@@ -22,7 +22,7 @@ export default function SyncPanel({ onSyncFromJobs, onSyncOrphaned, syncing }: S
           Sync videos from job results or scan for orphaned files
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-0">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Button
             variant="outline"

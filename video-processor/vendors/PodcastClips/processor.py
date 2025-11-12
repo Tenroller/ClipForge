@@ -12,6 +12,8 @@ Generates viral short-form videos from podcast content:
 import os
 import sys
 import json
+import cv2
+import base64
 from loguru import logger
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -197,6 +199,27 @@ class PodcastClipsProcessor:
             min_segment_duration = parameters.get('minSegmentDuration', 0.5)
             use_ocr = parameters.get('useOCR', True)
             transition_duration = parameters.get('transitionDuration', 0.5)
+
+            # AI-powered thumbnail configuration
+            thumbnail_use_ai = parameters.get('thumbnailUseAI', True)
+            thumbnail_red_box_color = parameters.get('thumbnailRedBoxColor', '#DC2626')
+            thumbnail_text_color = parameters.get('thumbnailTextColor', '#FFFF64')
+            thumbnail_blur_intensity = parameters.get('thumbnailBlurIntensity', 0.3)
+            thumbnail_box_position = parameters.get('thumbnailBoxPosition', 'bottom')
+            thumbnail_box_opacity = parameters.get('thumbnailBoxOpacity', 0.95)
+
+            # Store ai_model for thumbnail generation
+            self.ai_model = ai_model
+
+            # Store thumbnail config as instance variable for post-processing
+            self.thumbnail_config = {
+                'use_ai': thumbnail_use_ai,
+                'box_color': self._hex_to_rgb(thumbnail_red_box_color),
+                'text_color': self._hex_to_rgb(thumbnail_text_color),
+                'blur_intensity': thumbnail_blur_intensity,
+                'position': thumbnail_box_position,
+                'opacity': thumbnail_box_opacity
+            }
 
             # Face tracking smoothing configuration
             smoothing_strength = parameters.get('smoothingStrength', 11)  # 5=light, 11=medium, 21=strong
@@ -1027,11 +1050,14 @@ class PodcastClipsProcessor:
         generated_clips: List[Dict[str, Any]],
         viral_moments: List[ViralMoment]
     ) -> List[Dict[str, Any]]:
-        """Post-process clips: audio enhancement and thumbnail generation."""
-        self.update_progress("post_processing", 96, "Enhancing audio and generating thumbnails")
+        """Post-process clips: audio enhancement and AI-powered thumbnail generation."""
+        self.update_progress("post_processing", 96, "Enhancing audio and generating AI thumbnails")
 
         try:
-            logger.info("Post-processing clips")
+            logger.info("Post-processing clips with AI thumbnail generation")
+
+            # Import AI functions
+            from vendors.AIvideos.gpt import select_best_thumbnail_frame
 
             audio_enhancer = AudioEnhancer()
             thumbnail_gen = ThumbnailGenerator(platform="universal")
@@ -1056,26 +1082,72 @@ class PodcastClipsProcessor:
                 except Exception as e:
                     logger.warning(f"Audio normalization failed for clip {clip_index}: {e}")
 
-                # 2. Generate thumbnail
+                # 2. Generate AI-powered thumbnail
                 try:
-                    logger.debug(f"Generating thumbnail for clip {clip_index}")
+                    logger.debug(f"Generating AI thumbnail for clip {clip_index}")
                     thumbnail_path = clip_path.replace('.mp4', '_thumbnail.jpg')
 
-                    # Use optimized start time if available
-                    timestamp = moment.optimized_start if moment and moment.optimized_start else None
+                    # Extract catchy phrase from viral moment
+                    catchy_phrase = moment.thumbnail_text if moment and moment.thumbnail_text else title[:25]
+
+                    # Extract multiple candidate frames for AI selection
+                    candidate_frames = self._extract_candidate_frames(clip_path, num_frames=5)
+
+                    if candidate_frames and len(candidate_frames) > 0:
+                        # Use AI to select best frame
+                        try:
+                            viral_context = {
+                                'title': title,
+                                'hook': moment.hook if moment else '',
+                                'thumbnail_text': catchy_phrase
+                            }
+
+                            selection_result = select_best_thumbnail_frame(
+                                frame_images=candidate_frames,
+                                viral_context=viral_context,
+                                ai_model=self.ai_model
+                            )
+
+                            selected_frame_index = selection_result.get('selected_frame_index', 0)
+                            logger.info(f"AI selected frame {selected_frame_index} for clip {clip_index} "
+                                      f"(score: {selection_result.get('engagement_score', 0)})")
+
+                            # Calculate timestamp for selected frame
+                            frame_timestamp = (selected_frame_index / 5.0) * 5.0  # Frame index to timestamp
+
+                        except Exception as e:
+                            logger.warning(f"AI frame selection failed for clip {clip_index}: {e}")
+                            frame_timestamp = 2.0  # Fallback to 2 seconds
+                    else:
+                        # Fallback if frame extraction fails
+                        logger.warning(f"Frame extraction failed for clip {clip_index}, using default timestamp")
+                        frame_timestamp = 2.0
+
+                    # Generate thumbnail with red box overlay
+                    red_box_config = {
+                        'box_color': self.thumbnail_config['box_color'],
+                        'text_color': self.thumbnail_config['text_color'],
+                        'position': self.thumbnail_config['position'],
+                        'opacity': self.thumbnail_config['opacity']
+                    }
 
                     thumbnail_gen.generate_thumbnail(
                         video_path=clip_path,
                         title=title,
                         output_path=thumbnail_path,
-                        timestamp=2.0  # 2 seconds in for best frame
+                        timestamp=frame_timestamp,
+                        catchy_phrase=catchy_phrase,
+                        use_red_box=True,
+                        apply_blur=True,
+                        blur_intensity=self.thumbnail_config['blur_intensity'],
+                        red_box_config=red_box_config
                     )
 
                     clip_data['thumbnail_path'] = thumbnail_path
-                    logger.debug(f"Thumbnail generated for clip {clip_index}")
+                    logger.debug(f"AI thumbnail generated for clip {clip_index}")
 
                 except Exception as e:
-                    logger.warning(f"Thumbnail generation failed for clip {clip_index}: {e}")
+                    logger.warning(f"Thumbnail generation failed for clip {clip_index}: {e}", exc_info=True)
                     clip_data['thumbnail_path'] = None
 
                 enhanced_clips.append(clip_data)
@@ -1088,6 +1160,81 @@ class PodcastClipsProcessor:
             logger.error(f"Post-processing failed: {e}")
             # Return original clips if post-processing fails
             return generated_clips
+
+    def _extract_candidate_frames(self, video_path: str, num_frames: int = 5) -> List[str]:
+        """
+        Extract multiple candidate frames from video for AI selection.
+
+        Samples frames from the first 5 seconds of the video and returns them
+        as base64-encoded data URIs.
+
+        Args:
+            video_path: Path to video file
+            num_frames: Number of frames to extract (default: 5)
+
+        Returns:
+            List of base64-encoded image data URIs
+        """
+        try:
+            cap = cv2.VideoCapture(video_path)
+
+            if not cap.isOpened():
+                logger.error(f"Could not open video: {video_path}")
+                return []
+
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+            # Sample frames from first 5 seconds
+            sample_duration = min(5.0, total_frames / fps)
+            sample_frames_count = int(sample_duration * fps)
+
+            frame_data_uris = []
+
+            # Extract frames at equal intervals
+            for i in range(num_frames):
+                frame_num = int((i / num_frames) * sample_frames_count)
+                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+                ret, frame = cap.read()
+
+                if not ret:
+                    continue
+
+                # Encode frame as JPEG
+                _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+                # Convert to base64
+                frame_b64 = base64.b64encode(buffer).decode('utf-8')
+
+                # Create data URI
+                data_uri = f"data:image/jpeg;base64,{frame_b64}"
+                frame_data_uris.append(data_uri)
+
+            cap.release()
+
+            logger.debug(f"Extracted {len(frame_data_uris)} candidate frames from {video_path}")
+
+            return frame_data_uris
+
+        except Exception as e:
+            logger.error(f"Failed to extract candidate frames: {e}", exc_info=True)
+            return []
+
+    def _hex_to_rgb(self, hex_color: str) -> tuple:
+        """
+        Convert hex color to RGB tuple.
+
+        Args:
+            hex_color: Hex color string (e.g., "#DC2626" or "DC2626")
+
+        Returns:
+            RGB tuple (r, g, b)
+        """
+        # Remove '#' if present
+        hex_color = hex_color.lstrip('#')
+
+        # Convert to RGB
+        return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
 
     def _cleanup(self):
         """Clean up temporary files and resources."""

@@ -26,7 +26,8 @@
       "Bash(curl:*)",
       "Bash(PGPASSWORD=\"senhalegal\" psql:*)",
       "WebFetch(domain:fonts.gstatic.com)",
-      "WebFetch(domain:fonts.googleapis.com)"
+      "WebFetch(domain:fonts.googleapis.com)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

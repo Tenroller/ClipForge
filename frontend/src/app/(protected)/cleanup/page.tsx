@@ -90,28 +90,34 @@ export default function CleanupPage() {
   };
 
   return (
-    <div className="container-page fade-in max-w-[1200px]">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold">System Cleanup</h1>
-            <p className="text-muted-foreground mt-2">Manage temporary files and free up disk space</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div className="flex-1 space-y-2">
+            <div className="inline-block">
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
+                System Cleanup
+              </h1>
+              <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
+            </div>
+            <p className="text-base text-muted-foreground max-w-2xl">
+              Manage temporary files and free up disk space
+            </p>
           </div>
           <Button
             onClick={loadStats}
             disabled={loading}
             variant="outline"
-            className="flex items-center gap-2"
           >
-            {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
+            {loading ? <Loader2 className="size-4 mr-2 animate-spin" /> : <RefreshCw className="size-4 mr-2" />}
             Refresh Stats
           </Button>
         </div>
 
         {/* Cleanup Status Card */}
         {cleanupResult && (
-          <Card className="border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800/30">
+          <Card className="border rounded-xl border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800/30 shadow-md backdrop-blur-sm">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="flex-shrink-0">
@@ -134,34 +140,34 @@ export default function CleanupPage() {
         )}
 
         {/* Stats Overview */}
-        <Card className="enhanced-card">
-          <CardHeader>
+        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+          <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <Folder className="size-5" />
               Temporary Files Overview
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 <span className="ml-2 text-muted-foreground">Loading statistics...</span>
               </div>
             ) : stats ? (
-              <div className="space-y-4">
+              <div className="space-y-5">
                 {/* Summary Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="text-center p-4 rounded-lg bg-muted/30 border">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                  <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
                     <div className="text-2xl font-bold text-primary">{stats.total_files}</div>
-                    <div className="text-sm text-muted-foreground">Total Files</div>
+                    <div className="text-sm text-muted-foreground mt-1">Total Files</div>
                   </div>
-                  <div className="text-center p-4 rounded-lg bg-muted/30 border">
+                  <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
                     <div className="text-2xl font-bold text-primary">{formatFileSize(stats.total_size_mb)}</div>
-                    <div className="text-sm text-muted-foreground">Total Size</div>
+                    <div className="text-sm text-muted-foreground mt-1">Total Size</div>
                   </div>
-                  <div className="text-center p-4 rounded-lg bg-muted/30 border">
+                  <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
                     <div className="text-2xl font-bold text-primary">{stats.directories.length}</div>
-                    <div className="text-sm text-muted-foreground">Directories</div>
+                    <div className="text-sm text-muted-foreground mt-1">Directories</div>
                   </div>
                 </div>
 
@@ -205,17 +211,17 @@ export default function CleanupPage() {
 
         {/* Directory Details */}
         {stats && stats.directories.length > 0 && (
-          <div className="grid gap-4">
+          <div className="grid gap-5">
             <h2 className="text-xl font-semibold">Directory Details</h2>
             {stats.directories.map((dir) => (
-              <Card key={dir.path} className="enhanced-card">
-                <CardHeader>
+              <Card key={dir.path} className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+                <CardHeader className="pb-4">
                   <CardTitle className="flex items-center gap-2 text-base">
                     <Folder className="size-4" />
                     {dir.path.split(/[/\\]/).pop() || dir.path}
                   </CardTitle>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="pt-0">
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-4">
                       <Badge variant="outline">{dir.file_count} files</Badge>
@@ -270,14 +276,14 @@ export default function CleanupPage() {
 
         {/* Cleanup Errors */}
         {cleanupResult && cleanupResult.errors.length > 0 && (
-          <Card className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20 dark:border-yellow-800/30">
-            <CardHeader>
+          <Card className="border rounded-xl border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20 dark:border-yellow-800/30 shadow-md backdrop-blur-sm">
+            <CardHeader className="pb-4">
               <CardTitle className="text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
                 <AlertTriangle className="size-4" />
                 Cleanup Warnings
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <div className="space-y-2">
                 {cleanupResult.errors.map((error, index) => (
                   <div key={index} className="text-sm text-yellow-700 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded">

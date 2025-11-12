@@ -7,7 +7,6 @@ const protectedRoutes = [
   '/compilations',
   '/videos',
   '/activity',
-  '/downloads',
   '/cleanup',
   '/job',
 ];

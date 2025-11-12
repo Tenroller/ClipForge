@@ -99,7 +99,7 @@ export default function ActivityPage() {
   // If showing results, render the result panel
   if (selectedResult) {
     return (
-      <div className="container-page fade-in max-w-[1200px]">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
         <ResultPanel
           job={selectedResult}
           onClose={handleCloseResult}
@@ -109,29 +109,33 @@ export default function ActivityPage() {
   }
 
   return (
-    <div className="container-page fade-in">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
       <div className="space-y-6">
         {/* Enhanced Header */}
-        <div className="glass-header">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="section-title">Job Activity</h1>
-              <p className="section-subtitle">View and manage your video generation jobs</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div className="flex-1 space-y-2">
+            <div className="inline-block">
+              <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
+                Job Activity
+              </h1>
+              <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
             </div>
-            <Button
-              variant="outline"
-              onClick={() => refetch()}
-              disabled={isLoading}
-              className="hover:bg-primary/10 hover:border-primary/50 transition-all"
-            >
-              <RefreshCw className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-              Refresh
-            </Button>
+            <p className="text-base text-muted-foreground max-w-2xl">
+              View and manage your video generation jobs
+            </p>
           </div>
+          <Button
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isLoading}
+          >
+            <RefreshCw className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
         </div>
 
         {/* Jobs List */}
-        <Card className="enhanced-card border-2">
+        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
           <CardHeader className="border-b bg-gradient-to-r from-muted/30 to-muted/10">
             <CardTitle className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -164,11 +168,11 @@ export default function ActivityPage() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {jobs.map((job, idx) => (
                   <div
                     key={job.id}
-                    className="flex items-center justify-between p-5 rounded-xl border-2 bg-gradient-to-r from-card to-card/50 hover:from-accent/10 hover:to-accent/5 hover:border-primary/30 transition-all duration-300 hover:shadow-lg group"
+                    className="flex items-center justify-between p-4 rounded-xl border bg-card/50 backdrop-blur-sm hover:bg-accent/10 hover:border-primary/30 transition-all duration-200 hover:shadow-md group"
                     style={{ animationDelay: `${idx * 50}ms` }}
                   >
                     <div className="flex-1 min-w-0">
@@ -284,9 +288,9 @@ export default function ActivityPage() {
         </Card>
 
         {/* Enhanced Stats Card */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
-            <CardContent className="pt-6 pb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-5">
               <div className="flex items-center justify-between mb-2">
                 <div className="size-10 rounded-lg bg-green-500/10 flex items-center justify-center group-hover:bg-green-500/20 transition-colors">
                   <svg className="size-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
@@ -300,8 +304,8 @@ export default function ActivityPage() {
               <p className="text-sm text-muted-foreground font-medium mt-1">Completed</p>
             </CardContent>
           </Card>
-          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
-            <CardContent className="pt-6 pb-6">
+          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-5">
               <div className="flex items-center justify-between mb-2">
                 <div className="size-10 rounded-lg bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
                   <Loader2 className="size-5 text-blue-500" />
@@ -313,8 +317,8 @@ export default function ActivityPage() {
               <p className="text-sm text-muted-foreground font-medium mt-1">In Progress</p>
             </CardContent>
           </Card>
-          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
-            <CardContent className="pt-6 pb-6">
+          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-5">
               <div className="flex items-center justify-between mb-2">
                 <div className="size-10 rounded-lg bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors">
                   <svg className="size-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
@@ -328,8 +332,8 @@ export default function ActivityPage() {
               <p className="text-sm text-muted-foreground font-medium mt-1">Failed</p>
             </CardContent>
           </Card>
-          <Card className="enhanced-card group cursor-pointer hover:scale-105 transition-transform border-2">
-            <CardContent className="pt-6 pb-6">
+          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+            <CardContent className="p-5">
               <div className="flex items-center justify-between mb-2">
                 <div className="size-10 rounded-lg bg-gray-500/10 flex items-center justify-center group-hover:bg-gray-500/20 transition-colors">
                   <svg className="size-5 text-gray-500" fill="currentColor" viewBox="0 0 20 20">

@@ -50,17 +50,27 @@ class ThumbnailGenerator:
         title: str,
         output_path: str,
         timestamp: Optional[float] = None,
-        face_bbox: Optional[Tuple[int, int, int, int]] = None
+        face_bbox: Optional[Tuple[int, int, int, int]] = None,
+        catchy_phrase: Optional[str] = None,
+        use_red_box: bool = True,
+        apply_blur: bool = True,
+        blur_intensity: float = 0.3,
+        red_box_config: Optional[dict] = None
     ) -> str:
         """
         Generate thumbnail from video clip.
 
         Args:
             video_path: Path to video file
-            title: Clip title for text overlay
+            title: Clip title for text overlay (fallback if no catchy_phrase)
             output_path: Path to save thumbnail
             timestamp: Specific timestamp to extract frame (default: middle of video)
             face_bbox: Optional face bounding box (x, y, width, height) for framing
+            catchy_phrase: AI-generated catchy phrase for red box overlay
+            use_red_box: Whether to use red box overlay (default: True)
+            apply_blur: Whether to apply background blur effect (default: True)
+            blur_intensity: Blur/darken intensity (0.0-1.0, default: 0.3)
+            red_box_config: Configuration dict for red box (color, opacity, padding, etc.)
 
         Returns:
             Path to generated thumbnail
@@ -86,8 +96,16 @@ class ThumbnailGenerator:
             # Apply enhancements
             img = self._enhance_image(img)
 
-            # Add text overlay
-            img = self._add_text_overlay(img, title)
+            # Apply background blur if requested
+            if apply_blur:
+                img = self._apply_background_blur(img, intensity=blur_intensity)
+
+            # Use red box overlay if catchy phrase provided
+            if use_red_box and catchy_phrase:
+                img = self._apply_red_box_overlay(img, catchy_phrase, red_box_config)
+            else:
+                # Fallback to old text overlay style
+                img = self._add_text_overlay(img, title)
 
             # Add borders/effects
             img = self._add_border_effects(img)
@@ -273,6 +291,165 @@ class ThumbnailGenerator:
         draw.text((x, y), title, font=font, fill=(255, 255, 100, 255))
 
         return img
+
+    def _apply_background_blur(self, img: Image.Image, intensity: float = 0.3) -> Image.Image:
+        """
+        Apply subtle blur and darkening to background for focus.
+
+        Args:
+            img: Input image
+            intensity: Blur/darken intensity (0.0-1.0)
+
+        Returns:
+            Image with blurred/darkened background
+        """
+        # Create darkening overlay
+        width, height = img.size
+        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # Calculate alpha for darkening effect
+        alpha = int(intensity * 100)  # 0.3 -> 30% darkness
+
+        # Draw semi-transparent dark overlay
+        draw.rectangle([0, 0, width, height], fill=(0, 0, 0, alpha))
+
+        # Apply overlay to image
+        img = img.convert('RGBA')
+        img = Image.alpha_composite(img, overlay)
+
+        return img.convert('RGB')
+
+    def _apply_red_box_overlay(
+        self,
+        img: Image.Image,
+        catchy_phrase: str,
+        config: Optional[dict] = None
+    ) -> Image.Image:
+        """
+        Apply viral-style red box overlay with catchy phrase.
+
+        Creates a bold red rectangular box with white/yellow text overlay,
+        positioned for maximum engagement.
+
+        Args:
+            img: Input image
+            catchy_phrase: AI-generated catchy phrase text
+            config: Optional configuration dict with:
+                - box_color: RGB tuple (default: red #DC2626)
+                - text_color: RGB tuple (default: yellow-tinted white)
+                - padding: Box padding in pixels
+                - position: 'bottom', 'center', or 'top'
+
+        Returns:
+            Image with red box overlay
+        """
+        # Default configuration
+        default_config = {
+            'box_color': (220, 38, 38),      # Red #DC2626
+            'text_color': (255, 255, 100),   # Yellow-tinted white #FFFF64
+            'padding': 30,
+            'position': 'bottom',
+            'opacity': 0.95,
+            'stroke_width': 5,
+            'stroke_color': (0, 0, 0)
+        }
+
+        # Merge with provided config
+        if config:
+            default_config.update(config)
+
+        cfg = default_config
+        width, height = img.size
+
+        # Convert to RGBA for transparency
+        img = img.convert('RGBA')
+
+        # Create overlay layer
+        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # Prepare text
+        text = catchy_phrase.upper()  # All caps for impact
+
+        # Load font (larger size for red box)
+        try:
+            font_paths = [
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "C:\\Windows\\Fonts\\arialbd.ttf",
+            ]
+
+            font = None
+            for font_path in font_paths:
+                if Path(font_path).exists():
+                    font = ImageFont.truetype(font_path, 90)
+                    break
+
+            if font is None:
+                font = ImageFont.load_default()
+
+        except Exception:
+            font = ImageFont.load_default()
+
+        # Calculate text dimensions
+        bbox = draw.textbbox((0, 0), text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+
+        # Calculate box dimensions (with padding)
+        box_width = text_width + (cfg['padding'] * 2)
+        box_height = text_height + (cfg['padding'] * 2)
+
+        # Position box based on config
+        if cfg['position'] == 'bottom':
+            box_x = (width - box_width) // 2
+            box_y = int(height * 0.65)  # Lower third
+        elif cfg['position'] == 'center':
+            box_x = (width - box_width) // 2
+            box_y = (height - box_height) // 2
+        else:  # top
+            box_x = (width - box_width) // 2
+            box_y = int(height * 0.15)
+
+        # Calculate text position (centered in box)
+        text_x = box_x + cfg['padding']
+        text_y = box_y + cfg['padding']
+
+        # Draw red box with opacity
+        box_color_with_alpha = cfg['box_color'] + (int(cfg['opacity'] * 255),)
+        draw.rectangle(
+            [box_x, box_y, box_x + box_width, box_y + box_height],
+            fill=box_color_with_alpha
+        )
+
+        # Draw text with stroke (for readability)
+        stroke_width = cfg['stroke_width']
+
+        # Draw stroke (black outline)
+        for offset_x in range(-stroke_width, stroke_width + 1):
+            for offset_y in range(-stroke_width, stroke_width + 1):
+                if offset_x == 0 and offset_y == 0:
+                    continue
+                draw.text(
+                    (text_x + offset_x, text_y + offset_y),
+                    text,
+                    font=font,
+                    fill=cfg['stroke_color'] + (255,)
+                )
+
+        # Draw main text (yellow-tinted white)
+        draw.text(
+            (text_x, text_y),
+            text,
+            font=font,
+            fill=cfg['text_color'] + (255,)
+        )
+
+        # Composite overlay onto image
+        img = Image.alpha_composite(img, overlay)
+
+        return img.convert('RGB')
 
     def _add_border_effects(self, img: Image.Image) -> Image.Image:
         """

@@ -386,38 +386,173 @@ def get_search_terms(video_subject: str, amount: int, script: str, ai_model: str
     return search_terms
 
 
-def generate_metadata(video_subject: str, script: str, ai_model: str) -> Tuple[str, str, List[str]]:  
-    """  
-    Generate metadata for a YouTube video, including the title, description, and keywords.  
-  
-    Args:  
-        video_subject (str): The subject of the video.  
-        script (str): The script of the video.  
-        ai_model (str): The AI model to use for generation.  
-  
-    Returns:  
-        Tuple[str, str, List[str]]: The title, description, and keywords for the video.  
-    """  
-  
-    # Build prompt for title  
-    title_prompt = f"""  
-    Generate a catchy and SEO-friendly title for a YouTube shorts video about {video_subject}.  
-    """  
-  
-    # Generate title  
-    title = generate_response(title_prompt, ai_model).strip()  
-    
-    # Build prompt for description  
-    description_prompt = f"""  
-    Write a brief and engaging description for a YouTube shorts video about {video_subject}.  
-    The video is based on the following script:  
-    {script}  
-    """  
-  
-    # Generate description  
-    description = generate_response(description_prompt, ai_model).strip()  
-  
-    # Generate keywords  
-    keywords = get_search_terms(video_subject, 6, script, ai_model)  
+def generate_metadata(video_subject: str, script: str, ai_model: str) -> Tuple[str, str, List[str]]:
+    """
+    Generate metadata for a YouTube video, including the title, description, and keywords.
+
+    Args:
+        video_subject (str): The subject of the video.
+        script (str): The script of the video.
+        ai_model (str): The AI model to use for generation.
+
+    Returns:
+        Tuple[str, str, List[str]]: The title, description, and keywords for the video.
+    """
+
+    # Build prompt for title
+    title_prompt = f"""
+    Generate a catchy and SEO-friendly title for a YouTube shorts video about {video_subject}.
+    """
+
+    # Generate title
+    title = generate_response(title_prompt, ai_model).strip()
+
+    # Build prompt for description
+    description_prompt = f"""
+    Write a brief and engaging description for a YouTube shorts video about {video_subject}.
+    The video is based on the following script:
+    {script}
+    """
+
+    # Generate description
+    description = generate_response(description_prompt, ai_model).strip()
+
+    # Generate keywords
+    keywords = get_search_terms(video_subject, 6, script, ai_model)
 
     return title, description, keywords
+
+
+# Pydantic model for frame selection response
+class ThumbnailFrameSelection(BaseModel):
+    """Schema for AI-selected best thumbnail frame."""
+    selected_frame_index: int = Field(description="Index of the best frame for thumbnail (0-based)")
+    reasoning: str = Field(description="Brief explanation of why this frame was selected")
+    engagement_score: int = Field(description="Estimated engagement potential (0-100)")
+
+
+def select_best_thumbnail_frame(
+    frame_images: List[str],
+    viral_context: Dict[str, Any],
+    ai_model: str = "gemini-2.0-flash-exp"
+) -> Dict[str, Any]:
+    """
+    Use Gemini Vision API to select the best frame for a viral thumbnail.
+
+    Analyzes multiple candidate frames and selects the one with highest viral potential.
+    Considers facial expressions, composition, clarity, and engagement factors.
+
+    Args:
+        frame_images: List of base64-encoded image data URIs (e.g., "data:image/jpeg;base64,...")
+        viral_context: Context about the clip (title, hook, tags, etc.)
+        ai_model: Gemini model to use (must support vision)
+
+    Returns:
+        Dictionary with selected_frame_index, reasoning, and engagement_score
+
+    Raises:
+        RuntimeError: If API call fails
+    """
+    try:
+        logger.info("gemini.select_best_thumbnail_frame: start", extra={
+            "ai_model": ai_model,
+            "frame_count": len(frame_images)
+        })
+
+        # Get the client
+        client = _get_client()
+        if not client:
+            raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
+
+        # Build prompt with viral context
+        title = viral_context.get('title', 'Viral Moment')
+        hook = viral_context.get('hook', '')
+        thumbnail_text = viral_context.get('thumbnail_text', '')
+
+        prompt = f"""You are an expert at viral social media content optimization.
+
+Analyze these {len(frame_images)} thumbnail candidate frames and select the ONE with the highest viral potential for a short-form video clip.
+
+**Clip Context:**
+- Title: {title}
+- Hook: {hook}
+- Thumbnail Text: {thumbnail_text}
+
+**Selection Criteria (in priority order):**
+1. **Facial Expression** - Look for expressive faces showing emotion (surprise, excitement, focus, intensity)
+2. **Visual Clarity** - Sharp, well-lit, high-contrast frames
+3. **Composition** - Centered subject, clear focal point, engaging framing
+4. **Authenticity** - Natural moment that looks genuine (not mid-blink or awkward)
+5. **Stop-Scroll Factor** - Would this make someone stop scrolling?
+
+**Instructions:**
+- Analyze all {len(frame_images)} frames carefully
+- Consider which frame pairs best with the thumbnail text overlay
+- Prefer frames with dynamic facial expressions or gestures
+- Avoid frames where the person is mid-word (open mouth, weird expression)
+- Select the frame with maximum viral/engagement potential
+
+Return your selection as JSON."""
+
+        # Create content with images
+        # Gemini expects parts array with text and inline_data
+        content_parts = [prompt]
+
+        for i, frame_data in enumerate(frame_images):
+            # Extract base64 data from data URI
+            if frame_data.startswith("data:"):
+                # Format: "data:image/jpeg;base64,<base64_data>"
+                mime_type, base64_data = frame_data.split(";base64,")
+                mime_type = mime_type.replace("data:", "")
+
+                content_parts.append({
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": base64_data
+                    }
+                })
+                content_parts.append(f"Frame {i}")
+
+        # Generate structured response
+        response_model = client.models.generate_content(
+            model=ai_model,
+            contents=content_parts,
+            config={
+                "response_mime_type": "application/json",
+                "response_json_schema": ThumbnailFrameSelection.model_json_schema(),
+            }
+        )
+
+        # Extract text from response
+        response_text = getattr(response_model, 'text', None)
+        if not response_text:
+            try:
+                response_text = response_model.candidates[0].content.parts[0].text
+            except Exception:
+                response_text = ""
+
+        if not response_text:
+            raise RuntimeError("Empty response from Gemini Vision API")
+
+        # Parse and validate
+        selection_data = ThumbnailFrameSelection.model_validate_json(response_text)
+
+        logger.info("gemini.select_best_thumbnail_frame: success", extra={
+            "ai_model": ai_model,
+            "selected_index": selection_data.selected_frame_index,
+            "engagement_score": selection_data.engagement_score
+        })
+
+        return selection_data.model_dump()
+
+    except Exception as e:
+        logger.error("gemini.select_best_thumbnail_frame: error", exc_info=True, extra={
+            "ai_model": ai_model
+        })
+        print(colored(f"[-] Gemini Vision Error: {e}", "red"))
+        # Fallback: return first frame
+        return {
+            "selected_frame_index": 0,
+            "reasoning": "Fallback to first frame due to API error",
+            "engagement_score": 50
+        }

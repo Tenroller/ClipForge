@@ -159,14 +159,17 @@ export default function CompilationsPage() {
   };
 
   return (
-    <div className="container-page">
-      <div className="glass-header">
-        <div>
-          <h1 className="section-title">Video Compilation Generator</h1>
-          <p className="section-subtitle">
-            Create engaging compilation videos from YouTube content
-          </p>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+      <div className="mb-8 space-y-2">
+        <div className="inline-block">
+          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
+            Video Compilation Generator
+          </h1>
+          <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
         </div>
+        <p className="text-base text-muted-foreground max-w-2xl">
+          Create engaging compilation videos from YouTube content
+        </p>
       </div>
 
       <div className="space-y-6">
@@ -191,8 +194,8 @@ export default function CompilationsPage() {
         {!currentJobId && !completedJob && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Form Section */}
-            <Card className="enhanced-card">
-              <CardHeader>
+            <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+              <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-3">
                   <div className="size-8 rounded-lg bg-gradient-to-r from-green-500 to-blue-600 flex items-center justify-center">
                     <Brain className="size-4 text-white" />
@@ -203,7 +206,7 @@ export default function CompilationsPage() {
                   Transform YouTube videos into TikTok-style compilations
                 </p>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-0">
                 <form onSubmit={startBrainrot} className="space-y-4">
                   {/* Input Method Selection */}
                   <div className="space-y-3">
@@ -474,8 +477,8 @@ export default function CompilationsPage() {
             </Card>
 
             {/* Info Panel */}
-            <Card className="enhanced-card">
-              <CardHeader>
+            <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+              <CardHeader className="pb-4">
                 <CardTitle className="flex items-center gap-3">
                   <div className="size-8 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center">
                     <HelpCircle className="size-4 text-white" />
@@ -483,7 +486,7 @@ export default function CompilationsPage() {
                   How It Works
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-0">
                 <div className="space-y-4 text-sm text-muted-foreground">
                   <div className="flex gap-3">
                     <div className="size-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0 mt-0.5">

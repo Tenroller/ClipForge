@@ -7,8 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Download, Play, Film, Brain, Video as VideoIcon, Check, Clock } from "lucide-react";
 import { useState } from 'react';
 import Image from 'next/image';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+import { getThumbnailUrl } from '@/lib/api';
 
 export interface Video {
   id: string;
@@ -87,10 +86,10 @@ export default function GridVideoCard({
   };
 
   return (
-    <Card className={`group overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1 ${selected ? 'ring-2 ring-primary' : ''}`}>
+    <Card className={`group overflow-hidden transition-all duration-200 rounded-xl border shadow-md hover:shadow-lg hover:border-primary/50 bg-card/50 backdrop-blur-sm ${selected ? 'ring-2 ring-primary' : ''}`}>
       <CardContent className="p-0">
         {/* Thumbnail Section - 9:16 Portrait */}
-        <div className="relative w-full aspect-[9/16] bg-muted overflow-hidden">
+        <div className="relative w-full aspect-[9/16] bg-muted overflow-hidden rounded-t-xl">
           {/* Selection Checkbox */}
           {onSelect && (
             <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -111,7 +110,7 @@ export default function GridVideoCard({
                 </div>
               )}
               <Image
-                src={`${API_BASE}${video.thumbnail_url}`}
+                src={getThumbnailUrl(video.thumbnail_url)}
                 alt={video.filename}
                 fill
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
@@ -130,18 +129,18 @@ export default function GridVideoCard({
           {/* Play Button Overlay */}
           {onPlay && (
             <div
-              className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer"
               onClick={() => onPlay(video)}
             >
-              <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center transform transition-transform group-hover:scale-110">
-                <Play className="size-6 text-gray-900 ml-1" />
+              <div className="w-14 h-14 rounded-full bg-white/95 flex items-center justify-center transform transition-all duration-200 hover:scale-110 hover:bg-white shadow-lg">
+                <Play className="size-5 text-gray-900 ml-0.5" fill="currentColor" />
               </div>
             </div>
           )}
 
           {/* Duration Badge */}
           {video.duration_seconds && (
-            <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded font-medium">
+            <div className="absolute bottom-2 right-2 bg-black/90 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md font-medium">
               {Math.floor(video.duration_seconds / 60)}:{(video.duration_seconds % 60).toString().padStart(2, '0')}
             </div>
           )}
@@ -149,7 +148,7 @@ export default function GridVideoCard({
           {/* Posted Badge */}
           {video.posted && (
             <div className="absolute top-2 right-2">
-              <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700">
+              <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700 shadow-sm">
                 <Check className="size-3 mr-1" />
                 Posted
               </Badge>
@@ -158,42 +157,38 @@ export default function GridVideoCard({
         </div>
 
         {/* Content Section */}
-        <div className="p-3 space-y-3">
-          {/* Title */}
-          <div>
-            <h3 className="font-medium text-sm line-clamp-2 leading-tight min-h-[2.5rem]" title={video.filename}>
-              {video.filename}
-            </h3>
-          </div>
-
-          {/* Workflow Badge */}
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className={`text-xs ${getWorkflowColor()}`}>
+        <div className="p-4 space-y-3">
+          {/* Title and Workflow Badge */}
+          <div className="space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="font-semibold text-sm line-clamp-2 leading-tight flex-1" title={video.filename}>
+                {video.filename}
+              </h3>
+            </div>
+            <Badge variant="outline" className={`text-xs w-fit ${getWorkflowColor()}`}>
               {getWorkflowIcon()}
               <span className="ml-1 capitalize">{video.workflow}</span>
             </Badge>
           </div>
 
           {/* Metadata */}
-          <div className="space-y-1 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
               <Clock className="size-3 shrink-0" />
               <span>{formatDate(video.created_at)}</span>
             </div>
-            <div className="flex items-center justify-between">
-              <span>Size: {formatFileSize(video.size_bytes)}</span>
-            </div>
+            <span className="font-medium">{formatFileSize(video.size_bytes)}</span>
           </div>
 
           {/* Actions */}
-          <div className="flex gap-2 pt-1">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => onDownload(video)}
-              className="flex-1 h-8 text-xs"
+              className="flex-1 h-9"
             >
-              <Download className="size-3 mr-1" />
+              <Download className="size-4 mr-1.5" />
               Download
             </Button>
             {onMarkPosted && !video.posted && (
@@ -201,10 +196,10 @@ export default function GridVideoCard({
                 variant="outline"
                 size="sm"
                 onClick={() => onMarkPosted(video)}
-                className="h-8 text-xs"
+                className="h-9 px-3"
                 title="Mark as Posted"
               >
-                <Check className="size-3" />
+                <Check className="size-4" />
               </Button>
             )}
           </div>

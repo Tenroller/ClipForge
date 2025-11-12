@@ -32,8 +32,8 @@ export default function VideoFilters({
   onSortOrderChange,
 }: VideoFiltersProps) {
   return (
-    <Card>
-      <CardContent className="pt-6">
+    <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+      <CardContent className="p-5">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           {/* Search */}
           <div className="md:col-span-2">

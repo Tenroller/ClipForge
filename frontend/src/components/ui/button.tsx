@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 import { cva, type VariantProps } from "class-variance-authority"
@@ -52,7 +54,6 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, loading = false, ripple = true, children, onClick, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
     const [ripples, setRipples] = React.useState<Array<{ x: number; y: number; id: number }>>([])
 
     const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -76,8 +77,22 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       }
     }
 
+    if (asChild) {
+      return (
+        <Slot
+          className={cn(buttonVariants({ variant, size, className }))}
+          ref={ref}
+          onClick={handleClick}
+          disabled={loading || props.disabled}
+          {...props}
+        >
+          {children}
+        </Slot>
+      )
+    }
+
     return (
-      <Comp
+      <button
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         onClick={handleClick}
@@ -101,7 +116,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           <Loader2 className="h-4 w-4 animate-spin" />
         )}
         {!loading && children}
-      </Comp>
+      </button>
     )
   }
 )

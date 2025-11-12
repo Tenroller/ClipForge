@@ -51,26 +51,24 @@ export default function VideoCardSkeleton({ variant = 'grid' }: VideoCardSkeleto
         <div className="relative w-full aspect-[9/16] bg-muted" />
 
         {/* Content skeleton */}
-        <div className="p-3 space-y-3">
-          {/* Title skeleton */}
+        <div className="p-4 space-y-3">
+          {/* Title and badge skeleton */}
           <div className="space-y-2">
             <div className="h-4 bg-muted rounded w-full" />
             <div className="h-4 bg-muted rounded w-4/5" />
+            <div className="h-6 bg-muted rounded w-24" />
           </div>
 
-          {/* Badge skeleton */}
-          <div className="h-6 bg-muted rounded w-24" />
-
           {/* Metadata skeleton */}
-          <div className="space-y-1.5">
-            <div className="h-3 bg-muted rounded w-32" />
-            <div className="h-3 bg-muted rounded w-20" />
+          <div className="flex items-center justify-between">
+            <div className="h-3 bg-muted rounded w-28" />
+            <div className="h-3 bg-muted rounded w-16" />
           </div>
 
           {/* Actions skeleton */}
-          <div className="flex gap-2 pt-1">
-            <div className="h-8 bg-muted rounded flex-1" />
-            <div className="h-8 bg-muted rounded w-8" />
+          <div className="flex gap-2">
+            <div className="h-9 bg-muted rounded flex-1" />
+            <div className="h-9 bg-muted rounded w-11" />
           </div>
         </div>
       </CardContent>

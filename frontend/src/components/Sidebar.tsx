@@ -13,7 +13,6 @@ import {
   Brain,
   Images,
   TrendingUp,
-  Download,
   Trash2,
   ChevronRight,
   LogOut,
@@ -78,13 +77,6 @@ export default function Sidebar({ username, className }: SidebarProps) {
       label: 'Activity',
       icon: <TrendingUp className="size-4" />,
       description: 'Job history & status',
-    },
-    {
-      id: 'downloads',
-      href: '/downloads',
-      label: 'Downloads',
-      icon: <Download className="size-4" />,
-      description: 'Manage your videos',
     },
     {
       id: 'cleanup',

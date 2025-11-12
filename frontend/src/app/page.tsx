@@ -33,7 +33,7 @@ export default function HomePage() {
 
               {/* Subtitle */}
               <p className="mx-auto max-w-2xl text-lg sm:text-xl lg:text-2xl text-muted-foreground leading-relaxed">
-                Transform ideas into engaging videos in minutes. Enterprise-grade AI video generation platform with dual workflows, cloud GPU acceleration, and comprehensive monitoring.
+                Transform ideas into engaging videos in minutes. Enterprise-grade AI video generation platform with three powerful workflows: AI Video Creator, Compilations, and Podcast Viral Clips.
               </p>
 
               {/* CTA Buttons */}
@@ -74,13 +74,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Dual Workflows Section */}
+      {/* Workflows Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28">
-        <div className="mx-auto max-w-6xl space-y-12">
+        <div className="mx-auto max-w-7xl space-y-12">
           <div className="text-center space-y-4">
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold">
-              <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
-                Two Powerful Workflows
+              <span className="bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent">
+                Three Powerful Workflows
               </span>
             </h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
@@ -88,7 +88,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* MoneyPrinter Card */}
             <Card className="overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-300">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -176,6 +176,50 @@ export default function HomePage() {
                 </Button>
               </CardContent>
             </Card>
+
+            {/* Podcast Clips Card */}
+            <Card className="overflow-hidden group cursor-pointer hover:shadow-lg transition-all duration-300">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+              <CardContent className="p-8 space-y-6 relative">
+                <div className="size-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-blue-500 flex items-center justify-center shadow-xl group-hover:scale-110 transition-transform">
+                  <svg className="size-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  </svg>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-2xl font-bold">Podcast Viral Clips</h3>
+                  <p className="text-muted-foreground leading-relaxed">
+                    Transform long-form podcasts into viral short clips. AI-powered moment detection, smart face tracking, and karaoke-style subtitles optimized for social media.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {[
+                    'AI Viral Moment Detection with Gemini',
+                    'Smart Face Tracking & 9:16 Cropping',
+                    'Mixed-Mode Content Detection (Face/Screen)',
+                    'Karaoke-Style Word Highlighting',
+                    'Parallel Clip Generation (3x Faster)',
+                  ].map((feature, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm">
+                      <div className="size-5 rounded-full bg-emerald-500/10 flex items-center justify-center shrink-0">
+                        <svg className="size-3 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span>{feature}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <Button asChild className="w-full" variant="default">
+                  <Link href="/login">
+                    Try Podcast Clips
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </section>
@@ -200,6 +244,16 @@ export default function HomePage() {
                 description: 'Leverage powerful L40S, A100, and H100 GPUs for lightning-fast video processing',
               },
               {
+                icon: '🎯',
+                title: 'AI Viral Detection',
+                description: 'Gemini-powered analysis identifies the most engaging moments in your podcasts',
+              },
+              {
+                icon: '👤',
+                title: 'Smart Face Tracking',
+                description: 'MediaPipe face detection with intelligent 9:16 cropping for social media',
+              },
+              {
                 icon: '📊',
                 title: 'Real-Time Monitoring',
                 description: 'Track job progress with detailed metrics, step-by-step updates, and comprehensive logs',
@@ -211,8 +265,8 @@ export default function HomePage() {
               },
               {
                 icon: '🎨',
-                title: 'Custom Styling',
-                description: 'Fine-tune subtitle colors, positions, fonts, shadows, and animations',
+                title: 'Karaoke Subtitles',
+                description: 'Word-by-word highlighting with customizable colors, positions, and animations',
               },
               {
                 icon: '🗄️',
@@ -230,9 +284,14 @@ export default function HomePage() {
                 description: 'Choose from Gemini Flash, Pro, and other cutting-edge AI models',
               },
               {
-                icon: '📦',
-                title: 'Artifact Persistence',
-                description: 'Store and reuse scripts, audio, subtitles, and other assets across jobs',
+                icon: '⚡',
+                title: 'Parallel Processing',
+                description: 'Generate multiple clips simultaneously with GPU acceleration (3x faster)',
+              },
+              {
+                icon: '🎬',
+                title: 'Mixed-Mode Detection',
+                description: 'Automatically switches between face-focused and screen recording modes',
               },
               {
                 icon: '🌐',
@@ -272,23 +331,23 @@ export default function HomePage() {
             {[
               {
                 step: '01',
-                title: 'Enter Your Topic',
-                description: 'Describe your video idea in a few words or sentences',
+                title: 'Choose Workflow',
+                description: 'Select AI Creator, Compilations, or Podcast Clips based on your needs',
               },
               {
                 step: '02',
                 title: 'AI Processing',
-                description: 'Our AI generates scripts, finds footage, and creates voiceovers',
+                description: 'Our AI generates scripts, finds footage, detects viral moments, and creates voiceovers',
               },
               {
                 step: '03',
-                title: 'Real-Time Preview',
-                description: 'Monitor progress with live updates and detailed metrics',
+                title: 'Real-Time Monitoring',
+                description: 'Track progress with live updates, detailed metrics, and step-by-step logs',
               },
               {
                 step: '04',
                 title: 'Download & Share',
-                description: 'Get your finished video ready to upload anywhere',
+                description: 'Get your finished videos ready to upload to any platform',
               },
             ].map((item, i) => (
               <div key={i} className="relative text-center space-y-4 group">

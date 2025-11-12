@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Download, Play, Film, Brain, Video, Check, Clock } from "lucide-react";
 import Image from 'next/image';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+import { getThumbnailUrl } from '@/lib/api';
 
 export interface Video {
   id: string;
@@ -83,7 +82,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
             )}
             {video.thumbnail_url ? (
               <Image
-                src={`${API_BASE}${video.thumbnail_url}`}
+                src={getThumbnailUrl(video.thumbnail_url)}
                 alt={video.filename}
                 fill
                 sizes="128px"

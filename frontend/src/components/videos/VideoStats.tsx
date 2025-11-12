@@ -29,10 +29,10 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
 
   if (loading || !stats) {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {[...Array(4)].map((_, i) => (
-          <Card key={i} className="animate-pulse">
-            <CardContent className="pt-6">
+          <Card key={i} className="animate-pulse border rounded-xl bg-card/50 backdrop-blur-sm shadow-md">
+            <CardContent className="p-5">
               <div className="h-8 bg-muted rounded mb-2"></div>
               <div className="h-4 bg-muted rounded"></div>
             </CardContent>
@@ -43,9 +43,9 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-      <Card>
-        <CardContent className="pt-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+        <CardContent className="p-5">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-blue-500 to-cyan-600 flex items-center justify-center">
               <VideoIcon className="size-5 text-white" />
@@ -58,8 +58,8 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+        <CardContent className="p-5">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-purple-500 to-pink-600 flex items-center justify-center">
               <HardDrive className="size-5 text-white" />
@@ -72,8 +72,8 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+        <CardContent className="p-5">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 flex items-center justify-center">
               <Film className="size-5 text-white" />
@@ -86,8 +86,8 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardContent className="pt-6">
+      <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+        <CardContent className="p-5">
           <div className="flex items-center gap-3">
             <div className="size-10 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center">
               <Brain className="size-5 text-white" />

@@ -6,7 +6,7 @@ import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import { useToast } from '@/hooks/use-toast';
 import type { JobRecord, YouTubeMetadata } from '@/lib/api';
-import { generatePodcastClips, getYouTubeMetadata } from '@/lib/api';
+import { generatePodcastClips, getYouTubeMetadata, getThumbnailUrl } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -220,24 +220,24 @@ export default function PodcastClipsPage() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <div className="p-3 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg">
-          <Sparkles className="h-8 w-8 text-white" />
+      <div className="mb-8 space-y-2">
+        <div className="inline-block">
+          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
+            Podcast Clips
+          </h1>
+          <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
         </div>
-        <div>
-          <h1 className="text-3xl font-bold">Podcast Clips</h1>
-          <p className="text-muted-foreground">
-            Generate viral short-form videos from podcasts with AI-powered moment detection
-          </p>
-        </div>
+        <p className="text-base text-muted-foreground max-w-2xl">
+          Generate viral short-form videos from podcasts with AI-powered moment detection
+        </p>
       </div>
 
       {/* Features Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+          <CardContent className="p-5">
             <div className="flex items-center gap-3">
               <Sparkles className="h-5 w-5 text-purple-500" />
               <div>
@@ -247,8 +247,8 @@ export default function PodcastClipsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+          <CardContent className="p-5">
             <div className="flex items-center gap-3">
               <Target className="h-5 w-5 text-blue-500" />
               <div>
@@ -258,8 +258,8 @@ export default function PodcastClipsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+          <CardContent className="p-5">
             <div className="flex items-center gap-3">
               <Zap className="h-5 w-5 text-yellow-500" />
               <div>
@@ -269,8 +269,8 @@ export default function PodcastClipsPage() {
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-6">
+        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+          <CardContent className="p-5">
             <div className="flex items-center gap-3">
               <VideoIcon className="h-5 w-5 text-green-500" />
               <div>
@@ -285,14 +285,14 @@ export default function PodcastClipsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Generation Form */}
         <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
+          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+            <CardHeader className="pb-4">
               <CardTitle>Generate Viral Clips</CardTitle>
               <CardDescription>
                 Enter a YouTube podcast URL to automatically generate viral short-form clips. AI decides how many clips to create based on quality.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* YouTube URL */}
                 <div className="space-y-2">
@@ -309,8 +309,8 @@ export default function PodcastClipsPage() {
 
                 {/* YouTube Video Preview */}
                 {isLoadingMetadata && (
-                  <Card className="border-blue-200 bg-blue-50/50">
-                    <CardContent className="pt-6">
+                  <Card className="rounded-xl border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800/30 shadow-sm backdrop-blur-sm">
+                    <CardContent className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
                         <p className="text-sm text-muted-foreground">Loading video details...</p>
@@ -320,14 +320,14 @@ export default function PodcastClipsPage() {
                 )}
 
                 {videoMetadata && !isLoadingMetadata && (
-                  <Card className="border-green-200 bg-green-50/50">
-                    <CardContent className="pt-6">
+                  <Card className="rounded-xl border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800/30 shadow-sm backdrop-blur-sm">
+                    <CardContent className="p-4">
                       <div className="flex gap-4">
                         {/* Thumbnail */}
                         <div className="relative flex-shrink-0 w-32 h-20 rounded-lg overflow-hidden bg-muted">
                           {videoMetadata.thumbnail_url ? (
                             <Image
-                              src={videoMetadata.thumbnail_url}
+                              src={getThumbnailUrl(videoMetadata.thumbnail_url)}
                               alt={videoMetadata.title}
                               width={128}
                               height={80}
@@ -662,11 +662,11 @@ export default function PodcastClipsPage() {
                 </div>
 
                 {/* Advanced Subtitle Settings (Collapsible) */}
-                <div className="border rounded-lg">
+                <div className="border rounded-lg bg-muted/30">
                   <Button
                     type="button"
                     variant="ghost"
-                    className="w-full flex items-center justify-between p-4 hover:bg-muted/50"
+                    className="w-full flex items-center justify-between p-4 hover:bg-muted/50 rounded-lg"
                     onClick={() => setShowAdvanced(!showAdvanced)}
                   >
                     <div className="flex items-center gap-2">
@@ -678,7 +678,7 @@ export default function PodcastClipsPage() {
                   </Button>
 
                   {showAdvanced && (
-                    <div className="p-4 pt-0 space-y-4 border-t">
+                    <div className="p-4 pt-0 space-y-4 border-t bg-muted/30">
                       <p className="text-sm text-muted-foreground mb-4">
                         Customize the karaoke-style subtitle appearance with word-by-word highlighting
                       </p>
@@ -791,11 +791,11 @@ export default function PodcastClipsPage() {
 
           {/* Info Card */}
           {!currentJob && !completedJob && (
-            <Card>
-              <CardHeader>
+            <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+              <CardHeader className="pb-4">
                 <CardTitle className="text-lg">How It Works</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4 text-sm">
+              <CardContent className="space-y-4 text-sm pt-0">
                 <div className="space-y-2">
                   <p className="font-semibold">1. AI Analysis</p>
                   <p className="text-muted-foreground">

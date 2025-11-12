@@ -421,4 +421,25 @@ export const api = {
     }),
 };
 
+/**
+ * Get proxied thumbnail URL that bypasses Next.js private IP restrictions
+ * @param thumbnailPath - The thumbnail path from the API (e.g., "/api/thumbnail/abc123.jpg") or a full URL (e.g., "https://i.ytimg.com/...")
+ * @returns The proxied thumbnail URL or the original URL if it's already a full URL
+ */
+export function getThumbnailUrl(thumbnailPath: string): string {
+  if (!thumbnailPath) return '';
+
+  // If it's already a full URL (YouTube thumbnail, etc.), return it directly
+  if (thumbnailPath.startsWith('http://') || thumbnailPath.startsWith('https://')) {
+    return thumbnailPath;
+  }
+
+  // Extract filename from path (e.g., "/api/thumbnail/abc123.jpg" -> "abc123.jpg")
+  const filename = thumbnailPath.split('/').pop();
+  if (!filename) return '';
+
+  // Return proxied URL through Next.js API route
+  return `/api/thumbnail/${filename}`;
+}
+
 export { API_BASE };

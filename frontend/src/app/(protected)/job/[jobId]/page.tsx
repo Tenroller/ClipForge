@@ -183,7 +183,7 @@ export default function JobMonitoringPage() {
 
   if (isLoading) {
     return (
-      <div className="container-page fade-in">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
         <div className="flex items-center justify-center min-h-[50vh]">
           <div className="text-center">
             <Loader2 className="size-8 animate-spin text-primary mx-auto mb-4" />
@@ -196,7 +196,7 @@ export default function JobMonitoringPage() {
 
   if (error || !job) {
     return (
-      <div className="container-page fade-in">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
         <div className="text-center py-12">
           <XCircle className="size-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold mb-2">Job Not Found</h2>
@@ -216,7 +216,7 @@ export default function JobMonitoringPage() {
   const progress = job.progress ?? calculateProgress(job.current_step, job.status, job.workflow);
 
   return (
-    <div className="container-page fade-in space-y-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

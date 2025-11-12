@@ -178,6 +178,14 @@ class PodcastClipsRequest(BaseModel):
     useOCR: bool = Field(default=True, description="Use OCR for text-based content detection")
     transitionDuration: float = Field(default=0.5, ge=0.2, le=1.0, description="Crossfade duration between modes (seconds)")
 
+    # AI-powered thumbnail generation options
+    thumbnailUseAI: bool = Field(default=True, description="Use AI to select best frame for thumbnails")
+    thumbnailRedBoxColor: str = Field(default="#DC2626", description="Red box background color (hex format)")
+    thumbnailTextColor: str = Field(default="#FFFF64", description="Thumbnail text color (hex format, default: yellow-tinted white)")
+    thumbnailBlurIntensity: float = Field(default=0.3, ge=0.0, le=1.0, description="Background blur/darken intensity (0.0-1.0)")
+    thumbnailBoxPosition: str = Field(default="bottom", description="Red box position: 'bottom', 'center', or 'top'")
+    thumbnailBoxOpacity: float = Field(default=0.95, ge=0.5, le=1.0, description="Red box opacity (0.5-1.0)")
+
     @field_validator('youtubeUrl')
     @classmethod
     def validate_youtube_url_field(cls, v):
@@ -188,9 +196,9 @@ class PodcastClipsRequest(BaseModel):
     def validate_ai_model_field(cls, v):
         return validate_ai_model(v)
 
-    @field_validator('subtitleColor', 'subtitleStrokeColor', 'subtitleHighlightColor')
+    @field_validator('subtitleColor', 'subtitleStrokeColor', 'subtitleHighlightColor', 'thumbnailRedBoxColor', 'thumbnailTextColor')
     @classmethod
-    def validate_subtitle_color_fields(cls, v):
+    def validate_color_fields(cls, v):
         return validate_color(v)
 
     @field_validator('minDuration', 'maxDuration')
