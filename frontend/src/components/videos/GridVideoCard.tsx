@@ -4,10 +4,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Download, Play, Film, Brain, Video as VideoIcon, Check, Clock } from "lucide-react";
+import { Download, Play, Film, Brain, Video as VideoIcon, Check, Clock, Trash2 } from "lucide-react";
 import { useState } from 'react';
 import Image from 'next/image';
 import { getThumbnailUrl } from '@/lib/api';
+import { formatDuration } from '@/utils/formatDuration';
 
 export interface Video {
   id: string;
@@ -29,6 +30,7 @@ interface GridVideoCardProps {
   onDownload: (video: Video) => void;
   onPlay?: (video: Video) => void;
   onMarkPosted?: (video: Video) => void;
+  onDelete?: (video: Video) => void;
   selected?: boolean;
   onSelect?: (video: Video, selected: boolean) => void;
 }
@@ -38,6 +40,7 @@ export default function GridVideoCard({
   onDownload,
   onPlay,
   onMarkPosted,
+  onDelete,
   selected = false,
   onSelect
 }: GridVideoCardProps) {
@@ -141,7 +144,7 @@ export default function GridVideoCard({
           {/* Duration Badge */}
           {video.duration_seconds && (
             <div className="absolute bottom-2 right-2 bg-black/90 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md font-medium">
-              {Math.floor(video.duration_seconds / 60)}:{(video.duration_seconds % 60).toString().padStart(2, '0')}
+              {formatDuration(video.duration_seconds)}
             </div>
           )}
 
@@ -200,6 +203,17 @@ export default function GridVideoCard({
                 title="Mark as Posted"
               >
                 <Check className="size-4" />
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onDelete(video)}
+                className="h-9 px-3 text-destructive hover:text-destructive"
+                title="Delete Video"
+              >
+                <Trash2 className="size-4" />
               </Button>
             )}
           </div>

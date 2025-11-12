@@ -4,9 +4,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Download, Play, Film, Brain, Video, Check, Clock } from "lucide-react";
+import { Download, Play, Film, Brain, Video, Check, Clock, Trash2 } from "lucide-react";
 import Image from 'next/image';
 import { getThumbnailUrl } from '@/lib/api';
+import { formatDuration } from '@/utils/formatDuration';
 
 export interface Video {
   id: string;
@@ -28,11 +29,12 @@ interface VideoCardProps {
   onDownload: (video: Video) => void;
   onPlay?: (video: Video) => void;
   onMarkPosted?: (video: Video) => void;
+  onDelete?: (video: Video) => void;
   selected?: boolean;
   onSelect?: (video: Video, selected: boolean) => void;
 }
 
-export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, selected = false, onSelect }: VideoCardProps) {
+export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onDelete, selected = false, onSelect }: VideoCardProps) {
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -95,7 +97,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
             )}
             {video.duration_seconds && (
               <div className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
-                {Math.floor(video.duration_seconds / 60)}:{(video.duration_seconds % 60).toString().padStart(2, '0')}
+                {formatDuration(video.duration_seconds)}
               </div>
             )}
           </div>
@@ -151,6 +153,12 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, sel
                 <Button variant="outline" size="sm" onClick={() => onMarkPosted(video)}>
                   <Check className="size-3 mr-1" />
                   Mark Posted
+                </Button>
+              )}
+              {onDelete && (
+                <Button variant="outline" size="sm" onClick={() => onDelete(video)} className="text-destructive hover:text-destructive">
+                  <Trash2 className="size-3 mr-1" />
+                  Delete
                 </Button>
               )}
             </div>

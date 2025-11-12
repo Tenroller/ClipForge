@@ -237,6 +237,14 @@ class PodcastClipsProcessor:
             # Step 1: Download video
             video_path = self._download_video(youtube_url)
 
+            # Get video dimensions for font size recommendations
+            import moviepy
+            temp_clip = moviepy.VideoFileClip(video_path)
+            video_height = temp_clip.h
+            video_width = temp_clip.w
+            temp_clip.close()
+            logger.info(f"Video dimensions: {video_width}x{video_height}")
+
             # Step 2: Transcribe
             word_timings = self._transcribe_video(video_path, whisper_model, use_gpu)
 
@@ -257,6 +265,22 @@ class PodcastClipsProcessor:
             # Step 6: Analyze faces (REMOVED - now done per-clip for better performance)
             # Face and speaker detection moved into _generate_clips() to only process
             # the specific clip segments instead of the entire video (8x faster)
+
+            # Font size recommendation based on video height
+            # Recommend font size to be 3.5-5% of video height for optimal readability
+            recommended_size = int(video_height * 0.04)  # 4% of height
+            if subtitle_font_size < recommended_size * 0.7:
+                logger.warning(
+                    f"Font size {subtitle_font_size}px may be too small for {video_height}px height video. "
+                    f"Recommended: {recommended_size}px (current is {int((subtitle_font_size / recommended_size) * 100)}% of recommended)"
+                )
+            elif subtitle_font_size > recommended_size * 1.5:
+                logger.info(
+                    f"Font size {subtitle_font_size}px is large for {video_height}px height video. "
+                    f"Recommended: {recommended_size}px (current is {int((subtitle_font_size / recommended_size) * 100)}% of recommended)"
+                )
+            else:
+                logger.info(f"Font size {subtitle_font_size}px is optimal for {video_height}px height video")
 
             # Step 7: Initialize subtitle generator
             self._initialize_subtitle_generator(

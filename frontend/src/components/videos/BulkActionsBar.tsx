@@ -8,6 +8,7 @@ interface BulkActionsBarProps {
   selectedCount: number;
   onDownloadAll: () => void;
   onMarkAllPosted: () => void;
+  onDeleteAll?: () => void;
   onClearSelection: () => void;
   totalUnposted?: number;
 }
@@ -16,6 +17,7 @@ export default function BulkActionsBar({
   selectedCount,
   onDownloadAll,
   onMarkAllPosted,
+  onDeleteAll,
   onClearSelection,
   totalUnposted = 0
 }: BulkActionsBarProps) {
@@ -59,6 +61,18 @@ export default function BulkActionsBar({
               >
                 <Check className="size-4 mr-2" />
                 Mark {totalUnposted} as Posted
+              </Button>
+            )}
+
+            {onDeleteAll && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onDeleteAll}
+                className="h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="size-4 mr-2" />
+                Delete All
               </Button>
             )}
 

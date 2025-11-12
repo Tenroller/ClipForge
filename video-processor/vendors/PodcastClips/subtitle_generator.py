@@ -226,7 +226,9 @@ class SubtitleGenerator:
         subtitle_clips = []
 
         # Calculate vertical position using vertical_offset
-        y_pos = video_height - self.vertical_offset
+        # Add 20% extra space for descenders and text rendering margins
+        safety_margin = int(self.font_size * 0.2)
+        y_pos = video_height - self.vertical_offset - safety_margin
 
         # Get font fallback list once
         font_choices = get_font_fallback_list()
@@ -338,8 +340,9 @@ class SubtitleGenerator:
 
             # Create rounded background box for current word
             if highlighted_clip_info and current_word_clip:
-                padding_x = 40
-                padding_y = 20
+                # Make padding proportional to font size for better scaling
+                padding_x = max(40, int(self.font_size * 0.5))  # 50% of font size, minimum 40px
+                padding_y = max(20, int(self.font_size * 0.3))  # 30% of font size, minimum 20px
                 box_width = highlighted_clip_info['width'] + 2 * padding_x
                 box_height = highlighted_clip_info['height'] + 2 * padding_y
 

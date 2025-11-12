@@ -158,13 +158,13 @@ class PodcastClipsRequest(BaseModel):
     minDuration: int = Field(default=30, ge=15, le=60, description="Minimum clip duration in seconds")
     maxDuration: int = Field(default=60, ge=30, le=120, description="Maximum clip duration in seconds")
     useGPU: bool = Field(default=True, description="Use GPU acceleration for processing")
-    subtitleFontSize: int = Field(default=40, ge=20, le=80, description="Subtitle font size")
+    subtitleFontSize: int = Field(default=70, ge=30, le=150, description="Subtitle font size")
     subtitleColor: str = Field(default="#FFFFFF", description="Subtitle text color (hex format)")
     subtitleStrokeColor: str = Field(default="#000000", description="Subtitle stroke/outline color")
     subtitleStrokeWidth: int = Field(default=2, ge=0, le=5, description="Subtitle stroke width")
 
     # Karaoke-style subtitle improvements
-    subtitleVerticalOffset: int = Field(default=500, ge=100, le=1000, description="Distance from bottom of video in pixels")
+    subtitleVerticalOffset: int = Field(default=700, ge=100, le=1500, description="Distance from bottom of video in pixels")
     subtitleHighlightColor: str = Field(default="#6366f1", description="Background box color for highlighted word (hex format)")
     subtitleMaxWordsVisible: int = Field(default=5, ge=1, le=10, description="Maximum words visible at once (karaoke window)")
 

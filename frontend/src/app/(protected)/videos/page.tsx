@@ -3,6 +3,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import VideoCard, { type Video } from '@/components/videos/VideoCard';
 import GridVideoCard from '@/components/videos/GridVideoCard';
@@ -44,6 +54,11 @@ export default function VideosPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [previewVideo, setPreviewVideo] = useState<Video | null>(null);
+
+  // Delete confirmation dialog
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [videoToDelete, setVideoToDelete] = useState<Video | null>(null);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
   const limit = 20;
 
@@ -295,6 +310,56 @@ export default function VideosPage() {
     }
   };
 
+  // Handle delete video
+  const handleDeleteClick = (video: Video) => {
+    setVideoToDelete(video);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!videoToDelete) return;
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/videos/managed/${videoToDelete.id}?delete_file=true`,
+        {
+          method: 'DELETE',
+          credentials: 'include',
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete video');
+      }
+
+      toast({
+        title: 'Video Deleted',
+        description: `${videoToDelete.filename} has been permanently deleted.`,
+      });
+
+      // Remove from local state
+      setVideos((prev) => prev.filter((v) => v.id !== videoToDelete.id));
+
+      // Remove from selection if selected
+      setSelectedVideos((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(videoToDelete.id);
+        return newSet;
+      });
+
+      loadStats();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to delete video.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setVideoToDelete(null);
+    }
+  };
+
   // Handle bulk selection
   const handleVideoSelect = (video: Video, selected: boolean) => {
     setSelectedVideos((prev) => {
@@ -338,6 +403,55 @@ export default function VideosPage() {
         description: 'Some videos failed to be marked as posted.',
         variant: 'destructive',
       });
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    setBulkDeleteDialogOpen(true);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    const selected = filteredVideos.filter((v) => selectedVideos.has(v.id));
+    const selectedCount = selected.length;
+
+    try {
+      // Delete videos in parallel
+      await Promise.all(
+        selected.map(async (video) => {
+          const response = await fetch(
+            `${API_BASE}/api/videos/managed/${video.id}?delete_file=true`,
+            {
+              method: 'DELETE',
+              credentials: 'include',
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`Failed to delete ${video.filename}`);
+          }
+        })
+      );
+
+      // Remove from local state
+      setVideos((prev) => prev.filter((v) => !selectedVideos.has(v.id)));
+
+      // Clear selection
+      setSelectedVideos(new Set());
+
+      toast({
+        title: 'Videos Deleted',
+        description: `Successfully deleted ${selectedCount} video${selectedCount !== 1 ? 's' : ''}.`,
+      });
+
+      loadStats();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Some videos failed to be deleted.',
+        variant: 'destructive',
+      });
+    } finally {
+      setBulkDeleteDialogOpen(false);
     }
   };
 
@@ -552,6 +666,7 @@ export default function VideosPage() {
                     onDownload={handleDownload}
                     onPlay={setPreviewVideo}
                     onMarkPosted={handleMarkPosted}
+                    onDelete={handleDeleteClick}
                     selected={selectedVideos.has(video.id)}
                     onSelect={handleVideoSelect}
                   />
@@ -566,6 +681,7 @@ export default function VideosPage() {
                     onDownload={handleDownload}
                     onPlay={setPreviewVideo}
                     onMarkPosted={handleMarkPosted}
+                    onDelete={handleDeleteClick}
                     selected={selectedVideos.has(video.id)}
                     onSelect={handleVideoSelect}
                   />
@@ -630,9 +746,52 @@ export default function VideosPage() {
         selectedCount={selectedVideos.size}
         onDownloadAll={handleBulkDownload}
         onMarkAllPosted={handleBulkMarkPosted}
+        onDeleteAll={handleBulkDeleteClick}
         onClearSelection={handleClearSelection}
         totalUnposted={selectedUnpostedCount}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Video</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{videoToDelete?.filename}</strong>?
+              <br />
+              <br />
+              This will permanently delete both the database record and the video file from disk. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Multiple Videos</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete <strong>{selectedVideos.size} video{selectedVideos.size !== 1 ? 's' : ''}</strong>?
+              <br />
+              <br />
+              This will permanently delete both the database records and the video files from disk. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
