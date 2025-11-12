@@ -10,12 +10,12 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, File, UploadFile, Depends
 from fastapi.responses import FileResponse
 
-from ...models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest, SuggestSubjectRequest
+from ...models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest
 from ...middleware.auth import get_current_user
 from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
 from ...services.video_orchestrator import get_video_orchestrator
-from ...utils.paths import get_backend_path, get_temp_path
+from ...utils.paths import get_temp_path
 from ...utils.youtube import get_video_metadata, YouTubeDownloadError
 
 router = APIRouter()
@@ -24,8 +24,6 @@ logger = get_logger("video_generation")
 # Get database and orchestrator instances
 job_store = get_job_store()
 video_orchestrator = get_video_orchestrator()
-
-VENDOR_ROOT = get_backend_path("vendors")
 
 
 @router.get(
@@ -399,159 +397,12 @@ async def podcastclips_generate(
         raise HTTPException(status_code=500, detail=f"Failed to generate podcast clips: {e}")
 
 
-@router.post("/AIvideos/suggest-subject")
-def suggest_subject(req: SuggestSubjectRequest) -> Dict[str, str]:
-    """Suggest a short content subject using Gemini."""
-    try:
-        from ...vendors.AIvideos.gpt import generate_response
-        
-        examples = req.examples or [
-            "Good foods for cats",
-            "How to calm your dog", 
-            "How to fix a broken pipe",
-        ]
-        hint = (req.topicHint or "").strip()
-
-        prompt_lines = [
-            "Suggest one short, catchy subject for a short-form video.",
-            "- 3 to 6 words.",
-            "- No quotes, no emojis, minimal punctuation.",
-            "- Return ONLY the subject text.",
-            "",
-            "Examples:",
-        ]
-        prompt_lines += [f"- {e}" for e in examples if e]
-        if hint:
-            prompt_lines.append(f"\nTopic area: {hint}")
-        prompt = "\n".join(prompt_lines)
-
-        try:
-            raw = generate_response(prompt, req.aiModel or "gemini-2.0-flash")
-        except Exception as e:
-            logger.error(f"Failed to generate subject suggestion: {e}")
-            return {"subject": "Amazing facts about animals"}
-
-        text = (raw or "").strip().splitlines()[0] if raw else ""
-        # Light cleanup: drop surrounding quotes and trailing punctuation
-        text = text.strip().strip('"\'').strip()
-        if text.endswith(('.', '!', '?')):
-            text = text[:-1]
-        if not text:
-            text = "Amazing facts about animals"
-
-        return {"subject": text}
-        
-    except Exception as e:
-        logger.error(f"Error in suggest_subject: {e}")
-        return {"subject": "Amazing facts about animals"}
-
-
-@router.get("/AIvideos/models", summary="List AI Models")
-def list_models() -> Dict[str, list]:
-    """List available Gemini models using API discovery."""
-    try:
-        from ...utils.gemini_client import get_available_gemini_models
-
-        # Fetch models from Gemini API
-        models = get_available_gemini_models()
-        logger.info(f"Returning {len(models)} models from Gemini API")
-        return {"models": models}
-    except Exception as e:
-        logger.error(f"Failed to list models: {e}", exc_info=True)
-        # Fallback to default models
-        return {"models": ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro", "gemini-1.5-flash"]}
-
-
-@router.get("/AIvideos/gpu-info")
-def get_gpu_info() -> Dict[str, Any]:
-    """Return information about locally available GPU acceleration."""
-    # Try CUDA/torch detection (optional dependency in some setups)
-    cuda_available = False
-    gpu_name = None
-    gpu_memory_gb = None
-    try:
-        import torch
-        if torch.cuda.is_available():
-            cuda_available = True
-            gpu_name = torch.cuda.get_device_name(0)
-            gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-    except Exception:
-        pass
-
-    # Use MoneyPrinter's codec detection if available
-    preferred_codec = None
-    ffmpeg_params = None
-    try:
-        # Placeholder for GPU codec detection
-        preferred_codec = "h264_nvenc" if cuda_available else "libx264"
-        ffmpeg_params = ["-preset", "fast"] if cuda_available else ["-preset", "medium"]
-    except Exception:
-        pass
-
-    return {
-        "local": {
-            "cudaAvailable": cuda_available,
-            "gpuName": gpu_name,
-            "memoryGb": gpu_memory_gb,
-            "preferredCodec": preferred_codec,
-            "ffmpegParams": ffmpeg_params,
-        }
-    }
-
-
-@router.get("/voices")
-def list_voices() -> Dict[str, list]:
-    """Expose Kokoro voices used by the AI video workflow."""
-    start_ts = time.time()
-    try:
-        from ...vendors.AIvideos.tiktokvoice import VOICES
-        # VOICES might be a list or dict, handle both cases
-        if isinstance(VOICES, dict):
-            voices = list(VOICES.keys())
-        else:
-            voices = VOICES  # Assume it's already a list
-    except Exception as e:
-        logger.error(f"Failed to load voices: {e}")
-        voices = ["af_bella", "en_male_jomboy", "en_female_samc"]
-        
-    duration = time.time() - start_ts
-    max_secs = 5.0
-    
-    if duration > max_secs:
-        logger.warning(f"Voice loading took {duration:.2f}s (>{max_secs}s)")
-        
-    return {"voices": voices}
-
-
-@router.get("/voice-sample")
-def voice_sample(voice: str, text: str | None = None):
-    """Generate and return a short MP3 sample for a given voice."""
-    try:
-        from ...vendors.AIvideos.tiktokvoice import VOICES, tts
-        
-        if voice not in VOICES:
-            raise HTTPException(status_code=400, detail=f"Voice '{voice}' not found")
-        
-        # Use a stable absolute temp path under vendors/temp
-        temp_dir = (VENDOR_ROOT / "temp").resolve()
-        temp_dir.mkdir(parents=True, exist_ok=True)
-        target = (temp_dir / f"voice_sample_{voice}.mp3").resolve()
-        sample_text = text or "This is a short sample of this voice."
-
-        # If no custom text requested and a sample already exists, reuse it
-        if text is None and target.exists() and target.is_file() and target.stat().st_size > 0:
-            return FileResponse(str(target), filename=target.name, media_type="audio/mpeg")
-
-        try:
-            tts(sample_text, voice, str(target))
-            if not target.exists() or target.stat().st_size == 0:
-                raise RuntimeError("TTS generation failed - no output file")
-        except Exception as e:
-            logger.error(f"TTS generation failed for voice {voice}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to generate voice sample")
-
-        return FileResponse(str(target), filename=target.name, media_type="audio/mpeg")
-        
-    except Exception as e:
-        logger.error(f"Voice sample error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# NOTE: The following endpoints have been removed as they accessed vendor code directly.
+# The video-processor service should provide equivalent APIs for these features:
+# - POST /AIvideos/suggest-subject - AI-powered subject suggestions
+# - GET /AIvideos/models - List available AI models
+# - GET /AIvideos/gpu-info - GPU acceleration information
+# - GET /voices - List available TTS voices
+# - GET /voice-sample - Generate TTS voice samples
+#
+# Frontend should be updated to call video-processor APIs directly for these features.

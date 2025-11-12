@@ -18,7 +18,7 @@ except ImportError:
 logger = get_logger("font_detection")
 
 # Centralized font configuration
-DEFAULT_FONT_PATH = Path(__file__).resolve().parent / "vendors" / "fonts" / "EpundaSlab-VariableFont_wght.ttf"
+DEFAULT_FONT_PATH = Path(__file__).resolve().parent / "utils" / "fonts" / "EpundaSlab-VariableFont_wght.ttf"
 DEFAULT_FONT_SIZE = 48
 
 

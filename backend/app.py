@@ -20,7 +20,6 @@ except ImportError:
 ROOT = get_project_root()
 DEFAULT_OUTPUT_DIR = get_output_path()
 os.environ.setdefault("VIDEOHELPER_OUTPUT_DIR", str(DEFAULT_OUTPUT_DIR))
-VENDOR_ROOT = get_backend_path("vendors")
 
 # Load environment variables early
 try:
@@ -38,15 +37,11 @@ try:
             print(f"[ENV] Loaded {legacy_env}")
     except Exception:
         pass
-    # Also support backend-local .env and vendor override
+    # Also support backend-local .env
     backend_env = Path(__file__).resolve().parent / ".env"
     if backend_env.exists():
         load_dotenv(backend_env, override=True)
         print(f"[ENV] Loaded {backend_env}")
-    vendor_env = VENDOR_ROOT / "moneyprinter" / ".env"
-    if vendor_env.exists():
-        load_dotenv(vendor_env, override=True)
-        print(f"[ENV] Loaded {vendor_env}")
 
     # Verify critical keys are loaded
     gemini_key = os.getenv('GEMINI_API_KEY')
@@ -73,80 +68,7 @@ early_logger.add(
 _SHUTDOWN_IN_PROGRESS = False
 _CLEANUP_COMPLETED = False
 
-# Setup espeak-ng environment for Kokoro TTS
-def setup_espeak_environment():
-    """Setup espeak-ng environment for Kokoro TTS."""
-    # Clear potentially problematic espeakng_loader environment variables
-    for key in ['ESPEAK_DATA_PATH', 'ESPEAKNG_DATA_PATH', 'PHONEMIZER_ESPEAK_DATA_PATH', 'PHONEMIZER_ESPEAK_LIBRARY']:
-        if key in os.environ:
-            del os.environ[key]
-
-    # Use system espeak-ng if available
-    system_espeak_paths = [
-        '/opt/homebrew/bin/espeak-ng',  # Homebrew ARM64
-        '/usr/local/bin/espeak-ng',    # Homebrew x86_64
-        '/usr/bin/espeak-ng',          # System package (Linux)
-        'C:\\Program Files\\eSpeak NG\\espeak-ng.exe',  # Windows winget installation
-        'C:\\Program Files (x86)\\eSpeak NG\\espeak-ng.exe'  # Windows 32-bit
-    ]
-
-    system_espeak_data_paths = [
-        '/opt/homebrew/share/espeak-ng-data',  # Homebrew ARM64
-        '/usr/local/share/espeak-ng-data',    # Homebrew x86_64
-        '/usr/share/espeak-ng-data',          # System package (Linux)
-        'C:\\Program Files\\eSpeak NG\\espeak-ng-data',  # Windows winget installation
-        'C:\\Program Files (x86)\\eSpeak NG\\espeak-ng-data'  # Windows 32-bit
-    ]
-
-    system_espeak = None
-    system_data = None
-
-    for espeak_path in system_espeak_paths:
-        if os.path.exists(espeak_path):
-            system_espeak = espeak_path
-            break
-
-    for data_path in system_espeak_data_paths:
-        if os.path.exists(data_path):
-            system_data = data_path
-            break
-
-    if system_espeak and system_data:
-        os.environ['PHONEMIZER_ESPEAK_PATH'] = system_espeak
-        os.environ['ESPEAK_DATA_PATH'] = system_data
-
-        # For Windows, also add to PATH if it's not already there
-        if system_espeak.startswith('C:\\Program Files'):
-            espeak_dir = os.path.dirname(system_espeak)
-            current_path = os.environ.get('PATH', '')
-            if espeak_dir not in current_path:
-                os.environ['PATH'] = espeak_dir + os.pathsep + current_path
-
-        early_logger.info(f"✅ Configured system espeak-ng for Kokoro TTS:")
-        early_logger.info(f"   ESPEAK_PATH: {system_espeak}")
-        early_logger.info(f"   DATA_PATH: {system_data}")
-    else:
-        # Fallback to espeakng_loader if system installation not found
-        try:
-            import espeakng_loader  # type: ignore
-            espeak_data_path = espeakng_loader.get_data_path()
-            espeak_lib_path = espeakng_loader.get_library_path()
-            if espeak_data_path and os.path.exists(espeak_data_path):
-                os.environ['ESPEAK_DATA_PATH'] = espeak_data_path
-                os.environ['PHONEMIZER_ESPEAK_DATA_PATH'] = espeak_data_path
-            if espeak_lib_path and os.path.exists(espeak_lib_path):
-                os.environ['PHONEMIZER_ESPEAK_LIBRARY'] = espeak_lib_path
-            early_logger.warning(f"⚠️  Using espeakng_loader (may have issues):")
-            early_logger.warning(f"   DATA_PATH: {espeak_data_path}")
-            early_logger.warning(f"   LIB_PATH: {espeak_lib_path}")
-        except ImportError:
-            early_logger.error("❌ Neither system espeak-ng nor espeakng_loader found - Kokoro TTS may not work")
-            early_logger.error("   Install espeak-ng: brew install espeak-ng (macOS) or apt install espeak-ng (Ubuntu)")
-        except Exception as e:
-            early_logger.error(f"⚠️  Error setting up espeak-ng environment: {e}")
-
-# Setup espeak environment
-setup_espeak_environment()
+# NOTE: espeak-ng setup removed - TTS is now handled by video-processor service
 
 # Windows console encoding setup for Unicode support
 if sys.platform == "win32":
