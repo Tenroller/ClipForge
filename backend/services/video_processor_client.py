@@ -166,9 +166,57 @@ class VideoProcessorClient:
                 headers=self._get_headers()
             )
             return response.status_code == 200
-            
+
         except:
             return False
+
+    async def get_available_models(self) -> Optional[List[str]]:
+        """Get available AI models from processor."""
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/api/v1/models",
+                headers=self._get_headers()
+            )
+
+            if response.status_code == 404:
+                return None
+
+            response.raise_for_status()
+            data = response.json()
+            return data.get("models", [])
+
+        except httpx.RequestError as e:
+            logger.error(f"Failed to get models from processor {self.base_url}: {e}")
+            return None
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"HTTP error getting models from processor {self.base_url}: {e.response.status_code}")
+            return None
+
+    async def get_available_voices(self) -> Optional[List[str]]:
+        """Get available TTS voices from processor."""
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/api/v1/voices",
+                headers=self._get_headers()
+            )
+
+            if response.status_code == 404:
+                return None
+
+            response.raise_for_status()
+            data = response.json()
+            return data.get("voices", [])
+
+        except httpx.RequestError as e:
+            logger.error(f"Failed to get voices from processor {self.base_url}: {e}")
+            return None
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            logger.error(f"HTTP error getting voices from processor {self.base_url}: {e.response.status_code}")
+            return None
 
 
 class ProcessorManager:
@@ -291,3 +339,21 @@ class ProcessorManager:
             "utilization": (total_active / total_capacity) if total_capacity > 0 else 0,
             "processors": statuses
         }
+
+    async def get_available_models(self) -> Optional[List[str]]:
+        """Get available AI models from any healthy processor."""
+        for processor in self.processors:
+            if await processor.health_check():
+                models = await processor.get_available_models()
+                if models:
+                    return models
+        return None
+
+    async def get_available_voices(self) -> Optional[List[str]]:
+        """Get available TTS voices from any healthy processor."""
+        for processor in self.processors:
+            if await processor.health_check():
+                voices = await processor.get_available_voices()
+                if voices:
+                    return voices
+        return None

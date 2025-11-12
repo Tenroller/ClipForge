@@ -402,28 +402,37 @@ async def list_models() -> Dict[str, list]:
     """
     List available AI models.
 
-    This endpoint proxies to the video-processor service.
+    This endpoint queries the video-processor service for available models.
+    Falls back to a static list if the processor is unavailable.
     """
+    # Default fallback models
+    fallback_models = [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-2.0-pro",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+    ]
+
     try:
         # Try to get models from video processor
+        from ...services.video_orchestrator import get_video_orchestrator
         orchestrator = get_video_orchestrator()
-        processor_status = await orchestrator.get_processor_cluster_status()
 
-        # If we have a healthy processor, we could query it for models
-        # For now, return a static list of known Gemini models
-        return {
-            "models": [
-                "gemini-2.0-flash",
-                "gemini-2.0-flash-exp",
-                "gemini-2.0-pro",
-                "gemini-1.5-pro",
-                "gemini-1.5-flash",
-            ]
-        }
+        # Query processor for available models
+        models = await orchestrator.processor_manager.get_available_models()
+
+        if models and len(models) > 0:
+            logger.info(f"Retrieved {len(models)} models from video-processor")
+            return {"models": models}
+        else:
+            logger.warning("No models returned from video-processor, using fallback list")
+            return {"models": fallback_models}
+
     except Exception as e:
-        logger.error(f"Failed to list models: {e}")
+        logger.error(f"Failed to list models from video-processor: {e}")
         # Fallback to default models
-        return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
+        return {"models": fallback_models}
 
 
 @router.get("/voices", summary="List TTS Voices")
@@ -431,28 +440,41 @@ async def list_voices() -> Dict[str, list]:
     """
     List available TTS voices.
 
-    This endpoint proxies to the video-processor service.
+    This endpoint queries the video-processor service for available voices.
+    Falls back to a static list if the processor is unavailable.
     """
+    # Default fallback voices
+    fallback_voices = [
+        "af_bella",
+        "af_nicole",
+        "af_sarah",
+        "af_sky",
+        "am_adam",
+        "am_michael",
+        "bf_emma",
+        "bf_isabella",
+        "bm_george",
+        "bm_lewis",
+        "en_male_jomboy",
+        "en_female_samc",
+    ]
+
     try:
-        # Return a static list of known Kokoro TTS voices
-        # In the future, this could query the video-processor service
-        return {
-            "voices": [
-                "af_bella",
-                "af_nicole",
-                "af_sarah",
-                "af_sky",
-                "am_adam",
-                "am_michael",
-                "bf_emma",
-                "bf_isabella",
-                "bm_george",
-                "bm_lewis",
-                "en_male_jomboy",
-                "en_female_samc",
-            ]
-        }
+        # Try to get voices from video processor
+        from ...services.video_orchestrator import get_video_orchestrator
+        orchestrator = get_video_orchestrator()
+
+        # Query processor for available voices
+        voices = await orchestrator.processor_manager.get_available_voices()
+
+        if voices and len(voices) > 0:
+            logger.info(f"Retrieved {len(voices)} voices from video-processor")
+            return {"voices": voices}
+        else:
+            logger.warning("No voices returned from video-processor, using fallback list")
+            return {"voices": fallback_voices}
+
     except Exception as e:
-        logger.error(f"Failed to list voices: {e}")
+        logger.error(f"Failed to list voices from video-processor: {e}")
         # Fallback to default voices
-        return {"voices": ["af_bella", "en_male_jomboy", "en_female_samc"]}
+        return {"voices": fallback_voices}
