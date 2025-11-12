@@ -259,7 +259,7 @@ def init_font_manager():
     manager = get_font_manager()
 
     # Add VideoHelper-specific font directories
-    videhelper_fonts = Path(__file__).resolve().parent.parent / "vendors" / "fonts"
+    videhelper_fonts = Path(__file__).resolve().parent / "fonts"
     if videhelper_fonts.exists():
         manager.add_custom_font_path(videhelper_fonts)
 

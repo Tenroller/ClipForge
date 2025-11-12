@@ -51,14 +51,6 @@ def _is_allowed_path(file_path: Path) -> bool:
             (project_root / "video-processor" / "output").resolve(),
         ]
 
-        # Also check vendor directories
-        vendor_root = project_root / "backend" / "vendors"
-        if vendor_root.exists():
-            allowed_roots.extend([
-                (vendor_root / "AIvideos" / "cat-video-creator" / "output").resolve(),
-                (vendor_root / "moneyprinter" / "output").resolve(),
-            ])
-        
         file_resolved = file_path.resolve()
         
         for root in allowed_roots:
@@ -421,14 +413,6 @@ def download_file(path: str):
                 (project_root / "video-processor" / "output").resolve(),
             ]
 
-            # Also check vendor directories
-            vendor_root = project_root / "backend" / "vendors"
-            if vendor_root.exists():
-                allowed_roots.extend([
-                    (vendor_root / "AIvideos" / "cat-video-creator" / "output").resolve(),
-                    (vendor_root / "moneyprinter" / "output").resolve(),
-                ])
-            
             found_path = None
             for root in allowed_roots:
                 # Try absolute path from root
