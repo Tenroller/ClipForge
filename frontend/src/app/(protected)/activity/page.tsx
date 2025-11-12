@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useJobs, useRemakeJob } from '@/hooks/use-jobs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,6 +14,7 @@ import type { JobRecord } from '@/lib/api';
 
 export default function ActivityPage() {
   const router = useRouter();
+  const t = useTranslations('activity');
   const { toast } = useToast();
   const { data: jobs = [], isLoading, refetch } = useJobs({ limit: 50, refetchInterval: 5000 });
   const remakeJobMutation = useRemakeJob();
@@ -34,8 +36,8 @@ export default function ActivityPage() {
       const result = await remakeJobMutation.mutateAsync(jobId);
 
       toast({
-        title: 'Job Remade Successfully',
-        description: `New job ID: ${result.job_id.substring(0, 8)}...`,
+        title: t('jobRemadeSuccess'),
+        description: t('newJobId', { id: result.job_id.substring(0, 8) }),
       });
 
       // Refresh jobs list
@@ -43,7 +45,7 @@ export default function ActivityPage() {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       toast({
-        title: 'Failed to Remake Job',
+        title: t('failedToRemake'),
         description: message,
         variant: 'destructive',
       });
@@ -80,9 +82,9 @@ export default function ActivityPage() {
   const getWorkflowLabel = (workflow: string) => {
     switch (workflow) {
       case 'moneyprinter':
-        return 'AI Video';
+        return t('workflows.aiVideo');
       case 'brainrot':
-        return 'Compilation';
+        return t('workflows.compilation');
       default:
         return workflow;
     }
@@ -116,12 +118,12 @@ export default function ActivityPage() {
           <div className="flex-1 space-y-2">
             <div className="inline-block">
               <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-                Job Activity
+                {t('title')}
               </h1>
               <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
             </div>
             <p className="text-base text-muted-foreground max-w-2xl">
-              View and manage your video generation jobs
+              {t('description')}
             </p>
           </div>
           <Button
@@ -130,7 +132,7 @@ export default function ActivityPage() {
             disabled={isLoading}
           >
             <RefreshCw className={`size-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('refresh')}
           </Button>
         </div>
 
@@ -142,10 +144,10 @@ export default function ActivityPage() {
                 <div className="size-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
                   <TrendingUp className="size-5 text-white" />
                 </div>
-                <span className="text-xl">Recent Jobs</span>
+                <span className="text-xl">{t('recentJobs')}</span>
               </div>
               <Badge variant="outline" className="px-3 py-1 text-sm">
-                {jobs.length} total
+                {jobs.length} {t('total')}
               </Badge>
             </CardTitle>
           </CardHeader>
@@ -153,18 +155,18 @@ export default function ActivityPage() {
             {isLoading && jobs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="size-12 mb-4 animate-spin text-primary" />
-                <p className="text-lg font-medium">Loading jobs...</p>
-                <p className="text-sm mt-2">Please wait while we fetch your data</p>
+                <p className="text-lg font-medium">{t('loadingJobs')}</p>
+                <p className="text-sm mt-2">{t('loadingMessage')}</p>
               </div>
             ) : jobs.length === 0 ? (
               <div className="text-center py-16">
                 <div className="size-20 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
                   <TrendingUp className="size-10 text-muted-foreground" />
                 </div>
-                <p className="text-xl font-semibold text-foreground mb-2">No jobs found</p>
-                <p className="text-sm text-muted-foreground mb-6">Create your first video to see it here</p>
+                <p className="text-xl font-semibold text-foreground mb-2">{t('noJobs')}</p>
+                <p className="text-sm text-muted-foreground mb-6">{t('noJobsMessage')}</p>
                 <Button asChild className="btn-primary">
-                  <a href="/creator">Create Your First Video</a>
+                  <a href="/creator">{t('createFirstVideo')}</a>
                 </Button>
               </div>
             ) : (
@@ -190,14 +192,14 @@ export default function ActivityPage() {
 
                       {job.current_step && (
                         <div className="text-sm text-muted-foreground mb-1">
-                          Step: {job.current_step}
+                          {t('step')}: {job.current_step}
                         </div>
                       )}
 
                       {job.progress !== undefined && job.progress >= 0 && job.status !== 'completed' && job.status !== 'done' && (
                         <div className="mb-2">
                           <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="text-muted-foreground">Progress</span>
+                            <span className="text-muted-foreground">{t('progress')}</span>
                             <span className="font-medium">{job.progress}%</span>
                           </div>
                           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -210,8 +212,8 @@ export default function ActivityPage() {
                       )}
 
                       <div className="text-xs text-muted-foreground">
-                        {job.created_at && `Created: ${formatDate(job.created_at)}`}
-                        {job.duration_seconds && ` • Duration: ${Math.floor(job.duration_seconds / 60)}m ${job.duration_seconds % 60}s`}
+                        {job.created_at && `${t('created')}: ${formatDate(job.created_at)}`}
+                        {job.duration_seconds && ` • ${t('duration')}: ${Math.floor(job.duration_seconds / 60)}m ${job.duration_seconds % 60}s`}
                       </div>
                     </div>
 
@@ -222,10 +224,10 @@ export default function ActivityPage() {
                         size="sm"
                         onClick={() => router.push(`/job/${job.id}`)}
                         className="h-8 px-3 text-xs"
-                        title="Monitor job progress"
+                        title={t('monitorProgress')}
                       >
                         <TrendingUp className="size-3 mr-1" />
-                        Monitor
+                        {t('monitor')}
                       </Button>
 
                       {/* View button for completed jobs with output */}
@@ -237,7 +239,7 @@ export default function ActivityPage() {
                           className="h-8 px-3 text-xs"
                         >
                           <Eye className="size-3 mr-1" />
-                          View
+                          {t('view')}
                         </Button>
                       )}
 
@@ -256,7 +258,7 @@ export default function ActivityPage() {
                             rel="noreferrer"
                           >
                             <Download className="size-3 mr-1" />
-                            Download
+                            {t('download')}
                           </a>
                         </Button>
                       )}
@@ -269,14 +271,14 @@ export default function ActivityPage() {
                           onClick={() => handleRemakeJob(job.id)}
                           disabled={remakingJobs.has(job.id)}
                           className="h-8 px-3 text-xs"
-                          title="Remake with same parameters"
+                          title={t('remakeWith')}
                         >
                           {remakingJobs.has(job.id) ? (
                             <Loader2 className="size-3 mr-1 animate-spin" />
                           ) : (
                             <RefreshCw className="size-3 mr-1" />
                           )}
-                          Remake
+                          {t('remake')}
                         </Button>
                       )}
                     </div>
@@ -301,7 +303,7 @@ export default function ActivityPage() {
               <div className="text-3xl font-bold bg-gradient-to-r from-green-500 to-emerald-500 bg-clip-text text-transparent">
                 {jobs.filter(j => j.status === 'completed' || j.status === 'done').length}
               </div>
-              <p className="text-sm text-muted-foreground font-medium mt-1">Completed</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">{t('stats.completed')}</p>
             </CardContent>
           </Card>
           <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
@@ -314,7 +316,7 @@ export default function ActivityPage() {
               <div className="text-3xl font-bold bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">
                 {jobs.filter(j => ['processing', 'running', 'queued'].includes(j.status)).length}
               </div>
-              <p className="text-sm text-muted-foreground font-medium mt-1">In Progress</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">{t('stats.inProgress')}</p>
             </CardContent>
           </Card>
           <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
@@ -329,7 +331,7 @@ export default function ActivityPage() {
               <div className="text-3xl font-bold text-red-500">
                 {jobs.filter(j => j.status === 'error').length}
               </div>
-              <p className="text-sm text-muted-foreground font-medium mt-1">Failed</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">{t('stats.failed')}</p>
             </CardContent>
           </Card>
           <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
@@ -344,7 +346,7 @@ export default function ActivityPage() {
               <div className="text-3xl font-bold text-gray-500">
                 {jobs.filter(j => j.status === 'cancelled').length}
               </div>
-              <p className="text-sm text-muted-foreground font-medium mt-1">Cancelled</p>
+              <p className="text-sm text-muted-foreground font-medium mt-1">{t('stats.cancelled')}</p>
             </CardContent>
           </Card>
         </div>
