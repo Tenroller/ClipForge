@@ -1,0 +1,386 @@
+{
+  "common": {
+    "loading": "Carregando...",
+    "error": "Erro",
+    "success": "Sucesso",
+    "cancel": "Cancelar",
+    "confirm": "Confirmar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "save": "Salvar",
+    "close": "Fechar",
+    "next": "Próximo",
+    "previous": "Anterior",
+    "search": "Pesquisar",
+    "filter": "Filtrar",
+    "sort": "Ordenar",
+    "download": "Baixar",
+    "upload": "Enviar",
+    "retry": "Tentar Novamente",
+    "status": "Status",
+    "actions": "Ações",
+    "welcome": "Bem-vindo"
+  },
+  "landing": {
+    "hero": {
+      "badge": "⚡ Impulsionado por IA",
+      "title": "Crie Vídeos com",
+      "titleHighlight": "Inteligência Artificial",
+      "subtitle": "Transforme ideias em vídeos envolventes em minutos. Plataforma de geração de vídeos com IA de nível empresarial com três fluxos de trabalho poderosos: Criador de Vídeo com IA, Compilações e Clipes Virais de Podcast.",
+      "ctaStart": "Começar Grátis",
+      "ctaSignIn": "Entrar",
+      "stats": {
+        "aiModels": "Modelos de IA",
+        "ttsVoices": "Vozes TTS",
+        "gpuPowered": "GPU Powered",
+        "processingSpeed": "Velocidade de Processamento"
+      }
+    },
+    "workflows": {
+      "title": "Três Fluxos de Trabalho Poderosos",
+      "subtitle": "Escolha o fluxo de trabalho perfeito para suas necessidades de criação de conteúdo",
+      "creator": {
+        "title": "Criador de Vídeo com IA",
+        "description": "Gere vídeos completos a partir de um tópico simples. A IA escreve o roteiro, busca imagens de arquivo do Pexels, cria narrações profissionais e adiciona legendas animadas.",
+        "features": {
+          "scriptGeneration": "Geração de Roteiro com IA usando Gemini",
+          "stockFootage": "Seleção Automática de Imagens de Arquivo",
+          "tts": "Conversão de Texto em Fala Profissional (50+ vozes)",
+          "subtitles": "Legendas Animadas Palavra por Palavra",
+          "music": "Integração de Música de Fundo"
+        },
+        "cta": "Experimentar Criador de Vídeo"
+      },
+      "compilations": {
+        "title": "Compilações de Vídeo",
+        "description": "Crie vídeos de compilação envolventes a partir de conteúdo do YouTube ou podcasts. Detecção inteligente de cenas, edição automatizada e sobreposições de fundo opcionais.",
+        "features": {
+          "youtube": "Download e Processamento de Vídeos do YouTube",
+          "sceneDetection": "Detecção de Cenas Impulsionada por IA",
+          "clipExtraction": "Extração Inteligente de Clipes",
+          "backgroundVideo": "Sobreposição de Vídeo de Fundo",
+          "assembly": "Montagem Automática de Compilação"
+        },
+        "cta": "Experimentar Compilações"
+      },
+      "podcastClips": {
+        "title": "Clipes Virais de Podcast",
+        "description": "Transforme podcasts longos em clipes curtos virais. Detecção de momentos com IA, rastreamento inteligente de rosto e legendas estilo karaokê otimizadas para redes sociais.",
+        "features": {
+          "viralDetection": "Detecção de Momentos Virais com IA usando Gemini",
+          "faceTracking": "Rastreamento Inteligente de Rosto e Corte 9:16",
+          "mixedMode": "Detecção de Conteúdo em Modo Misto (Rosto/Tela)",
+          "karaoke": "Destaque de Palavras Estilo Karaokê",
+          "parallel": "Geração Paralela de Clipes (3x Mais Rápido)"
+        },
+        "cta": "Experimentar Clipes de Podcast"
+      }
+    },
+    "features": {
+      "title": "Recursos de Nível Empresarial",
+      "subtitle": "Construído para criadores, otimizado para escala",
+      "items": {
+        "cloudGpu": {
+          "title": "Aceleração GPU na Nuvem",
+          "description": "Aproveite GPUs poderosas L40S, A100 e H100 para processamento de vídeo ultra-rápido"
+        },
+        "aiViral": {
+          "title": "Detecção Viral com IA",
+          "description": "Análise impulsionada por Gemini identifica os momentos mais envolventes em seus podcasts"
+        },
+        "faceTracking": {
+          "title": "Rastreamento Inteligente de Rosto",
+          "description": "Detecção facial MediaPipe com corte inteligente 9:16 para redes sociais"
+        },
+        "monitoring": {
+          "title": "Monitoramento em Tempo Real",
+          "description": "Acompanhe o progresso do trabalho com métricas detalhadas e atualizações passo a passo"
+        },
+        "resume": {
+          "title": "Retomar e Repetir Trabalho",
+          "description": "Retome automaticamente trabalhos com falha desde a última etapa bem-sucedida, nunca perca o progresso"
+        },
+        "subtitles": {
+          "title": "Legendas Karaokê",
+          "description": "Destaque palavra por palavra com cores, posições e animações personalizáveis"
+        },
+        "database": {
+          "title": "Backend PostgreSQL",
+          "description": "Persistência de nível empresarial com histórico completo de trabalhos e gerenciamento de artefatos"
+        },
+        "voices": {
+          "title": "50+ Vozes TTS",
+          "description": "Conversão de texto em fala profissional impulsionada por Kokoro com diversas opções de voz"
+        },
+        "models": {
+          "title": "Múltiplos Modelos de IA",
+          "description": "Escolha entre Gemini Flash, Pro e outros modelos de IA de ponta"
+        },
+        "parallel": {
+          "title": "Processamento Paralelo",
+          "description": "Gere múltiplos clipes simultaneamente com aceleração GPU (3x mais rápido)"
+        },
+        "mixedMode": {
+          "title": "Detecção em Modo Misto",
+          "description": "Alterna automaticamente entre modos focados em rosto e gravação de tela"
+        },
+        "api": {
+          "title": "API REST",
+          "description": "API completa com autenticação JWT para integração com suas ferramentas"
+        }
+      }
+    },
+    "howItWorks": {
+      "title": "Como Funciona",
+      "subtitle": "Da ideia ao vídeo em quatro passos simples",
+      "steps": {
+        "choose": {
+          "title": "Escolha o Fluxo de Trabalho",
+          "description": "Selecione Criador com IA, Compilações ou Clipes de Podcast conforme suas necessidades"
+        },
+        "processing": {
+          "title": "Processamento com IA",
+          "description": "Nossa IA gera roteiros, encontra filmagens, detecta momentos virais e cria narrações"
+        },
+        "monitoring": {
+          "title": "Monitoramento em Tempo Real",
+          "description": "Acompanhe o progresso com atualizações ao vivo, métricas detalhadas e rastreamento passo a passo"
+        },
+        "download": {
+          "title": "Baixar e Compartilhar",
+          "description": "Obtenha seus vídeos finalizados prontos para fazer upload em qualquer plataforma"
+        }
+      }
+    },
+    "cta": {
+      "title": "Pronto para Criar Vídeos Incríveis?",
+      "subtitle": "Junte-se aos criadores que usam o VideoHelper para automatizar seu fluxo de trabalho de produção de vídeo",
+      "start": "Começar Agora",
+      "demo": "Ver Demonstração"
+    },
+    "footer": {
+      "tagline": "Plataforma de geração de vídeos com IA de nível empresarial",
+      "product": "Produto",
+      "productLinks": {
+        "features": "Recursos",
+        "workflows": "Fluxos de Trabalho",
+        "pricing": "Preços"
+      },
+      "resources": "Recursos",
+      "resourcesLinks": {
+        "documentation": "Documentação",
+        "apiReference": "Referência da API",
+        "support": "Suporte"
+      },
+      "company": "Empresa",
+      "companyLinks": {
+        "about": "Sobre",
+        "blog": "Blog",
+        "contact": "Contato"
+      },
+      "copyright": "© {year} VideoHelper. Todos os direitos reservados."
+    }
+  },
+  "login": {
+    "title": "VideoHelper",
+    "subtitle": "Plataforma de Geração de Vídeos com IA",
+    "username": "Nome de Usuário",
+    "password": "Senha",
+    "usernamePlaceholder": "Digite seu nome de usuário",
+    "passwordPlaceholder": "Digite sua senha",
+    "signIn": "Entrar",
+    "signingIn": "Entrando...",
+    "defaultCredentials": "Credenciais Padrão",
+    "credentialsInfo": "Altere via variáveis de ambiente AUTH_USERNAME e AUTH_PASSWORD",
+    "termsAgreement": "Ao entrar, você concorda com nossos Termos de Serviço",
+    "errors": {
+      "required": "Por favor, insira nome de usuário e senha",
+      "invalidCredentials": "Credenciais inválidas",
+      "unexpectedError": "Ocorreu um erro inesperado"
+    },
+    "success": {
+      "loggedIn": "Login realizado com sucesso"
+    }
+  },
+  "sidebar": {
+    "appName": "VideoHelper",
+    "welcomeMessage": "Bem-vindo, {username}",
+    "sections": {
+      "create": "Criar",
+      "tools": "Ferramentas"
+    },
+    "navigation": {
+      "creator": {
+        "label": "Criador de Vídeo com IA",
+        "description": "Gere vídeos com IA"
+      },
+      "compilations": {
+        "label": "Compilações",
+        "description": "Criar a partir de vídeos existentes"
+      },
+      "podcastClips": {
+        "label": "Clipes de Podcast",
+        "description": "Gerar clipes de podcasts"
+      },
+      "videos": {
+        "label": "Galeria de Vídeos",
+        "description": "Ver todos os vídeos"
+      },
+      "activity": {
+        "label": "Atividade",
+        "description": "Histórico e status de trabalhos"
+      },
+      "cleanup": {
+        "label": "Limpeza",
+        "description": "Limpar arquivos temporários"
+      }
+    },
+    "footer": {
+      "theme": "Tema",
+      "language": "Idioma",
+      "logout": "Sair",
+      "apiStatus": "Status da API",
+      "connected": "Conectado"
+    }
+  },
+  "creator": {
+    "title": "Criador de Vídeo com IA",
+    "description": "Gere vídeos profissionais com roteiros, imagens de arquivo e narrações geradas por IA",
+    "form": {
+      "videoSubject": "Assunto do Vídeo",
+      "videoSubjectPlaceholder": "ex: A história da inteligência artificial",
+      "videoSubjectDescription": "Sobre qual tópico a IA deve criar um vídeo?",
+      "aiModel": "Modelo de IA",
+      "aiModelDescription": "Qual modelo de IA usar para geração de roteiro",
+      "voice": "Voz",
+      "voiceDescription": "Voz de conversão de texto em fala para narração",
+      "videoDuration": "Duração do Vídeo",
+      "videoDurationDescription": "Duração alvo em segundos",
+      "backgroundMusic": "Música de Fundo",
+      "backgroundMusicDescription": "Adicionar música de fundo ao vídeo",
+      "subtitles": "Legendas",
+      "subtitlesDescription": "Gerar legendas animadas palavra por palavra",
+      "generate": "Gerar Vídeo",
+      "generating": "Gerando..."
+    }
+  },
+  "compilations": {
+    "title": "Compilações de Vídeo",
+    "description": "Crie vídeos de compilação a partir de conteúdo do YouTube",
+    "form": {
+      "youtubeUrl": "URL do YouTube",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlDescription": "URL do vídeo do YouTube para baixar e processar",
+      "compilationDuration": "Duração da Compilação",
+      "compilationDurationDescription": "Duração alvo para cada compilação em segundos",
+      "backgroundVideo": "Vídeo de Fundo",
+      "backgroundVideoDescription": "Adicionar sobreposição de vídeo de fundo",
+      "generate": "Criar Compilação",
+      "generating": "Criando..."
+    }
+  },
+  "podcastClips": {
+    "title": "Clipes Virais de Podcast",
+    "description": "Transforme podcasts em clipes virais para redes sociais",
+    "form": {
+      "youtubeUrl": "URL do YouTube",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlDescription": "URL do episódio do podcast",
+      "clipCount": "Número de Clipes",
+      "clipCountDescription": "Quantos clipes gerar",
+      "clipDuration": "Duração do Clipe",
+      "clipDurationDescription": "Duração de cada clipe em segundos",
+      "aiModel": "Modelo de IA",
+      "aiModelDescription": "Modelo para detecção de momentos virais",
+      "faceTracking": "Rastreamento de Rosto",
+      "faceTrackingDescription": "Ativar rastreamento inteligente de rosto 9:16",
+      "subtitles": "Legendas Karaokê",
+      "subtitlesDescription": "Adicionar destaque palavra por palavra",
+      "generate": "Gerar Clipes",
+      "generating": "Gerando..."
+    }
+  },
+  "activity": {
+    "title": "Atividade",
+    "description": "Monitore o status e histórico de trabalhos",
+    "filters": {
+      "all": "Todos os Trabalhos",
+      "queued": "Na Fila",
+      "processing": "Processando",
+      "completed": "Concluído",
+      "error": "Erro",
+      "cancelled": "Cancelado"
+    },
+    "stats": {
+      "total": "Total de Trabalhos",
+      "active": "Ativos",
+      "completed": "Concluídos",
+      "failed": "Com Falha"
+    },
+    "job": {
+      "id": "ID do Trabalho",
+      "workflow": "Fluxo de Trabalho",
+      "status": "Status",
+      "progress": "Progresso",
+      "createdAt": "Criado em",
+      "updatedAt": "Atualizado em",
+      "actions": {
+        "view": "Ver Detalhes",
+        "cancel": "Cancelar",
+        "resume": "Retomar",
+        "download": "Baixar"
+      }
+    }
+  },
+  "videos": {
+    "title": "Galeria de Vídeos",
+    "description": "Navegue e gerencie seus vídeos gerados",
+    "filters": {
+      "all": "Todos os Vídeos",
+      "creator": "Criador com IA",
+      "compilations": "Compilações",
+      "podcastClips": "Clipes de Podcast"
+    },
+    "sort": {
+      "newest": "Mais Recentes",
+      "oldest": "Mais Antigos",
+      "nameAsc": "Nome (A-Z)",
+      "nameDesc": "Nome (Z-A)",
+      "sizeAsc": "Tamanho (Menor)",
+      "sizeDesc": "Tamanho (Maior)"
+    },
+    "video": {
+      "size": "Tamanho",
+      "duration": "Duração",
+      "createdAt": "Criado em",
+      "actions": {
+        "play": "Reproduzir",
+        "download": "Baixar",
+        "delete": "Excluir"
+      }
+    },
+    "empty": "Nenhum vídeo encontrado"
+  },
+  "cleanup": {
+    "title": "Limpeza",
+    "description": "Gerencie armazenamento e limpe arquivos temporários",
+    "storage": {
+      "title": "Uso de Armazenamento",
+      "total": "Total Usado",
+      "videos": "Vídeos",
+      "temp": "Arquivos Temporários",
+      "cache": "Cache"
+    },
+    "actions": {
+      "cleanTemp": "Limpar Arquivos Temporários",
+      "cleanCache": "Limpar Cache",
+      "cleanAll": "Limpar Tudo",
+      "cleaning": "Limpando..."
+    },
+    "confirmations": {
+      "cleanTemp": "Tem certeza de que deseja excluir todos os arquivos temporários?",
+      "cleanCache": "Tem certeza de que deseja limpar o cache?",
+      "cleanAll": "Tem certeza de que deseja limpar todos os arquivos temporários e cache?"
+    }
+  }
+}

@@ -1,0 +1,386 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "save": "Save",
+    "close": "Close",
+    "next": "Next",
+    "previous": "Previous",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "download": "Download",
+    "upload": "Upload",
+    "retry": "Retry",
+    "status": "Status",
+    "actions": "Actions",
+    "welcome": "Welcome"
+  },
+  "landing": {
+    "hero": {
+      "badge": "⚡ Powered by AI",
+      "title": "Create Videos with",
+      "titleHighlight": "Artificial Intelligence",
+      "subtitle": "Transform ideas into engaging videos in minutes. Enterprise-grade AI video generation platform with three powerful workflows: AI Video Creator, Compilations, and Podcast Viral Clips.",
+      "ctaStart": "Start Creating Free",
+      "ctaSignIn": "Sign In",
+      "stats": {
+        "aiModels": "AI Models",
+        "ttsVoices": "TTS Voices",
+        "gpuPowered": "GPU Powered",
+        "processingSpeed": "Processing Speed"
+      }
+    },
+    "workflows": {
+      "title": "Three Powerful Workflows",
+      "subtitle": "Choose the perfect workflow for your content creation needs",
+      "creator": {
+        "title": "AI Video Creator",
+        "description": "Generate complete videos from a simple topic. AI writes the script, sources stock footage from Pexels, creates professional voiceovers, and adds animated subtitles.",
+        "features": {
+          "scriptGeneration": "AI Script Generation with Gemini",
+          "stockFootage": "Automated Stock Footage Selection",
+          "tts": "Professional Text-to-Speech (50+ voices)",
+          "subtitles": "Word-Level Animated Subtitles",
+          "music": "Background Music Integration"
+        },
+        "cta": "Try AI Video Creator"
+      },
+      "compilations": {
+        "title": "Video Compilations",
+        "description": "Create engaging compilation videos from YouTube content or podcasts. Smart scene detection, automated editing, and optional background overlays.",
+        "features": {
+          "youtube": "YouTube Video Download & Processing",
+          "sceneDetection": "AI-Powered Scene Detection",
+          "clipExtraction": "Smart Clip Extraction",
+          "backgroundVideo": "Background Video Overlay",
+          "assembly": "Automated Compilation Assembly"
+        },
+        "cta": "Try Compilations"
+      },
+      "podcastClips": {
+        "title": "Podcast Viral Clips",
+        "description": "Transform long-form podcasts into viral short clips. AI-powered moment detection, smart face tracking, and karaoke-style subtitles optimized for social media.",
+        "features": {
+          "viralDetection": "AI Viral Moment Detection with Gemini",
+          "faceTracking": "Smart Face Tracking & 9:16 Cropping",
+          "mixedMode": "Mixed-Mode Content Detection (Face/Screen)",
+          "karaoke": "Karaoke-Style Word Highlighting",
+          "parallel": "Parallel Clip Generation (3x Faster)"
+        },
+        "cta": "Try Podcast Clips"
+      }
+    },
+    "features": {
+      "title": "Enterprise-Grade Features",
+      "subtitle": "Built for creators, optimized for scale",
+      "items": {
+        "cloudGpu": {
+          "title": "Cloud GPU Acceleration",
+          "description": "Leverage powerful L40S, A100, and H100 GPUs for lightning-fast video processing"
+        },
+        "aiViral": {
+          "title": "AI Viral Detection",
+          "description": "Gemini-powered analysis identifies the most engaging moments in your podcasts"
+        },
+        "faceTracking": {
+          "title": "Smart Face Tracking",
+          "description": "MediaPipe face detection with intelligent 9:16 cropping for social media"
+        },
+        "monitoring": {
+          "title": "Real-Time Monitoring",
+          "description": "Track job progress with detailed metrics and step-by-step updates"
+        },
+        "resume": {
+          "title": "Job Resume & Retry",
+          "description": "Automatically resume failed jobs from the last successful step, never lose progress"
+        },
+        "subtitles": {
+          "title": "Karaoke Subtitles",
+          "description": "Word-by-word highlighting with customizable colors, positions, and animations"
+        },
+        "database": {
+          "title": "PostgreSQL Backend",
+          "description": "Enterprise-grade persistence with full job history and artifact management"
+        },
+        "voices": {
+          "title": "50+ TTS Voices",
+          "description": "Professional text-to-speech powered by Kokoro with diverse voice options"
+        },
+        "models": {
+          "title": "Multiple AI Models",
+          "description": "Choose from Gemini Flash, Pro, and other cutting-edge AI models"
+        },
+        "parallel": {
+          "title": "Parallel Processing",
+          "description": "Generate multiple clips simultaneously with GPU acceleration (3x faster)"
+        },
+        "mixedMode": {
+          "title": "Mixed-Mode Detection",
+          "description": "Automatically switches between face-focused and screen recording modes"
+        },
+        "api": {
+          "title": "REST API",
+          "description": "Full-featured API with JWT authentication for integration with your tools"
+        }
+      }
+    },
+    "howItWorks": {
+      "title": "How It Works",
+      "subtitle": "From idea to video in four simple steps",
+      "steps": {
+        "choose": {
+          "title": "Choose Workflow",
+          "description": "Select AI Creator, Compilations, or Podcast Clips based on your needs"
+        },
+        "processing": {
+          "title": "AI Processing",
+          "description": "Our AI generates scripts, finds footage, detects viral moments, and creates voiceovers"
+        },
+        "monitoring": {
+          "title": "Real-Time Monitoring",
+          "description": "Track progress with live updates, detailed metrics, and step-by-step tracking"
+        },
+        "download": {
+          "title": "Download & Share",
+          "description": "Get your finished videos ready to upload to any platform"
+        }
+      }
+    },
+    "cta": {
+      "title": "Ready to Create Amazing Videos?",
+      "subtitle": "Join creators using VideoHelper to automate their video production workflow",
+      "start": "Get Started Now",
+      "demo": "View Demo"
+    },
+    "footer": {
+      "tagline": "Enterprise-grade AI video generation platform",
+      "product": "Product",
+      "productLinks": {
+        "features": "Features",
+        "workflows": "Workflows",
+        "pricing": "Pricing"
+      },
+      "resources": "Resources",
+      "resourcesLinks": {
+        "documentation": "Documentation",
+        "apiReference": "API Reference",
+        "support": "Support"
+      },
+      "company": "Company",
+      "companyLinks": {
+        "about": "About",
+        "blog": "Blog",
+        "contact": "Contact"
+      },
+      "copyright": "© {year} VideoHelper. All rights reserved."
+    }
+  },
+  "login": {
+    "title": "VideoHelper",
+    "subtitle": "AI Video Generation Platform",
+    "username": "Username",
+    "password": "Password",
+    "usernamePlaceholder": "Enter your username",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign In",
+    "signingIn": "Signing in...",
+    "defaultCredentials": "Default Credentials",
+    "credentialsInfo": "Change via AUTH_USERNAME and AUTH_PASSWORD environment variables",
+    "termsAgreement": "By signing in, you agree to our Terms of Service",
+    "errors": {
+      "required": "Please enter both username and password",
+      "invalidCredentials": "Invalid credentials",
+      "unexpectedError": "An unexpected error occurred"
+    },
+    "success": {
+      "loggedIn": "Logged in successfully"
+    }
+  },
+  "sidebar": {
+    "appName": "VideoHelper",
+    "welcomeMessage": "Welcome, {username}",
+    "sections": {
+      "create": "Create",
+      "tools": "Tools"
+    },
+    "navigation": {
+      "creator": {
+        "label": "AI Video Creator",
+        "description": "Generate videos with AI"
+      },
+      "compilations": {
+        "label": "Compilations",
+        "description": "Create from existing videos"
+      },
+      "podcastClips": {
+        "label": "Podcast Clips",
+        "description": "Generate clips from podcasts"
+      },
+      "videos": {
+        "label": "Video Gallery",
+        "description": "View all videos"
+      },
+      "activity": {
+        "label": "Activity",
+        "description": "Job history & status"
+      },
+      "cleanup": {
+        "label": "Cleanup",
+        "description": "Clean temp files"
+      }
+    },
+    "footer": {
+      "theme": "Theme",
+      "language": "Language",
+      "logout": "Logout",
+      "apiStatus": "API Status",
+      "connected": "Connected"
+    }
+  },
+  "creator": {
+    "title": "AI Video Creator",
+    "description": "Generate professional videos with AI-powered scripts, stock footage, and voiceovers",
+    "form": {
+      "videoSubject": "Video Subject",
+      "videoSubjectPlaceholder": "e.g., The history of artificial intelligence",
+      "videoSubjectDescription": "What topic should the AI create a video about?",
+      "aiModel": "AI Model",
+      "aiModelDescription": "Which AI model to use for script generation",
+      "voice": "Voice",
+      "voiceDescription": "Text-to-speech voice for narration",
+      "videoDuration": "Video Duration",
+      "videoDurationDescription": "Target duration in seconds",
+      "backgroundMusic": "Background Music",
+      "backgroundMusicDescription": "Add background music to the video",
+      "subtitles": "Subtitles",
+      "subtitlesDescription": "Generate word-level animated subtitles",
+      "generate": "Generate Video",
+      "generating": "Generating..."
+    }
+  },
+  "compilations": {
+    "title": "Video Compilations",
+    "description": "Create compilation videos from YouTube content",
+    "form": {
+      "youtubeUrl": "YouTube URL",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlDescription": "YouTube video URL to download and process",
+      "compilationDuration": "Compilation Duration",
+      "compilationDurationDescription": "Target duration for each compilation in seconds",
+      "backgroundVideo": "Background Video",
+      "backgroundVideoDescription": "Add background video overlay",
+      "generate": "Create Compilation",
+      "generating": "Creating..."
+    }
+  },
+  "podcastClips": {
+    "title": "Podcast Viral Clips",
+    "description": "Transform podcasts into viral social media clips",
+    "form": {
+      "youtubeUrl": "YouTube URL",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlDescription": "Podcast episode URL",
+      "clipCount": "Number of Clips",
+      "clipCountDescription": "How many clips to generate",
+      "clipDuration": "Clip Duration",
+      "clipDurationDescription": "Duration for each clip in seconds",
+      "aiModel": "AI Model",
+      "aiModelDescription": "Model for viral moment detection",
+      "faceTracking": "Face Tracking",
+      "faceTrackingDescription": "Enable smart 9:16 face tracking",
+      "subtitles": "Karaoke Subtitles",
+      "subtitlesDescription": "Add word-by-word highlighting",
+      "generate": "Generate Clips",
+      "generating": "Generating..."
+    }
+  },
+  "activity": {
+    "title": "Activity",
+    "description": "Monitor job status and history",
+    "filters": {
+      "all": "All Jobs",
+      "queued": "Queued",
+      "processing": "Processing",
+      "completed": "Completed",
+      "error": "Error",
+      "cancelled": "Cancelled"
+    },
+    "stats": {
+      "total": "Total Jobs",
+      "active": "Active",
+      "completed": "Completed",
+      "failed": "Failed"
+    },
+    "job": {
+      "id": "Job ID",
+      "workflow": "Workflow",
+      "status": "Status",
+      "progress": "Progress",
+      "createdAt": "Created",
+      "updatedAt": "Updated",
+      "actions": {
+        "view": "View Details",
+        "cancel": "Cancel",
+        "resume": "Resume",
+        "download": "Download"
+      }
+    }
+  },
+  "videos": {
+    "title": "Video Gallery",
+    "description": "Browse and manage your generated videos",
+    "filters": {
+      "all": "All Videos",
+      "creator": "AI Creator",
+      "compilations": "Compilations",
+      "podcastClips": "Podcast Clips"
+    },
+    "sort": {
+      "newest": "Newest First",
+      "oldest": "Oldest First",
+      "nameAsc": "Name (A-Z)",
+      "nameDesc": "Name (Z-A)",
+      "sizeAsc": "Size (Smallest)",
+      "sizeDesc": "Size (Largest)"
+    },
+    "video": {
+      "size": "Size",
+      "duration": "Duration",
+      "createdAt": "Created",
+      "actions": {
+        "play": "Play",
+        "download": "Download",
+        "delete": "Delete"
+      }
+    },
+    "empty": "No videos found"
+  },
+  "cleanup": {
+    "title": "Cleanup",
+    "description": "Manage storage and clean temporary files",
+    "storage": {
+      "title": "Storage Usage",
+      "total": "Total Used",
+      "videos": "Videos",
+      "temp": "Temporary Files",
+      "cache": "Cache"
+    },
+    "actions": {
+      "cleanTemp": "Clean Temp Files",
+      "cleanCache": "Clear Cache",
+      "cleanAll": "Clean All",
+      "cleaning": "Cleaning..."
+    },
+    "confirmations": {
+      "cleanTemp": "Are you sure you want to delete all temporary files?",
+      "cleanCache": "Are you sure you want to clear the cache?",
+      "cleanAll": "Are you sure you want to clean all temporary files and cache?"
+    }
+  }
+}
