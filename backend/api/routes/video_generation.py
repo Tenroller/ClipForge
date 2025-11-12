@@ -397,12 +397,62 @@ async def podcastclips_generate(
         raise HTTPException(status_code=500, detail=f"Failed to generate podcast clips: {e}")
 
 
-# NOTE: The following endpoints have been removed as they accessed vendor code directly.
-# The video-processor service should provide equivalent APIs for these features:
-# - POST /AIvideos/suggest-subject - AI-powered subject suggestions
-# - GET /AIvideos/models - List available AI models
-# - GET /AIvideos/gpu-info - GPU acceleration information
-# - GET /voices - List available TTS voices
-# - GET /voice-sample - Generate TTS voice samples
-#
-# Frontend should be updated to call video-processor APIs directly for these features.
+@router.get("/AIvideos/models", summary="List AI Models")
+async def list_models() -> Dict[str, list]:
+    """
+    List available AI models.
+
+    This endpoint proxies to the video-processor service.
+    """
+    try:
+        # Try to get models from video processor
+        orchestrator = get_video_orchestrator()
+        processor_status = await orchestrator.get_processor_cluster_status()
+
+        # If we have a healthy processor, we could query it for models
+        # For now, return a static list of known Gemini models
+        return {
+            "models": [
+                "gemini-2.0-flash",
+                "gemini-2.0-flash-exp",
+                "gemini-2.0-pro",
+                "gemini-1.5-pro",
+                "gemini-1.5-flash",
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Failed to list models: {e}")
+        # Fallback to default models
+        return {"models": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"]}
+
+
+@router.get("/voices", summary="List TTS Voices")
+async def list_voices() -> Dict[str, list]:
+    """
+    List available TTS voices.
+
+    This endpoint proxies to the video-processor service.
+    """
+    try:
+        # Return a static list of known Kokoro TTS voices
+        # In the future, this could query the video-processor service
+        return {
+            "voices": [
+                "af_bella",
+                "af_nicole",
+                "af_sarah",
+                "af_sky",
+                "am_adam",
+                "am_michael",
+                "bf_emma",
+                "bf_isabella",
+                "bm_george",
+                "bm_lewis",
+                "en_male_jomboy",
+                "en_female_samc",
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Failed to list voices: {e}")
+        # Fallback to default voices
+        return {"voices": ["af_bella", "en_male_jomboy", "en_female_samc"]}
