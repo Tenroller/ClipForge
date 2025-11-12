@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Film, Lock, User } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { loginAction } from './actions';
+import { useTranslations } from 'next-intl';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -15,14 +16,15 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const t = useTranslations('login');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!username || !password) {
       toast({
-        title: 'Error',
-        description: 'Please enter both username and password',
+        title: t('errors.required'),
+        description: t('errors.required'),
         variant: 'destructive',
       });
       return;
@@ -35,22 +37,22 @@ export default function LoginPage() {
 
       if (result.success) {
         toast({
-          title: 'Success',
-          description: 'Logged in successfully',
+          title: t('success.loggedIn'),
+          description: t('success.loggedIn'),
         });
         router.push('/creator');
         router.refresh(); // Refresh to update auth state
       } else {
         toast({
-          title: 'Login Failed',
-          description: result.error || 'Invalid credentials',
+          title: t('errors.invalidCredentials'),
+          description: result.error || t('errors.invalidCredentials'),
           variant: 'destructive',
         });
       }
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'An unexpected error occurred',
+        title: t('errors.unexpectedError'),
+        description: t('errors.unexpectedError'),
         variant: 'destructive',
       });
     } finally {
@@ -77,10 +79,10 @@ export default function LoginPage() {
               <Film className="size-10 text-white" />
             </div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent">
-              VideoHelper
+              {t('title')}
             </h1>
             <p className="text-sm text-muted-foreground mt-2">
-              AI Video Generation Platform
+              {t('subtitle')}
             </p>
           </div>
 
@@ -88,7 +90,7 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-3">
               <Label htmlFor="username" className="text-sm font-semibold">
-                Username
+                {t('username')}
               </Label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-primary transition-colors">
@@ -97,7 +99,7 @@ export default function LoginPage() {
                 <Input
                   id="username"
                   type="text"
-                  placeholder="Enter your username"
+                  placeholder={t('usernamePlaceholder')}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="pl-12 h-12 border-2 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
@@ -109,7 +111,7 @@ export default function LoginPage() {
 
             <div className="space-y-3">
               <Label htmlFor="password" className="text-sm font-semibold">
-                Password
+                {t('password')}
               </Label>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-primary transition-colors">
@@ -118,7 +120,7 @@ export default function LoginPage() {
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Enter your password"
+                  placeholder={t('passwordPlaceholder')}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="pl-12 h-12 border-2 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
@@ -135,11 +137,11 @@ export default function LoginPage() {
               {isLoading ? (
                 <>
                   <div className="size-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Signing in...
+                  {t('signingIn')}
                 </>
               ) : (
                 <>
-                  Sign In
+                  {t('signIn')}
                   <span className="ml-2">→</span>
                 </>
               )}
@@ -150,14 +152,13 @@ export default function LoginPage() {
           <div className="mt-8 pt-6 border-t-2 border-border/50">
             <div className="bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-emerald-500/10 rounded-xl p-4 border border-primary/20">
               <p className="text-xs text-center text-muted-foreground font-medium mb-2">
-                Default Credentials
+                {t('defaultCredentials')}
               </p>
               <p className="text-sm text-center font-mono bg-card/50 rounded-lg p-2 border">
                 admin / admin123
               </p>
               <p className="text-xs text-center text-muted-foreground mt-3 leading-relaxed">
-                Change via <code className="text-primary">AUTH_USERNAME</code> and{' '}
-                <code className="text-primary">AUTH_PASSWORD</code> environment variables
+                {t('credentialsInfo')}
               </p>
             </div>
           </div>
@@ -165,7 +166,7 @@ export default function LoginPage() {
           {/* Additional Info */}
           <div className="mt-6 text-center">
             <p className="text-xs text-muted-foreground">
-              By signing in, you agree to our Terms of Service
+              {t('termsAgreement')}
             </p>
           </div>
         </div>
