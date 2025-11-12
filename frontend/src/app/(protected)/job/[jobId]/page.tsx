@@ -24,19 +24,6 @@ import {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
-type LogEntry = {
-  timestamp: string;
-  level: string;
-  source: string;
-  message: string;
-};
-
-type JobLogs = {
-  job_id: string;
-  logs: LogEntry[];
-  total_logs: number;
-};
-
 function getStatusIcon(status: string) {
   switch (status) {
     case 'queued':
@@ -72,29 +59,6 @@ function getStatusColor(status: string): 'secondary' | 'default' | 'destructive'
       return 'secondary';
     default:
       return 'outline';
-  }
-}
-
-function formatTimestamp(timestamp: string) {
-  try {
-    return new Date(timestamp).toLocaleString();
-  } catch {
-    return timestamp;
-  }
-}
-
-function getLevelColor(level: string) {
-  switch (level.toLowerCase()) {
-    case 'error':
-      return 'text-red-600 bg-red-50 dark:bg-red-950/20';
-    case 'warning':
-    case 'warn':
-      return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-950/20';
-    case 'debug':
-      return 'text-gray-500 bg-gray-50 dark:bg-gray-950/20';
-    case 'info':
-    default:
-      return 'text-blue-600 bg-blue-50 dark:bg-blue-950/20';
   }
 }
 
@@ -155,13 +119,6 @@ export default function JobMonitoringPage() {
 
   const { data: job, isLoading, error } = useJob(jobId, { refetchInterval: 2000 });
   const [autoRefresh, setAutoRefresh] = useState(true);
-
-  // Logs are included in the job status response from the backend
-  const logs = job?.logs ? {
-    job_id: jobId,
-    logs: Array.isArray(job.logs) ? job.logs : [],
-    total_logs: Array.isArray(job.logs) ? job.logs.length : 0
-  } : null;
 
   const formatJobDuration = () => {
     if (job?.duration_seconds) {
@@ -385,55 +342,6 @@ export default function JobMonitoringPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Job Logs */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>Job Logs</span>
-            <div className="flex items-center gap-2">
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
-              <Badge variant="secondary">{logs?.total_logs || logs?.logs?.length || 0} entries</Badge>
-            </div>
-          </CardTitle>
-          <CardDescription>
-            Real-time logs from the job execution and backend processing
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[400px] w-full rounded border bg-muted/20 p-4 overflow-auto">
-            {logs?.logs && logs.logs.length > 0 ? (
-              <div className="space-y-2">
-                {logs.logs.map((log, index) => (
-                  <div key={index} className="text-sm font-mono">
-                    <div
-                      className={`inline-block px-2 py-1 rounded text-xs font-semibold mr-2 ${getLevelColor(
-                        log.level
-                      )}`}
-                    >
-                      {log.level.toUpperCase()}
-                    </div>
-                    <span className="text-muted-foreground mr-2">[{formatTimestamp(log.timestamp)}]</span>
-                    <span className="text-xs text-muted-foreground mr-2">({log.source})</span>
-                    <span>{log.message}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                {isLoading ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader2 className="size-4 animate-spin" />
-                    <span>Loading logs...</span>
-                  </div>
-                ) : (
-                  <span>No logs available for this job</span>
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }

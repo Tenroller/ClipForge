@@ -92,7 +92,7 @@ class ProgressTracker:
         self.callbacks: List[Callable] = []
         self.lock = threading.Lock()
         
-        # Log tracking
+        # Log tracking (for compatibility with video-processor version)
         self.logs: List[Dict[str, Any]] = []
 
         # Performance tracking

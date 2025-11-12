@@ -121,7 +121,7 @@ export default function JobStartedNotification({
         ) : (
           <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
             <p>
-              This job is currently running in the background. Click &apos;Monitor Progress&apos; to view detailed progress and logs.
+              This job is currently running in the background. Click &apos;Monitor Progress&apos; to view detailed progress and step tracking.
             </p>
           </div>
         )}
@@ -129,7 +129,7 @@ export default function JobStartedNotification({
         {autoRedirect && (
           <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
             <p>
-              Your job is now being processed in the background. You will be redirected to the monitoring page where you can track progress in real-time and view detailed logs.
+              Your job is now being processed in the background. You will be redirected to the monitoring page where you can track progress in real-time and view step-by-step updates.
             </p>
           </div>
         )}

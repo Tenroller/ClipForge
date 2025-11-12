@@ -256,7 +256,7 @@ export default function HomePage() {
               {
                 icon: '📊',
                 title: 'Real-Time Monitoring',
-                description: 'Track job progress with detailed metrics, step-by-step updates, and comprehensive logs',
+                description: 'Track job progress with detailed metrics and step-by-step updates',
               },
               {
                 icon: '🔄',
@@ -342,7 +342,7 @@ export default function HomePage() {
               {
                 step: '03',
                 title: 'Real-Time Monitoring',
-                description: 'Track progress with live updates, detailed metrics, and step-by-step logs',
+                description: 'Track progress with live updates, detailed metrics, and step-by-step tracking',
               },
               {
                 step: '04',

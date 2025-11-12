@@ -11,13 +11,6 @@ export type JobRecord = {
   status: string;
   step?: string;
   current_step?: string;
-  // Optional runtime logs returned by the backend for live monitoring
-  logs?: Array<{
-    timestamp: string;
-    level: string;
-    source?: string;
-    message: string;
-  }>;
   params?: unknown;
   result?: unknown;
   error_message?: string;

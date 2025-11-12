@@ -25,7 +25,6 @@ class JobCallbackPayload(BaseModel):
     current_step: Optional[str] = None
     error_message: Optional[str] = None
     result_data: Optional[Dict[str, Any]] = None
-    logs: Optional[list] = None
 
 
 @router.post(
@@ -85,21 +84,13 @@ async def job_callback(payload: JobCallbackPayload) -> Dict[str, str]:
         # Update progress tracker if available
         try:
             tracker = get_progress_tracker(job_id)
-            if payload.logs:
-                for log_entry in payload.logs:
-                    if isinstance(log_entry, str):
-                        tracker.add_log(log_entry, "info", payload.current_step or "processing")
-                    elif isinstance(log_entry, dict):
-                        tracker.add_log(
-                            log_entry.get("message", ""), 
-                            log_entry.get("level", "info"),
-                            log_entry.get("step", payload.current_step or "processing")
-                        )
             
             if payload.status == "completed":
-                tracker.add_log("Job completed by video processor", "info", "completed")
+                # Just update step, no logging
+                pass
             elif payload.status == "failed":
-                tracker.add_log(f"Job failed: {payload.error_message or 'Unknown error'}", "error", "failed")
+                # Just update status, no logging
+                pass
                 
         except Exception as e:
             logger.warning(f"Failed to update progress tracker for job {job_id}: {e}")

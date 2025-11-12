@@ -2,14 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   images: {
-    // Keep domain whitelist and add a remote pattern for the local backend
-    domains: [
-      'i.ytimg.com', // YouTube thumbnails
-      'localhost', // Allow localhost for development
-    ],
-    // Allow images served from the backend API during local development.
-    // This matches URLs like: http://localhost:9000/api/thumbnail/<file>.jpg
+    // Use remotePatterns instead of deprecated domains
     remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'i.ytimg.com',
+        pathname: '/**',
+      },
       {
         protocol: 'http',
         hostname: 'localhost',
@@ -30,14 +29,9 @@ const nextConfig: NextConfig = {
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  // Disable private IP blocking during development
-  experimental: {
-    allowedRevalidateHeaderKeys: [],
-    // Allow private IPs in development
-    ...(process.env.NODE_ENV === 'development' && {
-      allowPrivateNetworkAccess: true,
-    }),
-  },
+  // Remove experimental section entirely for Turbopack compatibility
+  // Next.js 16 with Turbopack doesn't support many experimental features
+  // Only add experimental features if they are specifically supported
 };
 
 export default nextConfig;

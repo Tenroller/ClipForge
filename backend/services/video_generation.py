@@ -1,51 +1,128 @@
 """
 Video generation service layer.
+
+This service handles video generation requests by delegating the actual
+video processing to the video-processor microservice.
 """
 
-import os
+import asyncio
 import time
-import uuid
-import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..models.requests import MoneyPrinterRequest, BrainrotRequest
-from ..logging_config import get_logger, log_job_event, log_generation_step
+from ..logging_config import get_logger, log_job_event
 from ..database import get_job_store
 from ..job_queue_unified import get_job_queue, update_job_progress
 from ..utils.paths import get_output_path
 from ..utils.error_handling import handle_error
 from .video_service import get_video_service
+from .video_processor_client import VideoProcessorClient, ProcessorManager
 
 
 class VideoGenerationService:
-    """Service for handling video generation workflows."""
+    """Service for handling video generation workflows via video-processor microservice."""
     
-    def __init__(self):
+    def __init__(self, processor_manager: Optional[ProcessorManager] = None):
         self.logger = get_logger("video_generation.service")
         self.job_store = get_job_store()
         self.job_queue = get_job_queue()
         self.output_dir = get_output_path()
+        self.processor_manager = processor_manager or self._create_default_processor_manager()
     
-    def generate_moneyprinter_video(self, request: MoneyPrinterRequest) -> Dict[str, Any]:
-        """Generate video using MoneyPrinter workflow."""
-        # TODO: Extract logic from app.py
-        raise NotImplementedError("To be implemented")
+    def _create_default_processor_manager(self) -> ProcessorManager:
+        """Create a default processor manager with video-processor instances."""
+        # TODO: Load these URLs from configuration
+        processor_urls = [
+            "http://localhost:8001",  # Default video-processor instance
+        ]
+        return ProcessorManager(processor_urls)
     
-    def generate_brainrot_video(self, request: BrainrotRequest) -> Dict[str, Any]:
-        """Generate video using Brainrot workflow."""
-        # TODO: Extract logic from app.py
-        raise NotImplementedError("To be implemented")
+    async def generate_moneyprinter_video(self, job_id: str, request: MoneyPrinterRequest) -> Dict[str, Any]:
+        """
+        Generate video using MoneyPrinter workflow via video-processor service.
+        
+        Args:
+            job_id: Unique job identifier
+            request: MoneyPrinter generation request
+            
+        Returns:
+            Dictionary containing job submission result
+        """
+        self.logger.info(f"Submitting MoneyPrinter job {job_id} to video-processor")
+        
+        # Convert request to dictionary for processor
+        request_data = request.model_dump()
+        
+        # Submit job to video processor
+        result = await self.processor_manager.submit_job(
+            job_id=job_id,
+            workflow="moneyprinter",
+            request_data=request_data,
+            priority="normal",
+            callback_url=f"http://localhost:9000/api/jobs/{job_id}/callback"  # TODO: Make configurable
+        )
+        
+        if not result:
+            raise RuntimeError("Failed to submit job to video processor")
+        
+        self.logger.info(f"Successfully submitted MoneyPrinter job {job_id}")
+        return result
+    
+    async def generate_brainrot_video(self, job_id: str, request: BrainrotRequest) -> Dict[str, Any]:
+        """
+        Generate video using Brainrot workflow via video-processor service.
+        
+        Args:
+            job_id: Unique job identifier
+            request: Brainrot generation request
+            
+        Returns:
+            Dictionary containing job submission result
+        """
+        self.logger.info(f"Submitting Brainrot job {job_id} to video-processor")
+        
+        # Convert request to dictionary for processor
+        request_data = request.model_dump()
+        
+        # Submit job to video processor
+        result = await self.processor_manager.submit_job(
+            job_id=job_id,
+            workflow="brainrot",
+            request_data=request_data,
+            priority="normal",
+            callback_url=f"http://localhost:9000/api/jobs/{job_id}/callback"  # TODO: Make configurable
+        )
+        
+        if not result:
+            raise RuntimeError("Failed to submit job to video processor")
+        
+        self.logger.info(f"Successfully submitted Brainrot job {job_id}")
+        return result
+    
+    async def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Get job status from video processor."""
+        return await self.processor_manager.get_job_status(job_id)
+    
+    async def cancel_job(self, job_id: str, reason: Optional[str] = None) -> bool:
+        """Cancel a job in the video processor."""
+        return await self.processor_manager.cancel_job(job_id, reason)
+    
+    async def get_processor_health(self) -> Dict[str, Any]:
+        """Get health status of all video processors."""
+        return await self.processor_manager.get_cluster_status()
+    
+    async def close(self):
+        """Close processor connections."""
+        if self.processor_manager:
+            await self.processor_manager.close()
 
 
-def _check_cancel(job_id: str) -> None:
-    """Check if job has been cancelled."""
-    job_queue = get_job_queue()
-    status = job_queue.get_job_status(job_id)
-    if status and status.get('status') == 'cancelled':
-        raise RuntimeError("cancelled")
-
+# Legacy job execution functions - DEPRECATED
+# These functions are replaced by the VideoGenerationService which delegates
+# to the video-processor microservice. They are kept for backward compatibility
+# but should be removed once all callers are updated.
 
 def _update_job(job_id: str, **fields: Any) -> None:
     """Update job in unified queue (which handles database persistence)."""
@@ -53,11 +130,6 @@ def _update_job(job_id: str, **fields: Any) -> None:
     job_queue = get_job_queue()
     
     # Handle special fields that need queue-specific processing
-    if 'logs' in fields and fields['logs']:
-        # Add log message to queue
-        job_queue.update_job_progress(job_id, fields.get('step', ''), fields['logs'][-1])
-        fields.pop('logs')  # Remove from database update
-
     if 'step' in fields:
         job_queue.update_job_progress(job_id, fields['step'])
         fields.pop('step')  # Remove from database update
@@ -65,13 +137,6 @@ def _update_job(job_id: str, **fields: Any) -> None:
     # Update database directly for remaining fields
     if fields:
         job_store.update_job(job_id, **fields)
-
-    _enqueue_job_update(job_id)
-
-
-def _enqueue_job_update(job_id: str) -> None:
-    """No-op: WebSocket broadcasting has been removed, using REST API polling instead."""
-    pass
 
 
 def run_moneyprinter_job(job_id: str, req: MoneyPrinterRequest):

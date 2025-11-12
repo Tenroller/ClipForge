@@ -60,7 +60,6 @@ class Job(Base):
     request_data = Column(JSON)
     result = Column(JSON)  # Changed from result_data to match database schema
     error_message = Column(Text)
-    logs = Column(JSON, default=list)
     resume_data = Column(JSON)
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -285,7 +284,6 @@ class JobStore:
                 "step": job.step,
                 "workflow": job.workflow,
                 "user_id": job.user_id,
-                "logs": job.logs if job.logs is not None else [],
                 "result": job.result,  # Changed from job.result_data to job.result
                 "request_data": job.request_data if job.request_data is not None else {},
                 "resume_data": job.resume_data,
@@ -326,7 +324,6 @@ class JobStore:
                     "step": job.step,
                     "workflow": job.workflow,
                     "user_id": job.user_id,
-                    "logs": job.logs if job.logs is not None else [],
                     "result": job.result,  # Changed from job.result_data to job.result
                     "request_data": job.request_data if job.request_data is not None else {},
                     "resume_data": job.resume_data,

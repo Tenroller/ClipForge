@@ -1795,84 +1795,10 @@ def job_status(job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     
-    # Include logs in the job status response for efficiency
-    try:
-        logger.info(f"Legacy app: Fetching logs for job {job_id} in job_status endpoint")
-        from services.job_management import JobManagementService
-        job_service = JobManagementService()
-        logs_data = job_service.get_job_logs(job_id)
-        job['logs'] = logs_data.get('logs', [])
-        job['total_logs'] = logs_data.get('total_logs', 0)
-        logger.info(f"Legacy app: Successfully added {len(job['logs'])} logs to job status response")
-    except Exception as e:
-        logger.warning(f"Legacy app: Failed to fetch logs for job {job_id}: {e}")
-        # Fallback to empty logs if logs fetch fails
-        job['logs'] = []
-        job['total_logs'] = 0
-    
     return job
 
 
-@app.get("/api/jobs/{job_id}/logs", tags=["Job Management"], summary="Get Job Logs")
-def get_job_logs(job_id: str) -> Dict[str, Any]:
-    """Get comprehensive logs for a specific job."""
-    job = job_store.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    # Get logs from the job record
-    job_logs = job.get('logs', [])
-    
-    # Try to get additional logs from progress tracker if job is active
-    additional_logs = []
-    try:
-        from utils.progress_tracker import get_progress_tracker
-        if job.get('status') in ['running', 'queued']:
-            tracker = get_progress_tracker(job_id)
-            progress_info = tracker.get_current_progress()
-            if 'logs' in progress_info:
-                additional_logs = progress_info['logs']
-    except Exception as e:
-        logger.warning(f"Failed to get progress tracker logs for job {job_id}: {e}")
-    
-    # Combine all logs and ensure they're timestamped
-    all_logs = []
-    
-    # Add job logs
-    for log_entry in job_logs:
-        if isinstance(log_entry, str):
-            all_logs.append({
-                'timestamp': job.get('created_at', ''),
-                'level': 'INFO',
-                'source': 'job',
-                'message': log_entry
-            })
-        elif isinstance(log_entry, dict):
-            all_logs.append({
-                'timestamp': log_entry.get('timestamp', job.get('created_at', '')),
-                'level': log_entry.get('level', 'INFO'),
-                'source': log_entry.get('source', 'job'),
-                'message': log_entry.get('message', str(log_entry))
-            })
-    
-    # Add progress tracker logs
-    for log_entry in additional_logs:
-        if isinstance(log_entry, dict):
-            all_logs.append({
-                'timestamp': log_entry.get('timestamp', ''),
-                'level': log_entry.get('level', 'INFO'),
-                'source': 'progress_tracker',
-                'message': log_entry.get('message', str(log_entry))
-            })
-    
-    # Sort logs by timestamp
-    all_logs.sort(key=lambda x: x.get('timestamp', ''))
-    
-    return {
-        'job_id': job_id,
-        'logs': all_logs,
-        'total_logs': len(all_logs)
-    }
+
 
 
 @app.get("/api/jobs", tags=["Job Management"], summary="List Jobs")

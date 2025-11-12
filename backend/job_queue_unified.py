@@ -69,12 +69,7 @@ class Job:
     duration: Optional[float] = None
     workflow: str = "default"
     user_id: Optional[str] = None
-    logs: Optional[List[str]] = None
     step: str = "init"
-
-    def __post_init__(self):
-        if self.logs is None:
-            self.logs = []
 
 
 class UnifiedJobQueue:
@@ -389,8 +384,7 @@ class UnifiedJobQueue:
                                 'completed_at': db_job.get('ended_at'),
                                 'duration': db_job.get('duration_seconds'),
                                 'result': db_job.get('result'),  # Changed from result_data to result
-                                'error': db_job.get('error_message'),
-                                'logs': db_job.get('logs', [])
+                                'error': db_job.get('error_message')
                             }
                     except Exception as e:
                         logger.error(f"Failed to get job {job_id} from database: {e}")
@@ -408,8 +402,7 @@ class UnifiedJobQueue:
                 'completed_at': job.completed_at.isoformat() if job.completed_at else None,
                 'duration': job.duration,
                 'result': job.result,
-                'error': job.error,
-                'logs': job.logs
+                'error': job.error
             }
 
     def list_jobs(self, limit: int = 100, status: Optional[JobStatus] = None,
@@ -521,16 +514,13 @@ class UnifiedJobQueue:
             job = self.jobs.get(job_id)
             if job:
                 job.step = step
-                if message and job.logs is not None:
-                    job.logs.append(message)
 
                 # Update database
                 if self.job_store:
                     try:
                         self.job_store.update_job(
                             job_id,
-                            step=step,
-                            logs=job.logs
+                            step=step
                         )
                     except Exception as e:
                         logger.error(f"Failed to update job progress for {job_id}: {e}")
