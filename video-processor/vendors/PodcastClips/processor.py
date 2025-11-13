@@ -94,6 +94,7 @@ from .thumbnail_generator import ThumbnailGenerator
 from .audio_enhancer import AudioEnhancer
 from .clip_scorer import ClipScorer
 from .hook_optimizer import HookOptimizer
+from .speaker_diarization import SpeakerDiarizer, SpeakerSegment, is_speaker_diarization_available
 from vendors.AIvideos.stable_ts_enhanced_subtitles import extract_word_timings_with_stable_ts
 from vendors.AIvideos.gpt import generate_structured_response, ViralMomentsResponse
 
@@ -229,6 +230,17 @@ class PodcastClipsProcessor:
             min_face_size_ratio = parameters.get('minFaceSizeRatio', 0.02)  # Filter out audience (2% of frame)
             max_tracked_faces = parameters.get('maxTrackedFaces', 4)  # Track up to 4 people
 
+            # Speaker diarization configuration (who speaks when)
+            enable_speaker_diarization = parameters.get('enableSpeakerDiarization', True)
+            min_speakers = parameters.get('minSpeakers', None)  # None = auto-detect
+            max_speakers = parameters.get('maxSpeakers', None)  # None = auto-detect
+
+            # Phase 2: Advanced speaker features
+            target_speaker = parameters.get('targetSpeaker', None)  # Focus on specific speaker (e.g., "SPEAKER_00")
+            min_speaker_percentage = parameters.get('minSpeakerPercentage', 0.0)  # Min % target speaker must speak
+            require_exchange = parameters.get('requireExchange', False)  # Require multiple speakers in moment
+            prioritize_guest = parameters.get('prioritizeGuest', False)  # Prioritize secondary speaker (guest) over main (host)
+
             # Split-screen configuration
             enable_split_screen = parameters.get('enableSplitScreen', True)  # Enable split-screen mode
             separation_threshold = parameters.get('separationThreshold', 0.40)  # 40% of frame width
@@ -248,19 +260,59 @@ class PodcastClipsProcessor:
             # Step 2: Transcribe
             word_timings = self._transcribe_video(video_path, whisper_model, use_gpu)
 
-            # Step 3: Detect viral moments
+            # Step 2.5: Speaker diarization (who speaks when)
+            speaker_segments = None
+            if enable_speaker_diarization and is_speaker_diarization_available():
+                speaker_segments = self._diarize_speakers(
+                    video_path, word_timings, use_gpu, min_speakers, max_speakers
+                )
+                # Store for later use
+                self.speaker_segments = speaker_segments
+            else:
+                self.speaker_segments = None
+
+            # Step 3: Detect viral moments (with speaker context if available)
             viral_moments = self._detect_viral_moments(
                 word_timings, ai_model, max_clip_count,
-                min_duration, max_duration, viral_keywords
+                min_duration, max_duration, viral_keywords,
+                speaker_segments=speaker_segments
             )
 
-            # Step 4: Score and rank viral moments
-            viral_moments = self._score_and_rank_moments(
-                viral_moments, word_timings, max_clip_count
-            )
+            # Step 3.5: Apply Phase 2 speaker filtering if requested
+            if speaker_segments and (target_speaker or min_speaker_percentage > 0 or require_exchange or prioritize_guest):
+                logger.info("Applying Phase 2 speaker filtering")
 
-            # Step 5: Optimize hooks for better engagement
+                # If prioritizing guest, identify main speaker and target the secondary one
+                if prioritize_guest and speaker_segments:
+                    from .speaker_diarization import SpeakerDiarizer
+                    diarizer = SpeakerDiarizer(use_gpu=False)
+                    speaker_stats = diarizer.get_speaker_statistics(speaker_segments)
+
+                    # Find secondary speaker (not the main one)
+                    sorted_speakers = sorted(speaker_stats.items(), key=lambda x: x[1]['percentage'], reverse=True)
+                    if len(sorted_speakers) >= 2:
+                        target_speaker = sorted_speakers[1][0]  # Second most speaking time (guest)
+                        min_speaker_percentage = max(min_speaker_percentage, 30.0)  # Guest should speak at least 30%
+                        logger.info(f"Prioritizing guest speaker: {target_speaker}")
+
+                # Apply filtering
+                viral_moments = self._filter_moments_by_speaker(
+                    viral_moments,
+                    speaker_segments,
+                    target_speaker=target_speaker,
+                    min_speaker_percentage=min_speaker_percentage,
+                    require_exchange=require_exchange
+                )
+
+            # Step 4: Optimize hooks for better engagement (MOVED BEFORE SCORING)
+            # This ensures we score the final, optimized clip timings, not AI's rough guesses
             viral_moments = self._optimize_hooks(viral_moments, word_timings)
+
+            # Step 5: Score and rank viral moments (NOW USES OPTIMIZED TIMINGS + SPEAKER DYNAMICS)
+            viral_moments = self._score_and_rank_moments(
+                viral_moments, word_timings, max_clip_count,
+                speaker_segments=speaker_segments
+            )
 
             # Step 6: Analyze faces (REMOVED - now done per-clip for better performance)
             # Face and speaker detection moved into _generate_clips() to only process
@@ -398,6 +450,96 @@ class PodcastClipsProcessor:
             logger.error(f"Transcription failed: {e}")
             raise RuntimeError(f"Failed to transcribe video: {e}")
 
+    def _diarize_speakers(
+        self,
+        video_path: str,
+        word_timings: List[Dict[str, Any]],
+        use_gpu: bool,
+        min_speakers: Optional[int] = None,
+        max_speakers: Optional[int] = None
+    ) -> Optional[List[SpeakerSegment]]:
+        """
+        Perform speaker diarization to identify who speaks when.
+
+        Args:
+            video_path: Path to video file
+            word_timings: Word timing data from transcription
+            use_gpu: Whether to use GPU acceleration
+            min_speakers: Minimum number of speakers (None = auto-detect)
+            max_speakers: Maximum number of speakers (None = auto-detect)
+
+        Returns:
+            List of SpeakerSegment objects or None if diarization fails
+        """
+        self.update_progress("speaker_diarization", 37, "Analyzing speakers")
+
+        try:
+            # Check if diarization already exists (resume support)
+            existing = load_artifact(self.job_id, "speaker_diarization", "segments")
+            if existing:
+                logger.info("Found existing speaker diarization data")
+                segments_data = existing.get('segments', [])
+                return [
+                    SpeakerSegment(
+                        start_time=s['start_time'],
+                        end_time=s['end_time'],
+                        speaker=s['speaker']
+                    )
+                    for s in segments_data
+                ]
+
+            logger.info("Starting speaker diarization")
+
+            # Initialize diarizer
+            diarizer = SpeakerDiarizer(
+                use_gpu=use_gpu,
+                min_speakers=min_speakers,
+                max_speakers=max_speakers
+            )
+
+            # Run diarization
+            speaker_segments = diarizer.diarize(
+                audio_path=video_path,  # pyannote can handle video files
+                min_speakers=min_speakers,
+                max_speakers=max_speakers
+            )
+
+            if not speaker_segments:
+                logger.warning("No speaker segments detected")
+                return None
+
+            # Persist speaker segments
+            persist_artifact(
+                self.job_id,
+                "speaker_diarization",
+                "segments",
+                payload={
+                    "segments": [
+                        {
+                            "start_time": s.start_time,
+                            "end_time": s.end_time,
+                            "speaker": s.speaker
+                        }
+                        for s in speaker_segments
+                    ],
+                    "speaker_count": len(set(s.speaker for s in speaker_segments)),
+                    "segment_count": len(speaker_segments)
+                }
+            )
+
+            self.update_progress("speaker_diarization", 39, f"Identified {len(set(s.speaker for s in speaker_segments))} speakers")
+
+            return speaker_segments
+
+        except ImportError as e:
+            logger.warning(f"Speaker diarization not available: {e}")
+            logger.warning("Install pyannote-audio: pip install pyannote-audio")
+            return None
+        except Exception as e:
+            logger.warning(f"Speaker diarization failed (non-critical): {e}")
+            logger.info("Continuing without speaker diarization")
+            return None
+
     def _detect_viral_moments(
         self,
         word_timings: List[Dict[str, Any]],
@@ -405,9 +547,10 @@ class PodcastClipsProcessor:
         max_count: int,
         min_duration: int,
         max_duration: int,
-        keywords: List[str]
+        keywords: List[str],
+        speaker_segments: Optional[List[SpeakerSegment]] = None
     ) -> List[ViralMoment]:
-        """Use Gemini AI to detect viral moments."""
+        """Use Gemini AI to detect viral moments with optional speaker context."""
         self.update_progress("ai_analysis", 40, "Analyzing content for viral moments")
 
         try:
@@ -418,33 +561,75 @@ class PodcastClipsProcessor:
                 moments_data = existing.get('moments', [])
                 return [ViralMoment(**m) for m in moments_data]
 
-            # Build transcript with timestamps for AI
+            # Merge speaker labels with word timings if available
+            if speaker_segments:
+                logger.info("Merging speaker labels with transcript")
+                diarizer = SpeakerDiarizer(use_gpu=False)  # Just for annotation
+                word_timings = diarizer.annotate_word_timings(word_timings, speaker_segments)
+                logger.info("✓ Transcript annotated with speaker labels")
+
+            # Build transcript with timestamps and speaker labels for AI
             transcript_lines = []
+            current_speaker = None
+
             for i, word in enumerate(word_timings):
-                if i % 20 == 0:  # Add timestamp every 20 words
-                    transcript_lines.append(f"[{word['start_time']:.1f}s] {word['word']}")
+                word_speaker = word.get('speaker')
+
+                # Add timestamp every 8 words for better precision
+                if i % 8 == 0:
+                    if word_speaker and word_speaker != current_speaker and speaker_segments:
+                        # Speaker change - add speaker label
+                        transcript_lines.append(f"\n[{word['start_time']:.1f}s {word_speaker}] {word['word']}")
+                        current_speaker = word_speaker
+                    else:
+                        transcript_lines.append(f"[{word['start_time']:.1f}s] {word['word']}")
                 else:
-                    transcript_lines.append(word['word'])
+                    # Check for speaker change mid-segment
+                    if word_speaker and word_speaker != current_speaker and speaker_segments:
+                        transcript_lines.append(f"\n[{word_speaker}] {word['word']}")
+                        current_speaker = word_speaker
+                    else:
+                        transcript_lines.append(word['word'])
 
             transcript_text = ' '.join(transcript_lines)
 
             # Prepare prompt (simplified - no need for detailed JSON format instructions)
             keywords_hint = f"\n\nPriority keywords: {', '.join(keywords)}" if keywords else ""
 
+            # Build speaker context hint if available
+            speaker_context = ""
+            if speaker_segments:
+                speakers = list(set(s.speaker for s in speaker_segments))
+                speaker_count = len(speakers)
+                speaker_context = f"""
+
+            SPEAKER CONTEXT
+            This podcast has {speaker_count} speaker(s): {', '.join(speakers)}.
+            Speaker labels are embedded in the transcript (e.g., "[SPEAKER_00]", "[SPEAKER_01]").
+
+            SPEAKER-AWARE SELECTION:
+            - Prioritize dynamic exchanges: back-and-forth moments, questions + answers, reactions
+            - Value speaker transitions that create tension/release or setup/punchline patterns
+            - Identify moments where one speaker dominates (monologues) vs. rapid exchanges (debates)
+            - Note multi-speaker interactions in the 'notes' field
+            - For interview-style podcasts, favor guest responses over host questions
+            - Look for controversial disagreements or surprising agreements between speakers
+            """
+
             # IMPROVED PROMPT (aligned with ViralMomentsResponse / ViralMomentSchema fields)
             prompt = f"""
-            
+
             KEYWORDS (OPTIONAL WEIGHTING):
             {keywords_hint}
-            
+
             ROLE
             You are an elite short-form editorial strategist for TikTok/Reels/Shorts. You surgically extract only HIGH-CONVICTION viral moments from a podcast transcript.
 
             OBJECTIVE
             Return the best possible set of moments (0..{max_count}) ordered BEST-FIRST. Do NOT pad quantity—quality is paramount.
-
+            {speaker_context}
             TRANSCRIPT
-            Only use words present below (with periodic timestamps baked in). Never invent, alter, or guess missing words.
+            Only use words present below (with periodic timestamps and speaker labels baked in). Never invent, alter, or guess missing words.
             {transcript_text}
 
             SELECTION RULES
@@ -953,14 +1138,62 @@ class PodcastClipsProcessor:
             logger.error(f"Finalization failed: {e}")
             raise RuntimeError(f"Failed to finalize: {e}")
 
+    def _filter_moments_by_speaker(
+        self,
+        viral_moments: List[ViralMoment],
+        speaker_segments: List[SpeakerSegment],
+        target_speaker: Optional[str] = None,
+        min_speaker_percentage: float = 0.0,
+        require_exchange: bool = False
+    ) -> List[ViralMoment]:
+        """
+        Filter moments based on Phase 2 speaker criteria.
+
+        Args:
+            viral_moments: List of ViralMoment objects
+            speaker_segments: Speaker diarization segments
+            target_speaker: Focus on specific speaker
+            min_speaker_percentage: Min % target speaker must speak
+            require_exchange: Require multiple speakers
+
+        Returns:
+            Filtered list of moments
+        """
+        from .speaker_diarization import SpeakerDiarizer
+
+        diarizer = SpeakerDiarizer(use_gpu=False)
+
+        # Convert to dicts for filtering
+        moments_dicts = [
+            {
+                'start_time': m.optimized_start if m.optimized_start is not None else m.start_time,
+                'end_time': m.optimized_end if m.optimized_end is not None else m.end_time,
+                'moment': m
+            }
+            for m in viral_moments
+        ]
+
+        # Apply filtering
+        filtered_dicts = diarizer.filter_moments_by_speaker(
+            moments_dicts,
+            speaker_segments,
+            target_speaker=target_speaker,
+            min_speaker_percentage=min_speaker_percentage,
+            require_exchange=require_exchange
+        )
+
+        # Extract moments
+        return [d['moment'] for d in filtered_dicts]
+
     def _score_and_rank_moments(
         self,
         viral_moments: List[ViralMoment],
         word_timings: List[Dict[str, Any]],
-        max_count: int
+        max_count: int,
+        speaker_segments: Optional[List[SpeakerSegment]] = None
     ) -> List[ViralMoment]:
-        """Score and rank viral moments by quality."""
-        self.update_progress("scoring", 56, f"Scoring {len(viral_moments)} viral moments")
+        """Score and rank viral moments by quality (using optimized timing + speaker dynamics)."""
+        self.update_progress("scoring", 58, f"Scoring {len(viral_moments)} optimized clips")
 
         try:
             logger.info("Scoring clip quality and viral potential")
@@ -970,22 +1203,27 @@ class PodcastClipsProcessor:
             # Score each moment
             scored_moments = []
             for moment in viral_moments:
-                # Extract transcript for this moment
+                # Use optimized timing if available, otherwise fall back to original
+                start_time = moment.optimized_start if moment.optimized_start is not None else moment.start_time
+                end_time = moment.optimized_end if moment.optimized_end is not None else moment.end_time
+
+                # Extract transcript for this moment using optimized timing
                 clip_words = [
                     w['word'] for w in word_timings
-                    if moment.start_time <= w.get('start_time', 0) <= moment.end_time
+                    if start_time <= w.get('start_time', 0) <= end_time
                 ]
                 clip_transcript = ' '.join(clip_words)
 
-                # Score the clip
+                # Score the clip with optimized timing and speaker dynamics
                 score_data = scorer.score_clip(
                     transcript_text=clip_transcript,
                     word_timings=word_timings,
-                    start_time=moment.start_time,
-                    end_time=moment.end_time,
+                    start_time=start_time,
+                    end_time=end_time,
                     title=moment.title,
                     reason=moment.reason,
-                    face_coverage=0.0  # Will be updated after face detection
+                    face_coverage=0.0,  # Will be updated after face detection
+                    speaker_segments=speaker_segments  # Phase 2: Speaker dynamics scoring
                 )
 
                 # Update moment with score
@@ -1016,7 +1254,7 @@ class PodcastClipsProcessor:
 
             logger.info(f"Selected top {len(final_moments)} clips (avg score: {sum(m.viral_score for m in final_moments)/len(final_moments):.1f})")
 
-            self.update_progress("scoring", 58, f"Selected {len(final_moments)} top-quality clips")
+            self.update_progress("scoring", 59, f"Selected {len(final_moments)} top-quality clips")
 
             return final_moments
 
@@ -1031,12 +1269,12 @@ class PodcastClipsProcessor:
         word_timings: List[Dict[str, Any]]
     ) -> List[ViralMoment]:
         """Optimize clip hooks for better engagement."""
-        self.update_progress("hook_optimization", 59, "Optimizing hooks for maximum engagement")
+        self.update_progress("hook_optimization", 56, "Optimizing hooks for maximum engagement")
 
         try:
             logger.info("Optimizing clip hooks")
 
-            optimizer = HookOptimizer(search_window=5.0)
+            optimizer = HookOptimizer(search_window=10.0)  # Expanded from 5s to 10s for better coverage
 
             # Build full transcript
             transcript_text = ' '.join([w['word'] for w in word_timings])

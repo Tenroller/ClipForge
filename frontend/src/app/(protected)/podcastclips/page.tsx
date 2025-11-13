@@ -66,6 +66,14 @@ export default function PodcastClipsPage() {
   const [transitionDuration, setTransitionDuration] = useState(0.5);
   const [showMixedModeSettings, setShowMixedModeSettings] = useState(false);
 
+  // Phase 2: Speaker diarization settings
+  const [enableSpeakerDiarization, setEnableSpeakerDiarization] = useState(true);
+  const [targetSpeaker, setTargetSpeaker] = useState('');
+  const [minSpeakerPercentage, setMinSpeakerPercentage] = useState(0);
+  const [requireExchange, setRequireExchange] = useState(false);
+  const [prioritizeGuest, setPrioritizeGuest] = useState(false);
+  const [showSpeakerSettings, setShowSpeakerSettings] = useState(false);
+
   // Organize models into categories for better UX (mutually exclusive)
   const organizedModels = useMemo(() => {
     if (!allModels.length) {
@@ -200,6 +208,12 @@ export default function PodcastClipsPage() {
         faceReturnThreshold,
         minSegmentDuration,
         transitionDuration,
+        // Phase 2: Speaker diarization settings
+        enableSpeakerDiarization,
+        targetSpeaker: targetSpeaker.trim() || undefined,
+        minSpeakerPercentage,
+        requireExchange,
+        prioritizeGuest,
       };
 
       const data = await generatePodcastClips(payload);
@@ -655,6 +669,115 @@ export default function PodcastClipsPage() {
                             />
                             <p className="text-xs text-muted-foreground">
                               Crossfade duration when switching between modes
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Speaker Diarization (Phase 2) */}
+                <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="enableSpeakerDiarization">{t('speakerDiarization')}</Label>
+                        <Badge variant="secondary">{t('phase2')}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {t('identifyWhoSpeaksWhen')}
+                      </p>
+                    </div>
+                    <Switch
+                      id="enableSpeakerDiarization"
+                      checked={enableSpeakerDiarization}
+                      onCheckedChange={setEnableSpeakerDiarization}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  {/* Advanced Speaker Settings */}
+                  {enableSpeakerDiarization && (
+                    <div className="pt-2 border-t">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="w-full flex items-center justify-between hover:bg-muted/50"
+                        onClick={() => setShowSpeakerSettings(!showSpeakerSettings)}
+                      >
+                        <span className="text-sm">{t('advancedSpeakerSettings')}</span>
+                        {showSpeakerSettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+
+                      {showSpeakerSettings && (
+                        <div className="mt-4 space-y-4">
+                          {/* Prioritize Guest */}
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                              <Label htmlFor="prioritizeGuest">{t('prioritizeGuest')}</Label>
+                              <p className="text-xs text-muted-foreground">
+                                {t('prioritizeGuestDesc')}
+                              </p>
+                            </div>
+                            <Switch
+                              id="prioritizeGuest"
+                              checked={prioritizeGuest}
+                              onCheckedChange={setPrioritizeGuest}
+                              disabled={isSubmitting}
+                            />
+                          </div>
+
+                          {/* Require Exchange */}
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                              <Label htmlFor="requireExchange">{t('requireMultipleSpeakers')}</Label>
+                              <p className="text-xs text-muted-foreground">
+                                {t('requireExchangeDesc')}
+                              </p>
+                            </div>
+                            <Switch
+                              id="requireExchange"
+                              checked={requireExchange}
+                              onCheckedChange={setRequireExchange}
+                              disabled={isSubmitting}
+                            />
+                          </div>
+
+                          {/* Target Speaker */}
+                          <div className="space-y-2">
+                            <Label htmlFor="targetSpeaker">
+                              {t('targetSpeaker')} <Badge variant="outline" className="ml-2">{t('optional')}</Badge>
+                            </Label>
+                            <Input
+                              id="targetSpeaker"
+                              placeholder="SPEAKER_00, SPEAKER_01, etc."
+                              value={targetSpeaker}
+                              onChange={(e) => setTargetSpeaker(e.target.value)}
+                              disabled={isSubmitting}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {t('targetSpeakerDesc')}
+                            </p>
+                          </div>
+
+                          {/* Min Speaker Percentage */}
+                          <div className="space-y-2">
+                            <Label htmlFor="minSpeakerPercentage">
+                              {t('minSpeakerPercentage')} <Badge variant="secondary">{minSpeakerPercentage}%</Badge>
+                            </Label>
+                            <Slider
+                              id="minSpeakerPercentage"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={[minSpeakerPercentage]}
+                              onValueChange={(value) => setMinSpeakerPercentage(value[0])}
+                              disabled={isSubmitting}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              {t('minSpeakerPercentageDesc')}
                             </p>
                           </div>
                         </div>

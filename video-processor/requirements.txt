@@ -64,6 +64,11 @@ whisper-timestamped
 pysubs2
 ffmpeg-python
 
+# Speaker diarization (who speaks when) - OPTIONAL but recommended for multi-speaker podcasts
+# Requires HuggingFace token: https://huggingface.co/settings/tokens
+# Accept model terms: https://huggingface.co/pyannote/speaker-diarization-3.1
+pyannote.audio  # Speaker diarization for better moment detection
+
 # TTS pipeline (advanced)
 kokoro
 
