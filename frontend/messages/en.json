@@ -446,7 +446,19 @@
     "audioEnhancement": "4. Audio Enhancement",
     "audioEnhancementDesc": "Automatic audio normalization and quality improvement",
     "thumbnails": "5. Thumbnails",
-    "thumbnailsDesc": "Auto-generated thumbnails for each clip, ready for social media"
+    "thumbnailsDesc": "Auto-generated thumbnails for each clip, ready for social media",
+    "speakerDiarization": "Speaker Diarization",
+    "phase2": "Phase 2",
+    "identifyWhoSpeaksWhen": "Identify who speaks when for better speaker attribution",
+    "advancedSpeakerSettings": "Advanced Speaker Settings",
+    "prioritizeGuest": "Prioritize Guest",
+    "prioritizeGuestDesc": "Focus clips on the guest speaker rather than the host",
+    "requireMultipleSpeakers": "Require Multiple Speakers",
+    "requireExchangeDesc": "Only create clips that contain conversation between multiple speakers",
+    "targetSpeaker": "Target Speaker",
+    "targetSpeakerDesc": "Specific speaker ID to focus on (e.g., SPEAKER_00 for the first speaker)",
+    "minSpeakerPercentage": "Min Speaker Percentage",
+    "minSpeakerPercentageDesc": "Minimum percentage of clip time that the target speaker must be talking"
   },
   "activity": {
     "title": "Job Activity",

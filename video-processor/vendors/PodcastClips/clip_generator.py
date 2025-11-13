@@ -321,12 +321,47 @@ class ClipGenerator:
                 x2 = min(original_width, x1 + crop_width)
                 y2 = original_height
 
+                # Additional validation for fallback dimensions
+                if x2 <= x1 or y2 <= y1 or crop_width <= 0 or crop_height <= 0:
+                    logger.error(
+                        f"Fallback crop box still invalid at t={absolute_time:.2f}s: "
+                        f"x=[{x1},{x2}] y=[{y1},{y2}], crop_size=({crop_width},{crop_height}). Using full frame."
+                    )
+                    x1, y1 = 0, 0
+                    x2, y2 = original_width, original_height
+
             # Crop the frame
             cropped_frame = frame[y1:y2, x1:x2]
 
+            # Validate cropped frame shape to prevent broadcast errors
+            if cropped_frame.shape[0] == 0 or cropped_frame.shape[1] == 0:
+                logger.warning(
+                    f"Cropped frame has zero dimensions at t={absolute_time:.2f}s: "
+                    f"shape={cropped_frame.shape}, crop_box=({x1},{y1},{x2},{y2}). Using fallback."
+                )
+                # Use center crop as fallback
+                crop_width = int(original_height * self.target_resolution[0] / self.target_resolution[1])
+                crop_height = original_height
+                x1_fallback = max(0, (original_width - crop_width) // 2)
+                y1_fallback = 0
+                x2_fallback = min(original_width, x1_fallback + crop_width)
+                y2_fallback = original_height
+                cropped_frame = frame[y1_fallback:y2_fallback, x1_fallback:x2_fallback]
+
+            # Additional shape validation after cropping
+            if cropped_frame.shape[0] == 0 or cropped_frame.shape[1] == 0:
+                logger.error(f"Still invalid frame shape after fallback: {cropped_frame.shape}. Using full frame.")
+                cropped_frame = frame
+
             # Resize to target resolution using cv2 for better performance
             import cv2
-            resized_frame = cv2.resize(cropped_frame, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
+            try:
+                resized_frame = cv2.resize(cropped_frame, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
+            except cv2.error as e:
+                logger.error(f"cv2.resize failed at t={absolute_time:.2f}s: {e}. Cropped shape: {cropped_frame.shape}")
+                # Return a black frame as last resort
+                import numpy as np
+                resized_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
 
             return resized_frame
 
@@ -481,9 +516,34 @@ class ClipGenerator:
             crop_x, crop_y = 0, 0
             crop_width, crop_height = original_width, original_height
 
+        # Additional validation to ensure crop bounds are within video dimensions
+        if crop_x + crop_width > original_width or crop_y + crop_height > original_height:
+            logger.warning(
+                f"Crop extends beyond video bounds at start_time={start_time:.2f}s: "
+                f"crop=({crop_x},{crop_y},{crop_width}x{crop_height}), video=({original_width}x{original_height}). Adjusting."
+            )
+            # Adjust crop to fit within bounds
+            crop_width = min(crop_width, original_width - crop_x)
+            crop_height = min(crop_height, original_height - crop_y)
+            
+            # If still invalid, use center crop
+            if crop_width <= 0 or crop_height <= 0:
+                logger.warning("Adjusted crop still invalid, using center crop")
+                crop_x, crop_y = 0, 0
+                crop_width, crop_height = original_width, original_height
+
         # Apply crop and resize
-        cropped = clip.cropped(crop_x, crop_y, crop_x + crop_width, crop_y + crop_height)
-        resized = cropped.resized(target_size)
+        try:
+            cropped = clip.cropped(crop_x, crop_y, crop_x + crop_width, crop_y + crop_height)
+        except Exception as e:
+            logger.error(f"Failed to crop clip: {e}. Using full frame.")
+            cropped = clip
+        try:
+            resized = cropped.resized(target_size)
+        except Exception as e:
+            logger.error(f"Failed to resize cropped clip: {e}. Crop dimensions: {cropped.size}")
+            # Return original clip as fallback
+            resized = clip.resized(target_size)
 
         logger.debug(
             f"Face crop: center=({face_center_x},{face_center_y}), "

@@ -1,176 +1,103 @@
-absl-py
-addict
-aiofiles
-annotated-doc
-annotated-types
-anyio
-assemblyai
-attrs
-av
-babel
-bcrypt
-blis
-cachetools
-catalogue
-certifi
-cffi
-charset-normalizer
-click
-cloudpathlib
-coloredlogs
-confection
-contourpy
-csvw
-ctranslate2
-curated-tokenizers
-curated-transformers
-cycler
-cymem
-Cython
-decorator
-dlinfo
-docopt
-dtw-python
-espeakng-loader
-exceptiongroup
-fastapi
-faster-whisper
-ffmpeg-python
-filelock
-flatbuffers
-fonttools
-fsspec
-future
-google-auth
-google-genai
-h11
-hf-xet
-httpcore
-httpx
-huggingface-hub
-humanfriendly
-idna
-ImageIO
-imageio-ffmpeg
-iniconfig
-isodate
-jax
-jaxlib
-Jinja2
-joblib
-jsonschema
-jsonschema-specifications
-kiwisolver
-kokoro
-langcodes
-language-tags
-language_data
-llvmlite
-loguru
-marisa-trie
-markdown-it-py
-MarkupSafe
-matplotlib
-mdurl
-mediapipe
-misaki
-ml_dtypes
-more-itertools
-moviepy
-mpmath
-murmurhash
-networkx
-num2words
-numba
-numpy
-onnxruntime
-openai-whisper
-opencv-contrib-python
-opencv-python
-opt_einsum
-packaging
-phonemizer-fork
-pillow
-platformdirs
-pluggy
-polars
-polars-runtime-32
-preshed
-proglog
-prometheus_client
-protobuf
-psutil
-psycopg2-binary
-pyasn1
-pyasn1_modules
-pycparser
-pydantic
-pydantic_core
-Pygments
-PyJWT
-pyparsing
-pysubs2
-pytesseract
-pytest
-python-dateutil
-python-dotenv
-python-multipart
-PyYAML
-rdflib
-referencing
-regex
-requests
-rfc3986
-rich
-rpds-py
-rsa
-safetensors
-scenedetect
-scipy
-segments
-sentencepiece
-sentry-sdk
-shellingham==1.5.4
-six
-smart_open
-sniffio
-sounddevice
-soundfile
-spacy
-spacy-curated-transformers
-spacy-legacy
-spacy-loggers
-SQLAlchemy
-srsly
-srt
-srt_equalizer
-stable-ts
-starlette
-structlog
-sympy
-tenacity
-termcolor
-thinc
-tiktoken
-tokenizers
-tomli
---extra-index-url https://download.pytorch.org/whl/cu126
-torch
-torchaudio
-torchvision
-tqdm
-transformers
-typer
-typing-inspection
-typing_extensions
-ultralytics
-ultralytics-thop
-uritemplate
-urllib3
-uvicorn
-wasabi
-weasel
-websockets
-whisper-timestamped
-wrapt
+# VideoHelper Requirements - Optimized Installation
+# Based on backend requirements with version constraints to avoid dependency conflicts
+
+# =============================================================================
+# CORE REQUIREMENTS (Always needed)
+# =============================================================================
+# Web server & API
+uvicorn>=0.24.0
+fastapi>=0.104.0
+starlette>=0.27.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+
+# Video processing (core)
+moviepy>=1.0.3
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.8
+opencv-python>=4.8.0
+numpy>=1.24.0,<2.0.0
+matplotlib>=3.7.0
+
+# Audio/TTS (core)
+soundfile>=0.12.1
+librosa>=0.10.0
+webrtcvad>=2.0.10
+
+# Data & utils (core)
+scipy>=1.11.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+termcolor>=2.3.0
+tqdm>=4.66.0
+psutil>=5.9.0
+Pillow>=10.0.0
+aiofiles>=23.2.0
+
+# Logging
+loguru>=0.7.0
+
+# Authentication & security
+PyJWT>=2.8.0
+bcrypt==4.2.0
+
+# Basic TTS support
+espeakng_loader>=1.0.0
+
+# Database support
+prometheus-client>=0.19.0
+SQLAlchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# Cache & scheduling
+redis>=4.5.0
+schedule>=1.2.0
+
+# =============================================================================
+# AI/ML DEPENDENCIES (For AI-powered video generation)
+# =============================================================================
+
+google-genai>=0.3.0
+ultralytics>=8.0.0
+mediapipe>=0.10.0
+assemblyai>=0.23.0
+
+# Enhanced ASR for better word-level timestamps
+stable-ts>=2.12.0
+faster-whisper>=0.10.0
+whisper-timestamped>=1.14.0
+pysubs2>=1.6.0
+ffmpeg-python>=0.2.0
+
+# TTS pipeline (advanced)
+kokoro>=0.2.0
+
+# =============================================================================
+# BRAINROT DEPENDENCIES (For TikTok-style compilations)
+# =============================================================================
+# Video downloading and processing
 yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master
+scenedetect>=0.6.2
+
+# ML dependencies for brainrot
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch>=2.0.0,<3.0.0
+torchaudio>=2.0.0,<3.0.0
+torchvision>=0.15.0,<1.0.0
+
+# =============================================================================
+# MONEYPRINTER EXTRAS (For advanced text-to-video features)
+# =============================================================================
+# Subtitle processing
+srt_equalizer>=0.1.8
+
+# =============================================================================
+# DEVELOPMENT & TESTING (Optional - not needed in production)
+# =============================================================================
+# Testing (only needed for running tests locally)
+pytest>=7.4.0
+httpx>=0.25.0
+
+# Observability (optional - only if SENTRY_DSN is configured)
+sentry-sdk>=1.38.0
+

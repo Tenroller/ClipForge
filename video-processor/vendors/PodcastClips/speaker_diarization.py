@@ -67,7 +67,7 @@ class SpeakerDiarizer:
         Args:
             hf_token: HuggingFace token for pyannote model access.
                      If None, will try to read from HF_TOKEN env var.
-            use_auth_token: Whether to use authentication token
+            use_auth_token: Whether to use authentication token (legacy parameter)
             min_speakers: Minimum number of speakers (None = auto-detect)
             max_speakers: Maximum number of speakers (None = auto-detect)
             use_gpu: Whether to use GPU acceleration if available
@@ -103,10 +103,18 @@ class SpeakerDiarizer:
 
         try:
             # Load the pre-trained pipeline
-            self.pipeline = Pipeline.from_pretrained(
-                "pyannote/speaker-diarization-3.1",
-                use_auth_token=self.hf_token if self.hf_token else True
-            )
+            # Use 'token' parameter for newer pyannote versions, fallback to 'use_auth_token' for older versions
+            try:
+                self.pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    token=self.hf_token if self.hf_token else True
+                )
+            except TypeError:
+                # Fallback for older pyannote versions
+                self.pipeline = Pipeline.from_pretrained(
+                    "pyannote/speaker-diarization-3.1",
+                    use_auth_token=self.hf_token if self.hf_token else True
+                )
 
             # Move to GPU if requested and available
             if self.use_gpu and torch.cuda.is_available():

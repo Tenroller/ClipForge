@@ -446,7 +446,19 @@
     "audioEnhancement": "4. Melhoria de Áudio",
     "audioEnhancementDesc": "Normalização automática de áudio e melhoria de qualidade",
     "thumbnails": "5. Miniaturas",
-    "thumbnailsDesc": "Miniaturas geradas automaticamente para cada clipe, prontas para redes sociais"
+    "thumbnailsDesc": "Miniaturas geradas automaticamente para cada clipe, prontas para redes sociais",
+    "speakerDiarization": "Diarização de Oradores",
+    "phase2": "Fase 2",
+    "identifyWhoSpeaksWhen": "Identifica quem fala quando para melhor atribuição de oradores",
+    "advancedSpeakerSettings": "Configurações Avançadas de Oradores",
+    "prioritizeGuest": "Priorizar Convidado",
+    "prioritizeGuestDesc": "Focar clipes no palestrante convidado em vez do apresentador",
+    "requireMultipleSpeakers": "Exigir Múltiplos Oradores",
+    "requireExchangeDesc": "Criar apenas clipes que contenham conversa entre múltiplos oradores",
+    "targetSpeaker": "Orador Alvo",
+    "targetSpeakerDesc": "ID específico do orador para focar (ex: SPEAKER_00 para o primeiro orador)",
+    "minSpeakerPercentage": "Porcentagem Mínima do Orador",
+    "minSpeakerPercentageDesc": "Porcentagem mínima do tempo do clipe que o orador alvo deve estar falando"
   },
   "activity": {
     "title": "Atividade de Trabalhos",
