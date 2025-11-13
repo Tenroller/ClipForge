@@ -254,13 +254,14 @@ class PodcastClipsProcessor:
                 min_duration, max_duration, viral_keywords
             )
 
-            # Step 4: Score and rank viral moments
+            # Step 4: Optimize hooks for better engagement (MOVED BEFORE SCORING)
+            # This ensures we score the final, optimized clip timings, not AI's rough guesses
+            viral_moments = self._optimize_hooks(viral_moments, word_timings)
+
+            # Step 5: Score and rank viral moments (NOW USES OPTIMIZED TIMINGS)
             viral_moments = self._score_and_rank_moments(
                 viral_moments, word_timings, max_clip_count
             )
-
-            # Step 5: Optimize hooks for better engagement
-            viral_moments = self._optimize_hooks(viral_moments, word_timings)
 
             # Step 6: Analyze faces (REMOVED - now done per-clip for better performance)
             # Face and speaker detection moved into _generate_clips() to only process
@@ -421,7 +422,7 @@ class PodcastClipsProcessor:
             # Build transcript with timestamps for AI
             transcript_lines = []
             for i, word in enumerate(word_timings):
-                if i % 20 == 0:  # Add timestamp every 20 words
+                if i % 8 == 0:  # Add timestamp every 8 words for better precision
                     transcript_lines.append(f"[{word['start_time']:.1f}s] {word['word']}")
                 else:
                     transcript_lines.append(word['word'])
@@ -959,8 +960,8 @@ class PodcastClipsProcessor:
         word_timings: List[Dict[str, Any]],
         max_count: int
     ) -> List[ViralMoment]:
-        """Score and rank viral moments by quality."""
-        self.update_progress("scoring", 56, f"Scoring {len(viral_moments)} viral moments")
+        """Score and rank viral moments by quality (using optimized timing)."""
+        self.update_progress("scoring", 58, f"Scoring {len(viral_moments)} optimized clips")
 
         try:
             logger.info("Scoring clip quality and viral potential")
@@ -970,19 +971,23 @@ class PodcastClipsProcessor:
             # Score each moment
             scored_moments = []
             for moment in viral_moments:
-                # Extract transcript for this moment
+                # Use optimized timing if available, otherwise fall back to original
+                start_time = moment.optimized_start if moment.optimized_start is not None else moment.start_time
+                end_time = moment.optimized_end if moment.optimized_end is not None else moment.end_time
+
+                # Extract transcript for this moment using optimized timing
                 clip_words = [
                     w['word'] for w in word_timings
-                    if moment.start_time <= w.get('start_time', 0) <= moment.end_time
+                    if start_time <= w.get('start_time', 0) <= end_time
                 ]
                 clip_transcript = ' '.join(clip_words)
 
-                # Score the clip
+                # Score the clip with optimized timing
                 score_data = scorer.score_clip(
                     transcript_text=clip_transcript,
                     word_timings=word_timings,
-                    start_time=moment.start_time,
-                    end_time=moment.end_time,
+                    start_time=start_time,
+                    end_time=end_time,
                     title=moment.title,
                     reason=moment.reason,
                     face_coverage=0.0  # Will be updated after face detection
@@ -1016,7 +1021,7 @@ class PodcastClipsProcessor:
 
             logger.info(f"Selected top {len(final_moments)} clips (avg score: {sum(m.viral_score for m in final_moments)/len(final_moments):.1f})")
 
-            self.update_progress("scoring", 58, f"Selected {len(final_moments)} top-quality clips")
+            self.update_progress("scoring", 59, f"Selected {len(final_moments)} top-quality clips")
 
             return final_moments
 
@@ -1031,12 +1036,12 @@ class PodcastClipsProcessor:
         word_timings: List[Dict[str, Any]]
     ) -> List[ViralMoment]:
         """Optimize clip hooks for better engagement."""
-        self.update_progress("hook_optimization", 59, "Optimizing hooks for maximum engagement")
+        self.update_progress("hook_optimization", 56, "Optimizing hooks for maximum engagement")
 
         try:
             logger.info("Optimizing clip hooks")
 
-            optimizer = HookOptimizer(search_window=5.0)
+            optimizer = HookOptimizer(search_window=10.0)  # Expanded from 5s to 10s for better coverage
 
             # Build full transcript
             transcript_text = ' '.join([w['word'] for w in word_timings])
