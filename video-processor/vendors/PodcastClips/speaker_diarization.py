@@ -331,6 +331,210 @@ class SpeakerDiarizer:
 
         return changes
 
+    def identify_main_speaker(
+        self,
+        segments: List[SpeakerSegment]
+    ) -> Tuple[str, float]:
+        """
+        Identify the main speaker (most speaking time).
+
+        Args:
+            segments: List of speaker segments
+
+        Returns:
+            Tuple of (speaker_label, percentage_of_total_time)
+        """
+        if not segments:
+            return ("UNKNOWN", 0.0)
+
+        # Calculate total speaking time per speaker
+        speaker_times = {}
+        for segment in segments:
+            speaker = segment.speaker
+            speaker_times[speaker] = speaker_times.get(speaker, 0) + segment.duration
+
+        # Find speaker with most time
+        total_time = sum(speaker_times.values())
+        main_speaker = max(speaker_times.items(), key=lambda x: x[1])
+
+        percentage = (main_speaker[1] / total_time * 100) if total_time > 0 else 0
+
+        logger.info(f"Main speaker: {main_speaker[0]} ({percentage:.1f}% of speaking time)")
+
+        return main_speaker[0], percentage
+
+    def get_speaker_statistics(
+        self,
+        segments: List[SpeakerSegment]
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get detailed statistics for each speaker.
+
+        Args:
+            segments: List of speaker segments
+
+        Returns:
+            Dict mapping speaker to statistics:
+            {
+                "SPEAKER_00": {
+                    "total_time": 45.3,
+                    "segment_count": 12,
+                    "percentage": 65.2,
+                    "avg_segment_duration": 3.78,
+                    "role": "main" | "secondary" | "minor"
+                }
+            }
+        """
+        if not segments:
+            return {}
+
+        # Calculate per-speaker stats
+        speaker_stats = {}
+        total_time = sum(s.duration for s in segments)
+
+        for speaker in set(s.speaker for s in segments):
+            speaker_segments = [s for s in segments if s.speaker == speaker]
+            speaker_time = sum(s.duration for s in speaker_segments)
+            percentage = (speaker_time / total_time * 100) if total_time > 0 else 0
+
+            # Determine role
+            if percentage >= 50:
+                role = "main"
+            elif percentage >= 20:
+                role = "secondary"
+            else:
+                role = "minor"
+
+            speaker_stats[speaker] = {
+                "total_time": speaker_time,
+                "segment_count": len(speaker_segments),
+                "percentage": percentage,
+                "avg_segment_duration": speaker_time / len(speaker_segments) if speaker_segments else 0,
+                "role": role
+            }
+
+        return speaker_stats
+
+    def detect_interaction_patterns(
+        self,
+        segments: List[SpeakerSegment],
+        start_time: float,
+        end_time: float
+    ) -> Dict[str, Any]:
+        """
+        Detect speaker interaction patterns in a time range.
+
+        Args:
+            segments: List of speaker segments
+            start_time: Range start in seconds
+            end_time: Range end in seconds
+
+        Returns:
+            Dict with interaction analysis:
+            {
+                "has_exchange": bool,  # Multiple speakers present
+                "speaker_changes": int,
+                "dominant_speaker": str,  # Speaker with most time
+                "speakers_present": List[str],
+                "interaction_type": "monologue" | "dialogue" | "multi-party",
+                "avg_turn_duration": float
+            }
+        """
+        relevant_segments = [
+            s for s in segments
+            if s.overlaps_with(start_time, end_time)
+        ]
+
+        if not relevant_segments:
+            return {
+                "has_exchange": False,
+                "speaker_changes": 0,
+                "dominant_speaker": None,
+                "speakers_present": [],
+                "interaction_type": "monologue",
+                "avg_turn_duration": 0.0
+            }
+
+        # Get speakers in range with durations
+        speakers_in_range = self.get_speakers_in_range(segments, start_time, end_time)
+        speaker_changes = self.count_speaker_changes(segments, start_time, end_time)
+
+        # Determine interaction type
+        num_speakers = len(speakers_in_range)
+        if num_speakers == 1:
+            interaction_type = "monologue"
+        elif num_speakers == 2:
+            interaction_type = "dialogue"
+        else:
+            interaction_type = "multi-party"
+
+        # Calculate average turn duration
+        avg_turn = sum(s.duration for s in relevant_segments) / len(relevant_segments)
+
+        return {
+            "has_exchange": num_speakers > 1,
+            "speaker_changes": speaker_changes,
+            "dominant_speaker": speakers_in_range[0][0] if speakers_in_range else None,
+            "speakers_present": [s[0] for s in speakers_in_range],
+            "interaction_type": interaction_type,
+            "avg_turn_duration": avg_turn
+        }
+
+    def filter_moments_by_speaker(
+        self,
+        moments: List[Dict[str, Any]],
+        segments: List[SpeakerSegment],
+        target_speaker: Optional[str] = None,
+        min_speaker_percentage: float = 0.0,
+        require_exchange: bool = False
+    ) -> List[Dict[str, Any]]:
+        """
+        Filter moments based on speaker criteria.
+
+        Args:
+            moments: List of moment dicts with 'start_time', 'end_time'
+            segments: List of speaker segments
+            target_speaker: Specific speaker to focus on (None = any)
+            min_speaker_percentage: Minimum % of time target speaker must speak
+            require_exchange: Whether moment must have multiple speakers
+
+        Returns:
+            Filtered list of moments meeting speaker criteria
+        """
+        filtered = []
+
+        for moment in moments:
+            start = moment.get('start_time', 0)
+            end = moment.get('end_time', 0)
+
+            # Get speakers in this moment
+            speakers_in_moment = self.get_speakers_in_range(segments, start, end)
+
+            if not speakers_in_moment:
+                continue
+
+            # Check exchange requirement
+            if require_exchange and len(speakers_in_moment) < 2:
+                continue
+
+            # Check target speaker
+            if target_speaker:
+                # Find target speaker's duration
+                target_duration = next(
+                    (duration for speaker, duration in speakers_in_moment if speaker == target_speaker),
+                    0.0
+                )
+                total_duration = sum(d for _, d in speakers_in_moment)
+                percentage = (target_duration / total_duration * 100) if total_duration > 0 else 0
+
+                if percentage < min_speaker_percentage:
+                    continue
+
+            filtered.append(moment)
+
+        logger.info(f"Filtered {len(moments)} moments → {len(filtered)} meeting speaker criteria")
+        return filtered
+
 
 def is_speaker_diarization_available() -> bool:
     """Check if speaker diarization is available."""

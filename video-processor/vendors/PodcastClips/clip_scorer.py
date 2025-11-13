@@ -6,7 +6,7 @@ Scores clips based on viral potential using multiple engagement factors.
 
 from loguru import logger as loguru_logger
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import math
 
 logger = loguru_logger.bind(name="PodcastClips.clip_scorer")
@@ -59,7 +59,8 @@ class ClipScorer:
         end_time: float,
         title: str,
         reason: str,
-        face_coverage: float = 0.0
+        face_coverage: float = 0.0,
+        speaker_segments: Optional[List] = None
     ) -> Dict[str, Any]:
         """
         Score a clip's viral potential.
@@ -72,6 +73,7 @@ class ClipScorer:
             title: Clip title
             reason: AI's reason for selecting this moment
             face_coverage: Percentage of frames with detected faces
+            speaker_segments: Optional speaker diarization segments (Phase 2)
 
         Returns:
             Dict with overall score and breakdown
@@ -100,7 +102,15 @@ class ClipScorer:
         # 6. Visual Quality - 10 points
         scores['visual'] = self._score_visual_quality(face_coverage)
 
-        # Calculate total score (out of 100)
+        # 7. Speaker Dynamics - 10 points (Phase 2 - optional)
+        if speaker_segments:
+            scores['speaker_dynamics'] = self._score_speaker_dynamics(
+                speaker_segments, start_time, end_time
+            )
+        else:
+            scores['speaker_dynamics'] = 0.0
+
+        # Calculate total score (out of 110 with speaker dynamics, 100 without)
         total_score = sum(scores.values())
 
         return {
@@ -285,6 +295,63 @@ class ClipScorer:
             return 4.0
         else:
             return 2.0  # Minimum score for any clip
+
+    def _score_speaker_dynamics(
+        self,
+        speaker_segments: List,
+        start_time: float,
+        end_time: float
+    ) -> float:
+        """
+        Score speaker dynamics and interactions (Phase 2).
+
+        Rewards clips with engaging speaker patterns:
+        - Multiple speakers (exchanges)
+        - Speaker changes (back-and-forth)
+        - Balanced participation
+
+        Max: 10 points
+        """
+        try:
+            # Import here to avoid circular dependency
+            from .speaker_diarization import SpeakerDiarizer
+
+            diarizer = SpeakerDiarizer(use_gpu=False)
+
+            # Get interaction pattern
+            pattern = diarizer.detect_interaction_patterns(
+                speaker_segments, start_time, end_time
+            )
+
+            score = 0.0
+
+            # 1. Multi-speaker bonus (+4 points for exchanges)
+            if pattern['has_exchange']:
+                score += 4.0
+
+            # 2. Speaker changes bonus (+3 points, scaled)
+            speaker_changes = pattern['speaker_changes']
+            if speaker_changes >= 3:
+                score += 3.0  # Lots of back-and-forth
+            elif speaker_changes == 2:
+                score += 2.0  # Moderate exchange
+            elif speaker_changes == 1:
+                score += 1.0  # Single exchange
+
+            # 3. Interaction type bonus (+3 points)
+            interaction_type = pattern['interaction_type']
+            if interaction_type == 'dialogue':
+                score += 3.0  # Best: two-person exchange
+            elif interaction_type == 'multi-party':
+                score += 2.0  # Good: multi-person discussion
+            else:  # monologue
+                score += 0.0  # No bonus
+
+            return min(score, 10.0)
+
+        except Exception as e:
+            logger.warning(f"Failed to score speaker dynamics: {e}")
+            return 0.0
 
     def _get_grade(self, score: float) -> str:
         """
