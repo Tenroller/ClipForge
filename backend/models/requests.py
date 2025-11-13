@@ -178,6 +178,13 @@ class PodcastClipsRequest(BaseModel):
     useOCR: bool = Field(default=True, description="Use OCR for text-based content detection")
     transitionDuration: float = Field(default=0.5, ge=0.2, le=1.0, description="Crossfade duration between modes (seconds)")
 
+    # Phase 2: Speaker diarization options (who speaks when)
+    enableSpeakerDiarization: bool = Field(default=True, description="Enable speaker diarization to identify who speaks when")
+    targetSpeaker: Optional[str] = Field(default=None, description="Target specific speaker (e.g., 'SPEAKER_00'). Leave empty for all speakers.")
+    minSpeakerPercentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Minimum percentage of time target speaker must speak in clip")
+    requireExchange: bool = Field(default=False, description="Require clips to have multiple speakers (exchanges)")
+    prioritizeGuest: bool = Field(default=False, description="Auto-target secondary speaker (guest) in interview-style podcasts")
+
     # AI-powered thumbnail generation options
     thumbnailUseAI: bool = Field(default=True, description="Use AI to select best frame for thumbnails")
     thumbnailRedBoxColor: str = Field(default="#DC2626", description="Red box background color (hex format)")
