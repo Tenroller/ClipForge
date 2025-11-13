@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { useGenerateBrainrotVideo, useJobs } from '@/hooks/use-jobs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,13 +11,14 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
-import { Brain, Cpu, File, HelpCircle, Loader2, Video as VideoIcon } from "lucide-react";
+import { Brain, Cpu, HelpCircle, Loader2, Video as VideoIcon } from "lucide-react";
 import type { JobRecord } from '@/lib/api';
 
 const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
 export default function CompilationsPage() {
   const { toast } = useToast();
+  const t = useTranslations('compilations');
   const generateVideo = useGenerateBrainrotVideo();
   const { data: recentJobs = [] } = useJobs({ limit: 10, refetchInterval: 5000 });
 
@@ -49,14 +51,14 @@ export default function CompilationsPage() {
         setCurrentJobId(null);
       } else if (currentJob.status === 'error' || currentJob.status === 'cancelled') {
         toast({
-          title: 'Job Failed',
+          title: t('jobFailed'),
           description: currentJob.error_message || `Job ${currentJob.status}`,
           variant: 'destructive',
         });
         setCurrentJobId(null);
       }
     }
-  }, [currentJob, toast]);
+  }, [currentJob, toast, t]);
 
   // File upload function
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,12 +86,12 @@ export default function CompilationsPage() {
       setUploadedFileId(data.file_id);
       setUploadedFilePath(data.file_path);
       toast({
-        title: 'Video uploaded successfully',
+        title: t('videoUploaded'),
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
-        title: 'Upload failed',
-        description: error.message,
+        title: t('uploadFailed'),
+        description: (error as Error).message,
         variant: 'destructive',
       });
       setUploadedFile(null);
@@ -119,7 +121,7 @@ export default function CompilationsPage() {
     // Validate that either YouTube URL or uploaded file is provided
     if (inputMethod === 'youtube' && !payload.youtubeUrl) {
       toast({
-        title: 'YouTube URL is required',
+        title: t('youtubeUrlRequired'),
         variant: 'destructive',
       });
       return;
@@ -127,7 +129,7 @@ export default function CompilationsPage() {
 
     if (inputMethod === 'upload' && !uploadedFilePath) {
       toast({
-        title: 'Please upload a video file first',
+        title: t('uploadVideoFirst'),
         variant: 'destructive',
       });
       return;
@@ -140,13 +142,13 @@ export default function CompilationsPage() {
       setCompletedJob(null);
 
       toast({
-        title: 'Starting the generation',
+        title: t('startingGeneration'),
         description: `Job ID: ${data.jobId.substring(0, 8)}...`,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast({
-        title: 'Generation failed',
-        description: e.message,
+        title: t('generationFailed'),
+        description: (e as Error).message,
         variant: 'destructive',
       });
     } finally {
@@ -163,12 +165,12 @@ export default function CompilationsPage() {
       <div className="mb-8 space-y-2">
         <div className="inline-block">
           <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-            Video Compilation Generator
+            {t('title')}
           </h1>
           <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
         </div>
         <p className="text-base text-muted-foreground max-w-2xl">
-          Create engaging compilation videos from YouTube content
+          {t('description')}
         </p>
       </div>
 
@@ -200,17 +202,17 @@ export default function CompilationsPage() {
                   <div className="size-8 rounded-lg bg-gradient-to-r from-green-500 to-blue-600 flex items-center justify-center">
                     <Brain className="size-4 text-white" />
                   </div>
-                  Brainrot Generator
+                  {t('brainrotGenerator')}
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Transform YouTube videos into TikTok-style compilations
+                  {t('transformVideos')}
                 </p>
               </CardHeader>
               <CardContent className="pt-0">
                 <form onSubmit={startBrainrot} className="space-y-4">
                   {/* Input Method Selection */}
                   <div className="space-y-3">
-                    <Label>Video Source</Label>
+                    <Label>{t('videoSource')}</Label>
                     <div className="flex gap-4">
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
@@ -221,7 +223,7 @@ export default function CompilationsPage() {
                           onChange={(e) => setInputMethod(e.target.value as 'youtube' | 'upload')}
                           className="text-primary"
                         />
-                        <span className="text-sm font-medium">YouTube URL</span>
+                        <span className="text-sm font-medium">{t('youtubeUrl')}</span>
                       </label>
                       <label className="flex items-center space-x-2 cursor-pointer">
                         <input
@@ -232,7 +234,7 @@ export default function CompilationsPage() {
                           onChange={(e) => setInputMethod(e.target.value as 'youtube' | 'upload')}
                           className="text-primary"
                         />
-                        <span className="text-sm font-medium">Upload File</span>
+                        <span className="text-sm font-medium">{t('uploadFile')}</span>
                       </label>
                     </div>
                   </div>
@@ -240,7 +242,7 @@ export default function CompilationsPage() {
                   {/* YouTube URL Input */}
                   {inputMethod === 'youtube' && (
                     <div className="space-y-2">
-                      <Label htmlFor="youtubeUrl">YouTube URL</Label>
+                      <Label htmlFor="youtubeUrl">{t('form.youtubeUrl')}</Label>
                       <Input
                         id="youtubeUrl"
                         name="youtubeUrl"
@@ -250,7 +252,7 @@ export default function CompilationsPage() {
                         className="transition-all duration-200"
                       />
                       <p className="text-xs text-muted-foreground">
-                        Enter a YouTube video URL to create compilations from
+                        {t('enterYoutubeUrl')}
                       </p>
                     </div>
                   )}
@@ -258,7 +260,7 @@ export default function CompilationsPage() {
                   {/* File Upload Input */}
                   {inputMethod === 'upload' && (
                     <div className="space-y-2">
-                      <Label htmlFor="videoFile">Upload Video</Label>
+                      <Label htmlFor="videoFile">{t('uploadVideo')}</Label>
                       <div className="space-y-3">
                         <input
                           id="videoFile"
@@ -275,16 +277,16 @@ export default function CompilationsPage() {
                             disabled:opacity-50 disabled:cursor-not-allowed"
                         />
                         {isUploading && (
-                          <p className="text-xs text-blue-600">Uploading...</p>
+                          <p className="text-xs text-blue-600">{t('uploading')}</p>
                         )}
                         {uploadedFile && !isUploading && (
                           <p className="text-xs text-green-600">
-                            ✓ {uploadedFile.name} uploaded successfully
+                            ✓ {uploadedFile.name} {t('uploadedSuccessfully')}
                           </p>
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Upload a video file (MP4, AVI, MOV, MKV, etc.) to create compilations from
+                        {t('uploadVideoDescription')}
                       </p>
                     </div>
                   )}
@@ -292,7 +294,7 @@ export default function CompilationsPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="numCompilations">
-                        Compilations
+                        {t('compilations')}
                         <HelpCircle className="inline size-3 ml-1 opacity-60" />
                       </Label>
                       <Input
@@ -309,7 +311,7 @@ export default function CompilationsPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="maxReuse">
-                        Max Reuse
+                        {t('maxReuse')}
                         <HelpCircle className="inline size-3 ml-1 opacity-60" />
                       </Label>
                       <Input
@@ -327,7 +329,7 @@ export default function CompilationsPage() {
                   {/* Unlimited Generation Checkbox */}
                   <div className="space-y-2">
                     <Label htmlFor="unlimited">
-                      Unlimited Generation
+                      {t('unlimitedGeneration')}
                       <HelpCircle className="inline size-3 ml-1 opacity-60" />
                     </Label>
                     <div className="flex items-center space-x-2">
@@ -340,14 +342,14 @@ export default function CompilationsPage() {
                         className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                       <Label htmlFor="unlimited" className="text-sm text-muted-foreground">
-                        Generate unlimited compilations until clips are exhausted (limited by max reuse setting)
+                        {t('generateUnlimited')}
                       </Label>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="minDuration">Min Duration (seconds)</Label>
+                      <Label htmlFor="minDuration">{t('minDuration')}</Label>
                       <Input
                         id="minDuration"
                         name="minDuration"
@@ -360,7 +362,7 @@ export default function CompilationsPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="maxDuration">Max Duration (seconds)</Label>
+                      <Label htmlFor="maxDuration">{t('maxDuration')}</Label>
                       <Input
                         id="maxDuration"
                         name="maxDuration"
@@ -377,7 +379,7 @@ export default function CompilationsPage() {
                   <div className="space-y-4 p-4 rounded-lg border bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20">
                     <h3 className="text-sm font-semibold flex items-center gap-2">
                       <VideoIcon className="size-4 text-purple-600" />
-                      No-Background Variation Settings
+                      {t('noBackgroundSettings')}
                     </h3>
 
                     {/* Generate No-Background Toggle */}
@@ -385,10 +387,10 @@ export default function CompilationsPage() {
                       <div className="flex items-center gap-3">
                         <div>
                           <Label htmlFor="generateNoBackground" className="font-medium">
-                            Generate No-Background Version
+                            {t('generateNoBackground')}
                           </Label>
                           <p className="text-xs text-muted-foreground">
-                            Creates a third variation without white background - pure video or blurred pillarbox
+                            {t('createThirdVariation')}
                           </p>
                         </div>
                       </div>
@@ -463,12 +465,12 @@ export default function CompilationsPage() {
                     {busy ? (
                       <>
                         <Loader2 className="size-4 mr-2 animate-spin" />
-                        Starting Compilation...
+                        {t('startingCompilation')}
                       </>
                     ) : (
                       <>
                         <Brain className="size-4 mr-2" />
-                        Generate Compilation
+                        {t('generateCompilation')}
                       </>
                     )}
                   </Button>
@@ -483,7 +485,7 @@ export default function CompilationsPage() {
                   <div className="size-8 rounded-lg bg-gradient-to-r from-orange-500 to-red-600 flex items-center justify-center">
                     <HelpCircle className="size-4 text-white" />
                   </div>
-                  How It Works
+                  {t('howItWorks')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 pt-0">
@@ -493,8 +495,8 @@ export default function CompilationsPage() {
                       <span className="text-xs font-medium text-blue-600 dark:text-blue-400">1</span>
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">Extract Content</p>
-                      <p>Download and analyze the YouTube video for interesting segments</p>
+                      <p className="font-medium text-foreground">{t('extractContent')}</p>
+                      <p>{t('extractContentDesc')}</p>
                     </div>
                   </div>
 
@@ -503,8 +505,8 @@ export default function CompilationsPage() {
                       <span className="text-xs font-medium text-green-600 dark:text-green-400">2</span>
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">Create Clips</p>
-                      <p>Generate multiple compilation videos with the specified duration</p>
+                      <p className="font-medium text-foreground">{t('createClips')}</p>
+                      <p>{t('createClipsDesc')}</p>
                     </div>
                   </div>
 
@@ -513,8 +515,8 @@ export default function CompilationsPage() {
                       <span className="text-xs font-medium text-purple-600 dark:text-purple-400">3</span>
                     </div>
                     <div>
-                      <p className="font-medium text-foreground">Generate Variations</p>
-                      <p>Create up to 3 different versions: normal, TTS intro, and no-background</p>
+                      <p className="font-medium text-foreground">{t('generateVariations')}</p>
+                      <p>{t('generateVariationsDesc')}</p>
                     </div>
                   </div>
                 </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useJob } from '@/hooks/use-jobs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -112,6 +113,7 @@ function calculateProgress(currentStep?: string, status?: string, workflow?: str
 }
 
 export default function JobMonitoringPage() {
+  const t = useTranslations('jobMonitor');
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -156,13 +158,13 @@ export default function JobMonitoringPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
         <div className="text-center py-12">
           <XCircle className="size-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold mb-2">Job Not Found</h2>
+          <h2 className="text-2xl font-bold mb-2">{t('jobNotFound')}</h2>
           <p className="text-muted-foreground mb-6">
-            The job you're looking for doesn't exist or has been removed.
+            {t('jobNotFoundDesc')}
           </p>
           <Button onClick={() => router.push('/activity')}>
             <ArrowLeft className="size-4 mr-2" />
-            Back to Activity
+            {t('backToActivity')}
           </Button>
         </div>
       </div>
@@ -187,7 +189,7 @@ export default function JobMonitoringPage() {
             Back to Activity
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Job Monitor</h1>
+            <h1 className="text-2xl font-bold">{t('jobMonitor')}</h1>
             <p className="text-sm text-muted-foreground">
               {job.workflow === 'brainrot' ? 'Brainrot Compilation' :
                job.workflow === 'podcastclips' ? 'Podcast Clips' :
@@ -266,7 +268,7 @@ export default function JobMonitoringPage() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Progress</span>
+                <span className="text-muted-foreground">{t('progress')}</span>
                 <span className="font-medium">{progress}%</span>
               </div>
               <Progress value={progress} className="h-2" />
@@ -285,7 +287,7 @@ export default function JobMonitoringPage() {
         {/* Steps Progress Card */}
         <Card>
           <CardHeader>
-            <CardTitle>Processing Steps</CardTitle>
+            <CardTitle>{t('processingSteps')}</CardTitle>
             <CardDescription>
               Step-by-step progress through the {job.workflow} workflow
             </CardDescription>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,7 @@ export default function GridVideoCard({
   selected = false,
   onSelect
 }: GridVideoCardProps) {
+  const t = useTranslations('videoCard');
   const [imageLoaded, setImageLoaded] = useState(false);
 
   const formatFileSize = (bytes: number) => {
@@ -153,7 +155,7 @@ export default function GridVideoCard({
             <div className="absolute top-2 right-2">
               <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700 shadow-sm">
                 <Check className="size-3 mr-1" />
-                Posted
+                {t('posted')}
               </Badge>
             </div>
           )}
@@ -192,7 +194,7 @@ export default function GridVideoCard({
               className="flex-1 h-9"
             >
               <Download className="size-4 mr-1.5" />
-              Download
+              {t('download')}
             </Button>
             {onMarkPosted && !video.posted && (
               <Button
@@ -200,7 +202,7 @@ export default function GridVideoCard({
                 size="sm"
                 onClick={() => onMarkPosted(video)}
                 className="h-9 px-3"
-                title="Mark as Posted"
+                title={t('markAsPosted')}
               >
                 <Check className="size-4" />
               </Button>
@@ -211,7 +213,7 @@ export default function GridVideoCard({
                 size="sm"
                 onClick={() => onDelete(video)}
                 className="h-9 px-3 text-destructive hover:text-destructive"
-                title="Delete Video"
+                title={t('deleteVideo')}
               >
                 <Trash2 className="size-4" />
               </Button>

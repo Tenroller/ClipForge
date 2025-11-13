@@ -2,6 +2,7 @@
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -29,9 +30,10 @@ export default function JobStartedNotification({
   autoRedirect = true,
   redirectDelay = 3000
 }: JobStartedNotificationProps) {
+  const t = useTranslations('jobNotification');
   const router = useRouter()
 
-  const workflowLabel = workflow === 'brainrot' ? 'Brainrot Compilation' : 'AI Video Generation'
+  const workflowLabel = workflow === 'brainrot' ? t('brainrotCompilation') : t('aiVideoGeneration')
   const shortJobId = jobId.length > 8 ? `${jobId.substring(0, 8)}...` : jobId
 
   const handleMonitorJob = () => {
@@ -54,7 +56,7 @@ export default function JobStartedNotification({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-3">
           <CheckCircle className="size-5 text-green-600" />
-          {autoRedirect ? 'Job Started Successfully' : 'Job In Progress'}
+          {autoRedirect ? t('jobStartedSuccessfully') : t('jobInProgress')}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -75,7 +77,7 @@ export default function JobStartedNotification({
             <span className="text-sm text-muted-foreground">Status:</span>
             <div className="flex items-center gap-2">
               <Loader2 className="size-3 animate-spin text-blue-500" />
-              <span className="text-sm font-medium">Processing...</span>
+              <span className="text-sm font-medium">{t('processing')}</span>
             </div>
           </div>
         </div>
@@ -83,7 +85,7 @@ export default function JobStartedNotification({
         <div className="flex gap-2 pt-2">
           <Button onClick={handleMonitorJob} className="flex-1">
             <Eye className="size-4 mr-2" />
-            Monitor Progress
+            {t('monitorProgress')}
           </Button>
         </div>
 
@@ -115,13 +117,13 @@ export default function JobStartedNotification({
           <div className="text-xs text-center text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30">
             <p className="flex items-center justify-center gap-2">
               <Loader2 className="size-3 animate-spin" />
-              Redirecting to job monitoring in {Math.ceil(redirectDelay / 1000)} seconds...
+              {t('redirectingIn', { seconds: Math.ceil(redirectDelay / 1000) })}
             </p>
           </div>
         ) : (
           <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
             <p>
-              This job is currently running in the background. Click &apos;Monitor Progress&apos; to view detailed progress and step tracking.
+              {t('backgroundJobInfo')}
             </p>
           </div>
         )}
@@ -129,7 +131,7 @@ export default function JobStartedNotification({
         {autoRedirect && (
           <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
             <p>
-              Your job is now being processed in the background. You will be redirected to the monitoring page where you can track progress in real-time and view step-by-step updates.
+              {t('jobProcessingInfo')}
             </p>
           </div>
         )}

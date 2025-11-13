@@ -257,7 +257,59 @@
     "jobFailed": "Job Failed",
     "step": "Step",
     "aiVideo": "🎬 AI Video",
-    "compilation": "🎞️ Compilation"
+    "compilation": "🎞️ Compilation",
+    "form": {
+      "videoSubject": "Video Subject",
+      "videoSubjectPlaceholder": "Describe the video topic (e.g., travel hacks)",
+      "aiModel": "AI Model",
+      "selectModel": "Select model",
+      "voice": "Voice",
+      "selectVoice": "Select voice",
+      "subtitleColor": "Subtitle Color",
+      "generate": "Generate",
+      "generating": "Generating…",
+      "generateWithAI": "Generate with AI",
+      "playSample": "Play sample",
+      "loadingSample": "Loading sample…",
+      "chooseCapableModel": "Choose a capable, cost‑effective model",
+      "backgroundMusic": "Background Music",
+      "zipUrlPlaceholder": "ZIP URL of MP3s (optional)",
+      "advancedSubtitleOptions": "Advanced Subtitle Options",
+      "enableWordByWord": "Enable word-by-word highlighting",
+      "highlightEachWord": "Highlight each word as it's spoken, TikTok style",
+      "useWhisperTiming": "Use Whisper for precise timing",
+      "whisperTooltip": "Use OpenAI Whisper for ultra-precise word timing (3-word windows)",
+      "whisperModel": "Whisper Model",
+      "font": "Font",
+      "fontSize": "Font Size",
+      "shadowLayers": "Shadow Layers",
+      "soft": "Soft",
+      "standard": "Standard", 
+      "professional": "Professional",
+      "moreLayers": "More layers = deeper 3D effect, but longer processing time",
+      "textColor": "Text Color",
+      "shadowLayer1": "Shadow Layer 1",
+      "shadowLayer2": "Shadow Layer 2",
+      "shadowLayer3": "Shadow Layer 3",
+      "shadowLayer4": "Shadow Layer 4",
+      "highlightColor": "Highlight Color",
+      "strokeColor": "Stroke Color",
+      "backgroundColor": "Background Color",
+      "strokeWidth": "Stroke Width",
+      "backgroundOpacity": "Background Opacity",
+      "paddingX": "Horizontal Padding",
+      "paddingY": "Vertical Padding",
+      "paragraphs": "Paragraphs",
+      "threads": "Threads",
+      "useGpu": "Use GPU",
+      "customPrompt": "Custom Prompt (Optional)",
+      "customPromptPlaceholder": "Additional instructions for the AI...",
+      "generateVideo": "Generate Video",
+      "reset": "Reset",
+      "processors": "processors",
+      "cpuProcessing": "CPU Processing",
+      "gpuAccelerated": "GPU Accelerated"
+    }
   },
   "compilations": {
     "title": "Video Compilation Generator",
@@ -445,6 +497,8 @@
   "videos": {
     "title": "Video Gallery",
     "description": "Browse and manage generated videos",
+    "video": "video",
+    "videos": "videos",
     "selected": "selected",
     "showSync": "Show Sync",
     "hideSync": "Hide Sync",
@@ -474,6 +528,8 @@
     "failedToLoad": "Failed to load videos. Please try again.",
     "failedToLoadMore": "Failed to load more videos. Please try again.",
     "filters": {
+      "search": "Search",
+      "searchPlaceholder": "Search by filename or job ID...",
       "all": "All Videos",
       "workflow": "Workflow",
       "posted": "Posted Status",
@@ -484,8 +540,8 @@
     },
     "sort": {
       "sortBy": "Sort By",
-      "createdAt": "Created Date",
-      "filename": "Filename",
+      "createdAt": "Date",
+      "filename": "Name",
       "size": "Size",
       "ascending": "Ascending",
       "descending": "Descending"
@@ -519,6 +575,7 @@
     },
     "sync": {
       "title": "Sync Videos",
+      "description": "Sync videos from job results or scan for orphaned files",
       "fromJobs": "Sync from Jobs",
       "fromJobsDesc": "Register videos from completed jobs in the database",
       "orphaned": "Sync Orphaned",
@@ -579,5 +636,35 @@
     "warnings": {
       "title": "Cleanup Warnings"
     }
+  },
+  "videoCard": {
+    "posted": "Posted",
+    "play": "Play",
+    "download": "Download",
+    "markPosted": "Mark Posted",
+    "delete": "Delete",
+    "size": "Size:",
+    "job": "Job:",
+    "markAsPosted": "Mark as Posted",
+    "deleteVideo": "Delete Video"
+  },
+  "jobNotification": {
+    "jobStartedSuccessfully": "Job Started Successfully",
+    "jobInProgress": "Job In Progress", 
+    "brainrotCompilation": "Brainrot Compilation",
+    "aiVideoGeneration": "AI Video Generation",
+    "processing": "Processing...",
+    "monitorProgress": "Monitor Progress",
+    "redirectingIn": "Redirecting to job monitoring in {seconds} seconds...",
+    "backgroundJobInfo": "This job is currently running in the background. Click 'Monitor Progress' to view detailed progress and step tracking.",
+    "jobProcessingInfo": "Your job is now being processed in the background. You will be redirected to the monitoring page where you can track progress in real-time and view step-by-step updates."
+  },
+  "jobMonitor": {
+    "jobNotFound": "Job Not Found",
+    "jobNotFoundDesc": "The job you're looking for doesn't exist or has been removed.",
+    "backToActivity": "Back to Activity",
+    "jobMonitor": "Job Monitor",
+    "progress": "Progress",
+    "processingSteps": "Processing Steps"
   }
 }

@@ -1,13 +1,14 @@
 "use client"
 
 import { useId, useRef, useState } from "react"
+import { useTranslations } from 'next-intl'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { HelpCircle, RotateCw, RefreshCw, Star, Cpu, Loader2, Type, ChevronDown, ChevronUp } from "lucide-react"
+import { HelpCircle, RefreshCw, Star, Cpu, Loader2, Type, ChevronDown, ChevronUp } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -67,6 +68,7 @@ export default function MoneyPrinterForm({
   shadowLayer4Color: externalShadowLayer4Color,
   onChangeShadowLayer4Color,
 }: MoneyPrinterFormProps) {
+  const t = useTranslations('creator.form')
   const [useMusic, setUseMusic] = useState(false)
   const [useLocalGpu, setUseLocalGpu] = useState(true)
   const [gpuInfoText, setGpuInfoText] = useState<string>("")
@@ -162,7 +164,7 @@ export default function MoneyPrinterForm({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor={subjectId}>Video Subject</Label>
+                    <Label htmlFor={subjectId}>{t('videoSubject')}</Label>
                     <Button
                       type="button"
                       variant="outline"
@@ -188,16 +190,16 @@ export default function MoneyPrinterForm({
                           setSuggesting(false)
                         }
                       }}
-                      title="Generate with AI"
+                      title={t('generateWithAI')}
                     >
                       <Star className="size-3" />
-                      {suggesting ? 'Generating…' : 'Generate'}
+                      {suggesting ? t('generating') : t('generate')}
                     </Button>
                   </div>
                   <Input
                     id={subjectId}
                     name="videoSubject"
-                    placeholder="Describe the video topic (e.g., travel hacks)"
+                    placeholder={t('videoSubjectPlaceholder')}
                     required
                     value={subject}
                     onChange={(e) => setSubject(e.target.value)}
@@ -208,18 +210,18 @@ export default function MoneyPrinterForm({
                   <div className="flex flex-col">
                     <div className="flex items-center justify-between min-h-[1.5rem] mb-2">
                       <Label htmlFor={modelId} className="flex items-center gap-1">
-                        AI Model
+                        {t('aiModel')}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <HelpCircle className="size-3.5 text-muted-foreground" />
                           </TooltipTrigger>
-                          <TooltipContent>Choose a capable, cost‑effective model</TooltipContent>
+                          <TooltipContent>{t('chooseCapableModel')}</TooltipContent>
                         </Tooltip>
                       </Label>
                     </div>
                     <Select value={aiModel} onValueChange={onChangeAiModel}>
                       <SelectTrigger id={modelId}>
-                        <SelectValue placeholder="Select model" />
+                        <SelectValue placeholder={t('selectModel')} />
                       </SelectTrigger>
                       <SelectContent>
                         {models.length > 0
@@ -239,13 +241,13 @@ export default function MoneyPrinterForm({
 
                   <div className="flex flex-col">
                     <div className="flex items-center justify-between min-h-[1.5rem] mb-2">
-                      <Label htmlFor={voiceId}>Voice</Label>
+                      <Label htmlFor={voiceId}>{t('voice')}</Label>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="h-6 w-6 p-0 flex-shrink-0"
-                        title={voiceLoading ? "Loading sample…" : "Play sample"}
+                        title={voiceLoading ? t('loadingSample') : t('playSample')}
                         disabled={!voice || voiceLoading}
                         onClick={async () => {
                           if (!voice) return
@@ -270,7 +272,7 @@ export default function MoneyPrinterForm({
                     </div>
                     <Select value={voice} onValueChange={onChangeVoice}>
                       <SelectTrigger id={voiceId}>
-                        <SelectValue placeholder="Select voice" />
+                        <SelectValue placeholder={t('selectVoice')} />
                       </SelectTrigger>
                       <SelectContent>
                         {voices.length > 0
@@ -292,7 +294,7 @@ export default function MoneyPrinterForm({
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                   <div className="flex flex-col">
                     <div className="min-h-[1.5rem] mb-2 flex items-center">
-                      <Label htmlFor={colorId}>Subtitle Color</Label>
+                      <Label htmlFor={colorId}>{t('subtitleColor')}</Label>
                     </div>
                     <div className="flex items-center gap-3">
                       <input
@@ -310,7 +312,7 @@ export default function MoneyPrinterForm({
                   </div>
                   <div className="flex flex-col">
                     <div className="flex items-center justify-between min-h-[1.5rem] mb-2">
-                      <Label htmlFor="use-music">Background Music</Label>
+                      <Label htmlFor="use-music">{t('backgroundMusic')}</Label>
                       <Switch
                         id="use-music"
                         checked={useMusic}
@@ -323,7 +325,7 @@ export default function MoneyPrinterForm({
                           id={musicZipId}
                           name="zipUrl"
                           type="url"
-                          placeholder="ZIP URL of MP3s (optional)"
+                          placeholder={t('zipUrlPlaceholder')}
                           className="w-full"
                         />
                       )}
@@ -341,7 +343,7 @@ export default function MoneyPrinterForm({
                 className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
               >
                 <Type className="size-4 text-green-500" />
-                Advanced Subtitle Options
+                {t('advancedSubtitleOptions')}
                                   {showSubtitleSettings ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
               </button>
               
@@ -354,13 +356,13 @@ export default function MoneyPrinterForm({
                       onCheckedChange={setUseTikTokSubtitles}
                     />
                     <Label htmlFor="useTikTokSubtitles" className="flex-1">
-                      Enable word-by-word highlighting
+                      {t('enableWordByWord')}
                     </Label>
                     <Tooltip>
                       <TooltipTrigger>
                         <HelpCircle className="size-3.5 text-muted-foreground" />
                       </TooltipTrigger>
-                      <TooltipContent>Highlight each word as it's spoken, TikTok style</TooltipContent>
+                      <TooltipContent>{t('highlightEachWord')}</TooltipContent>
                     </Tooltip>
                   </div>
 
@@ -372,19 +374,19 @@ export default function MoneyPrinterForm({
                       onCheckedChange={setUseWhisperEnhanced}
                     />
                     <Label htmlFor="useWhisperEnhanced" className="flex-1">
-                      Use Whisper for precise timing
+                      {t('useWhisperTiming')}
                     </Label>
                     <Tooltip>
                       <TooltipTrigger>
                         <HelpCircle className="size-3.5 text-muted-foreground" />
                       </TooltipTrigger>
-                      <TooltipContent>Use OpenAI Whisper for ultra-precise word timing (3-word windows)</TooltipContent>
+                      <TooltipContent>{t('whisperTooltip')}</TooltipContent>
                     </Tooltip>
                   </div>
 
                   {useWhisperEnhanced && (
                     <div className="space-y-2 pl-4 border-l border-blue-200 dark:border-blue-800">
-                      <Label>Whisper Model</Label>
+                      <Label>{t('whisperModel')}</Label>
                       <Select value={whisperModel} onValueChange={setWhisperModel}>
                         <SelectTrigger>
                           <SelectValue />
@@ -404,7 +406,7 @@ export default function MoneyPrinterForm({
                     <div className="grid gap-4 pl-4 border-l border-green-200 dark:border-green-800">
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                         <div className="space-y-2">
-                          <Label>Font</Label>
+                          <Label>{t('font')}</Label>
                           <Select value={subtitleFont} onValueChange={setSubtitleFont}>
                             <SelectTrigger>
                               <SelectValue />
@@ -431,7 +433,7 @@ export default function MoneyPrinterForm({
                           </Select>
                         </div>
                         <div className="space-y-2">
-                          <Label>Font Size</Label>
+                          <Label>{t('fontSize')}</Label>
                           <Input
                             type="number"
                             min={20}
@@ -443,7 +445,7 @@ export default function MoneyPrinterForm({
                       </div>
                       
                       <div className="space-y-3">
-                        <Label>Shadow Layers</Label>
+                        <Label>{t('shadowLayers')}</Label>
                         <div className="grid grid-cols-3 gap-2">
                           <button
                             type="button"
@@ -454,7 +456,7 @@ export default function MoneyPrinterForm({
                                 : 'bg-background border-border hover:bg-muted/60'
                             }`}
                           >
-                            Soft (2)
+                            {t('soft')} (2)
                           </button>
                           <button
                             type="button"
@@ -465,7 +467,7 @@ export default function MoneyPrinterForm({
                                 : 'bg-background border-border hover:bg-muted/60'
                             }`}
                           >
-                            Standard (3)
+                            {t('standard')} (3)
                           </button>
                           <button
                             type="button"
@@ -476,17 +478,17 @@ export default function MoneyPrinterForm({
                                 : 'bg-background border-border hover:bg-muted/60'
                             }`}
                           >
-                            Professional (4)
+                            {t('professional')} (4)
                           </button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          More layers = deeper 3D effect, but longer processing time
+                          {t('moreLayers')}
                         </p>
                       </div>
                       
                       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                         <div className="space-y-2">
-                          <Label>Text Color</Label>
+                          <Label>{t('textColor')}</Label>
                           <input
                             type="color"
                             value={subtitleDefaultColor}
@@ -495,7 +497,7 @@ export default function MoneyPrinterForm({
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Shadow Layer 1</Label>
+                          <Label>{t('shadowLayer1')}</Label>
                           <input
                             type="color"
                             value={shadowLayer1Color}
@@ -505,7 +507,7 @@ export default function MoneyPrinterForm({
                         </div>
                         {shadowLayersCount >= 3 && (
                           <div className="space-y-2">
-                            <Label>Shadow Layer 2</Label>
+                            <Label>{t('shadowLayer2')}</Label>
                             <input
                               type="color"
                               value={shadowLayer2Color}
@@ -547,7 +549,7 @@ export default function MoneyPrinterForm({
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>Highlight Color</Label>
+                          <Label>{t('highlightColor')}</Label>
                           <input
                             type="color"
                             value={subtitleHighlightColor}
@@ -557,7 +559,7 @@ export default function MoneyPrinterForm({
                           <p className="text-xs text-muted-foreground">For word highlighting</p>
                         </div>
                         <div className="space-y-2">
-                          <Label>Background</Label>
+                          <Label>{t('background')}</Label>
                           <input
                             type="color"
                             value={subtitleBackgroundColor}
@@ -590,19 +592,19 @@ export default function MoneyPrinterForm({
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-1">
-                        <Label htmlFor={parasId}>Paragraphs</Label>
+                        <Label htmlFor={parasId}>{t('paragraphs')}</Label>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <HelpCircle className="size-3.5 text-muted-foreground" />
                           </TooltipTrigger>
-                          <TooltipContent>Number of script segments</TooltipContent>
+                          <TooltipContent>{t('paragraphsTooltip')}</TooltipContent>
                         </Tooltip>
                       </div>
                       <Input id={parasId} name="paragraphNumber" type="number" min={1} max={10} defaultValue={1} />
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center gap-1">
-                        <Label htmlFor={threadsId}>Threads</Label>
+                        <Label htmlFor={threadsId}>{t('threads')}</Label>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <HelpCircle className="size-3.5 text-muted-foreground" />
@@ -652,12 +654,12 @@ export default function MoneyPrinterForm({
               {busy ? (
                 <>
                                       <Loader2 className="size-4 animate-spin mr-2" />
-                  Creating Video...
+                  {t('generating')}
                 </>
               ) : (
                 <>
                                       <Star className="size-4 mr-2" />
-                  Generate Video
+                  {t('generateVideo')}
                 </>
               )}
             </Button>
@@ -693,7 +695,7 @@ export default function MoneyPrinterForm({
                 onReset?.()
               }}
             >
-                                <RefreshCw className="size-4 mr-2" /> Reset Form
+                                <RefreshCw className="size-4 mr-2" /> {t('reset')}
             </Button>
           </CardFooter>
         </form>

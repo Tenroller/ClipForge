@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { useGenerateMoneyPrinterVideo, useJobs, useAvailableModels, useAvailableVoices } from '@/hooks/use-jobs';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
@@ -24,6 +25,7 @@ type Position =
 
 export default function CreatorPage() {
   const { toast } = useToast();
+  const t = useTranslations('creator');
   const generateVideo = useGenerateMoneyPrinterVideo();
   const { data: recentJobs = [] } = useJobs({ limit: 10, refetchInterval: 5000 });
   const { data: models = [] } = useAvailableModels();
@@ -60,14 +62,14 @@ export default function CreatorPage() {
         setCurrentJobId(null);
       } else if (currentJob.status === 'error' || currentJob.status === 'cancelled') {
         toast({
-          title: 'Job Failed',
+          title: t('jobFailed'),
           description: currentJob.error_message || `Job ${currentJob.status}`,
           variant: 'destructive',
         });
         setCurrentJobId(null);
       }
     }
-  }, [currentJob, toast]);
+  }, [currentJob, toast, t]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -78,8 +80,8 @@ export default function CreatorPage() {
     const videoSubject = String(form.get('videoSubject') || '');
     if (!videoSubject.trim()) {
       toast({
-        title: 'Subject Required',
-        description: 'Please enter a video subject',
+        title: t('subjectRequired'),
+        description: t('enterVideoSubject'),
         variant: 'destructive',
       });
       return;
@@ -130,13 +132,13 @@ export default function CreatorPage() {
       setCompletedJob(null);
 
       toast({
-        title: 'Video Generation Started',
+        title: t('videoGenerationStarted'),
         description: `Job ID: ${result.jobId.substring(0, 8)}...`,
       });
     } catch (error: any) {
       toast({
-        title: 'Generation Failed',
-        description: error.message || 'Failed to start video generation',
+        title: t('generationFailed'),
+        description: error.message || t('failedToStartGeneration'),
         variant: 'destructive',
       });
     }
@@ -179,12 +181,12 @@ export default function CreatorPage() {
       <div className="mb-8 space-y-2">
         <div className="inline-block">
           <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-            AI Video Creator
+            {t('title')}
           </h1>
           <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
         </div>
         <p className="text-base text-muted-foreground max-w-2xl">
-          Generate professional videos with AI-powered scripts and stock footage in minutes
+          {t('description')}
         </p>
       </div>
 
@@ -261,7 +263,7 @@ export default function CreatorPage() {
           <div className="border rounded-xl bg-card/50 backdrop-blur-sm p-5 shadow-md hover:shadow-lg transition-all duration-300">
             <h3 className="text-base font-bold mb-4 flex items-center gap-2">
               <div className="size-2 rounded-full bg-primary animate-pulse" />
-              Recent Jobs
+              {t('recentJobs')}
             </h3>
             <div className="space-y-2">
               {recentJobs.length === 0 ? (
@@ -271,8 +273,8 @@ export default function CreatorPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                     </svg>
                   </div>
-                  <p className="text-sm text-muted-foreground">No recent jobs</p>
-                  <p className="text-xs text-muted-foreground mt-1">Start creating to see jobs here</p>
+                  <p className="text-sm text-muted-foreground">{t('noRecentJobs')}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{t('startCreating')}</p>
                 </div>
               ) : (
                 recentJobs.slice(0, 5).map((job) => (
@@ -295,11 +297,11 @@ export default function CreatorPage() {
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground truncate mb-1">
-                      {job.workflow === 'moneyprinter' ? '🎬 AI Video' : '🎞️ Compilation'}
+                      {job.workflow === 'moneyprinter' ? t('aiVideo') : t('compilation')}
                     </p>
                     {job.current_step && (
                       <p className="text-xs text-muted-foreground mt-1.5 truncate">
-                        <span className="font-medium">Step:</span> {job.current_step}
+                        <span className="font-medium">{t('step')}:</span> {job.current_step}
                       </p>
                     )}
                     {job.progress !== undefined && job.progress >= 0 && (

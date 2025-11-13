@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -36,6 +37,7 @@ interface VideosResponse {
 
 export default function VideosPage() {
   const { toast } = useToast();
+  const t = useTranslations('videos');
   const [videos, setVideos] = useState<Video[]>([]);
   const [stats, setStats] = useState<VideoStatsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -111,14 +113,14 @@ export default function VideosPage() {
     } catch (error) {
       console.error('Failed to load more videos:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to load more videos. Please try again.',
+        title: t('error'),
+        description: t('failedToLoadMore'),
         variant: 'destructive',
       });
     } finally {
       setLoadingMore(false);
     }
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, offset, toast]);
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, offset, toast, t]);
 
   // Refresh function for manual refresh
   const refreshVideos = useCallback(async () => {
@@ -156,14 +158,14 @@ export default function VideosPage() {
     } catch (error) {
       console.error('Failed to refresh videos:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to refresh videos. Please try again.',
+        title: t('error'),
+        description: t('failedToLoad'),
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast]);
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast, t]);
 
   // Load stats
   const loadStats = useCallback(async () => {
@@ -209,8 +211,11 @@ export default function VideosPage() {
       const result = await response.json();
 
       toast({
-        title: 'Videos Synced',
-        description: `Successfully synced ${result.registered_videos} videos from ${result.processed_jobs} jobs.`,
+        title: t('sync.videosSynced'),
+        description: t('sync.syncedFromJobs', { 
+          count: result.registered_videos, 
+          jobs: result.processed_jobs 
+        }),
       });
 
       refreshVideos();
@@ -218,8 +223,8 @@ export default function VideosPage() {
     } catch (error) {
       console.error('Failed to sync videos:', error);
       toast({
-        title: 'Sync Failed',
-        description: error instanceof Error ? error.message : 'Failed to sync videos from jobs.',
+        title: t('sync.syncFailed'),
+        description: error instanceof Error ? error.message : t('sync.failedToSync'),
         variant: 'destructive',
       });
     } finally {
@@ -243,8 +248,11 @@ export default function VideosPage() {
       const result = await response.json();
 
       toast({
-        title: 'Orphaned Videos Synced',
-        description: `Registered ${result.registered_videos} orphaned videos from ${result.scanned_files} files.`,
+        title: t('sync.orphanedSynced'),
+        description: t('sync.registeredOrphaned', { 
+          count: result.registered_videos, 
+          files: result.scanned_files 
+        }),
       });
 
       refreshVideos();
@@ -252,8 +260,8 @@ export default function VideosPage() {
     } catch (error) {
       console.error('Failed to sync orphaned videos:', error);
       toast({
-        title: 'Sync Failed',
-        description: error instanceof Error ? error.message : 'Failed to sync orphaned videos.',
+        title: t('sync.syncFailed'),
+        description: error instanceof Error ? error.message : t('sync.failedToSyncOrphaned'),
         variant: 'destructive',
       });
     } finally {
@@ -272,8 +280,8 @@ export default function VideosPage() {
     document.body.removeChild(link);
 
     toast({
-      title: 'Download Started',
-      description: `Downloading ${video.filename}...`,
+      title: t('downloadStarted'),
+      description: t('downloading', { filename: video.filename }),
     });
   };
 
@@ -290,8 +298,8 @@ export default function VideosPage() {
       }
 
       toast({
-        title: 'Video Marked as Posted',
-        description: `${video.filename} has been marked as posted.`,
+        title: t('videoMarkedPosted'),
+        description: t('markedAsPosted', { filename: video.filename }),
       });
 
       // Update local state
@@ -303,8 +311,8 @@ export default function VideosPage() {
       loadStats();
     } catch {
       toast({
-        title: 'Error',
-        description: 'Failed to mark video as posted.',
+        title: t('error'),
+        description: t('failedToMark'),
         variant: 'destructive',
       });
     }
@@ -333,8 +341,8 @@ export default function VideosPage() {
       }
 
       toast({
-        title: 'Video Deleted',
-        description: `${videoToDelete.filename} has been permanently deleted.`,
+        title: t('videoDeleted'),
+        description: t('permanentlyDeleted', { filename: videoToDelete.filename }),
       });
 
       // Remove from local state
@@ -348,10 +356,10 @@ export default function VideosPage() {
       });
 
       loadStats();
-    } catch (error) {
+    } catch {
       toast({
-        title: 'Error',
-        description: 'Failed to delete video.',
+        title: t('error'),
+        description: t('failedToDelete'),
         variant: 'destructive',
       });
     } finally {
@@ -382,8 +390,8 @@ export default function VideosPage() {
     const selected = filteredVideos.filter((v) => selectedVideos.has(v.id));
     selected.forEach((video) => handleDownload(video));
     toast({
-      title: 'Bulk Download Started',
-      description: `Downloading ${selected.length} videos...`,
+      title: t('bulkDownloadStarted'),
+      description: t('downloadingMultiple', { count: selected.length }),
     });
   };
 
@@ -394,13 +402,13 @@ export default function VideosPage() {
       await Promise.all(selected.map((video) => handleMarkPosted(video)));
       setSelectedVideos(new Set());
       toast({
-        title: 'Bulk Operation Complete',
-        description: `Marked ${selected.length} videos as posted.`,
+        title: t('bulkOperationComplete'),
+        description: t('markedMultiple', { count: selected.length }),
       });
     } catch {
       toast({
-        title: 'Error',
-        description: 'Some videos failed to be marked as posted.',
+        title: t('error'),
+        description: t('failedToMarkSome'),
         variant: 'destructive',
       });
     }
@@ -439,15 +447,18 @@ export default function VideosPage() {
       setSelectedVideos(new Set());
 
       toast({
-        title: 'Videos Deleted',
-        description: `Successfully deleted ${selectedCount} video${selectedCount !== 1 ? 's' : ''}.`,
+        title: t('videosDeleted'),
+        description: t('successfullyDeleted', { 
+          count: selectedCount,
+          plural: selectedCount !== 1 ? 's' : ''
+        }),
       });
 
       loadStats();
-    } catch (error) {
+    } catch {
       toast({
-        title: 'Error',
-        description: 'Some videos failed to be deleted.',
+        title: t('error'),
+        description: t('failedToDeleteSome'),
         variant: 'destructive',
       });
     } finally {
@@ -517,8 +528,8 @@ export default function VideosPage() {
       } catch (error) {
         console.error('Failed to load initial data:', error);
         toast({
-          title: 'Error',
-          description: 'Failed to load videos. Please try again.',
+          title: t('error'),
+          description: t('failedToLoad'),
           variant: 'destructive',
         });
       } finally {
@@ -527,7 +538,7 @@ export default function VideosPage() {
     };
 
     initialLoad();
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast]);
+  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast, t]);
 
   // Filter videos by search term
   const filteredVideos = videos.filter(
@@ -547,15 +558,15 @@ export default function VideosPage() {
         <div className="flex-1 space-y-2">
           <div className="inline-block">
             <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-              Video Gallery
+              {t('title')}
             </h1>
             <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
           </div>
           <p className="text-base text-muted-foreground max-w-2xl">
-            Browse and manage generated videos
+            {t('description')}
             {selectedVideos.size > 0 && (
               <span className="ml-2 text-primary font-semibold">
-                · {selectedVideos.size} selected
+                · {selectedVideos.size} {t('selected')}
               </span>
             )}
           </p>
@@ -585,7 +596,7 @@ export default function VideosPage() {
             size="sm"
             onClick={() => setShowSyncPanel(!showSyncPanel)}
           >
-            {showSyncPanel ? 'Hide' : 'Show'} Sync
+            {showSyncPanel ? t('hideSync') : t('showSync')}
           </Button>
           <Button variant="outline" size="sm" onClick={refreshVideos} disabled={loading}>
             {loading ? (
@@ -646,11 +657,11 @@ export default function VideosPage() {
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
                   <Film className="size-8 text-muted-foreground" />
                 </div>
-                <p className="text-lg font-medium text-muted-foreground">No videos found</p>
+                <p className="text-lg font-medium text-muted-foreground">{t('noVideos')}</p>
                 <p className="text-sm text-muted-foreground mt-2">
                   {searchTerm
-                    ? 'Try adjusting your search or filters'
-                    : 'Generate some videos to see them here'}
+                    ? t('tryAdjusting')
+                    : t('generateToSee')}
                 </p>
               </div>
             </CardContent>
@@ -700,12 +711,12 @@ export default function VideosPage() {
                   {loadingMore ? (
                     <>
                       <Loader2 className="size-4 mr-2 animate-spin" />
-                      Loading...
+                      {t('loading')}
                     </>
                   ) : (
                     <>
                       <ChevronDown className="size-4 mr-2" />
-                      Load More
+                      {t('loadMore')}
                     </>
                   )}
                 </Button>
@@ -755,18 +766,21 @@ export default function VideosPage() {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Video</AlertDialogTitle>
+            <AlertDialogTitle>{t('dialog.deleteTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{videoToDelete?.filename}</strong>?
+              {t.rich('dialog.deleteDescription', { 
+                filename: videoToDelete?.filename || '',
+                strong: (chunks) => <strong>{chunks}</strong>
+              })}
               <br />
               <br />
-              This will permanently delete both the database record and the video file from disk. This action cannot be undone.
+              {t('dialog.deleteWarning')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('dialog.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete
+              {t('dialog.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -776,18 +790,22 @@ export default function VideosPage() {
       <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Multiple Videos</AlertDialogTitle>
+            <AlertDialogTitle>{t('dialog.deleteMultipleTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete <strong>{selectedVideos.size} video{selectedVideos.size !== 1 ? 's' : ''}</strong>?
+              {t.rich('dialog.deleteMultipleDescription', { 
+                count: selectedVideos.size,
+                plural: selectedVideos.size !== 1 ? 's' : '',
+                strong: (chunks) => <strong>{chunks}</strong>
+              })}
               <br />
               <br />
-              This will permanently delete both the database records and the video files from disk. This action cannot be undone.
+              {t('dialog.deleteWarning')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t('dialog.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleBulkDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete All
+              {t('dialog.deleteAll')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

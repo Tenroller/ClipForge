@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import { useJobs, useAvailableModels } from '@/hooks/use-jobs';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
@@ -26,6 +27,7 @@ import { ChevronDown, ChevronUp, Clock, Eye, Play, Sparkles, Target, User, Video
 
 export default function PodcastClipsPage() {
   const { toast } = useToast();
+  const t = useTranslations('podcastClips');
   const { data: recentJobs = [] } = useJobs({ limit: 10, refetchInterval: 5000 });
   const { data: allModels = [] } = useAvailableModels();
 
@@ -111,19 +113,19 @@ export default function PodcastClipsPage() {
           ? (currentJob.result as { clips_count?: unknown }).clips_count 
           : 'multiple';
         toast({
-          title: '🎉 Clips Generated!',
-          description: `Successfully created ${clipsCount} viral clips`,
+          title: t('clipsGenerated'),
+          description: t('successfullyCreated', { count: String(clipsCount) }),
         });
       } else if (currentJob.status === 'error' || currentJob.status === 'cancelled') {
         toast({
-          title: 'Job Failed',
+          title: t('jobFailed'),
           description: currentJob.error_message || `Job ${currentJob.status}`,
           variant: 'destructive',
         });
         setCurrentJobId(null);
       }
     }
-  }, [currentJob, toast]);
+  }, [currentJob, toast, t]);
 
   // Fetch YouTube metadata when URL changes
   useEffect(() => {
@@ -159,8 +161,8 @@ export default function PodcastClipsPage() {
 
     if (!youtubeUrl.trim()) {
       toast({
-        title: 'YouTube URL Required',
-        description: 'Please enter a valid YouTube podcast URL',
+        title: t('youtubeUrlRequired'),
+        description: t('enterValidUrl'),
         variant: 'destructive',
       });
       return;
@@ -204,13 +206,13 @@ export default function PodcastClipsPage() {
       setCurrentJobId(data.jobId);
 
       toast({
-        title: '🚀 Job Started',
-        description: `Generating viral clips from podcast (max: ${maxClipCount})`,
+        title: t('jobStarted'),
+        description: t('generatingClips', { max: maxClipCount }),
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to start podcast clips generation';
       toast({
-        title: 'Error',
+        title: t('error'),
         description: message,
         variant: 'destructive',
       });
@@ -225,12 +227,12 @@ export default function PodcastClipsPage() {
       <div className="mb-8 space-y-2">
         <div className="inline-block">
           <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-            Podcast Clips
+            {t('title')}
           </h1>
           <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
         </div>
         <p className="text-base text-muted-foreground max-w-2xl">
-          Generate viral short-form videos from podcasts with AI-powered moment detection
+          {t('description')}
         </p>
       </div>
 
@@ -241,8 +243,8 @@ export default function PodcastClipsPage() {
             <div className="flex items-center gap-3">
               <Sparkles className="h-5 w-5 text-purple-500" />
               <div>
-                <p className="font-semibold text-sm">AI Detection</p>
-                <p className="text-xs text-muted-foreground">Viral moments</p>
+                <p className="font-semibold text-sm">{t('aiDetection')}</p>
+                <p className="text-xs text-muted-foreground">{t('viralMoments')}</p>
               </div>
             </div>
           </CardContent>
@@ -252,8 +254,8 @@ export default function PodcastClipsPage() {
             <div className="flex items-center gap-3">
               <Target className="h-5 w-5 text-blue-500" />
               <div>
-                <p className="font-semibold text-sm">Face Tracking</p>
-                <p className="text-xs text-muted-foreground">Smart cropping</p>
+                <p className="font-semibold text-sm">{t('faceTracking')}</p>
+                <p className="text-xs text-muted-foreground">{t('smartCropping')}</p>
               </div>
             </div>
           </CardContent>
@@ -263,8 +265,8 @@ export default function PodcastClipsPage() {
             <div className="flex items-center gap-3">
               <Zap className="h-5 w-5 text-yellow-500" />
               <div>
-                <p className="font-semibold text-sm">Parallel Gen</p>
-                <p className="text-xs text-muted-foreground">3x faster</p>
+                <p className="font-semibold text-sm">{t('parallelGen')}</p>
+                <p className="text-xs text-muted-foreground">{t('fasterProcessing')}</p>
               </div>
             </div>
           </CardContent>
@@ -274,8 +276,8 @@ export default function PodcastClipsPage() {
             <div className="flex items-center gap-3">
               <VideoIcon className="h-5 w-5 text-green-500" />
               <div>
-                <p className="font-semibold text-sm">9:16 Format</p>
-                <p className="text-xs text-muted-foreground">Social ready</p>
+                <p className="font-semibold text-sm">{t('socialFormat')}</p>
+                <p className="text-xs text-muted-foreground">{t('socialReady')}</p>
               </div>
             </div>
           </CardContent>
@@ -287,16 +289,16 @@ export default function PodcastClipsPage() {
         <div className="lg:col-span-2">
           <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
             <CardHeader className="pb-4">
-              <CardTitle>Generate Viral Clips</CardTitle>
+              <CardTitle>{t('generateViralClips')}</CardTitle>
               <CardDescription>
-                Enter a YouTube podcast URL to automatically generate viral short-form clips. AI decides how many clips to create based on quality.
+                {t('enterYoutubePodcast')}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-0">
               <form onSubmit={handleSubmit} className="space-y-6">
                 {/* YouTube URL */}
                 <div className="space-y-2">
-                  <Label htmlFor="youtubeUrl">YouTube Podcast URL *</Label>
+                  <Label htmlFor="youtubeUrl">{t('youtubePodcastUrl')}</Label>
                   <Input
                     id="youtubeUrl"
                     placeholder="https://www.youtube.com/watch?v=..."
@@ -313,7 +315,7 @@ export default function PodcastClipsPage() {
                     <CardContent className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
-                        <p className="text-sm text-muted-foreground">Loading video details...</p>
+                        <p className="text-sm text-muted-foreground">{t('loadingVideoDetails')}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -372,7 +374,7 @@ export default function PodcastClipsPage() {
 
                 {/* AI Model */}
                 <div className="space-y-2">
-                  <Label htmlFor="aiModel">AI Model for Viral Detection</Label>
+                  <Label htmlFor="aiModel">{t('aiModelViralDetection')}</Label>
                   <Select value={aiModel} onValueChange={setAiModel}>
                     <SelectTrigger>
                       <SelectValue />
@@ -382,13 +384,13 @@ export default function PodcastClipsPage() {
                       {organizedModels.recommended.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                            Recommended
+                            {t('recommended')}
                           </div>
                           {organizedModels.recommended.slice(0, 6).map((model) => (
                             <SelectItem key={model} value={model}>
                               {model}
-                              {model === 'gemini-2.5-flash' && ' ⚡ (Fastest)'}
-                              {model === 'gemini-2.0-flash' && ' ✨ (Default)'}
+                              {model === 'gemini-2.5-flash' && ` ${t('fastest')}`}
+                              {model === 'gemini-2.0-flash' && ` ${t('default')}`}
                             </SelectItem>
                           ))}
                         </>
@@ -398,7 +400,7 @@ export default function PodcastClipsPage() {
                       {organizedModels.stable.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
-                            Other Models
+                            {t('otherModels')}
                           </div>
                           {organizedModels.stable.map((model) => (
                             <SelectItem key={model} value={model}>
@@ -412,7 +414,7 @@ export default function PodcastClipsPage() {
                       {organizedModels.experimental.length > 0 && (
                         <>
                           <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
-                            Experimental
+                            {t('experimental')}
                           </div>
                           {organizedModels.experimental.slice(0, 5).map((model) => (
                             <SelectItem key={model} value={model}>
@@ -424,23 +426,23 @@ export default function PodcastClipsPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    {allModels.length > 0 ? `${allModels.length} models available from Gemini API` : 'Loading models...'}
+                    {allModels.length > 0 ? t('modelsAvailable', { count: allModels.length }) : t('loadingModels')}
                   </p>
                 </div>
 
                 {/* Whisper Model */}
                 <div className="space-y-2">
-                  <Label htmlFor="whisperModel">Transcription Model</Label>
+                  <Label htmlFor="whisperModel">{t('transcriptionModel')}</Label>
                   <Select value={whisperModel} onValueChange={setWhisperModel}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem key="tiny" value="tiny">Tiny (Fastest)</SelectItem>
-                      <SelectItem key="base" value="base">Base (Recommended)</SelectItem>
-                      <SelectItem key="small" value="small">Small (Better)</SelectItem>
-                      <SelectItem key="medium" value="medium">Medium (Best)</SelectItem>
-                      <SelectItem key="turbo" value="turbo">Turbo (Fastest)</SelectItem>
+                      <SelectItem key="tiny" value="tiny">{t('tiny')}</SelectItem>
+                      <SelectItem key="base" value="base">{t('base')}</SelectItem>
+                      <SelectItem key="small" value="small">{t('small')}</SelectItem>
+                      <SelectItem key="medium" value="medium">{t('medium')}</SelectItem>
+                      <SelectItem key="turbo" value="turbo">{t('turbo')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -448,7 +450,7 @@ export default function PodcastClipsPage() {
                 {/* Max Clip Count */}
                 <div className="space-y-2">
                   <Label htmlFor="maxClipCount">
-                    Maximum Clips: <Badge variant="secondary">{maxClipCount}</Badge>
+                    {t('maximumClips')} <Badge variant="secondary">{maxClipCount}</Badge>
                   </Label>
                   <Slider
                     id="maxClipCount"
@@ -460,7 +462,7 @@ export default function PodcastClipsPage() {
                     disabled={isSubmitting}
                   />
                   <p className="text-xs text-muted-foreground">
-                    AI will generate as many clips as it finds with genuine viral potential (up to {maxClipCount})
+                    {t('aiWillGenerate', { max: maxClipCount })}
                   </p>
                 </div>
 
@@ -468,7 +470,7 @@ export default function PodcastClipsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="minDuration">
-                      Min Duration: <Badge variant="outline">{minDuration}s</Badge>
+                      {t('minDuration')} <Badge variant="outline">{minDuration}s</Badge>
                     </Label>
                     <Slider
                       id="minDuration"
@@ -482,7 +484,7 @@ export default function PodcastClipsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="maxDuration">
-                      Max Duration: <Badge variant="outline">{maxDuration}s</Badge>
+                      {t('maxDuration')} <Badge variant="outline">{maxDuration}s</Badge>
                     </Label>
                     <Slider
                       id="maxDuration"
@@ -499,7 +501,7 @@ export default function PodcastClipsPage() {
                 {/* Subtitle Font Size */}
                 <div className="space-y-2">
                   <Label htmlFor="subtitleFontSize">
-                    Subtitle Font Size: <Badge variant="secondary">{subtitleFontSize}px</Badge>
+                    {t('subtitleFontSize')} <Badge variant="secondary">{subtitleFontSize}px</Badge>
                   </Label>
                   <Slider
                     id="subtitleFontSize"
@@ -515,17 +517,17 @@ export default function PodcastClipsPage() {
                 {/* Viral Keywords */}
                 <div className="space-y-2">
                   <Label htmlFor="viralKeywords">
-                    Viral Focus Keywords <Badge variant="outline" className="ml-2">Optional</Badge>
+                    {t('viralFocusKeywords')} <Badge variant="outline" className="ml-2">{t('optional')}</Badge>
                   </Label>
                   <Input
                     id="viralKeywords"
-                    placeholder="e.g., startup, founder, investment"
+                    placeholder={t('keywordsPlaceholder')}
                     value={viralKeywords}
                     onChange={(e) => setViralKeywords(e.target.value)}
                     disabled={isSubmitting}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Comma-separated keywords to prioritize when detecting viral moments
+                    {t('keywordsDescription')}
                   </p>
                 </div>
 
@@ -534,11 +536,11 @@ export default function PodcastClipsPage() {
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <Label htmlFor="enableMixedMode">Smart Content Detection</Label>
-                        <Badge variant="secondary">AI-Powered</Badge>
+                        <Label htmlFor="enableMixedMode">{t('smartContentDetection')}</Label>
+                        <Badge variant="secondary">{t('aiPowered')}</Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        Automatically switches between face-focused and horizontal modes for screen recordings
+                        {t('autoSwitchModes')}
                       </p>
                     </div>
                     <Switch
@@ -551,9 +553,9 @@ export default function PodcastClipsPage() {
 
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <Label htmlFor="useOCR">OCR Text Detection</Label>
+                      <Label htmlFor="useOCR">{t('ocrTextDetection')}</Label>
                       <p className="text-xs text-muted-foreground">
-                        Detect text-based content (slides, code, articles) for better framing
+                        {t('detectTextContent')}
                       </p>
                     </div>
                     <Switch
@@ -574,7 +576,7 @@ export default function PodcastClipsPage() {
                         className="w-full flex items-center justify-between hover:bg-muted/50"
                         onClick={() => setShowMixedModeSettings(!showMixedModeSettings)}
                       >
-                        <span className="text-sm">Advanced Detection Settings</span>
+                        <span className="text-sm">{t('advancedDetectionSettings')}</span>
                         {showMixedModeSettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </Button>
 
@@ -583,7 +585,7 @@ export default function PodcastClipsPage() {
                           {/* Face Loss Threshold */}
                           <div className="space-y-2">
                             <Label htmlFor="faceLossThreshold">
-                              Face Loss Threshold: <Badge variant="secondary">{faceLossThreshold}s</Badge>
+                              {t('faceLossThreshold')} <Badge variant="secondary">{faceLossThreshold}s</Badge>
                             </Label>
                             <Slider
                               id="faceLossThreshold"
@@ -595,7 +597,7 @@ export default function PodcastClipsPage() {
                               disabled={isSubmitting}
                             />
                             <p className="text-xs text-muted-foreground">
-                              Seconds without face to switch to horizontal mode
+                              {t('faceLossDescription')}
                             </p>
                           </div>
 
@@ -671,8 +673,8 @@ export default function PodcastClipsPage() {
                   >
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4" />
-                      <span className="font-semibold">Advanced Subtitle Settings</span>
-                      <Badge variant="outline" className="ml-2">Karaoke Style</Badge>
+                      <span className="font-semibold">{t('advancedSubtitleSettings')}</span>
+                      <Badge variant="outline" className="ml-2">{t('karaokeStyle')}</Badge>
                     </div>
                     {showAdvanced ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
@@ -680,7 +682,7 @@ export default function PodcastClipsPage() {
                   {showAdvanced && (
                     <div className="p-4 pt-0 space-y-4 border-t bg-muted/30">
                       <p className="text-sm text-muted-foreground mb-4">
-                        Customize the karaoke-style subtitle appearance with word-by-word highlighting
+                        {t('customizeKaraoke')}
                       </p>
 
                       {/* Vertical Offset */}
@@ -762,7 +764,7 @@ export default function PodcastClipsPage() {
                   size="lg"
                   disabled={isSubmitting || !!currentJobId}
                 >
-                  {isSubmitting ? 'Starting...' : currentJobId ? 'Processing...' : '🚀 Generate Viral Clips'}
+                  {isSubmitting ? t('starting') : currentJobId ? t('processing') : t('generateViralClipsButton')}
                 </Button>
               </form>
             </CardContent>
@@ -793,37 +795,37 @@ export default function PodcastClipsPage() {
           {!currentJob && !completedJob && (
             <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
               <CardHeader className="pb-4">
-                <CardTitle className="text-lg">How It Works</CardTitle>
+                <CardTitle className="text-lg">{t('howItWorks')}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm pt-0">
                 <div className="space-y-2">
-                  <p className="font-semibold">1. AI Analysis</p>
+                  <p className="font-semibold">{t('aiAnalysis')}</p>
                   <p className="text-muted-foreground">
-                    Gemini AI analyzes your podcast and identifies the most viral-worthy moments
+                    {t('aiAnalysisDesc')}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="font-semibold">2. Smart Cropping</p>
+                  <p className="font-semibold">{t('smartCroppingStep')}</p>
                   <p className="text-muted-foreground">
-                    MediaPipe tracks faces for intelligent 9:16 cropping focused on the speaker
+                    {t('smartCroppingDesc')}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="font-semibold">3. Hook Optimization</p>
+                  <p className="font-semibold">{t('hookOptimization')}</p>
                   <p className="text-muted-foreground">
-                    Clips are trimmed to start with the most engaging hook for maximum retention
+                    {t('hookOptimizationDesc')}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="font-semibold">4. Audio Enhancement</p>
+                  <p className="font-semibold">{t('audioEnhancement')}</p>
                   <p className="text-muted-foreground">
-                    Automatic audio normalization and quality improvement
+                    {t('audioEnhancementDesc')}
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="font-semibold">5. Thumbnails</p>
+                  <p className="font-semibold">{t('thumbnails')}</p>
                   <p className="text-muted-foreground">
-                    Auto-generated thumbnails for each clip, ready for social media
+                    {t('thumbnailsDesc')}
                   </p>
                 </div>
               </CardContent>

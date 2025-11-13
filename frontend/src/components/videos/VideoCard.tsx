@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,8 @@ interface VideoCardProps {
 }
 
 export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onDelete, selected = false, onSelect }: VideoCardProps) {
+  const t = useTranslations('videoCard');
+  
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -117,7 +120,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
                   {video.posted && (
                     <Badge variant="default" className="text-xs">
                       <Check className="size-3 mr-1" />
-                      Posted
+                      {t('posted')}
                     </Badge>
                   )}
                 </div>
@@ -130,10 +133,10 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
                 {formatDate(video.created_at)}
               </div>
               <div>
-                Size: {formatFileSize(video.size_bytes)}
+                {t('size')} {formatFileSize(video.size_bytes)}
               </div>
               <div className="col-span-2 truncate">
-                Job: {video.job_id.substring(0, 16)}...
+                {t('job')} {video.job_id.substring(0, 16)}...
               </div>
             </div>
 
@@ -142,23 +145,23 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
               {onPlay && (
                 <Button variant="outline" size="sm" onClick={() => onPlay(video)}>
                   <Play className="size-3 mr-1" />
-                  Play
+                  {t('play')}
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => onDownload(video)}>
                 <Download className="size-3 mr-1" />
-                Download
+                {t('download')}
               </Button>
               {onMarkPosted && !video.posted && (
                 <Button variant="outline" size="sm" onClick={() => onMarkPosted(video)}>
                   <Check className="size-3 mr-1" />
-                  Mark Posted
+                  {t('markPosted')}
                 </Button>
               )}
               {onDelete && (
                 <Button variant="outline" size="sm" onClick={() => onDelete(video)} className="text-destructive hover:text-destructive">
                   <Trash2 className="size-3 mr-1" />
-                  Delete
+                  {t('delete')}
                 </Button>
               )}
             </div>

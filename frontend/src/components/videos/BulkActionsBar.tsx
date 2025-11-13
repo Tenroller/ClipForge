@@ -3,6 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Download, Check, X, Trash2 } from "lucide-react";
+import { useTranslations } from 'next-intl';
 
 interface BulkActionsBarProps {
   selectedCount: number;
@@ -21,6 +22,8 @@ export default function BulkActionsBar({
   onClearSelection,
   totalUnposted = 0
 }: BulkActionsBarProps) {
+  const t = useTranslations('videos');
+  
   if (selectedCount === 0) return null;
 
   return (
@@ -33,7 +36,7 @@ export default function BulkActionsBar({
               {selectedCount}
             </div>
             <span className="font-medium text-sm">
-              {selectedCount} video{selectedCount !== 1 ? 's' : ''} selected
+              {selectedCount} {selectedCount !== 1 ? t('videos') : t('video')} {t('selected')}
             </span>
           </div>
 
@@ -49,7 +52,7 @@ export default function BulkActionsBar({
               className="h-9"
             >
               <Download className="size-4 mr-2" />
-              Download All
+              {t('bulkActions.downloadAll')}
             </Button>
 
             {totalUnposted > 0 && (
@@ -60,7 +63,7 @@ export default function BulkActionsBar({
                 className="h-9"
               >
                 <Check className="size-4 mr-2" />
-                Mark {totalUnposted} as Posted
+                {t('bulkActions.markAllPosted')} ({totalUnposted})
               </Button>
             )}
 
@@ -72,7 +75,7 @@ export default function BulkActionsBar({
                 className="h-9 text-destructive hover:text-destructive hover:bg-destructive/10"
               >
                 <Trash2 className="size-4 mr-2" />
-                Delete All
+                {t('bulkActions.deleteAll')}
               </Button>
             )}
 
@@ -83,7 +86,7 @@ export default function BulkActionsBar({
               className="h-9"
             >
               <X className="size-4 mr-2" />
-              Clear
+              {t('bulkActions.clearSelection')}
             </Button>
           </div>
         </div>

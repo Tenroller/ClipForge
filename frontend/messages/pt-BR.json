@@ -257,7 +257,59 @@
     "jobFailed": "Trabalho Falhou",
     "step": "Etapa",
     "aiVideo": "🎬 Vídeo com IA",
-    "compilation": "🎞️ Compilação"
+    "compilation": "🎞️ Compilação",
+    "form": {
+      "videoSubject": "Assunto do Vídeo",
+      "videoSubjectPlaceholder": "Descreva o tópico do vídeo (ex: dicas de viagem)",
+      "aiModel": "Modelo de IA",
+      "selectModel": "Selecionar modelo",
+      "voice": "Voz",
+      "selectVoice": "Selecionar voz",
+      "subtitleColor": "Cor das Legendas",
+      "generate": "Gerar",
+      "generating": "Gerando…",
+      "generateWithAI": "Gerar com IA",
+      "playSample": "Reproduzir amostra",
+      "loadingSample": "Carregando amostra…",
+      "chooseCapableModel": "Escolha um modelo capaz e econômico",
+      "backgroundMusic": "Música de Fundo",
+      "zipUrlPlaceholder": "URL do ZIP com MP3s (opcional)",
+      "advancedSubtitleOptions": "Opções Avançadas de Legendas",
+      "enableWordByWord": "Ativar destaque palavra por palavra",
+      "highlightEachWord": "Destaque cada palavra conforme é falada, estilo TikTok",
+      "useWhisperTiming": "Usar Whisper para cronometragem precisa",
+      "whisperTooltip": "Use OpenAI Whisper para cronometragem ultra-precisa (janelas de 3 palavras)",
+      "whisperModel": "Modelo Whisper",
+      "font": "Fonte",
+      "fontSize": "Tamanho da Fonte",
+      "shadowLayers": "Camadas de Sombra",
+      "soft": "Suave",
+      "standard": "Padrão",
+      "professional": "Profissional", 
+      "moreLayers": "Mais camadas = efeito 3D mais profundo, mas tempo de processamento maior",
+      "textColor": "Cor do Texto",
+      "shadowLayer1": "Camada de Sombra 1",
+      "shadowLayer2": "Camada de Sombra 2",
+      "shadowLayer3": "Camada de Sombra 3",
+      "shadowLayer4": "Camada de Sombra 4",
+      "highlightColor": "Cor de Destaque",
+      "strokeColor": "Cor do Contorno",
+      "backgroundColor": "Cor do Fundo",
+      "strokeWidth": "Largura do Contorno",
+      "backgroundOpacity": "Opacidade do Fundo",
+      "paddingX": "Espaçamento Horizontal",
+      "paddingY": "Espaçamento Vertical",
+      "paragraphs": "Parágrafos",
+      "threads": "Threads",
+      "useGpu": "Usar GPU",
+      "customPrompt": "Prompt Personalizado (Opcional)",
+      "customPromptPlaceholder": "Instruções adicionais para a IA...",
+      "generateVideo": "Gerar Vídeo",
+      "reset": "Redefinir",
+      "processors": "processadores",
+      "cpuProcessing": "Processamento CPU",
+      "gpuAccelerated": "Acelerado por GPU"
+    }
   },
   "compilations": {
     "title": "Gerador de Compilações de Vídeo",
@@ -445,6 +497,8 @@
   "videos": {
     "title": "Galeria de Vídeos",
     "description": "Navegue e gerencie vídeos gerados",
+    "video": "vídeo",
+    "videos": "vídeos",
     "selected": "selecionados",
     "showSync": "Mostrar Sincronização",
     "hideSync": "Ocultar Sincronização",
@@ -474,6 +528,8 @@
     "failedToLoad": "Falha ao carregar vídeos. Por favor, tente novamente.",
     "failedToLoadMore": "Falha ao carregar mais vídeos. Por favor, tente novamente.",
     "filters": {
+      "search": "Pesquisar",
+      "searchPlaceholder": "Pesquisar por nome do arquivo ou ID do job...",
       "all": "Todos os Vídeos",
       "workflow": "Fluxo de Trabalho",
       "posted": "Status de Postagem",
@@ -484,8 +540,8 @@
     },
     "sort": {
       "sortBy": "Ordenar Por",
-      "createdAt": "Data de Criação",
-      "filename": "Nome do Arquivo",
+      "createdAt": "Data",
+      "filename": "Nome",
       "size": "Tamanho",
       "ascending": "Crescente",
       "descending": "Decrescente"
@@ -518,8 +574,9 @@
       "clearSelection": "Limpar Seleção"
     },
     "sync": {
-      "title": "Sincronizar Vídeos",
-      "fromJobs": "Sincronizar de Trabalhos",
+      "title": "Sincronizar Vídeos", 
+      "description": "Sincronizar vídeos dos resultados de jobs ou escanear por arquivos órfãos",
+      "fromJobs": "Sincronizar de Jobs",
       "fromJobsDesc": "Registrar vídeos de trabalhos concluídos no banco de dados",
       "orphaned": "Sincronizar Órfãos",
       "orphanedDesc": "Encontrar e registrar arquivos de vídeo que não estão no banco de dados",
@@ -579,5 +636,35 @@
     "warnings": {
       "title": "Avisos de Limpeza"
     }
+  },
+  "videoCard": {
+    "posted": "Postado",
+    "play": "Reproduzir",
+    "download": "Baixar",
+    "markPosted": "Marcar Postado",
+    "delete": "Excluir",
+    "size": "Tamanho:",
+    "job": "Trabalho:",
+    "markAsPosted": "Marcar como Postado",
+    "deleteVideo": "Excluir Vídeo"
+  },
+  "jobNotification": {
+    "jobStartedSuccessfully": "Trabalho Iniciado com Sucesso",
+    "jobInProgress": "Trabalho em Andamento",
+    "brainrotCompilation": "Compilação Brainrot", 
+    "aiVideoGeneration": "Geração de Vídeo IA",
+    "processing": "Processando...",
+    "monitorProgress": "Monitorar Progresso",
+    "redirectingIn": "Redirecionando para monitoramento de trabalho em {seconds} segundos...",
+    "backgroundJobInfo": "Este trabalho está atualmente sendo executado em segundo plano. Clique em 'Monitorar Progresso' para visualizar o progresso detalhado e o acompanhamento das etapas.",
+    "jobProcessingInfo": "Seu trabalho está sendo processado em segundo plano. Você será redirecionado para a página de monitoramento onde pode acompanhar o progresso em tempo real e ver atualizações passo a passo."
+  },
+  "jobMonitor": {
+    "jobNotFound": "Trabalho Não Encontrado",
+    "jobNotFoundDesc": "O trabalho que você está procurando não existe ou foi removido.",
+    "backToActivity": "Voltar para Atividade",
+    "jobMonitor": "Monitor de Trabalho",
+    "progress": "Progresso",
+    "processingSteps": "Etapas de Processamento"
   }
 }

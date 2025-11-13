@@ -2,6 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Video as VideoIcon, Film, Brain, HardDrive } from "lucide-react";
+import { useTranslations } from 'next-intl';
 
 export interface VideoStatsData {
   total_videos: number;
@@ -22,6 +23,8 @@ interface VideoStatsProps {
 }
 
 export default function VideoStats({ stats, loading }: VideoStatsProps) {
+  const t = useTranslations('videos.stats');
+  
   const formatSize = (mb: number) => {
     if (mb >= 1024) return `${(mb / 1024).toFixed(2)} GB`;
     return `${mb.toFixed(2)} MB`;
@@ -52,7 +55,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
             </div>
             <div>
               <div className="text-2xl font-bold">{stats.total_videos}</div>
-              <p className="text-xs text-muted-foreground">Total Videos</p>
+              <p className="text-xs text-muted-foreground">{t('totalVideos')}</p>
             </div>
           </div>
         </CardContent>
@@ -66,7 +69,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
             </div>
             <div>
               <div className="text-2xl font-bold">{formatSize(stats.total_size_mb)}</div>
-              <p className="text-xs text-muted-foreground">Total Size</p>
+              <p className="text-xs text-muted-foreground">{t('totalSize')}</p>
             </div>
           </div>
         </CardContent>
@@ -80,7 +83,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
             </div>
             <div>
               <div className="text-2xl font-bold">{stats.workflows.moneyprinter.count}</div>
-              <p className="text-xs text-muted-foreground">AI Generated</p>
+              <p className="text-xs text-muted-foreground">{t('aiGenerated')}</p>
             </div>
           </div>
         </CardContent>
@@ -94,7 +97,7 @@ export default function VideoStats({ stats, loading }: VideoStatsProps) {
             </div>
             <div>
               <div className="text-2xl font-bold">{stats.workflows.brainrot.count}</div>
-              <p className="text-xs text-muted-foreground">Compilations</p>
+              <p className="text-xs text-muted-foreground">{t('compilation')}</p>
             </div>
           </div>
         </CardContent>
