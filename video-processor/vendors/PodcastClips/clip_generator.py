@@ -21,7 +21,8 @@ from .subtitle_generator import SubtitleGenerator
 from .content_detector import ContentModeDetector, ContentSegment, ContentMode
 
 # Import codec detection from AIvideos
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 from AIvideos.video import get_video_codec_settings
 
 logger = loguru_logger.bind(name="PodcastClips.clip_generator")
@@ -41,6 +42,15 @@ class ViralMoment:
     optimized_start: Optional[float] = None  # Hook-optimized start time
     optimized_end: Optional[float] = None  # Hook-optimized end time
     thumbnail_text: Optional[str] = None  # AI-generated catchy phrase for thumbnail (<=25 chars)
+    # AI-generated metadata fields
+    confidence: float = 0.0  # Model confidence in selection (0.0-1.0)
+    caption: str = ""  # Social media caption (<= 150 chars)
+    tags: List[str] = field(default_factory=list)  # Up to 6 tags (without # symbol)
+    recommended_crop: str = "mid"  # Crop recommendation: close-up, mid, wide, or focus-on-person-X
+    cut_padding_before: float = 0.0  # Suggested extra seconds before start (0.0-2.0)
+    cut_padding_after: float = 0.0  # Suggested extra seconds after end (0.0-2.0)
+    subtitles: str = ""  # Exact transcript excerpt for this clip (max 300 chars)
+    notes: str = ""  # Optional notes: speaker changes, warnings, or fallback suggestions
 
     @property
     def duration(self) -> float:
@@ -204,10 +214,6 @@ class ClipGenerator:
             # Set FPS directly to match source (MoviePy 2.x handles this correctly)
             final_clip = final_clip.with_fps(source_fps)
 
-        # Verify FPS was set correctly
-        actual_fps = getattr(final_clip, 'fps', None)
-        logger.info(f"[FPS-DEBUG] Created horizontal content clip - source FPS: {source_fps}, actual FPS: {actual_fps}")
-
         return final_clip
 
     def create_face_tracked_clip(
@@ -301,64 +307,152 @@ class ClipGenerator:
             x2, y2 = crop_box.x + crop_box.width, crop_box.y + crop_box.height
 
             # Ensure crop coordinates are within bounds
-            x1 = max(0, min(x1, original_width))
-            y1 = max(0, min(y1, original_height))
-            x2 = max(0, min(x2, original_width))
-            y2 = max(0, min(y2, original_height))
+            x1 = max(0, min(x1, original_width - 1))
+            y1 = max(0, min(y1, original_height - 1))
+            x2 = max(x1 + 1, min(x2, original_width))  # Ensure x2 > x1
+            y2 = max(y1 + 1, min(y2, original_height))  # Ensure y2 > y1
 
-            # Validate crop box has non-zero dimensions
-            if x2 <= x1 or y2 <= y1:
+            # Minimum dimension to prevent cv2.resize broadcast errors
+            MIN_DIMENSION = 10
+
+            # Validate crop box has non-zero dimensions and meets minimum requirements
+            if x2 <= x1 or y2 <= y1 or (x2 - x1) < MIN_DIMENSION or (y2 - y1) < MIN_DIMENSION:
                 # Invalid crop box - fall back to center crop
                 logger.warning(
                     f"Invalid crop box at t={absolute_time:.2f}s: "
-                    f"x=[{x1},{x2}] y=[{y1},{y2}]. Using center crop."
+                    f"x=[{x1},{x2}] y=[{y1},{y2}], dimensions=({x2-x1},{y2-y1}). Using center crop."
                 )
-                # Calculate center crop
-                crop_width = int(original_height * self.target_resolution[0] / self.target_resolution[1])
+
+                # Calculate center crop with guaranteed valid dimensions
+                target_aspect = self.target_resolution[0] / self.target_resolution[1]  # 9/16
+
+                # Calculate crop dimensions maintaining target aspect ratio
+                crop_width = int(original_height * target_aspect)
                 crop_height = original_height
+
+                # If calculated crop_width exceeds frame width, adjust
+                if crop_width > original_width:
+                    crop_width = original_width
+                    crop_height = int(original_width / target_aspect)
+                    crop_height = min(crop_height, original_height)
+
+                # Ensure minimum dimensions
+                crop_width = max(MIN_DIMENSION, min(crop_width, original_width))
+                crop_height = max(MIN_DIMENSION, min(crop_height, original_height))
+
+                # Center the crop
                 x1 = max(0, (original_width - crop_width) // 2)
-                y1 = 0
-                x2 = min(original_width, x1 + crop_width)
-                y2 = original_height
+                y1 = max(0, (original_height - crop_height) // 2)
+                x2 = x1 + crop_width
+                y2 = y1 + crop_height
 
-                # Additional validation for fallback dimensions
-                if x2 <= x1 or y2 <= y1 or crop_width <= 0 or crop_height <= 0:
-                    logger.error(
-                        f"Fallback crop box still invalid at t={absolute_time:.2f}s: "
-                        f"x=[{x1},{x2}] y=[{y1},{y2}], crop_size=({crop_width},{crop_height}). Using full frame."
-                    )
-                    x1, y1 = 0, 0
-                    x2, y2 = original_width, original_height
+                # Final bounds check
+                x2 = min(x2, original_width)
+                y2 = min(y2, original_height)
 
-            # Crop the frame
-            cropped_frame = frame[y1:y2, x1:x2]
+                # Ensure x2 > x1 and y2 > y1 after all adjustments
+                if x2 <= x1:
+                    x1 = 0
+                    x2 = original_width
+                if y2 <= y1:
+                    y1 = 0
+                    y2 = original_height
 
-            # Validate cropped frame shape to prevent broadcast errors
-            if cropped_frame.shape[0] == 0 or cropped_frame.shape[1] == 0:
+                logger.debug(f"Fallback crop: x=[{x1},{x2}], y=[{y1},{y2}], dimensions=({x2-x1},{y2-y1})")
+
+            # Crop the frame with error handling
+            try:
+                cropped_frame = frame[y1:y2, x1:x2]
+            except Exception as e:
+                logger.error(
+                    f"Frame cropping failed at t={absolute_time:.2f}s: {e}. "
+                    f"Frame shape: {frame.shape}, crop: x=[{x1},{x2}], y=[{y1},{y2}]"
+                )
+                # Return black frame as fallback
+                import numpy as np
+                resized_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+                return resized_frame
+
+            # Immediate validation of cropped frame shape
+            if (cropped_frame.size == 0 or
+                cropped_frame.shape[0] == 0 or
+                cropped_frame.shape[1] == 0 or
+                len(cropped_frame.shape) < 2):
+                logger.error(
+                    f"Cropped frame is empty at t={absolute_time:.2f}s: shape={cropped_frame.shape}, "
+                    f"crop coordinates: x=[{x1},{x2}], y=[{y1},{y2}]. Using black frame."
+                )
+                # Return black frame immediately
+                import numpy as np
+                resized_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+                return resized_frame
+
+            # Validate cropped frame meets minimum dimensions
+            if cropped_frame.shape[0] < MIN_DIMENSION or cropped_frame.shape[1] < MIN_DIMENSION:
                 logger.warning(
-                    f"Cropped frame has zero dimensions at t={absolute_time:.2f}s: "
+                    f"Cropped frame has invalid dimensions at t={absolute_time:.2f}s: "
                     f"shape={cropped_frame.shape}, crop_box=({x1},{y1},{x2},{y2}). Using fallback."
                 )
                 # Use center crop as fallback
                 crop_width = int(original_height * self.target_resolution[0] / self.target_resolution[1])
                 crop_height = original_height
+
+                # Ensure crop_width doesn't exceed original_width
+                if crop_width > original_width:
+                    # If calculated crop is too wide, use full width and adjust height
+                    crop_width = original_width
+                    crop_height = int(original_width * self.target_resolution[1] / self.target_resolution[0])
+                    crop_height = min(crop_height, original_height)
+
+                # Ensure minimum dimensions
+                crop_width = max(MIN_DIMENSION, crop_width)
+                crop_height = max(MIN_DIMENSION, crop_height)
+
+                # Ensure dimensions don't exceed original frame
+                crop_width = min(crop_width, original_width)
+                crop_height = min(crop_height, original_height)
+
                 x1_fallback = max(0, (original_width - crop_width) // 2)
-                y1_fallback = 0
+                y1_fallback = max(0, (original_height - crop_height) // 2)
                 x2_fallback = min(original_width, x1_fallback + crop_width)
-                y2_fallback = original_height
+                y2_fallback = min(original_height, y1_fallback + crop_height)
+
+                # Ensure fallback dimensions are valid and meet minimum requirements
+                if x2_fallback <= x1_fallback or y2_fallback <= y1_fallback or (x2_fallback - x1_fallback) < MIN_DIMENSION or (y2_fallback - y1_fallback) < MIN_DIMENSION:
+                    logger.error(f"Fallback dimensions invalid, using full frame")
+                    x1_fallback, y1_fallback = 0, 0
+                    x2_fallback, y2_fallback = original_width, original_height
+
                 cropped_frame = frame[y1_fallback:y2_fallback, x1_fallback:x2_fallback]
 
             # Additional shape validation after cropping
-            if cropped_frame.shape[0] == 0 or cropped_frame.shape[1] == 0:
+            if cropped_frame.shape[0] == 0 or cropped_frame.shape[1] == 0 or cropped_frame.shape[0] < MIN_DIMENSION or cropped_frame.shape[1] < MIN_DIMENSION:
                 logger.error(f"Still invalid frame shape after fallback: {cropped_frame.shape}. Using full frame.")
                 cropped_frame = frame
+
+            # Final safety check before resize to prevent broadcast errors
+            if cropped_frame.size == 0 or cropped_frame.shape[0] == 0 or cropped_frame.shape[1] == 0:
+                logger.error(f"Empty frame detected at t={absolute_time:.2f}s. Using black frame as fallback.")
+                import numpy as np
+                resized_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
+                return resized_frame
 
             # Resize to target resolution using cv2 for better performance
             import cv2
             try:
+                # Final validation before resize to catch any edge cases
+                if cropped_frame.shape[0] <= 0 or cropped_frame.shape[1] <= 0:
+                    raise ValueError(f"Invalid cropped frame dimensions: {cropped_frame.shape}")
+
                 resized_frame = cv2.resize(cropped_frame, (target_width, target_height), interpolation=cv2.INTER_LINEAR)
-            except cv2.error as e:
-                logger.error(f"cv2.resize failed at t={absolute_time:.2f}s: {e}. Cropped shape: {cropped_frame.shape}")
+            except (cv2.error, ValueError, Exception) as e:
+                logger.error(
+                    f"cv2.resize failed at t={absolute_time:.2f}s: {e}\n"
+                    f"  Cropped shape: {cropped_frame.shape}\n"
+                    f"  Crop coordinates: x=[{x1},{x2}] ({x2-x1}px), y=[{y1},{y2}] ({y2-y1}px)\n"
+                    f"  Original frame: {original_width}x{original_height}\n"
+                    f"  Target resolution: {target_width}x{target_height}"
+                )
                 # Return a black frame as last resort
                 import numpy as np
                 resized_frame = np.zeros((target_height, target_width, 3), dtype=np.uint8)
@@ -373,10 +467,6 @@ class ClipGenerator:
 
         # Set FPS to match source (MoviePy 2.x handles this correctly)
         dynamic_clip = dynamic_clip.with_fps(source_fps)
-
-        # Verify FPS was set correctly
-        actual_fps = getattr(dynamic_clip, 'fps', None)
-        logger.info(f"[FPS-DEBUG] Created face-tracked clip - source FPS: {source_fps}, set with_fps({source_fps:.2f}), actual FPS: {actual_fps}")
 
         # Preserve audio from original clip
         if hasattr(clip, 'audio') and clip.audio is not None:
@@ -507,8 +597,11 @@ class ClipGenerator:
         crop_x = max(0, min(crop_x, original_width - crop_width))
         crop_y = max(0, min(crop_y, original_height - crop_height))
 
-        # Validate crop dimensions are positive
-        if crop_width <= 0 or crop_height <= 0:
+        # Minimum dimension to prevent cv2.resize broadcast errors
+        MIN_DIMENSION = 10
+
+        # Validate crop dimensions are positive and meet minimum requirements
+        if crop_width <= 0 or crop_height <= 0 or crop_width < MIN_DIMENSION or crop_height < MIN_DIMENSION:
             logger.warning(
                 f"Invalid crop dimensions for face at start_time={start_time:.2f}s: "
                 f"width={crop_width}, height={crop_height}. Using full frame."
@@ -525,9 +618,9 @@ class ClipGenerator:
             # Adjust crop to fit within bounds
             crop_width = min(crop_width, original_width - crop_x)
             crop_height = min(crop_height, original_height - crop_y)
-            
+
             # If still invalid, use center crop
-            if crop_width <= 0 or crop_height <= 0:
+            if crop_width <= 0 or crop_height <= 0 or crop_width < MIN_DIMENSION or crop_height < MIN_DIMENSION:
                 logger.warning("Adjusted crop still invalid, using center crop")
                 crop_x, crop_y = 0, 0
                 crop_width, crop_height = original_width, original_height
@@ -720,57 +813,36 @@ class ClipGenerator:
 
             segment_clips.append(processed)
 
-        # Concatenate segments with transitions
+        # Concatenate segments with direct cuts (no fading transitions)
         if len(segment_clips) == 1:
             final_clip = segment_clips[0]
         else:
-            # Apply crossfade transitions between mode changes
-            clips_with_transitions = [segment_clips[0]]
+            # Direct concatenation without transitions - just use crops
+            logger.debug(f"Concatenating {len(segment_clips)} segments with direct cuts (no fading)")
 
-            for i in range(1, len(segment_clips)):
-                prev_mode = relevant_segments[i-1].mode
-                curr_mode = relevant_segments[i].mode
+            # Validate all clips have audio before concatenation
+            clips_without_audio = [
+                i for i, clip in enumerate(segment_clips)
+                if not hasattr(clip, 'audio') or clip.audio is None
+            ]
+            if clips_without_audio:
+                logger.warning(f"Warning: {len(clips_without_audio)} clips missing audio before concatenation")
 
-                if prev_mode != curr_mode:
-                    # Mode change - apply transition
-                    logger.debug(f"Applying transition between {prev_mode.value} and {curr_mode.value}")
-                    transition = self.apply_crossfade_transition(
-                        clips_with_transitions[-1],
-                        segment_clips[i],
-                        self.transition_duration
-                    )
-                    # Replace last clip with transitioned version
-                    clips_with_transitions[-1] = transition
-                else:
-                    # Same mode - just append
-                    clips_with_transitions.append(segment_clips[i])
+            # Ensure all clips have the same FPS to prevent freezing
+            target_fps = getattr(segment_clips[0], 'fps', 30)
+            for i, clip in enumerate(segment_clips):
+                clip_fps = getattr(clip, 'fps', None)
+                if clip_fps is None or abs(clip_fps - target_fps) > 0.1:  # Allow small FPS differences
+                    logger.warning(f"Clip {i} has mismatched FPS ({clip_fps}), normalizing to {target_fps}")
+                    # Set FPS to match target (MoviePy 2.x handles this correctly)
+                    segment_clips[i] = clip.with_fps(target_fps)
 
-            if len(clips_with_transitions) == 1:
-                final_clip = clips_with_transitions[0]
-            else:
-                # Validate all clips have audio before concatenation
-                clips_without_audio = [
-                    i for i, clip in enumerate(clips_with_transitions)
-                    if not hasattr(clip, 'audio') or clip.audio is None
-                ]
-                if clips_without_audio:
-                    logger.warning(f"Warning: {len(clips_without_audio)} clips missing audio before concatenation")
+            # Use "compose" method to ensure audio is properly handled
+            final_clip = concatenate_videoclips(segment_clips, method="compose")
 
-                # Ensure all clips have the same FPS to prevent freezing
-                target_fps = getattr(clips_with_transitions[0], 'fps', 30)
-                for i, clip in enumerate(clips_with_transitions):
-                    clip_fps = getattr(clip, 'fps', None)
-                    if clip_fps is None or abs(clip_fps - target_fps) > 0.1:  # Allow small FPS differences
-                        logger.warning(f"Clip {i} has mismatched FPS ({clip_fps}), normalizing to {target_fps}")
-                        # Set FPS to match target (MoviePy 2.x handles this correctly)
-                        clips_with_transitions[i] = clip.with_fps(target_fps)
-
-                # Use "compose" method to ensure audio is properly handled
-                final_clip = concatenate_videoclips(clips_with_transitions, method="compose")
-
-                # Verify audio was preserved
-                if final_clip.audio is None:
-                    logger.error("Concatenation lost audio! This should not happen.")
+            # Verify audio was preserved
+            if final_clip.audio is None:
+                logger.error("Concatenation lost audio! This should not happen.")
 
         return final_clip
 
@@ -834,10 +906,6 @@ class ClipGenerator:
             # Load video
             logger.debug(f"Loading video: {video_path}")
             video = VideoFileClip(video_path)
-
-            # Check source video FPS
-            source_video_fps = getattr(video, 'fps', None)
-            logger.info(f"[FPS-DEBUG] Source video file loaded with FPS: {source_video_fps}")
 
             # Validate timing
             if viral_moment.end_time > video.duration:
@@ -915,7 +983,6 @@ class ClipGenerator:
 
             # Get the clip's FPS (preserve source FPS to avoid freezing)
             clip_fps = getattr(clip, 'fps', 30)
-            logger.info(f"[FPS-DEBUG] Clip FPS detected for export: {clip_fps}")
 
             # Add keyframe parameters to prevent freezing
             # Force keyframes every 1 second (adjust based on actual FPS)

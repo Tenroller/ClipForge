@@ -222,6 +222,12 @@ class PodcastClipsProcessor:
                 'opacity': thumbnail_box_opacity
             }
 
+            # Debug mode configuration
+            debug_mode = parameters.get('debugMode', False)
+            self.debug_mode = debug_mode  # Store as instance variable
+            if debug_mode:
+                logger.info("🐛 Debug mode enabled - will save extra artifacts and launch debug UI")
+
             # Face tracking smoothing configuration
             smoothing_strength = parameters.get('smoothingStrength', 11)  # 5=light, 11=medium, 21=strong
 
@@ -245,6 +251,10 @@ class PodcastClipsProcessor:
             enable_split_screen = parameters.get('enableSplitScreen', True)  # Enable split-screen mode
             separation_threshold = parameters.get('separationThreshold', 0.40)  # 40% of frame width
             split_orientation = parameters.get('splitOrientation', 'vertical')  # 'vertical' or 'horizontal'
+
+            # Launch debug UI if debug mode enabled
+            if debug_mode:
+                self._launch_debug_ui_thread()
 
             # Step 1: Download video
             video_path = self._download_video(youtube_url)
@@ -313,6 +323,43 @@ class PodcastClipsProcessor:
                 viral_moments, word_timings, max_clip_count,
                 speaker_segments=speaker_segments
             )
+
+            # Re-save viral moments with optimized timings and scores for debug UI
+            persist_artifact(
+                self.job_id,
+                "ai_analysis",
+                "viral_moments",
+                payload={
+                    "moments": [
+                        {
+                            "title": m.title,
+                            "start_time": m.start_time,
+                            "end_time": m.end_time,
+                            "optimized_start": m.optimized_start,
+                            "optimized_end": m.optimized_end,
+                            "reason": m.reason,
+                            "hook": m.hook,
+                            "clip_index": m.clip_index,
+                            "thumbnail_text": m.thumbnail_text,
+                            "viral_score": m.viral_score,
+                            "confidence": m.confidence,
+                            "caption": m.caption,
+                            "tags": m.tags,
+                            "recommended_crop": m.recommended_crop,
+                            "cut_padding_before": m.cut_padding_before,
+                            "cut_padding_after": m.cut_padding_after,
+                            "subtitles": m.subtitles,
+                            "notes": m.notes,
+                            "engagement_factors": getattr(m, 'engagement_factors', {})
+                        }
+                        for m in viral_moments
+                    ],
+                    "moment_count": len(viral_moments),
+                    "optimized": True,
+                    "scored": True
+                }
+            )
+            logger.info("Updated viral moments artifact with optimized timings and scores")
 
             # Step 6: Analyze faces (REMOVED - now done per-clip for better performance)
             # Face and speaker detection moved into _generate_clips() to only process
@@ -450,6 +497,60 @@ class PodcastClipsProcessor:
             logger.error(f"Transcription failed: {e}")
             raise RuntimeError(f"Failed to transcribe video: {e}")
 
+    def _annotate_words_with_speakers(
+        self,
+        word_timings: List[Dict[str, Any]],
+        speaker_segments: List[SpeakerSegment]
+    ):
+        """
+        Annotate word timings with speaker labels based on speaker segments.
+        Updates word_timings in-place and re-saves the transcription artifact.
+        """
+        try:
+            logger.info("Annotating word timings with speaker labels")
+
+            # Create a sorted list of speaker segments for efficient lookup
+            sorted_segments = sorted(speaker_segments, key=lambda s: s.start_time)
+
+            # Annotate each word with its speaker
+            annotated_count = 0
+            for word in word_timings:
+                word_time = word.get('start_time', 0)
+
+                # Find the speaker segment that contains this word
+                speaker_label = None
+                for segment in sorted_segments:
+                    if segment.start_time <= word_time <= segment.end_time:
+                        speaker_label = segment.speaker
+                        break
+
+                # Update word with speaker label
+                word['speaker'] = speaker_label if speaker_label else 'UNKNOWN'
+                if speaker_label:
+                    annotated_count += 1
+
+            logger.info(f"Annotated {annotated_count}/{len(word_timings)} words with speaker labels")
+
+            # Re-save the transcription artifact with speaker annotations
+            transcript_text = ' '.join([w.get('word', '') for w in word_timings])
+            persist_artifact(
+                self.job_id,
+                "transcription",
+                "transcript",
+                payload={
+                    "word_timings": word_timings,
+                    "transcript_text": transcript_text,
+                    "word_count": len(word_timings),
+                    "has_speaker_labels": True,
+                    "annotated_words": annotated_count
+                }
+            )
+
+            logger.info("Updated transcription artifact with speaker annotations")
+
+        except Exception as e:
+            logger.error(f"Failed to annotate words with speakers: {e}", exc_info=True)
+
     def _diarize_speakers(
         self,
         video_path: str,
@@ -479,7 +580,7 @@ class PodcastClipsProcessor:
             if existing:
                 logger.info("Found existing speaker diarization data")
                 segments_data = existing.get('segments', [])
-                return [
+                speaker_segments = [
                     SpeakerSegment(
                         start_time=s['start_time'],
                         end_time=s['end_time'],
@@ -487,6 +588,13 @@ class PodcastClipsProcessor:
                     )
                     for s in segments_data
                 ]
+
+                # Check if word timings need speaker annotation
+                if word_timings and not word_timings[0].get('speaker'):
+                    logger.info("Annotating existing transcription with speaker labels")
+                    self._annotate_words_with_speakers(word_timings, speaker_segments)
+
+                return speaker_segments
 
             logger.info("Starting speaker diarization")
 
@@ -526,6 +634,9 @@ class PodcastClipsProcessor:
                     "segment_count": len(speaker_segments)
                 }
             )
+
+            # Annotate word timings with speaker labels
+            self._annotate_words_with_speakers(word_timings, speaker_segments)
 
             self.update_progress("speaker_diarization", 39, f"Identified {len(set(s.speaker for s in speaker_segments))} speakers")
 
@@ -568,69 +679,120 @@ class PodcastClipsProcessor:
                 word_timings = diarizer.annotate_word_timings(word_timings, speaker_segments)
                 logger.info("✓ Transcript annotated with speaker labels")
 
-            # Build transcript with timestamps and speaker labels for AI
-            transcript_lines = []
-            current_speaker = None
+            def group_words_into_phrases(word_timings: list, speaker_segments: list) -> list:
+                """
+                Group word timings into sentence/phrase boundaries with speaker information.
 
-            for i, word in enumerate(word_timings):
-                word_speaker = word.get('speaker')
+                Returns a list of phrase objects with indexed JSON format:
+                {"i": 0, "start": 0.00, "end": 3.42, "speaker": "SPEAKER_00", "text": "..."}
 
-                # Add timestamp every 8 words for better precision
-                if i % 8 == 0:
-                    if word_speaker and word_speaker != current_speaker and speaker_segments:
-                        # Speaker change - add speaker label
-                        transcript_lines.append(f"\n[{word['start_time']:.1f}s {word_speaker}] {word['word']}")
-                        current_speaker = word_speaker
-                    else:
-                        transcript_lines.append(f"[{word['start_time']:.1f}s] {word['word']}")
-                else:
-                    # Check for speaker change mid-segment
-                    if word_speaker and word_speaker != current_speaker and speaker_segments:
-                        transcript_lines.append(f"\n[{word_speaker}] {word['word']}")
-                        current_speaker = word_speaker
-                    else:
-                        transcript_lines.append(word['word'])
+                Boundaries are detected by:
+                - Punctuation marks (. ! ? - for sentence ends, , ; for phrase pauses)
+                - Speaker changes
+                - Long pauses between words (> 0.5s)
+                """
+                if not word_timings:
+                    return []
 
-            transcript_text = ' '.join(transcript_lines)
+                phrases = []
+                current_phrase_words = []
+                current_speaker = None
+                phrase_index = 0
 
-            # Prepare prompt (simplified - no need for detailed JSON format instructions)
-            keywords_hint = f"\n\nPriority keywords: {', '.join(keywords)}" if keywords else ""
+                # Punctuation that ends a sentence/phrase
+                sentence_end_punct = {'.', '!', '?', ':', ';', ','}
 
-            # Build speaker context hint if available
-            speaker_context = ""
+                for i, word in enumerate(word_timings):
+                    word_text = word.get('word', '').strip()
+                    word_speaker = word.get('speaker', 'SPEAKER_UNKNOWN')
+                    word_start = word.get('start_time', 0.0)
+
+                    # Detect boundary conditions
+                    is_speaker_change = word_speaker != current_speaker and current_speaker is not None
+                    is_long_pause = False
+
+                    if current_phrase_words and i > 0:
+                        prev_word = word_timings[i - 1]
+                        pause_duration = word_start - prev_word.get('end_time', word_start)
+                        is_long_pause = pause_duration > 0.5
+
+                    # Check if previous word ended with punctuation
+                    has_sentence_punct = False
+                    if current_phrase_words:
+                        last_word = current_phrase_words[-1]['word'].strip()
+                        has_sentence_punct = any(last_word.endswith(p) for p in sentence_end_punct)
+
+                    # Start new phrase if boundary detected
+                    if current_phrase_words and (is_speaker_change or is_long_pause or has_sentence_punct):
+                        # Save current phrase
+                        phrase_text = ' '.join(w['word'].strip() for w in current_phrase_words)
+                        phrase_start = current_phrase_words[0]['start_time']
+                        phrase_end = current_phrase_words[-1]['end_time']
+
+                        phrases.append({
+                            "i": phrase_index,
+                            "start": round(phrase_start, 2),
+                            "end": round(phrase_end, 2),
+                            "speaker": current_speaker or word_speaker,
+                            "text": phrase_text
+                        })
+
+                        phrase_index += 1
+                        current_phrase_words = []
+
+                    # Add word to current phrase
+                    current_phrase_words.append(word)
+                    current_speaker = word_speaker
+
+                # Add final phrase
+                if current_phrase_words:
+                    phrase_text = ' '.join(w['word'].strip() for w in current_phrase_words)
+                    phrase_start = current_phrase_words[0]['start_time']
+                    phrase_end = current_phrase_words[-1]['end_time']
+
+                    phrases.append({
+                        "i": phrase_index,
+                        "start": round(phrase_start, 2),
+                        "end": round(phrase_end, 2),
+                        "speaker": current_speaker,
+                        "text": phrase_text
+                    })
+
+                return phrases
+
+            # Group words into phrases with speaker information
+            logger.info("Grouping word timings into sentence/phrase boundaries")
+            phrases = group_words_into_phrases(word_timings, speaker_segments or [])
+            logger.info(f"Grouped {len(word_timings)} words into {len(phrases)} phrases")
+
+            # Format phrases as TOON for AI (30-60% token reduction vs JSON)
+            from toon_format import encode as toon_encode
+            transcript_toon = toon_encode(phrases)
+
+            # Build speaker context information if available
+            speaker_info = ""
             if speaker_segments:
                 speakers = list(set(s.speaker for s in speaker_segments))
                 speaker_count = len(speakers)
-                speaker_context = f"""
+                speaker_info = f"This podcast has {speaker_count} speaker(s): {', '.join(speakers)}."
 
-            SPEAKER CONTEXT
-            This podcast has {speaker_count} speaker(s): {', '.join(speakers)}.
-            Speaker labels are embedded in the transcript (e.g., "[SPEAKER_00]", "[SPEAKER_01]").
-
-            SPEAKER-AWARE SELECTION:
-            - Prioritize dynamic exchanges: back-and-forth moments, questions + answers, reactions
-            - Value speaker transitions that create tension/release or setup/punchline patterns
-            - Identify moments where one speaker dominates (monologues) vs. rapid exchanges (debates)
-            - Note multi-speaker interactions in the 'notes' field
-            - For interview-style podcasts, favor guest responses over host questions
-            - Look for controversial disagreements or surprising agreements between speakers
-            """
-
-            # IMPROVED PROMPT (aligned with ViralMomentsResponse / ViralMomentSchema fields)
-            prompt = f"""
-
-            KEYWORDS (OPTIONAL WEIGHTING):
-            {keywords_hint}
-
+            # SYSTEM INSTRUCTION - All rules and guidelines for the AI
+            system_instruction = f"""
             ROLE
             You are an elite short-form editorial strategist for TikTok/Reels/Shorts. You surgically extract only HIGH-CONVICTION viral moments from a podcast transcript.
 
             OBJECTIVE
             Return the best possible set of moments (0..{max_count}) ordered BEST-FIRST. Do NOT pad quantity—quality is paramount.
-            {speaker_context}
-            TRANSCRIPT
-            Only use words present below (with periodic timestamps and speaker labels baked in). Never invent, alter, or guess missing words.
-            {transcript_text}
+
+            TRANSCRIPT FORMAT
+            You will receive a transcript in TOON format (a compact tabular format). The data is a table with columns:
+            - i: index number
+            - start: start time in seconds (float, 2 decimal places)
+            - end: end time in seconds (float, 2 decimal places)
+            - speaker: speaker label (e.g., "SPEAKER_00", "SPEAKER_01")
+            - text: the spoken text for this phrase
+
+            TOON uses pipe-delimited tabular rows after a header line. Parse each row to extract phrase data.
 
             SELECTION RULES
             - Dynamic count: Choose any number up to {max_count}; stop when quality drops. 1 amazing clip beats 8 mediocre ones.
@@ -642,7 +804,15 @@ class PodcastClipsProcessor:
             - Speaker changes: If a segment crosses a speaker turn OR contains an interruption, note it in notes (e.g., "Speaker change at 23.4s").
             - Exclusions: Omit hate, illegal activity, private data, or incoherent fragments.
 
-            VIRAL HEURISTICS (PRIORITIZE):
+            SPEAKER-AWARE SELECTION
+            - Prioritize dynamic exchanges: back-and-forth moments, questions + answers, reactions
+            - Value speaker transitions that create tension/release or setup/punchline patterns
+            - Identify moments where one speaker dominates (monologues) vs. rapid exchanges (debates)
+            - Note multi-speaker interactions in the 'notes' field
+            - For interview-style podcasts, favor guest responses over host questions
+            - Look for controversial disagreements or surprising agreements between speakers
+
+            VIRAL HEURISTICS (PRIORITIZE)
             1. Immediate hook in first ~3 seconds (shock, controversy, strong opinion, emotional spike, surprising stat, concise advice, punchline setup/reveal).
             2. Emotional resonance (laughter, anger, awe), audible reactions, tension + release.
             3. Standalone clarity—clip makes sense with minimal prior context.
@@ -650,13 +820,13 @@ class PodcastClipsProcessor:
             5. Actionable or contrarian insight.
             6. Visually compelling moments likely to show facial reactions / emphasis.
 
-            DE-PREFER / AVOID:
+            DE-PREFER / AVOID
             - Long multi-step setups without payoff.
             - Dry technical droning unless containing a surprising twist.
             - Moments requiring niche prior knowledge to understand.
             - Redundant restatements.
 
-            SCORING & FIELDS (Provide meaningful, non-default values):
+            SCORING & FIELDS (Provide meaningful, non-default values)
             - viral_score (0–100): Composite of hook strength, emotional impact, shareability, clarity, novelty. Scores ≥60 indicate publishable; ≤50 should generally be excluded unless transcript is very weak.
             - confidence (0.0–1.0): Your certainty this moment will perform (NOT identical to viral_score—confidence reflects selection reliability).
             - title: Punchy ≤60 chars, no clickbait fluff words repeated (avoid "insane", "shocking" unless justified).
@@ -675,8 +845,9 @@ class PodcastClipsProcessor:
             - Round all time floats to at most 2 decimal places.
             - If selected segment slightly exceeds {max_duration}, trim at a natural sentence boundary without killing payoff.
             - If emotional peak occurs just outside window, shift boundaries minimally to include it (still respect {max_duration}).
+            - Use the "start" and "end" times from the transcript phrases to identify viral moments.
 
-            KEYWORDS (OPTIONAL WEIGHTING): {keywords_hint}
+            KEYWORD GUIDANCE
             Use keywords ONLY if they actually align with a strong viral moment; NEVER force irrelevant segments.
 
             MULTI-LANGUAGE
@@ -691,12 +862,25 @@ class PodcastClipsProcessor:
             - No meta-commentary about the task.
             - Do not mention you are an AI.
             - Provide ONLY high-quality moments; zero is acceptable if nothing meets criteria.
+            - Only use words present in the transcript. Never invent, alter, or guess missing words.
             """
+
+            # CONTENT - Only the data to analyze
+            keywords_section = f"Priority keywords: {', '.join(keywords)}\n\n" if keywords else ""
+            speaker_section = f"{speaker_info}\n\n" if speaker_info else ""
+
+            content = f"""{keywords_section}{speaker_section}TRANSCRIPT (TOON format):
+            {transcript_toon}"""
 
             logger.info(f"Sending transcript to {ai_model} for structured analysis")
 
-            # Use structured output to guarantee valid JSON
-            response_data = generate_structured_response(prompt, ai_model, ViralMomentsResponse)
+            # Use structured output to guarantee valid JSON with system instruction
+            response_data = generate_structured_response(
+                prompt=content,
+                ai_model=ai_model,
+                response_schema=ViralMomentsResponse,
+                system_instruction=system_instruction
+            )
 
             # Extract moments from response
             moments_data = response_data.get('moments', [])
@@ -711,7 +895,17 @@ class PodcastClipsProcessor:
                     reason=moment.get('reason', 'Engaging content'),
                     hook=moment.get('hook', ''),
                     clip_index=i + 1,
-                    thumbnail_text=moment.get('thumbnail_text', '')
+                    thumbnail_text=moment.get('thumbnail_text', ''),
+                    # AI-generated metadata fields
+                    viral_score=float(moment.get('viral_score', 0)),
+                    confidence=float(moment.get('confidence', 0.0)),
+                    caption=moment.get('caption', ''),
+                    tags=moment.get('tags', []),
+                    recommended_crop=moment.get('recommended_crop', 'mid'),
+                    cut_padding_before=float(moment.get('cut_padding_before', 0.0)),
+                    cut_padding_after=float(moment.get('cut_padding_after', 0.0)),
+                    subtitles=moment.get('subtitles', ''),
+                    notes=moment.get('notes', '')
                 ))
 
             logger.info(f"AI detected {len(viral_moments)} viral moments")
@@ -730,7 +924,16 @@ class PodcastClipsProcessor:
                             "reason": m.reason,
                             "hook": m.hook,
                             "clip_index": m.clip_index,
-                            "thumbnail_text": m.thumbnail_text
+                            "thumbnail_text": m.thumbnail_text,
+                            "viral_score": m.viral_score,
+                            "confidence": m.confidence,
+                            "caption": m.caption,
+                            "tags": m.tags,
+                            "recommended_crop": m.recommended_crop,
+                            "cut_padding_before": m.cut_padding_before,
+                            "cut_padding_after": m.cut_padding_after,
+                            "subtitles": m.subtitles,
+                            "notes": m.notes
                         }
                         for m in viral_moments
                     ],
@@ -1037,6 +1240,14 @@ class PodcastClipsProcessor:
                 else:
                     logger.warning("No audio track found in video - speaker detection skipped")
 
+            # Save debug face tracking data if debug mode is enabled
+            if hasattr(self, 'debug_mode') and self.debug_mode:
+                logger.info("🐛 Saving face tracking debug data")
+                try:
+                    self._save_face_tracking_debug_data(video_path, viral_moments)
+                except Exception as e:
+                    logger.warning(f"Failed to save face tracking debug data: {e}")
+
             self.update_progress("clip_generation", 75, f"Generating {len(viral_moments)} clips")
 
             # Ensure subtitle generator is available (fallback to basic instance if needed)
@@ -1115,14 +1326,58 @@ class PodcastClipsProcessor:
         self.update_progress("finalization", 95, "Finalizing outputs")
 
         try:
-            # Create summary
+            # Enrich clips with full AI metadata from viral moments
+            enriched_clips = []
+            for clip in generated_clips:
+                clip_index = clip["clip_index"]
+                # Find corresponding viral moment
+                moment = next((m for m in viral_moments if m.clip_index == clip_index), None)
+
+                # Create enriched clip data with all AI metadata
+                enriched_clip = {
+                    **clip,  # Keep existing data (title, output_path, duration, etc.)
+                    "ai_metadata": {
+                        # Core identifiers
+                        "title": moment.title if moment else clip.get("title", ""),
+                        "clip_index": clip_index,
+
+                        # Timing information
+                        "start_time": moment.start_time if moment else 0,
+                        "end_time": moment.end_time if moment else 0,
+                        "optimized_start": moment.optimized_start if moment else None,
+                        "optimized_end": moment.optimized_end if moment else None,
+                        "cut_padding_before": moment.cut_padding_before if moment else 0.0,
+                        "cut_padding_after": moment.cut_padding_after if moment else 0.0,
+
+                        # AI-generated content
+                        "hook": moment.hook if moment else "",
+                        "reason": moment.reason if moment else "",
+                        "caption": moment.caption if moment else "",
+                        "subtitles": moment.subtitles if moment else "",
+                        "notes": moment.notes if moment else "",
+
+                        # Scoring and confidence
+                        "viral_score": moment.viral_score if moment else 0,
+                        "confidence": moment.confidence if moment else 0.0,
+                        "engagement_factors": moment.engagement_factors if moment else {},
+
+                        # Metadata for publishing
+                        "tags": moment.tags if moment else [],
+                        "thumbnail_text": moment.thumbnail_text if moment else "",
+                        "recommended_crop": moment.recommended_crop if moment else "mid",
+                    } if moment else None
+                }
+                enriched_clips.append(enriched_clip)
+
+            # Create summary with enriched clips
             summary = {
                 "job_id": self.job_id,
-                "total_clips_generated": len(generated_clips),
+                "total_clips_generated": len(enriched_clips),
                 "total_clips_requested": len(viral_moments),
-                "clips": generated_clips,
-                "total_size_mb": sum(c["file_size_mb"] for c in generated_clips),
-                "average_duration": sum(c["duration"] for c in generated_clips) / len(generated_clips) if generated_clips else 0
+                "clips": enriched_clips,
+                "generated_videos": enriched_clips,  # Alias for compatibility
+                "total_size_mb": sum(c["file_size_mb"] for c in enriched_clips),
+                "average_duration": sum(c["duration"] for c in enriched_clips) / len(enriched_clips) if enriched_clips else 0
             }
 
             # Save summary JSON
@@ -1131,6 +1386,7 @@ class PodcastClipsProcessor:
                 json.dump(summary, f, indent=2)
 
             logger.info(f"Summary saved to {summary_path}")
+            logger.info(f"Enriched {len(enriched_clips)} clips with full AI metadata")
 
             return summary
 
@@ -1354,6 +1610,9 @@ class PodcastClipsProcessor:
                     # Extract catchy phrase from viral moment
                     catchy_phrase = moment.thumbnail_text if moment and moment.thumbnail_text else title[:25]
 
+                    # Get AI-recommended crop style
+                    crop_style = moment.recommended_crop if moment and moment.recommended_crop else "mid"
+
                     # Extract multiple candidate frames for AI selection
                     candidate_frames = self._extract_candidate_frames(clip_path, num_frames=5)
 
@@ -1374,7 +1633,7 @@ class PodcastClipsProcessor:
 
                             selected_frame_index = selection_result.get('selected_frame_index', 0)
                             logger.info(f"AI selected frame {selected_frame_index} for clip {clip_index} "
-                                      f"(score: {selection_result.get('engagement_score', 0)})")
+                                      f"(score: {selection_result.get('engagement_score', 0)}) with crop: {crop_style}")
 
                             # Calculate timestamp for selected frame
                             frame_timestamp = (selected_frame_index / 5.0) * 5.0  # Frame index to timestamp
@@ -1387,7 +1646,7 @@ class PodcastClipsProcessor:
                         logger.warning(f"Frame extraction failed for clip {clip_index}, using default timestamp")
                         frame_timestamp = 2.0
 
-                    # Generate thumbnail with red box overlay
+                    # Generate thumbnail with red box overlay and AI-recommended cropping
                     red_box_config = {
                         'box_color': self.thumbnail_config['box_color'],
                         'text_color': self.thumbnail_config['text_color'],
@@ -1404,7 +1663,8 @@ class PodcastClipsProcessor:
                         use_red_box=True,
                         apply_blur=True,
                         blur_intensity=self.thumbnail_config['blur_intensity'],
-                        red_box_config=red_box_config
+                        red_box_config=red_box_config,
+                        crop_style=crop_style  # AI-recommended cropping
                     )
 
                     clip_data['thumbnail_path'] = thumbnail_path
@@ -1468,7 +1728,7 @@ class PodcastClipsProcessor:
                 _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
 
                 # Convert to base64
-                frame_b64 = base64.b64encode(buffer).decode('utf-8')
+                frame_b64 = base64.b64encode(buffer.tobytes()).decode('utf-8')
 
                 # Create data URI
                 data_uri = f"data:image/jpeg;base64,{frame_b64}"
@@ -1499,6 +1759,164 @@ class PodcastClipsProcessor:
 
         # Convert to RGB
         return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+
+    def _launch_debug_ui_thread(self):
+        """Launch the Gradio debug UI in a background thread"""
+        import threading
+        import webbrowser
+        import time
+
+        def launch_ui():
+            try:
+                time.sleep(2)  # Wait a bit for initial processing to start
+                logger.info(f"🐛 Launching debug UI at http://localhost:7860")
+
+                from .debug_ui import launch_debug_ui
+
+                # Open browser automatically
+                try:
+                    webbrowser.open('http://localhost:7860')
+                except:
+                    pass
+
+                # Launch Gradio (blocking call)
+                launch_debug_ui(
+                    job_id=self.job_id,
+                    output_dir=str(self.output_dir),
+                    share=False,
+                    server_port=7860
+                )
+            except Exception as e:
+                logger.error(f"Failed to launch debug UI: {e}", exc_info=True)
+
+        # Start in background thread
+        debug_thread = threading.Thread(target=launch_ui, daemon=True)
+        debug_thread.start()
+
+        logger.info("Debug UI thread started - interface will be available shortly")
+
+    def _save_debug_artifact(self, artifact_name: str, data: Any):
+        """Save debug artifact for visualization"""
+        try:
+            from .debug_visualizer import save_debug_artifact
+            save_debug_artifact(str(self.output_dir), artifact_name, data)
+        except Exception as e:
+            logger.warning(f"Failed to save debug artifact {artifact_name}: {e}")
+
+    def _save_face_tracking_debug_data(self, video_path: str, viral_moments: List[ViralMoment]):
+        """
+        Save detailed face tracking data for debug visualization.
+        Extracts frame-by-frame face boxes from analyzed clip segments.
+        """
+        try:
+            import cv2
+
+            if not self.face_tracker:
+                logger.warning("No face tracker available for debug data")
+                return
+
+            logger.info("Extracting face tracking debug data from clip segments")
+
+            # Get video properties
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            cap.release()
+
+            # Build frame-by-frame data from face positions
+            frames_data = {}
+            face_tracks_summary = []
+
+            # Get face tracks from the tracker
+            if hasattr(self.face_tracker, 'face_tracks') and self.face_tracker.face_tracks:
+                for track in self.face_tracker.face_tracks:
+                    # FaceTrack is a dataclass, use attribute access not .get()
+                    face_id = track.face_id
+                    positions = track.positions
+
+                    # Add to summary
+                    face_tracks_summary.append({
+                        'face_id': face_id,
+                        'positions': {str(k): {
+                            'x': box.x,
+                            'y': box.y,
+                            'width': box.width,
+                            'height': box.height,
+                            'confidence': box.confidence
+                        } for k, box in positions.items()},
+                        'avg_area_ratio': track.avg_area_ratio,
+                        'speech_correlation': track.speech_correlation,
+                        'frame_count': len(positions)
+                    })
+
+                    # Build frame data
+                    for timestamp, box in positions.items():
+                        frame_idx = int(float(timestamp) * fps)
+                        frame_key = str(frame_idx)
+
+                        if frame_key not in frames_data:
+                            frames_data[frame_key] = {'tracked': [], 'untracked': []}
+
+                        # FaceBox is a dataclass, use attribute access
+                        frames_data[frame_key]['tracked'].append({
+                            'x': int(box.x),
+                            'y': int(box.y),
+                            'width': int(box.width),
+                            'height': int(box.height),
+                            'confidence': float(box.confidence),
+                            'face_id': face_id
+                        })
+
+            # Get speech segments
+            speech_segments = []
+            if hasattr(self.face_tracker, 'speech_segments') and self.face_tracker.speech_segments:
+                for segment in self.face_tracker.speech_segments:
+                    # AudioSegment is a dataclass, use attribute access
+                    speech_segments.append({
+                        'start_time': segment.start_time,
+                        'end_time': segment.end_time,
+                        'energy': segment.energy,
+                        'confidence': segment.confidence
+                    })
+
+            # Build complete debug data structure
+            debug_data = {
+                'frames': frames_data,
+                'face_tracks': face_tracks_summary,
+                'speech_segments': speech_segments,
+                'video_info': {
+                    'width': width,
+                    'height': height,
+                    'fps': fps
+                },
+                'analyzed_segments': [
+                    {
+                        'start_time': m.start_time,
+                        'end_time': m.end_time,
+                        'title': m.title
+                    }
+                    for m in viral_moments
+                ],
+                'metadata': {
+                    'total_frames_analyzed': len(frames_data),
+                    'total_face_tracks': len(face_tracks_summary),
+                    'total_speech_segments': len(speech_segments)
+                }
+            }
+
+            # Save the debug data
+            self._save_debug_artifact("face_boxes_by_frame.json", debug_data)
+
+            logger.info(
+                f"Saved face tracking debug data: "
+                f"{len(frames_data)} frames, "
+                f"{len(face_tracks_summary)} face tracks, "
+                f"{len(speech_segments)} speech segments"
+            )
+
+        except Exception as e:
+            logger.error(f"Error saving face tracking debug data: {e}", exc_info=True)
 
     def _cleanup(self):
         """Clean up temporary files and resources."""

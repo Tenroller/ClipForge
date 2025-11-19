@@ -10,6 +10,7 @@ import json
 import threading
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+from loguru import logger
 
 try:
     import stable_whisper
@@ -17,7 +18,7 @@ try:
 except ImportError:
     STABLE_TS_AVAILABLE = False
     stable_whisper = None
-    print("stable-ts not available. Install with: pip install stable-ts")
+    logger.warning("stable-ts not available. Install with: pip install stable-ts")
 
 try:
     import torch
@@ -25,7 +26,7 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
     torch = None
-    print("PyTorch not available. GPU acceleration disabled.")
+    logger.warning("PyTorch not available. GPU acceleration disabled.")
 
 
 # Global model cache with thread-safe locking to prevent concurrent model loads
@@ -51,42 +52,41 @@ def _get_or_load_model(model_size: str, device: str) -> Any:
 
     # Fast path: check if model already loaded (without lock)
     if cache_key in _model_cache:
-        print(f"✅ Using cached model: {model_size} on {device}")
+        logger.info(f"✅ Using cached model: {model_size} on {device}")
         return _model_cache[cache_key]
 
     # Slow path: acquire lock and load model
     with _model_lock:
         # Double-check after acquiring lock (another thread may have loaded it)
         if cache_key in _model_cache:
-            print(f"✅ Using cached model: {model_size} on {device}")
+            logger.info(f"✅ Using cached model: {model_size} on {device}")
             return _model_cache[cache_key]
 
         # Load the model (only one thread can reach here at a time)
-        print(f"🔄 Loading stable-ts model: {model_size} on {device} (thread-safe)")
-
+        logger.info(f"🔄 Loading stable-ts model: {model_size} on {device} (thread-safe)")
         if not stable_whisper:
             raise RuntimeError("stable_whisper not available")
 
         try:
             model = stable_whisper.load_model(model_size, device=device)
             _model_cache[cache_key] = model
-            print(f"✅ Model loaded and cached successfully: {model_size} on {device}")
+            logger.info(f"✅ Model loaded and cached successfully: {model_size} on {device}")
             return model
         except Exception as e:
-            print(f"❌ Failed to load model on {device}: {e}")
+            logger.error(f"❌ Failed to load model on {device}: {e}")
 
             # If CUDA failed, try CPU fallback
             if device == "cuda" and stable_whisper:
-                print("🔄 Falling back to CPU...")
+                logger.info("🔄 Falling back to CPU...")
                 try:
                     model = stable_whisper.load_model(model_size, device="cpu")
                     # Cache with CPU device key
                     cpu_cache_key = f"{model_size}_cpu"
                     _model_cache[cpu_cache_key] = model
-                    print(f"✅ Model loaded on CPU fallback")
+                    logger.info(f"✅ Model loaded on CPU fallback")
                     return model
                 except Exception as cpu_e:
-                    print(f"❌ CPU fallback also failed: {cpu_e}")
+                    logger.error(f"❌ CPU fallback also failed: {cpu_e}")
                     raise
             else:
                 raise
@@ -123,19 +123,19 @@ def extract_word_timings_with_stable_ts(
     env_device = os.environ.get("WHISPER_DEVICE", "").lower()
     if env_device in ["cpu", "cuda"]:
         device = env_device
-        print(f"Using device from WHISPER_DEVICE env: {device}")
+        logger.info(f"Using device from WHISPER_DEVICE env: {device}")
     elif TORCH_AVAILABLE and torch and use_gpu and torch.cuda.is_available():
         device = "cuda"
     else:
         device = "cpu"
-    print(f"Using device: {device}")
+    logger.info(f"Using device: {device}")
 
     # Load stable-ts model with thread-safe singleton pattern
     # This prevents concurrent model loads which cause segmentation faults
     model = _get_or_load_model(model_size, device)
     
     # Transcribe with enhanced options
-    print(f"Transcribing audio file: {audio_path}")
+    logger.info(f"Transcribing audio file: {audio_path}")
     
     try:
         # Use stable-ts specific options for better timing
@@ -159,11 +159,11 @@ def extract_word_timings_with_stable_ts(
             min_silence_dur=0.1  # Minimum silence duration for word boundaries
         )
         
-        print("✅ Transcription completed with stable-ts")
+        logger.info("✅ Transcription completed with stable-ts")
         
     except Exception as e:
-        print(f"stable-ts transcription failed: {e}")
-        print("Falling back to basic transcription...")
+        logger.error(f"stable-ts transcription failed: {e}")
+        logger.info("Falling back to basic transcription...")
         # Fallback to basic transcription if advanced options fail
         result = model.transcribe(
             audio_path,
@@ -218,7 +218,7 @@ def extract_word_timings_with_stable_ts(
     # Note: refinement API may have changed in stable-ts 2.x
     if hasattr(result, 'refine'):
         try:
-            print("Applying stable-ts refinement...")
+            logger.info("Applying stable-ts refinement...")
             refine_method = getattr(result, 'refine', None)
             if refine_method:
                 # Try with precision parameter (may not be supported in newer versions)
@@ -265,13 +265,13 @@ def extract_word_timings_with_stable_ts(
                     
                     sentence_index += 1
             
-            print("✅ Refinement applied successfully")
+            logger.info("✅ Refinement applied successfully")
             
         except Exception as e:
-            print(f"Refinement failed: {e}")
-            print("Using non-refined results")
+            logger.error(f"Refinement failed: {e}")
+            logger.info("Using non-refined results")
     
-    print(f"✅ Extracted {len(word_timings)} words with stable-ts enhanced timing")
+    logger.info(f"✅ Extracted {len(word_timings)} words with stable-ts enhanced timing")
     return word_timings
 
 

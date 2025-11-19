@@ -1,6 +1,7 @@
 import re
 import os
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Tuple, List, Optional, Any, Dict
 
@@ -20,6 +21,10 @@ except Exception:
 # Configure Gemini - get API key
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
+# Debug configuration
+DEBUG_PROMPTS = os.getenv('DEBUG_PROMPTS', 'false').lower() == 'true'
+DEBUG_DIR = Path(__file__).resolve().parent / "debug_prompts"
+
 # Bind logger with context for this module
 logger = logger.bind(name="AIvideos.gpt")
 
@@ -35,6 +40,50 @@ def _get_client():
         except Exception as e:
             logger.error(f"Failed to create Gemini client: {e}")
     return _client
+
+
+def _save_debug_prompt(prompt: str, function_name: str, extra_data: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Save prompt to debug file if DEBUG_PROMPTS is enabled.
+    
+    Args:
+        prompt: The prompt text to save
+        function_name: Name of the function making the request
+        extra_data: Additional context data to save
+        
+    Returns:
+        Path to saved file if saved, None if debug disabled
+    """
+    if not DEBUG_PROMPTS:
+        return None
+        
+    try:
+        # Create debug directory if it doesn't exist
+        DEBUG_DIR.mkdir(exist_ok=True)
+        
+        # Generate timestamp for filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]  # milliseconds
+        filename = f"{function_name}_{timestamp}.json"
+        filepath = DEBUG_DIR / filename
+        
+        # Prepare debug data
+        debug_data = {
+            "timestamp": datetime.now().isoformat(),
+            "function": function_name,
+            "prompt": prompt,
+            "prompt_length": len(prompt),
+            "extra_data": extra_data or {}
+        }
+        
+        # Save to file
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(debug_data, f, indent=2, ensure_ascii=False)
+            
+        logger.debug(f"Debug prompt saved: {filepath}")
+        return str(filepath)
+        
+    except Exception as e:
+        logger.warning(f"Failed to save debug prompt: {e}")
+        return None
 
 
 # Pydantic models for structured output (Viral Moments Detection)
@@ -80,8 +129,18 @@ def generate_response(prompt: str, ai_model: str) -> str:
 
     # Force Gemini-only; allow ai_model to be a concrete Gemini model name
     model_name = ai_model or 'gemini-2.0-flash'
+    
+    # Save debug prompt if enabled
+    debug_file = _save_debug_prompt(prompt, "generate_response", {
+        "ai_model": model_name
+    })
+    
     try:
-        logger.info("gemini.generate_response: start", extra={"ai_model": model_name, "prompt_len": len(prompt)})
+        logger.info("gemini.generate_response: start", extra={
+            "ai_model": model_name, 
+            "prompt_len": len(prompt),
+            "debug_file": debug_file
+        })
 
         # Get the client
         client = _get_client()
@@ -117,7 +176,12 @@ def generate_response(prompt: str, ai_model: str) -> str:
     return response or ""
 
 
-def generate_structured_response(prompt: str, ai_model: str, response_schema: type[BaseModel]) -> Dict[str, Any]:
+def generate_structured_response(
+    prompt: str,
+    ai_model: str,
+    response_schema: type[BaseModel],
+    system_instruction: str = None # type: ignore
+) -> Dict[str, Any]:
     """
     Generate a structured response using Gemini with JSON schema validation.
 
@@ -126,8 +190,9 @@ def generate_structured_response(prompt: str, ai_model: str, response_schema: ty
 
     Args:
         prompt: The prompt to send to the AI
-        ai_model: The AI model to use (e.g., 'gemini-2.5-flash')
+        ai_model: The AI model to use (e.g., 'gemini-2.5-pro')
         response_schema: Pydantic BaseModel class defining the expected JSON structure
+        system_instruction: Optional system instruction to guide the AI's behavior
 
     Returns:
         Dictionary containing the validated response data
@@ -136,13 +201,22 @@ def generate_structured_response(prompt: str, ai_model: str, response_schema: ty
         RuntimeError: If client initialization fails or API call fails
         ValidationError: If response doesn't match schema (unlikely with structured outputs)
     """
-    model_name = ai_model or 'gemini-2.5-flash'
+    
+    model_name = ai_model or 'gemini-2.5-pro'
 
+    # Save debug prompt if enabled
+    debug_file = _save_debug_prompt(prompt, "generate_structured_response", {
+        "ai_model": model_name,
+        "schema": response_schema.__name__,
+        "schema_json": response_schema.model_json_schema()
+    })
+    
     try:
         logger.info("gemini.generate_structured_response: start", extra={
             "ai_model": model_name,
             "prompt_len": len(prompt),
-            "schema": response_schema.__name__
+            "schema": response_schema.__name__,
+            "debug_file": debug_file
         })
 
         # Get the client
@@ -150,14 +224,21 @@ def generate_structured_response(prompt: str, ai_model: str, response_schema: ty
         if not client:
             raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
 
+        # Build config dictionary
+        config = {
+            "response_mime_type": "application/json",
+            "response_json_schema": response_schema.model_json_schema(),
+        }
+
+        # Add system instruction if provided
+        if system_instruction:
+            config["system_instruction"] = system_instruction
+
         # Generate content with structured output
         response_model = client.models.generate_content(
             model=model_name,
             contents=prompt,
-            config={
-                "response_mime_type": "application/json",
-                "response_json_schema": response_schema.model_json_schema(),
-            }
+            config=config
         )
 
         # Extract text from response
@@ -253,6 +334,15 @@ def generate_script(video_subject: str, paragraph_number: int, ai_model: str, vo
 
     """
 
+    # Save debug prompt if enabled
+    _save_debug_prompt(prompt, "generate_script", {
+        "video_subject": video_subject,
+        "paragraph_number": paragraph_number,
+        "ai_model": ai_model,
+        "voice": voice,
+        "has_custom_prompt": bool(customPrompt)
+    })
+
     # Generate script
     response = generate_response(prompt, ai_model)
 
@@ -325,6 +415,14 @@ def get_search_terms(video_subject: str, amount: int, script: str, ai_model: str
     For context, here is the full text:
     {script}
     """
+
+    # Save debug prompt if enabled
+    _save_debug_prompt(prompt, "get_search_terms", {
+        "video_subject": video_subject,
+        "amount": amount,
+        "ai_model": ai_model,
+        "script_length": len(script)
+    })
 
     # Generate search terms
     response = generate_response(prompt, ai_model)
@@ -404,6 +502,12 @@ def generate_metadata(video_subject: str, script: str, ai_model: str) -> Tuple[s
     Generate a catchy and SEO-friendly title for a YouTube shorts video about {video_subject}.
     """
 
+    # Save debug prompts if enabled
+    _save_debug_prompt(title_prompt, "generate_metadata_title", {
+        "video_subject": video_subject,
+        "ai_model": ai_model
+    })
+
     # Generate title
     title = generate_response(title_prompt, ai_model).strip()
 
@@ -413,6 +517,13 @@ def generate_metadata(video_subject: str, script: str, ai_model: str) -> Tuple[s
     The video is based on the following script:
     {script}
     """
+
+    # Save debug prompt for description
+    _save_debug_prompt(description_prompt, "generate_metadata_description", {
+        "video_subject": video_subject,
+        "ai_model": ai_model,
+        "script_length": len(script)
+    })
 
     # Generate description
     description = generate_response(description_prompt, ai_model).strip()
@@ -494,9 +605,18 @@ Analyze these {len(frame_images)} thumbnail candidate frames and select the ONE 
 
 Return your selection as JSON."""
 
+        # Save debug prompt if enabled (without base64 image data for readability)
+        _save_debug_prompt(prompt, "select_best_thumbnail_frame", {
+            "ai_model": ai_model,
+            "frame_count": len(frame_images),
+            "viral_context": viral_context,
+            "note": "Image data excluded from debug save for readability"
+        })
+
         # Create content with images
-        # Gemini expects parts array with text and inline_data
-        content_parts = [prompt]
+        # Gemini expects a single content object with parts array
+        from typing import Any, Dict, List, Union
+        content_parts: List[Dict[str, Any]] = [{"text": prompt}]
 
         for i, frame_data in enumerate(frame_images):
             # Extract base64 data from data URI
@@ -505,18 +625,20 @@ Return your selection as JSON."""
                 mime_type, base64_data = frame_data.split(";base64,")
                 mime_type = mime_type.replace("data:", "")
 
-                content_parts.append({
+                # Create inline data part
+                inline_data_part: Dict[str, Any] = {
                     "inline_data": {
                         "mime_type": mime_type,
                         "data": base64_data
                     }
-                })
-                content_parts.append(f"Frame {i}")
+                }
+                content_parts.append(inline_data_part)
+                content_parts.append({"text": f"Frame {i}"})
 
-        # Generate structured response
+        # Generate structured response with proper content structure
         response_model = client.models.generate_content(
             model=ai_model,
-            contents=content_parts,
+            contents=[{"parts": content_parts}],
             config={
                 "response_mime_type": "application/json",
                 "response_json_schema": ThumbnailFrameSelection.model_json_schema(),

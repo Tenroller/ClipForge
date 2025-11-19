@@ -285,7 +285,8 @@ def create_podcastclips_job(youtube_url: str, **kwargs) -> Dict[str, Any]:
         "subtitleColor": kwargs.get("text_color", "#FFFFFF"),
         "subtitleStrokeColor": kwargs.get("stroke_color", "#000000"),
         "subtitleStrokeWidth": kwargs.get("stroke_width", 2),
-        "viralFocusKeywords": kwargs.get("viral_keywords", [])
+        "viralFocusKeywords": kwargs.get("viral_keywords", []),
+        "Debug": kwargs.get("debug", True)
     }
 
 

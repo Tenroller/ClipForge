@@ -74,6 +74,9 @@ export default function PodcastClipsPage() {
   const [prioritizeGuest, setPrioritizeGuest] = useState(false);
   const [showSpeakerSettings, setShowSpeakerSettings] = useState(false);
 
+  // Debug mode
+  const [debugMode, setDebugMode] = useState(false);
+
   // Organize models into categories for better UX (mutually exclusive)
   const organizedModels = useMemo(() => {
     if (!allModels.length) {
@@ -214,6 +217,8 @@ export default function PodcastClipsPage() {
         minSpeakerPercentage,
         requireExchange,
         prioritizeGuest,
+        // Debug mode
+        debugMode,
       };
 
       const data = await generatePodcastClips(payload);
@@ -782,6 +787,46 @@ export default function PodcastClipsPage() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Debug Mode */}
+                <div className="border rounded-lg p-4 space-y-4 bg-gradient-to-br from-orange-50/50 to-red-50/50 dark:from-orange-950/20 dark:to-red-950/20 border-orange-200 dark:border-orange-800/30">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="debugMode">🐛 Debug Mode</Label>
+                        <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
+                          Developer
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Launch interactive Gradio UI for step-by-step visualization, face tracking overlays, and parameter tuning
+                      </p>
+                    </div>
+                    <Switch
+                      id="debugMode"
+                      checked={debugMode}
+                      onCheckedChange={setDebugMode}
+                      disabled={isSubmitting}
+                    />
+                  </div>
+
+                  {debugMode && (
+                    <div className="p-3 bg-orange-100/50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800/30">
+                      <div className="flex items-start gap-2 text-xs text-orange-800 dark:text-orange-200">
+                        <Sparkles className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                        <div className="space-y-1">
+                          <p className="font-semibold">Debug UI will auto-launch at http://localhost:7860</p>
+                          <ul className="list-disc list-inside space-y-0.5 text-orange-700 dark:text-orange-300">
+                            <li>View transcription & speaker timeline</li>
+                            <li>See face tracking with bounding boxes</li>
+                            <li>Inspect AI viral moment analysis</li>
+                            <li>Rerun steps with different parameters</li>
+                          </ul>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>

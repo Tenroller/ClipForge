@@ -56,6 +56,7 @@ psycopg2-binary
 google-genai
 ultralytics
 mediapipe  # For face detection in podcast clips workflow
+toon-format @ git+https://github.com/toon-format/toon-python.git  # Token-efficient serialization for AI contexts
 
 # Enhanced ASR for better word-level timestamps
 stable-ts

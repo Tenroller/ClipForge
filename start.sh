@@ -60,7 +60,7 @@ BACKEND_PID=$!
 echo -e "${GREEN}[Backend]${NC} Started (PID: $BACKEND_PID)"
 
 # Wait a moment for backend to initialize
-sleep 2
+sleep 10
 
 # Start Video Processor (Port 8090)
 echo -e "${MAGENTA}[Video-Processor]${NC} Starting on port 8090..."

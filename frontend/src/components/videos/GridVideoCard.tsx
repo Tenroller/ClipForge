@@ -5,26 +5,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Download, Play, Film, Brain, Video as VideoIcon, Check, Clock, Trash2 } from "lucide-react";
+import { Download, Play, Film, Brain, Video as VideoIcon, Check, Clock, Trash2, TrendingUp, Tag, Star } from "lucide-react";
 import { useState } from 'react';
 import Image from 'next/image';
 import { getThumbnailUrl } from '@/lib/api';
 import { formatDuration } from '@/utils/formatDuration';
-
-export interface Video {
-  id: string;
-  job_id: string;
-  workflow: 'moneyprinter' | 'brainrot' | 'podcastclips';
-  filename: string;
-  file_path?: string;
-  size_bytes: number;
-  created_at: string;
-  duration_seconds?: number;
-  download_url: string;
-  thumbnail_url?: string;
-  posted?: boolean;
-  posted_at?: string;
-}
+import { Video, VideoMetadata } from './VideoCard';
 
 interface GridVideoCardProps {
   video: Video;
@@ -166,15 +152,51 @@ export default function GridVideoCard({
           {/* Title and Workflow Badge */}
           <div className="space-y-2">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold text-sm line-clamp-2 leading-tight flex-1" title={video.filename}>
-                {video.filename}
+              <h3 className="font-semibold text-sm line-clamp-2 leading-tight flex-1" title={video.metadata?.title || video.filename}>
+                {video.metadata?.title || video.filename}
               </h3>
             </div>
-            <Badge variant="outline" className={`text-xs w-fit ${getWorkflowColor()}`}>
-              {getWorkflowIcon()}
-              <span className="ml-1 capitalize">{video.workflow}</span>
-            </Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className={`text-xs w-fit ${getWorkflowColor()}`}>
+                {getWorkflowIcon()}
+                <span className="ml-1 capitalize">{video.workflow}</span>
+              </Badge>
+              {/* Viral Score Badge */}
+              {video.metadata?.viral_score !== undefined && video.metadata.viral_score > 0 && (
+                <Badge
+                  variant={video.metadata.viral_score >= 90 ? "default" : video.metadata.viral_score >= 80 ? "secondary" : "outline"}
+                  className="text-xs"
+                >
+                  <TrendingUp className="size-3 mr-1" />
+                  {video.metadata.viral_score}
+                </Badge>
+              )}
+              {/* Confidence Badge */}
+              {video.metadata?.confidence !== undefined && video.metadata.confidence > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  <Star className="size-3 mr-1" />
+                  {Math.round(video.metadata.confidence * 100)}%
+                </Badge>
+              )}
+            </div>
           </div>
+
+          {/* Tags */}
+          {video.metadata?.tags && video.metadata.tags.length > 0 && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {video.metadata.tags.slice(0, 2).map((tag, idx) => (
+                <Badge key={idx} variant="secondary" className="text-xs">
+                  <Tag className="size-2 mr-1" />
+                  {tag}
+                </Badge>
+              ))}
+              {video.metadata.tags.length > 2 && (
+                <span className="text-xs text-muted-foreground">
+                  +{video.metadata.tags.length - 2}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Metadata */}
           <div className="flex items-center justify-between text-xs text-muted-foreground">

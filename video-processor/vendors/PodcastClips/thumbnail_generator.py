@@ -55,7 +55,8 @@ class ThumbnailGenerator:
         use_red_box: bool = True,
         apply_blur: bool = True,
         blur_intensity: float = 0.3,
-        red_box_config: Optional[dict] = None
+        red_box_config: Optional[dict] = None,
+        crop_style: str = "mid"
     ) -> str:
         """
         Generate thumbnail from video clip.
@@ -71,6 +72,7 @@ class ThumbnailGenerator:
             apply_blur: Whether to apply background blur effect (default: True)
             blur_intensity: Blur/darken intensity (0.0-1.0, default: 0.3)
             red_box_config: Configuration dict for red box (color, opacity, padding, etc.)
+            crop_style: AI-recommended crop style ("close-up", "mid", "wide", "focus-on-person-X")
 
         Returns:
             Path to generated thumbnail
@@ -89,6 +91,9 @@ class ThumbnailGenerator:
 
             # Create PIL Image
             img = Image.fromarray(frame_rgb)
+
+            # Apply AI-recommended cropping before resizing
+            img = self._apply_smart_crop(img, crop_style)
 
             # Resize to target dimensions
             img = img.resize(self.target_size, Image.Resampling.LANCZOS)
@@ -212,6 +217,68 @@ class ThumbnailGenerator:
         score = (sharpness / 1000) + (brightness / 255) + (contrast / 128)
 
         return score
+
+    def _apply_smart_crop(self, img: Image.Image, crop_style: str) -> Image.Image:
+        """
+        Apply AI-recommended cropping to focus on the most important part of the frame.
+
+        Args:
+            img: Input image
+            crop_style: One of "close-up", "mid", "wide", or "focus-on-person-X"
+
+        Returns:
+            Cropped image
+        """
+        width, height = img.size
+
+        # Normalize crop_style
+        crop_style = crop_style.lower() if crop_style else "mid"
+
+        logger.debug(f"Applying crop style: {crop_style}")
+
+        if crop_style == "close-up" or crop_style.startswith("focus-on-person"):
+            # Close-up: Crop to center 60% for tighter framing
+            # Great for emotional reactions and facial expressions
+            crop_factor = 0.6
+            new_width = int(width * crop_factor)
+            new_height = int(height * crop_factor)
+
+            # Center crop
+            left = (width - new_width) // 2
+            top = (height - new_height) // 2
+            right = left + new_width
+            bottom = top + new_height
+
+            img = img.crop((left, top, right, bottom))
+            logger.debug(f"Applied close-up crop: {new_width}x{new_height}")
+
+        elif crop_style == "mid":
+            # Mid shot: Crop to center 80% (slight zoom)
+            # Balanced framing for most content
+            crop_factor = 0.8
+            new_width = int(width * crop_factor)
+            new_height = int(height * crop_factor)
+
+            left = (width - new_width) // 2
+            top = (height - new_height) // 2
+            right = left + new_width
+            bottom = top + new_height
+
+            img = img.crop((left, top, right, bottom))
+            logger.debug(f"Applied mid crop: {new_width}x{new_height}")
+
+        elif crop_style == "wide":
+            # Wide shot: No cropping, keep full frame
+            # Good for showing context or multiple people
+            logger.debug("Keeping wide shot (no crop)")
+            pass
+
+        else:
+            # Unknown crop style, default to mid
+            logger.warning(f"Unknown crop style '{crop_style}', defaulting to mid")
+            return self._apply_smart_crop(img, "mid")
+
+        return img
 
     def _enhance_image(self, img: Image.Image) -> Image.Image:
         """
@@ -513,8 +580,8 @@ class ThumbnailGenerator:
         Returns:
             List of generated thumbnail paths
         """
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
 
         thumbnail_paths = []
 
@@ -525,7 +592,7 @@ class ThumbnailGenerator:
 
             # Generate output path
             video_name = Path(video_path).stem
-            thumbnail_path = output_dir / f"{video_name}_thumbnail.jpg"
+            thumbnail_path = output_path / f"{video_name}_thumbnail.jpg"
 
             try:
                 path = self.generate_thumbnail(

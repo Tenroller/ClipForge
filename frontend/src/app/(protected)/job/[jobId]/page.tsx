@@ -78,6 +78,7 @@ function getInitialSteps(workflow: string) {
       { key: 'initialization', label: 'Initialize', done: false },
       { key: 'download', label: 'Download Video', done: false },
       { key: 'transcription', label: 'Transcribe Audio', done: false },
+      { key: 'speaker_diarization', label: 'Identify Speakers', done: false },
       { key: 'ai_analysis', label: 'AI Analysis', done: false },
       { key: 'scoring', label: 'Score Moments', done: false },
       { key: 'hook_optimization', label: 'Optimize Hooks', done: false },

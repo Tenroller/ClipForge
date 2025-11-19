@@ -5,10 +5,32 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Download, Play, Film, Brain, Video, Check, Clock, Trash2 } from "lucide-react";
+import { Download, Play, Film, Brain, Video, Check, Clock, Trash2, TrendingUp, Tag, Star } from "lucide-react";
 import Image from 'next/image';
 import { getThumbnailUrl } from '@/lib/api';
 import { formatDuration } from '@/utils/formatDuration';
+
+export interface VideoMetadata {
+  title?: string;
+  clip_index?: number;
+  start_time?: number;
+  end_time?: number;
+  optimized_start?: number;
+  optimized_end?: number;
+  cut_padding_before?: number;
+  cut_padding_after?: number;
+  hook?: string;
+  reason?: string;
+  caption?: string;
+  subtitles?: string;
+  notes?: string;
+  viral_score?: number;
+  confidence?: number;
+  engagement_factors?: Record<string, any>;
+  tags?: string[];
+  thumbnail_text?: string;
+  recommended_crop?: string;
+}
 
 export interface Video {
   id: string;
@@ -23,6 +45,7 @@ export interface Video {
   thumbnail_url?: string;
   posted?: boolean;
   posted_at?: string;
+  metadata?: VideoMetadata;
 }
 
 interface VideoCardProps {
@@ -109,10 +132,10 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2 mb-2">
               <div className="flex-1 min-w-0">
-                <h3 className="font-medium truncate" title={video.filename}>
-                  {video.filename}
+                <h3 className="font-medium truncate" title={video.metadata?.title || video.filename}>
+                  {video.metadata?.title || video.filename}
                 </h3>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <Badge variant="outline" className="text-xs">
                     {getWorkflowIcon()}
                     <span className="ml-1">{video.workflow}</span>
@@ -123,7 +146,40 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
                       {t('posted')}
                     </Badge>
                   )}
+                  {/* Viral Score Badge */}
+                  {video.metadata?.viral_score !== undefined && video.metadata.viral_score > 0 && (
+                    <Badge
+                      variant={video.metadata.viral_score >= 90 ? "default" : video.metadata.viral_score >= 80 ? "secondary" : "outline"}
+                      className="text-xs"
+                    >
+                      <TrendingUp className="size-3 mr-1" />
+                      {video.metadata.viral_score}
+                    </Badge>
+                  )}
+                  {/* Confidence Badge */}
+                  {video.metadata?.confidence !== undefined && video.metadata.confidence > 0 && (
+                    <Badge variant="outline" className="text-xs">
+                      <Star className="size-3 mr-1" />
+                      {Math.round(video.metadata.confidence * 100)}%
+                    </Badge>
+                  )}
                 </div>
+                {/* Tags */}
+                {video.metadata?.tags && video.metadata.tags.length > 0 && (
+                  <div className="flex items-center gap-1 mt-2 flex-wrap">
+                    {video.metadata.tags.slice(0, 3).map((tag, idx) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        <Tag className="size-2 mr-1" />
+                        {tag}
+                      </Badge>
+                    ))}
+                    {video.metadata.tags.length > 3 && (
+                      <span className="text-xs text-muted-foreground">
+                        +{video.metadata.tags.length - 3}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -135,9 +191,15 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
               <div>
                 {t('size')} {formatFileSize(video.size_bytes)}
               </div>
-              <div className="col-span-2 truncate">
-                {t('job')} {video.job_id.substring(0, 16)}...
-              </div>
+              {video.metadata?.hook ? (
+                <div className="col-span-2 truncate italic text-xs">
+                  "{video.metadata.hook}"
+                </div>
+              ) : (
+                <div className="col-span-2 truncate">
+                  {t('job')} {video.job_id.substring(0, 16)}...
+                </div>
+              )}
             </div>
 
             {/* Actions */}

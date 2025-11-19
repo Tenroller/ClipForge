@@ -193,6 +193,9 @@ class PodcastClipsRequest(BaseModel):
     thumbnailBoxPosition: str = Field(default="bottom", description="Red box position: 'bottom', 'center', or 'top'")
     thumbnailBoxOpacity: float = Field(default=0.95, ge=0.5, le=1.0, description="Red box opacity (0.5-1.0)")
 
+    # Debug mode options
+    debugMode: bool = Field(default=False, description="Enable debug mode with Gradio UI for step-by-step visualization and parameter tuning")
+
     @field_validator('youtubeUrl')
     @classmethod
     def validate_youtube_url_field(cls, v):

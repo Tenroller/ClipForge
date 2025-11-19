@@ -9,6 +9,9 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
 import os
+import tempfile
+import subprocess
+import time
 
 from loguru import logger as loguru_logger
 
@@ -59,7 +62,8 @@ class SpeakerDiarizer:
         use_auth_token: bool = True,
         min_speakers: Optional[int] = None,
         max_speakers: Optional[int] = None,
-        use_gpu: bool = True
+        use_gpu: bool = True,
+        num_workers: Optional[int] = None
     ):
         """
         Initialize speaker diarizer.
@@ -71,6 +75,8 @@ class SpeakerDiarizer:
             min_speakers: Minimum number of speakers (None = auto-detect)
             max_speakers: Maximum number of speakers (None = auto-detect)
             use_gpu: Whether to use GPU acceleration if available
+            num_workers: Number of CPU workers for parallel processing (None = auto-detect)
+                        Only used when GPU is not available. Default: CPU count / 2
         """
         if not PYANNOTE_AVAILABLE:
             raise ImportError(
@@ -90,9 +96,40 @@ class SpeakerDiarizer:
         self.min_speakers = min_speakers
         self.max_speakers = max_speakers
         self.use_gpu = use_gpu
+
+        # Auto-detect number of workers if not specified
+        if num_workers is None:
+            # Check environment variable first
+            env_workers = os.getenv('SPEAKER_DIARIZATION_NUM_WORKERS')
+            if env_workers:
+                try:
+                    self.num_workers = max(1, int(env_workers))
+                except ValueError:
+                    logger.warning(f"Invalid SPEAKER_DIARIZATION_NUM_WORKERS value: {env_workers}")
+                    import multiprocessing
+                    cpu_count = multiprocessing.cpu_count()
+                    self.num_workers = max(1, cpu_count // 2)
+            else:
+                import multiprocessing
+                cpu_count = multiprocessing.cpu_count()
+                # Use half of available CPUs by default to avoid overwhelming the system
+                self.num_workers = max(1, cpu_count // 2)
+        else:
+            self.num_workers = max(1, num_workers)
+
+        # Check for batch size override from environment
+        self.default_batch_size = None
+        env_batch_size = os.getenv('SPEAKER_DIARIZATION_BATCH_SIZE')
+        if env_batch_size:
+            try:
+                self.default_batch_size = max(1, int(env_batch_size))
+                logger.info(f"Using custom batch size from environment: {self.default_batch_size}")
+            except ValueError:
+                logger.warning(f"Invalid SPEAKER_DIARIZATION_BATCH_SIZE value: {env_batch_size}")
+
         self.pipeline = None
 
-        logger.info("Speaker diarizer initialized")
+        logger.info(f"Speaker diarizer initialized (num_workers={self.num_workers})")
 
     def _load_pipeline(self):
         """Lazy-load the pyannote pipeline."""
@@ -121,7 +158,15 @@ class SpeakerDiarizer:
                 self.pipeline = self.pipeline.to(torch.device("cuda"))
                 logger.info("✓ Using GPU for speaker diarization")
             else:
-                logger.info("Using CPU for speaker diarization")
+                # Configure CPU multi-core processing
+                logger.info(f"Using CPU for speaker diarization with {self.num_workers} workers")
+
+                # Set number of threads for PyTorch operations
+                # This is the recommended way to configure CPU parallelization for pyannote-audio
+                torch.set_num_threads(self.num_workers)
+
+                # Note: pyannote-audio handles internal parallelization automatically
+                # The torch.set_num_threads() call above controls the overall CPU usage
 
             logger.info("✓ Pyannote pipeline loaded successfully")
 
@@ -135,11 +180,63 @@ class SpeakerDiarizer:
                 "3. Set HF_TOKEN environment variable with your HuggingFace token"
             )
 
+    def _preprocess_audio(self, audio_path: str) -> str:
+        """
+        Preprocess audio to ensure compatibility with pyannote.
+
+        Extracts audio to a temporary WAV file with consistent sample rate (16kHz mono).
+        This prevents sample count mismatches that can occur with video files.
+
+        Args:
+            audio_path: Path to audio/video file
+
+        Returns:
+            Path to preprocessed audio file (temporary WAV)
+        """
+        # Create temporary file for preprocessed audio
+        temp_audio = tempfile.NamedTemporaryFile(suffix='.wav', delete=False)
+        temp_audio_path = temp_audio.name
+        temp_audio.close()
+
+        try:
+            # Use ffmpeg to extract audio with consistent parameters
+            # -ar 16000: 16kHz sample rate (standard for speech processing)
+            # -ac 1: mono audio
+            # -acodec pcm_s16le: 16-bit PCM (uncompressed)
+            cmd = [
+                'ffmpeg',
+                '-i', audio_path,
+                '-ar', '16000',
+                '-ac', '1',
+                '-acodec', 'pcm_s16le',
+                '-y',  # Overwrite output file
+                temp_audio_path
+            ]
+
+            # Run ffmpeg silently
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True
+            )
+
+            logger.debug(f"Preprocessed audio: {audio_path} -> {temp_audio_path}")
+            return temp_audio_path
+
+        except subprocess.CalledProcessError as e:
+            # Clean up temp file on error
+            if os.path.exists(temp_audio_path):
+                os.unlink(temp_audio_path)
+            logger.error(f"Audio preprocessing failed: {e.stderr.decode()}")
+            raise RuntimeError(f"Failed to preprocess audio: {e}")
+
     def diarize(
         self,
         audio_path: str,
         min_speakers: Optional[int] = None,
-        max_speakers: Optional[int] = None
+        max_speakers: Optional[int] = None,
+        batch_size: Optional[int] = None
     ) -> List[SpeakerSegment]:
         """
         Perform speaker diarization on an audio file.
@@ -148,6 +245,8 @@ class SpeakerDiarizer:
             audio_path: Path to audio file
             min_speakers: Override minimum number of speakers
             max_speakers: Override maximum number of speakers
+            batch_size: Batch size for processing (higher = faster but more memory)
+                       Default: 32 for CPU, 64 for GPU
 
         Returns:
             List of SpeakerSegment objects with timing and labels
@@ -159,41 +258,111 @@ class SpeakerDiarizer:
 
         logger.info(f"Running speaker diarization on: {audio_path}")
 
-        # Use provided values or fall back to instance values
-        min_spk = min_speakers if min_speakers is not None else self.min_speakers
-        max_spk = max_speakers if max_speakers is not None else self.max_speakers
-
-        # Run diarization
+        # Preprocess audio to ensure compatibility with pyannote
+        preprocessed_audio = None
+        start_time = time.time()
         try:
+            preprocessed_audio = self._preprocess_audio(audio_path)
+
+            # Use provided values or fall back to instance values
+            min_spk = min_speakers if min_speakers is not None else self.min_speakers
+            max_spk = max_speakers if max_speakers is not None else self.max_speakers
+
+            # Set optimal batch size based on device
+            if batch_size is None:
+                # Use environment/instance default if set
+                if self.default_batch_size is not None:
+                    batch_size = self.default_batch_size
+                elif self.use_gpu and torch.cuda.is_available():
+                    batch_size = 64  # Larger batches for GPU
+                else:
+                    batch_size = 32  # Moderate batches for CPU
+
+            # Log processing configuration
+            device = "GPU" if (self.use_gpu and torch.cuda.is_available()) else f"CPU ({self.num_workers} workers)"
+            logger.info(f"Diarization config: device={device}, batch_size={batch_size}, min_speakers={min_spk}, max_speakers={max_spk}")
+
+            # Run diarization on preprocessed audio with optimization parameters
             diarization_params = {}
             if min_spk is not None:
                 diarization_params['min_speakers'] = min_spk
             if max_spk is not None:
                 diarization_params['max_speakers'] = max_spk
 
-            diarization = self.pipeline(audio_path, **diarization_params)
+            # Add batch processing for better throughput
+            # Note: batch_size parameter is supported in newer pyannote versions
+            logger.info("Starting diarization pipeline (this may take a while for long audio)...")
+            pipeline_start = time.time()
+            try:
+                diarization_params['batch_size'] = batch_size
+                diarization = self.pipeline(preprocessed_audio, **diarization_params)
+            except TypeError:
+                # Fallback for older pyannote versions that don't support batch_size
+                diarization_params.pop('batch_size', None)
+                diarization = self.pipeline(preprocessed_audio, **diarization_params)
+
+            pipeline_duration = time.time() - pipeline_start
+            logger.info(f"✓ Pipeline completed in {pipeline_duration:.1f}s")
 
         except Exception as e:
             logger.error(f"Diarization failed: {e}")
             raise RuntimeError(f"Speaker diarization failed: {e}")
 
+        finally:
+            # Clean up temporary preprocessed audio file
+            if preprocessed_audio and os.path.exists(preprocessed_audio):
+                try:
+                    os.unlink(preprocessed_audio)
+                    logger.debug(f"Cleaned up temporary audio: {preprocessed_audio}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to cleanup temp audio: {cleanup_error}")
+
         # Convert pyannote output to SpeakerSegment objects
         segments = []
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
-            segments.append(SpeakerSegment(
-                start_time=turn.start,
-                end_time=turn.end,
-                speaker=speaker
-            ))
+
+        # Handle both pyannote-audio 3.x and 4.x APIs
+        if hasattr(diarization, 'itertracks'):
+            # Version 3.x API - Annotation object with itertracks method
+            for turn, _, speaker in diarization.itertracks(yield_label=True):
+                segments.append(SpeakerSegment(
+                    start_time=turn.start,
+                    end_time=turn.end,
+                    speaker=speaker
+                ))
+        elif hasattr(diarization, 'speaker_diarization'):
+            # Version 4.x API - DiarizeOutput object with speaker_diarization attribute
+            for turn, speaker in diarization.speaker_diarization:
+                segments.append(SpeakerSegment(
+                    start_time=turn.start,
+                    end_time=turn.end,
+                    speaker=speaker
+                ))
+        else:
+            # Unsupported version
+            logger.error(f"Unsupported pyannote-audio API. Diarization object type: {type(diarization)}")
+            logger.error(f"Available attributes: {dir(diarization)}")
+            raise RuntimeError(
+                f"Incompatible pyannote-audio version. "
+                f"Expected object with .itertracks() (v3.x) or .speaker_diarization (v4.x), "
+                f"got {type(diarization).__name__}"
+            )
 
         # Get speaker statistics
         speakers = set(seg.speaker for seg in segments)
         total_duration = sum(seg.duration for seg in segments)
 
+        # Calculate total processing time
+        total_time = time.time() - start_time
+        processing_speed = total_duration / total_time if total_time > 0 else 0
+
         logger.info(
             f"✓ Diarization complete: {len(segments)} segments, "
             f"{len(speakers)} speakers detected, "
             f"{total_duration:.1f}s total speech"
+        )
+        logger.info(
+            f"✓ Processing time: {total_time:.1f}s "
+            f"(speed: {processing_speed:.2f}x realtime)"
         )
 
         # Log speaker breakdown

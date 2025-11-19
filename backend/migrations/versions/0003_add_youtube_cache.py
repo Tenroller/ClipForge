@@ -14,7 +14,7 @@ def upgrade(conn):
             video_id TEXT PRIMARY KEY,
             normalized_url TEXT NOT NULL,
             file_path TEXT NOT NULL,
-            file_size_bytes INTEGER,
+            file_size_bytes BIGINT,
             title TEXT NOT NULL,
             duration_seconds DOUBLE PRECISION,
             width INTEGER,

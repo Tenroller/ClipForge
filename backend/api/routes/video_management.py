@@ -42,18 +42,27 @@ def list_managed_videos(
     offset: int = Query(0, ge=0),
     workflow: Optional[str] = Query(None),
     posted: Optional[bool] = Query(None),
-    job_id: Optional[str] = Query(None)
+    job_id: Optional[str] = Query(None),
+    # New filtering params for AI metadata
+    tags: Optional[str] = Query(None, description="Comma-separated list of tags to filter by"),
+    min_viral_score: Optional[int] = Query(None, ge=0, le=100, description="Minimum viral score"),
+    min_confidence: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence"),
+    search: Optional[str] = Query(None, description="Search in title, hook, caption, and tags"),
+    # Sorting params
+    sort_by: Optional[str] = Query("created_at", description="Sort by: created_at, viral_score, confidence, duration"),
+    sort_order: Optional[str] = Query("desc", description="Sort order: asc or desc")
 ) -> Dict[str, Any]:
     """
-    List videos tracked in the database with filtering options.
-    
+    List videos tracked in the database with filtering and sorting options.
+
     This endpoint returns videos that are properly tracked in the database,
-    as opposed to the legacy endpoint that scans files dynamically.
+    with support for filtering by AI metadata (tags, viral_score, confidence)
+    and sorting by various fields.
     """
     try:
         # Build kwargs and avoid passing None for parameters that expect a str
         _list_kwargs = {
-            "limit": limit,
+            "limit": limit * 2,  # Get more to account for filtering
             "offset": offset,
             "workflow": workflow,
             "posted": posted,
@@ -83,32 +92,88 @@ def list_managed_videos(
             return False
 
         videos = [v for v in videos if is_final_output(v)]
-        
+
+        # Apply AI metadata filters
+        if tags:
+            tag_list = [t.strip() for t in tags.split(",")]
+            videos = [
+                v for v in videos
+                if v.get("metadata", {}).get("tags") and
+                any(tag in v["metadata"]["tags"] for tag in tag_list)
+            ]
+
+        if min_viral_score is not None:
+            videos = [
+                v for v in videos
+                if v.get("metadata", {}).get("viral_score", 0) >= min_viral_score
+            ]
+
+        if min_confidence is not None:
+            videos = [
+                v for v in videos
+                if v.get("metadata", {}).get("confidence", 0.0) >= min_confidence
+            ]
+
+        if search:
+            search_lower = search.lower()
+            videos = [
+                v for v in videos
+                if search_lower in str(v.get("metadata", {}).get("title", "")).lower()
+                or search_lower in str(v.get("metadata", {}).get("hook", "")).lower()
+                or search_lower in str(v.get("metadata", {}).get("caption", "")).lower()
+                or any(search_lower in str(tag).lower() for tag in v.get("metadata", {}).get("tags", []))
+            ]
+
+        # Apply sorting
+        def get_sort_value(video: Dict[str, Any]) -> Any:
+            if sort_by == "viral_score":
+                return video.get("metadata", {}).get("viral_score", 0)
+            elif sort_by == "confidence":
+                return video.get("metadata", {}).get("confidence", 0.0)
+            elif sort_by == "duration":
+                return video.get("duration_seconds", 0) or 0
+            else:  # created_at (default)
+                return video.get("created_at", "")
+
+        reverse_sort = (sort_order.lower() == "desc")
+        videos = sorted(videos, key=get_sort_value, reverse=reverse_sort)
+
+        # Apply limit after filtering
+        videos = videos[:limit]
+
         # Add download URLs and enhance the response
         for video in videos:
             video["download_url"] = f"/api/download?path={video['file_path']}"
-            
+
             # Check if file still exists
             video["file_exists"] = Path(video["file_path"]).exists()
-            
+
             # Add thumbnail URL
             video["thumbnail_url"] = thumbnail_service.get_thumbnail_url(video["file_path"])
-            
+
             # Calculate size in MB for display
             if video.get("size_bytes"):
                 video["size_mb"] = round(video["size_bytes"] / (1024 * 1024), 2)
-        
+
         # Get total count for pagination (approximate)
         total_count = len(videos) if len(videos) < limit else limit + offset + 1
-        
+
         return {
             "videos": videos,
             "total": total_count,
             "offset": offset,
             "limit": limit,
-            "has_more": len(videos) == limit
+            "has_more": len(videos) == limit,
+            "filters_applied": {
+                "tags": tags,
+                "min_viral_score": min_viral_score,
+                "min_confidence": min_confidence,
+                "search": search,
+                "sort_by": sort_by,
+                "sort_order": sort_order
+            }
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to list managed videos: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list videos: {e}")
@@ -147,32 +212,32 @@ def update_video(video_id: str, request: UpdateVideoRequest) -> Dict[str, Any]:
         video = video_service.get_video(video_id)
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
-        
+
         # Prepare update fields
         update_fields = {}
         if request.posted is not None:
             update_fields["posted"] = request.posted
         if request.metadata is not None:
             update_fields["metadata"] = request.metadata
-        
+
         if not update_fields:
             raise HTTPException(status_code=400, detail="No fields to update")
-        
+
         # Update the video
         success = job_store.update_video(video_id, **update_fields)
         if not success:
             raise HTTPException(status_code=500, detail="Failed to update video")
-        
+
         # Mark as posted in video service if needed
         if request.posted:
             video_service.mark_video_posted(video_id)
-        
+
         # Return updated video
         updated_video = video_service.get_video(video_id)
         if not updated_video:
             logger.error(f"Updated video {video_id} not found after update")
             raise HTTPException(status_code=500, detail="Updated video not found")
-        
+
         file_path = updated_video.get("file_path")
         if file_path:
             updated_video["download_url"] = f"/api/download?path={file_path}"
@@ -180,17 +245,68 @@ def update_video(video_id: str, request: UpdateVideoRequest) -> Dict[str, Any]:
         else:
             updated_video["download_url"] = None
             updated_video["file_exists"] = False
-        
+
         if updated_video.get("size_bytes"):
             updated_video["size_mb"] = round(updated_video["size_bytes"] / (1024 * 1024), 2)
-        
+
         return updated_video
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to update video {video_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to update video: {e}")
+
+
+@router.patch("/videos/managed/{video_id}/metadata", summary="Update Video Metadata")
+def update_video_metadata(video_id: str, metadata_updates: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update specific fields in video metadata (AI-generated metadata).
+
+    This endpoint allows partial updates to metadata fields like title, tags, caption, etc.
+    Existing metadata fields not included in the update will be preserved.
+    """
+    try:
+        # Check if video exists
+        video = video_service.get_video(video_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+
+        # Get existing metadata
+        existing_metadata = video.get("metadata", {})
+
+        # Merge updates with existing metadata
+        updated_metadata = {**existing_metadata, **metadata_updates}
+
+        # Update the video with merged metadata
+        success = job_store.update_video(video_id, metadata=updated_metadata)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update video metadata")
+
+        logger.info(f"Updated metadata for video {video_id}: {list(metadata_updates.keys())}")
+
+        # Return updated video
+        updated_video = video_service.get_video(video_id)
+        if not updated_video:
+            raise HTTPException(status_code=500, detail="Updated video not found")
+
+        # Enhance response
+        file_path = updated_video.get("file_path")
+        if file_path:
+            updated_video["download_url"] = f"/api/download?path={file_path}"
+            updated_video["file_exists"] = Path(file_path).exists()
+            updated_video["thumbnail_url"] = thumbnail_service.get_thumbnail_url(file_path)
+
+        if updated_video.get("size_bytes"):
+            updated_video["size_mb"] = round(updated_video["size_bytes"] / (1024 * 1024), 2)
+
+        return updated_video
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update video metadata for {video_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update metadata: {e}")
 
 
 @router.post("/videos/managed/{video_id}/mark-posted", summary="Mark Video as Posted")

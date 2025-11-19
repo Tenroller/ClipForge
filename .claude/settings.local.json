@@ -27,7 +27,12 @@
       "Bash(PGPASSWORD=\"senhalegal\" psql:*)",
       "WebFetch(domain:fonts.gstatic.com)",
       "WebFetch(domain:fonts.googleapis.com)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(if [ -n \"$HF_TOKEN\" ])",
+      "Bash(then echo \"HF_TOKEN is set\")",
+      "Bash(else echo \"HF_TOKEN is not set\")",
+      "Bash(fi)",
+      "Bash(pip install:*)"
     ],
     "deny": [],
     "ask": []

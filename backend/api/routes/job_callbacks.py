@@ -93,7 +93,7 @@ def _auto_register_videos(job_id: str, workflow: Optional[str], result_data: Dic
                 if not video_data:
                     continue
 
-                video_path = video_data.get("path")
+                video_path = video_data.get("path") or video_data.get("output_path")
                 if video_path:
                     # Resolve relative paths (from video-processor)
                     if not Path(video_path).is_absolute():
@@ -103,6 +103,15 @@ def _auto_register_videos(job_id: str, workflow: Optional[str], result_data: Dic
                         absolute_path = Path(video_path)
 
                     if absolute_path.exists():
+                        # Extract AI metadata from video_data if available
+                        ai_metadata = video_data.get("ai_metadata", {})
+
+                        # Build comprehensive metadata for database storage
+                        video_metadata = {
+                            "auto_registered": True,
+                            **ai_metadata  # Include all AI-generated metadata
+                        }
+
                         video_service.register_video(
                             job_id=job_id,
                             file_path=str(absolute_path),
@@ -110,9 +119,15 @@ def _auto_register_videos(job_id: str, workflow: Optional[str], result_data: Dic
                             video_type="podcast_clip",
                             compilation_type=video_data.get("compilation_type"),
                             compilation_num=video_data.get("compilation_num"),
-                            metadata={"auto_registered": True}
+                            metadata=video_metadata
                         )
                         registered_count += 1
+
+                        # Log metadata inclusion
+                        if ai_metadata:
+                            logger.debug(f"Registered video with AI metadata: title={ai_metadata.get('title', 'N/A')}, "
+                                       f"viral_score={ai_metadata.get('viral_score', 0)}, "
+                                       f"tags={ai_metadata.get('tags', [])}")
 
             if registered_count > 0:
                 logger.info(f"Auto-registered {registered_count} PodcastClips videos for job {job_id}")

@@ -7,7 +7,7 @@ and determines when to switch between face-tracking vertical mode and horizontal
 
 import cv2
 import numpy as np
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
 from loguru import logger as loguru_logger
@@ -19,7 +19,7 @@ except ImportError:
     HAS_OCR = False
     loguru_logger.warning("pytesseract not available - OCR-based content detection disabled")
 
-from .face_tracker import FaceBox
+from .face_tracker import FaceBox, FaceTracker
 
 logger = loguru_logger.bind(name="PodcastClips.content_detector")
 
@@ -101,7 +101,7 @@ class ContentModeDetector:
         fps: float,
         start_time: float = 0.0,
         end_time: Optional[float] = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> List[ContentSegment]:
         """
         Analyze video to determine content mode segments.
@@ -165,7 +165,7 @@ class ContentModeDetector:
         face_positions: Dict[float, FaceBox],
         video_width: int,
         video_height: int,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> Dict[float, float]:
         """
         Analyze ALL frames for content presence (not just face-loss frames).
@@ -294,7 +294,12 @@ class ContentModeDetector:
         for i, timestamp in enumerate(all_timestamps):
             # Get content score and face info for this timestamp
             content_score = content_scores.get(timestamp, 0.0)
-            face_box = face_positions.get(timestamp)
+
+            # Use face tracker's persistence method if available for better wide shot handling
+            if self.face_tracker and hasattr(self.face_tracker, 'get_face_position_with_persistence'):
+                face_box = self.face_tracker.get_face_position_with_persistence(timestamp, persistence_window=2.0)
+            else:
+                face_box = face_positions.get(timestamp)
 
             # Calculate face area ratio if face present
             face_area_ratio = 0.0
@@ -304,6 +309,38 @@ class ContentModeDetector:
             # Determine mode based on content-first logic, with split-screen detection
             should_be_horizontal = False
             should_be_split_screen = False
+
+            # PRIORITY -1: Check diarization - if someone is speaking, ALWAYS use face mode
+            # This is the highest priority check because diarization KNOWS who is talking
+            diarization_speaker = None
+            if (self.face_tracker and
+                hasattr(self.face_tracker, 'diarization_segments') and
+                self.face_tracker.diarization_segments and
+                hasattr(self.face_tracker, 'speaker_to_face_map') and
+                self.face_tracker.speaker_to_face_map):
+                diarization_speaker = self.face_tracker.get_speaker_at_time(timestamp)
+                if diarization_speaker:
+                    # Diarization says someone is speaking - stay in FACE mode
+                    should_be_horizontal = False
+                    face_id = self.face_tracker.speaker_to_face_map.get(diarization_speaker, "?")
+                    logger.debug(
+                        f"[{timestamp:.1f}s] Diarization override: {diarization_speaker} -> Face {face_id} → FACE"
+                    )
+                    # Skip all other checks - diarization is authoritative
+                    target_mode = ContentMode.FACE
+
+                    # Check if mode changed
+                    if target_mode != current_mode:
+                        if timestamp > segment_start:
+                            confidence = self._calculate_segment_confidence(
+                                content_scores, segment_start, timestamp
+                            )
+                            segments.append(ContentSegment(
+                                segment_start, timestamp, current_mode, confidence
+                            ))
+                        segment_start = timestamp
+                        current_mode = target_mode
+                    continue  # Skip to next timestamp
 
             # PRIORITY 0: Check for extreme content (overrides everything)
             if content_score > 0.7:
@@ -338,10 +375,26 @@ class ContentModeDetector:
                     should_be_horizontal = False
                     logger.debug(f"[{timestamp:.1f}s] Low content ({content_score:.2f}) + face → FACE")
                 else:
-                    # No face, low content → could be transition, check context
-                    # Look ahead/behind for pattern
-                    should_be_horizontal = current_mode == ContentMode.HORIZONTAL
-                    logger.debug(f"[{timestamp:.1f}s] Low content, no face → maintain {current_mode.value}")
+                    # No face, low content → check speech activity
+                    # If speech is active, someone is talking - prefer face mode
+                    is_speech_active = False
+                    if (self.face_tracker and
+                        hasattr(self.face_tracker, 'speaker_detector') and
+                        self.face_tracker.speaker_detector and
+                        self.face_tracker.speech_segments):
+                        is_speech, energy = self.face_tracker.speaker_detector.is_speech_at_time(
+                            timestamp, self.face_tracker.speech_segments, min_confidence=0.3
+                        )
+                        is_speech_active = is_speech and energy > 5.0
+
+                    if is_speech_active:
+                        # Speech active → prefer face mode even without detected face
+                        should_be_horizontal = False
+                        logger.debug(f"[{timestamp:.1f}s] Low content, no face but speech active → FACE")
+                    else:
+                        # No face, no speech, low content → maintain current mode
+                        should_be_horizontal = current_mode == ContentMode.HORIZONTAL
+                        logger.debug(f"[{timestamp:.1f}s] Low content, no face, no speech → maintain {current_mode.value}")
 
             else:
                 # Medium content score (0.3-0.6) → check face size
@@ -355,9 +408,26 @@ class ContentModeDetector:
                         should_be_horizontal = False
                         logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}) + large face ({face_area_ratio*100:.1f}%) → FACE")
                 else:
-                    # No face, medium content → horizontal mode
-                    should_be_horizontal = True
-                    logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}), no face → HORIZONTAL")
+                    # No face, medium content → check speech activity before deciding
+                    # If speech is active, someone is probably talking - stay in face mode
+                    is_speech_active = False
+                    if (self.face_tracker and
+                        hasattr(self.face_tracker, 'speaker_detector') and
+                        self.face_tracker.speaker_detector and
+                        self.face_tracker.speech_segments):
+                        is_speech, energy = self.face_tracker.speaker_detector.is_speech_at_time(
+                            timestamp, self.face_tracker.speech_segments, min_confidence=0.3
+                        )
+                        is_speech_active = is_speech and energy > 5.0  # Require some energy
+
+                    if is_speech_active:
+                        # Speech active but no face detected → stay in face mode (wide shot scenario)
+                        should_be_horizontal = False
+                        logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}), no face but speech active → FACE")
+                    else:
+                        # No face, no speech, medium content → horizontal mode
+                        should_be_horizontal = True
+                        logger.debug(f"[{timestamp:.1f}s] Medium content ({content_score:.2f}), no face, no speech → HORIZONTAL")
 
             # Determine target mode
             if should_be_horizontal:
@@ -421,14 +491,14 @@ class ContentModeDetector:
             return 0.7  # Default moderate confidence
 
         # High consistency = high confidence
-        avg_score = np.mean(scores_in_range)
-        std_score = np.std(scores_in_range) if len(scores_in_range) > 1 else 0.0
+        avg_score = float(np.mean(scores_in_range))
+        std_score = float(np.std(scores_in_range)) if len(scores_in_range) > 1 else 0.0
 
         # Low standard deviation = consistent signal = high confidence
         consistency_score = 1.0 - min(std_score, 0.3) / 0.3
         confidence = 0.5 + (consistency_score * 0.5)
 
-        return min(1.0, max(0.5, confidence))
+        return float(min(1.0, max(0.5, confidence)))
 
     def _create_face_detection_timeline(
         self,
@@ -524,7 +594,7 @@ class ContentModeDetector:
         video_path: str,
         segments: List[ContentSegment],
         fps: float,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> Dict[float, float]:
         """
         Analyze frames for content indicators (text, UI elements, etc.).
@@ -616,7 +686,7 @@ class ContentModeDetector:
         if not scores:
             return 0.5
 
-        final_score = np.mean(scores)
+        final_score = float(np.mean(scores))
         return min(1.0, max(0.0, final_score))
 
     def _detect_text_density(self, frame: np.ndarray) -> float:
@@ -635,12 +705,25 @@ class ContentModeDetector:
         try:
             # Downscale frame for faster OCR if needed
             original_height = frame.shape[0]
+            original_width = frame.shape[1]
+
+            # Validate frame dimensions
+            MIN_DIMENSION = 10
+            if original_height == 0 or original_width == 0 or original_height < MIN_DIMENSION or original_width < MIN_DIMENSION:
+                logger.warning(f"Frame has invalid dimensions for OCR: {frame.shape}. Skipping OCR.")
+                return 0.0
+
             if original_height > self.ocr_height:
                 scale_factor = self.ocr_height / original_height
-                ocr_width = int(frame.shape[1] * scale_factor)
+                ocr_width = int(original_width * scale_factor)
+
+                # Ensure minimum dimensions to prevent cv2.resize broadcast errors
+                ocr_width = max(MIN_DIMENSION, ocr_width)
+                ocr_height_final = max(MIN_DIMENSION, self.ocr_height)
+
                 frame = cv2.resize(
                     frame,
-                    (ocr_width, self.ocr_height),
+                    (ocr_width, ocr_height_final),
                     interpolation=cv2.INTER_AREA  # Best for downscaling
                 )
 
@@ -743,7 +826,7 @@ class ContentModeDetector:
         elif mean_saturation < 0.1:
             return 1.0
         else:
-            return (0.3 - mean_saturation) / 0.2
+            return float((0.3 - mean_saturation) / 0.2)
 
     def _refine_timeline_with_content(
         self,
@@ -792,9 +875,9 @@ class ContentModeDetector:
 
             # Update confidence based on content score alignment
             if segment.mode == ContentMode.HORIZONTAL:
-                segment.confidence = min(1.0, avg_score + 0.3)
+                segment.confidence = float(min(1.0, avg_score + 0.3))
             else:
-                segment.confidence = min(1.0, (1.0 - avg_score) + 0.3)
+                segment.confidence = float(min(1.0, (1.0 - avg_score) + 0.3))
 
             refined.append(segment)
 

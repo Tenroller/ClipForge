@@ -127,9 +127,9 @@ class SpeakerDetector:
             segment_offset = start_time or 0.0
 
         if self.use_vad:
-            segments = self._detect_with_vad(y, sample_rate)
+            segments = self._detect_with_vad(y, int(sample_rate))
         else:
-            segments = self._detect_with_energy(y, sample_rate)
+            segments = self._detect_with_energy(y, int(sample_rate))
 
         # Filter out very short segments
         filtered_segments = [
@@ -269,6 +269,10 @@ class SpeakerDetector:
         Returns:
             List of detected speech segments
         """
+        if self.vad is None:
+            self.logger.warning("VAD not available, falling back to energy-based detection")
+            return self._detect_with_energy(y, sr)
+
         # WebRTC VAD requires 16kHz, 16-bit PCM
         target_sr = 16000
         if sr != target_sr:

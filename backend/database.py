@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, List, Union
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine, Column, String, Text, Integer, TIMESTAMP, JSON, Index, func, Boolean, Float, text, ARRAY
+from sqlalchemy import create_engine, Column, String, Text, Integer, BigInteger, TIMESTAMP, JSON, Index, func, Boolean, Float, text, ARRAY
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from sqlalchemy.pool import QueuePool
@@ -137,7 +137,7 @@ class YouTubeVideo(Base):
 
     # File storage
     file_path = Column(Text, nullable=False)  # Path to cached video
-    file_size_bytes = Column(Integer)
+    file_size_bytes = Column(BigInteger)
 
     # Video metadata
     title = Column(String, nullable=False)

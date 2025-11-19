@@ -271,13 +271,21 @@ class SubtitleGenerator:
                     try:
                         # For current word, create without stroke to go on top of background
                         # For other words, use normal stroke
+                        # Estimate width based on word length (rough estimate: 0.7 * font_size per char)
+                        # This ensures both dimensions are specified when using method='caption'
+                        estimated_width = int(len(word) * self.font_size * 0.7) + 40  # +40px padding
+                        estimated_height = int(self.font_size * 2.5)  # Generous height for text + stroke + descenders
+
                         txt_clip = TextClip(
                             text=word,
                             font_size=self.font_size,
                             color=self.color,
                             stroke_color=self.stroke_color if not is_current else None,
                             stroke_width=self.stroke_width if not is_current else 0,
-                            font=font_choice
+                            font=font_choice,
+                            method='caption',  # Ensures proper text centering within size
+                            size=(estimated_width, estimated_height),  # Both dimensions required for caption method
+                            text_align='center'
                         )
 
                         if txt_clip and txt_clip.w > 0 and txt_clip.h > 0:
@@ -342,7 +350,7 @@ class SubtitleGenerator:
             if highlighted_clip_info and current_word_clip:
                 # Make padding proportional to font size for better scaling
                 padding_x = max(40, int(self.font_size * 0.5))  # 50% of font size, minimum 40px
-                padding_y = max(20, int(self.font_size * 0.3))  # 30% of font size, minimum 20px
+                padding_y = max(30, int(self.font_size * 0.5))  # 50% of font size, minimum 30px (increased to prevent clipping)
                 box_width = highlighted_clip_info['width'] + 2 * padding_x
                 box_height = highlighted_clip_info['height'] + 2 * padding_y
 
@@ -414,6 +422,10 @@ class SubtitleGenerator:
             for font_choice in font_choices:
                 try:
                     # Create text clip with stroke
+                    # Both width and height must be specified when using method='caption'
+                    clip_width = video_width - 100  # 50px padding on each side
+                    clip_height = int(self.font_size * 3)  # Generous height for multi-line text
+
                     txt_clip = TextClip(
                         text=segment.text,
                         font_size=self.font_size,
@@ -422,7 +434,7 @@ class SubtitleGenerator:
                         stroke_width=self.stroke_width,
                         font=font_choice,
                         method='caption',
-                        size=(video_width - 100, None),  # 50px padding on each side
+                        size=(clip_width, clip_height),  # Both dimensions required for caption method
                         text_align='center'
                     )
 

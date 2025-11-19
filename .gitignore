@@ -81,3 +81,6 @@ backend/migrations/__pycache__/__init__.cpython-310.pyc
 /video-processor/vendors/PodcastClips/__pycache__
 /video-processor/src/__pycache__
 /video-processor/src/api/__pycache__
+video-processor/vendors/PodcastClips/test.webm
+*.mp4
+*.webm
