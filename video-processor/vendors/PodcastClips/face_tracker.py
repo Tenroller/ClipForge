@@ -1,5 +1,5 @@
 """
-Face tracking module using MediaPipe for intelligent person-focused cropping.
+Face tracking module using OpenCV for intelligent person-focused cropping.
 """
 
 import cv2
@@ -11,29 +11,99 @@ from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
 import os
 import sys
-from .face_tracker_filters import OneEuroFilter, smooth_trajectory_with_one_euro
+from .face_tracker_filters import smooth_trajectory_with_one_euro
 
-# Make MediaPipe optional
-try:
-    import mediapipe as mp
-    MEDIAPIPE_AVAILABLE = True
-except ImportError:
-    MEDIAPIPE_AVAILABLE = False
-    mp = None
+# =============================================================================
+# CONFIGURATION PARAMETERS - Adjust these values to tune face tracking behavior
+# =============================================================================
+
+# Face Detection Parameters
+# -------------------------
+# Minimum face size as ratio of frame area (0.002-0.1)
+# Faces smaller than this are filtered out (background/audience members)
+# Default: 0.008 (0.8% of frame) - filters small background faces
+MIN_FACE_SIZE_RATIO = 0.02
+
+# Maximum number of faces to track simultaneously (1-8)
+# 1: Track only largest face (simplest)
+# 2-4: Track main subjects (recommended for podcasts with multiple speakers)
+MAX_TRACKED_FACES = 2
+
+# Minimum frames required to keep a face track (avoids tracking false detections)
+# Lower value = more sensitive to brief appearances
+# Higher value = only tracks faces that appear consistently
+MIN_TRACK_FRAMES = 10
+
+# Minimum average confidence for a face track to be kept (0-1)
+# Lower value = more lenient, may include uncertain detections
+# Higher value = stricter, only high-confidence tracks
+MIN_AVG_CONFIDENCE = 0.4
+
+# IoU (Intersection over Union) threshold for NMS (Non-Maximum Suppression)
+# Lower value = stricter duplicate removal (fewer duplicates)
+# Higher value = more lenient (may keep some duplicates)
+NMS_IOU_THRESHOLD = 0.3
+
+# Maximum velocity for face movement tracking (as fraction of frame width)
+# Lower value = stricter association, prevents ID switching
+# Higher value = more lenient, allows faster movement
+MAX_FACE_VELOCITY = 0.4
+
+# Speaker Detection Parameters
+# ----------------------------
+# Speaker switching debounce time (seconds)
+# Prevents rapid switching between speakers
+SPEAKER_SWITCH_DEBOUNCE = 0.3
+
+# Speaker switching hysteresis (0-1)
+# Margin required before switching to a different speaker
+# Higher value = more stable (fewer switches)
+SPEAKER_SWITCH_HYSTERESIS = 0.3
+
+# Face separation threshold for split-screen detection (0-1)
+# Fraction of frame width required to consider faces "separated"
+# Higher value = stricter (only very separated faces trigger split-screen)
+FACE_SEPARATION_THRESHOLD = 0.7
+
+# Face persistence window (seconds)
+# How long to persist last known face position during temporary gaps
+# Prevents false switches during wide shots or occlusions
+FACE_PERSISTENCE_WINDOW = 2.0
+
+# Smoothing Parameters
+# --------------------
+# Default smoothing window for crop box calculation (seconds)
+# Larger value = smoother but slower to respond to movement
+SMOOTHING_WINDOW = 1.5
+
+# Reduced smoothing window near mode transitions (seconds)
+# Prevents jitter when switching between vertical/horizontal modes
+TRANSITION_SMOOTHING_WINDOW = 1
+
+# Face aspect ratio validation range (height/width)
+# Real human faces typically have ratios between 0.75 and 1.5
+# Filters out false detections like logos, text, rectangular objects
+MIN_FACE_ASPECT_RATIO = 0.75
+MAX_FACE_ASPECT_RATIO = 1.5
+
+# =============================================================================
+# END CONFIGURATION PARAMETERS
+# =============================================================================
 
 # Import speaker diarization for speaker-to-face mapping
 try:
-    from .speaker_diarization import SpeakerDiarizer, SpeakerSegment, is_speaker_diarization_available
+    from .speaker_diarization import SpeakerDiarizer, is_speaker_diarization_available
     SPEAKER_DIARIZATION_AVAILABLE = is_speaker_diarization_available()
 except ImportError:
     SPEAKER_DIARIZATION_AVAILABLE = False
 
-# Import OpenCV YuNet face detector as alternative backend
+# Import OpenCV YuNet face detector (primary and only backend)
 try:
     from .face_detector_opencv import OpenCVFaceDetector, is_opencv_face_detection_available
     OPENCV_FACE_DETECTION_AVAILABLE = is_opencv_face_detection_available()
 except ImportError:
     OPENCV_FACE_DETECTION_AVAILABLE = False
+    raise ImportError("OpenCV face detection is required but not available")
 
 # Import new enhancement modules
 try:
@@ -127,7 +197,7 @@ class FaceBox:
             True if aspect ratio is within valid range, False otherwise
         """
         ratio = self.aspect_ratio
-        return 0.75 <= ratio <= 1.5
+        return MIN_FACE_ASPECT_RATIO <= ratio <= MAX_FACE_ASPECT_RATIO
 
 
 @dataclass
@@ -186,7 +256,7 @@ class CropBox:
 
 class FaceTracker:
     """
-    Face tracking using MediaPipe Face Detection.
+    Face tracking using OpenCV YuNet Face Detection.
 
     Analyzes video frames to detect faces and provides optimal crop boxes
     for converting horizontal podcast videos to 9:16 vertical format while
@@ -198,12 +268,11 @@ class FaceTracker:
         use_gpu: bool = True,
         detection_height: int = 0,  # 0 = adaptive (use video resolution), otherwise fixed height
         batch_size: int = 4,
-        min_face_size_ratio: float = 0.004,  # Reduced to 0.4%: allows detection of smaller faces (~100x100 px @ 1080p)
-        max_tracked_faces: int = 4,
+        min_face_size_ratio: Optional[float] = None,  # Optional override for MIN_FACE_SIZE_RATIO
+        max_tracked_faces: Optional[int] = None,  # Optional override for MAX_TRACKED_FACES
         enable_speaker_detection: bool = False,
         enable_lip_detection: bool = False,
-        # Face detection backend selection
-        detector_backend: str = "mediapipe",  # "mediapipe" or "opencv"
+        detector_backend: str = "opencv",  
         # New enhancement features
         enable_face_recognition: bool = False,
         enable_gaze_detection: bool = False,
@@ -214,7 +283,7 @@ class FaceTracker:
         cache_dir: str = ".face_detection_cache"
     ):
         """
-        Initialize face tracker with MediaPipe.
+        Initialize face tracker with OpenCV.
 
         Args:
             use_gpu: Whether to prefer GPU acceleration (will fallback to CPU if GPU unavailable)
@@ -223,21 +292,15 @@ class FaceTracker:
                              - 1080: No downscaling for 1080p videos
                              - 720: Balanced (2-3x faster, minimal accuracy loss)
                              - 480: Fast (4-5x faster, good for simple podcasts)
-            batch_size: Number of frames to process per MediaPipe batch (1-8)
+            batch_size: Number of frames to process per batch (1-8)
                        - 1: No batching (simple, works on CPU)
                        - 4: Balanced batching (recommended for GPU) - DEFAULT
                        - 8: Aggressive batching (best GPU utilization)
-            min_face_size_ratio: Minimum face size as ratio of frame area (0.002-0.1)
-                                Faces smaller than this are filtered out (background/audience members)
-                                Default: 0.015 (1.5% of frame) - filters small background faces
-            max_tracked_faces: Maximum number of faces to track (1-8)
-                              - 1: Track only largest face (legacy behavior)
-                              - 2-4: Track main subjects (recommended for podcasts)
+            min_face_size_ratio: Optional override for MIN_FACE_SIZE_RATIO constant
+            max_tracked_faces: Optional override for MAX_TRACKED_FACES constant
             enable_speaker_detection: Enable audio-based speaker detection
-            enable_lip_detection: Enable lip movement detection with MediaPipe Face Mesh
-            detector_backend: Face detection backend to use
-                             - "mediapipe": MediaPipe BlazeFace (fast, good for close-up)
-                             - "opencv": OpenCV YuNet (better for small faces in wide shots)
+            enable_lip_detection: Deprecated (MediaPipe removed), kept for compatibility
+            detector_backend: Deprecated (only OpenCV now), kept for compatibility
             enable_face_recognition: Enable InsightFace embeddings for persistent identity (NEW)
             enable_gaze_detection: Enable iris-based gaze direction detection (NEW)
             enable_av_fusion: Enable audio-visual fusion for improved speaker detection (NEW)
@@ -246,15 +309,22 @@ class FaceTracker:
             enable_quality_metrics: Enable tracking quality metrics computation (NEW)
             cache_dir: Directory for face detection cache
         """
+        
+        # Warn about deprecated parameters
+        if enable_lip_detection:
+            logger.warning("enable_lip_detection is deprecated (MediaPipe removed). Ignoring.")
+        if detector_backend != "opencv":
+            logger.warning(f"detector_backend='{detector_backend}' is deprecated. Only OpenCV is supported now.")
+        
         self.use_gpu_requested = use_gpu
         self.use_gpu_actual = False  # Will be set based on GPU manager decision
         self.detection_height = detection_height
         self.batch_size = max(1, min(8, batch_size))  # Clamp to 1-8 range
-        self.min_face_size_ratio = max(0.001, min(0.1, min_face_size_ratio))  # Balanced size threshold
-        self.max_tracked_faces = max(1, min(8, max_tracked_faces))
+        
+        # Use provided values or fall back to configuration constants
+        self.min_face_size_ratio = min_face_size_ratio if min_face_size_ratio is not None else MIN_FACE_SIZE_RATIO
+        self.max_tracked_faces = max_tracked_faces if max_tracked_faces is not None else MAX_TRACKED_FACES
         self.enable_speaker_detection = enable_speaker_detection
-        self.enable_lip_detection = enable_lip_detection
-        self.detector_backend = detector_backend.lower()
 
         # Make intelligent GPU decision using GPU manager
         if use_gpu and GPU_MANAGER_AVAILABLE:
@@ -284,65 +354,21 @@ class FaceTracker:
                 logger.info("→ GPU manager not available, MediaPipe will auto-detect GPU")
                 self.use_gpu_actual = use_gpu  # Let MediaPipe handle it
 
-        # Initialize face detection backend
-        self.opencv_detector = None
-        self.face_detection = None
-
-        if self.detector_backend == "opencv":
-            # Initialize OpenCV YuNet face detector
-            if OPENCV_FACE_DETECTION_AVAILABLE:
-                try:
-                    self.opencv_detector = OpenCVFaceDetector(
-                        conf_threshold=0.5,  # Increased to 0.5: filter low-confidence false positives
-                        nms_threshold=0.3,
-                        model_dir=cache_dir
-                    )
-                    logger.info("✓ Using OpenCV YuNet face detector (better for small faces)")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize OpenCV detector, falling back to MediaPipe: {e}")
-                    self.detector_backend = "mediapipe"
-            else:
-                logger.warning("OpenCV FaceDetectorYN not available, falling back to MediaPipe")
-                self.detector_backend = "mediapipe"
-
-        if self.detector_backend == "mediapipe":
-            # Check if MediaPipe is available
-            if not MEDIAPIPE_AVAILABLE:
-                raise ImportError(
-                    "MediaPipe is not available. Install it with: pip install mediapipe\n"
-                    "Or use the OpenCV backend with: detector_backend='opencv'"
-                )
-                
-            # Initialize MediaPipe Face Detection
-            # Note: MediaPipe automatically uses GPU when available through its delegate system
-            mp_face_detection = mp.solutions.face_detection
-            self.face_detection = mp_face_detection.FaceDetection(
-                model_selection=1,  # 1 = full range model (better for podcasts), 0 = short range
-                min_detection_confidence=0.5  # Increased to 0.5: filter low-confidence false positives
+        # Initialize OpenCV YuNet face detector (only backend)
+        if not OPENCV_FACE_DETECTION_AVAILABLE:
+            raise RuntimeError("OpenCV face detection is required but not available")
+        
+        try:
+            logger.info("Initializing OpenCV YuNet face detector...")
+            self.opencv_detector = OpenCVFaceDetector(
+                conf_threshold=0.5,
+                nms_threshold=NMS_IOU_THRESHOLD,
+                model_dir=cache_dir
             )
-            logger.info("✓ Using MediaPipe BlazeFace face detector")
-
-        # Initialize MediaPipe Face Mesh for lip detection (if enabled)
-        self.face_mesh = None
-        if self.enable_lip_detection:
-            if not MEDIAPIPE_AVAILABLE:
-                logger.warning("Lip detection requires MediaPipe which is not available. Disabling lip detection.")
-                self.enable_lip_detection = False
-            else:
-                try:
-                    mp_face_mesh = mp.solutions.face_mesh
-                    self.face_mesh = mp_face_mesh.FaceMesh(
-                        static_image_mode=False,
-                        max_num_faces=self.max_tracked_faces,
-                        refine_landmarks=True,  # Enables iris and lip landmarks
-                        min_detection_confidence=0.5,
-                        min_tracking_confidence=0.5
-                    )
-                    logger.info("Lip detection enabled with MediaPipe Face Mesh")
-                except Exception as e:
-                    logger.warning(f"Failed to initialize Face Mesh for lip detection: {e}")
-                    self.enable_lip_detection = False
-                    self.face_mesh = None
+            logger.info("✓ Using OpenCV YuNet face detector")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenCV detector: {e}")
+            raise RuntimeError(f"OpenCV detector initialization failed: {e}")
 
         # Storage for detected face positions over time
         self.face_positions: Dict[float, FaceBox] = {}  # Legacy: single face per timestamp
@@ -365,11 +391,11 @@ class FaceTracker:
         else:
             self.speaker_detector = None
 
-        # Speaker switching hysteresis state
+        # Speaker switching hysteresis state (uses config constants)
         self.current_active_speaker_id: Optional[int] = None
         self.last_speaker_switch_time: float = 0.0
-        self.speaker_switch_debounce: float = 0.2  # 200ms debounce
-        self.speaker_switch_hysteresis: float = 0.15  # 15% confidence margin
+        self.speaker_switch_debounce: float = SPEAKER_SWITCH_DEBOUNCE
+        self.speaker_switch_hysteresis: float = SPEAKER_SWITCH_HYSTERESIS
 
         # Speaker diarization integration
         self.diarization_segments: List = []  # List of SpeakerSegment objects
@@ -402,24 +428,7 @@ class FaceTracker:
             self.face_recognition = None
             if enable_face_recognition and not FACE_RECOGNITION_AVAILABLE:
                 logger.warning("Face recognition requested but module not available")
-
-        # Gaze detector
-        if self.enable_gaze_detection and GAZE_DETECTION_AVAILABLE and self.face_mesh:
-            try:
-                self.gaze_detector = GazeDetector(
-                    camera_threshold=10.0,
-                    offscreen_threshold=25.0
-                )
-                logger.info("Gaze detection enabled")
-            except Exception as e:
-                logger.warning(f"Failed to initialize gaze detector: {e}")
-                self.gaze_detector = None
-                self.enable_gaze_detection = False
-        else:
-            self.gaze_detector = None
-            if enable_gaze_detection and not GAZE_DETECTION_AVAILABLE:
-                logger.warning("Gaze detection requested but module not available")
-
+                
         # Audio-visual fusion
         if self.enable_av_fusion and AUDIO_VISUAL_FUSION_AVAILABLE:
             try:
@@ -689,112 +698,61 @@ class FaceTracker:
         return priority_score
 
     @staticmethod
-    def _apply_nms(faces: List[FaceBox], iou_threshold: float = 0.3) -> List[FaceBox]:
+    def _apply_nms(faces: List[FaceBox], iou_threshold: float = NMS_IOU_THRESHOLD) -> List[FaceBox]:
         """
         Apply Non-Maximum Suppression to remove overlapping face detections.
-
-        Keeps the detection with highest confidence when multiple detections overlap.
-        This prevents multiple IDs being assigned to the same face.
-
-        Args:
-            faces: List of detected face boxes
-            iou_threshold: IoU threshold for considering boxes as overlapping (default: 0.3)
-
-        Returns:
-            Filtered list of face boxes with overlaps removed
+        
+        Uses configurable IoU threshold for stricter duplicate removal.
+        Groups overlapping faces and selects the best from each group.
         """
         if len(faces) <= 1:
             return faces
 
-        # Sort by confidence (highest first)
-        sorted_faces = sorted(faces, key=lambda f: f.confidence, reverse=True)
-
-        kept_faces = []
-        suppressed_indices = set()
-
-        for i, face_i in enumerate(sorted_faces):
-            if i in suppressed_indices:
+        # Group overlapping faces first
+        face_groups = []
+        processed = set()
+        
+        for i, face_i in enumerate(faces):
+            if i in processed:
                 continue
-
-            # Keep this face
-            kept_faces.append(face_i)
-
-            # Suppress overlapping faces with lower confidence
-            for j in range(i + 1, len(sorted_faces)):
-                if j in suppressed_indices:
+                
+            # Start a new group with this face
+            group = [face_i]
+            processed.add(i)
+            
+            # Find all faces that overlap with any face in this group
+            for j in range(i + 1, len(faces)):
+                if j in processed:
                     continue
+                    
+                face_j = faces[j]
+                
+                # Check if face_j overlaps with any face in the current group
+                for group_face in group:
+                    iou = FaceTracker._calculate_iou(group_face, face_j)
+                    if iou > iou_threshold:  # Using 0.25 instead of 0.3
+                        group.append(face_j)
+                        processed.add(j)
+                        break
+            
+            face_groups.append(group)
+        
+        # From each group, select the best face
+        result = []
+        for group in face_groups:
+            # Select face with best combined score (confidence + size)
+            def score_face(face):
+                # Give preference to larger faces when confidence is similar
+                size_bonus = min(0.3, face.area / 50000)  # Normalize to 0-0.3 range
+                return face.confidence + size_bonus
+            
+            best_face = max(group, key=score_face)
+            result.append(best_face)
+        
+        logger.debug(f"NMS: Reduced {len(faces)} faces to {len(result)} (removed {len(faces)-len(result)} duplicates)")
+        return result
 
-                face_j = sorted_faces[j]
-                iou = FaceTracker._calculate_iou(face_i, face_j)
-
-                if iou > iou_threshold:
-                    # Faces overlap significantly - suppress the lower confidence one
-                    suppressed_indices.add(j)
-                    logger.debug(
-                        f"NMS: Suppressed face (conf={face_j.confidence:.2f}) "
-                        f"overlapping with higher confidence face (conf={face_i.confidence:.2f}, IoU={iou:.2f})"
-                    )
-
-        logger.debug(f"NMS: Kept {len(kept_faces)} / {len(faces)} faces")
-        return kept_faces
-
-    def _calculate_lip_movement(
-        self,
-        face_landmarks,
-        frame_width: int,
-        frame_height: int
-    ) -> float:
-        """
-        Calculate lip movement score from Face Mesh landmarks.
-
-        Uses the distance between upper and lower lip to detect mouth opening.
-
-        Args:
-            face_landmarks: MediaPipe Face Mesh landmarks
-            frame_width: Video frame width
-            frame_height: Video frame height
-
-        Returns:
-            Lip movement score (0-1), where higher = more movement
-        """
-        # MediaPipe Face Mesh landmark indices for lips
-        # Upper lip: 13 (center top)
-        # Lower lip: 14 (center bottom)
-        # Mouth corners: 61 (left), 291 (right)
-        try:
-            # Get key lip landmarks
-            upper_lip = face_landmarks.landmark[13]
-            lower_lip = face_landmarks.landmark[14]
-            left_corner = face_landmarks.landmark[61]
-            right_corner = face_landmarks.landmark[291]
-
-            # Convert normalized coordinates to pixels
-            upper_y = upper_lip.y * frame_height
-            lower_y = lower_lip.y * frame_height
-            left_x = left_corner.x * frame_width
-            right_x = right_corner.x * frame_width
-
-            # Calculate vertical mouth opening (distance between upper and lower lip)
-            mouth_opening = abs(lower_y - upper_y)
-
-            # Calculate mouth width for normalization
-            mouth_width = abs(right_x - left_x)
-
-            # Normalize: opening relative to mouth width
-            # Typical mouth opening ratio: 0.0 (closed) to 0.5+ (wide open)
-            if mouth_width > 0:
-                opening_ratio = mouth_opening / mouth_width
-                # Clamp and scale to 0-1 range
-                # Assume 0.3 ratio = maximum typical speaking movement
-                lip_score = min(1.0, opening_ratio / 0.3)
-            else:
-                lip_score = 0.0
-
-            return lip_score
-
-        except (IndexError, AttributeError) as e:
-            logger.debug(f"Failed to calculate lip movement: {e}")
-            return 0.0
+    
 
     def _merge_duplicate_tracks(self):
         """
@@ -989,16 +947,19 @@ class FaceTracker:
                 frame_num, timestamp = frame_batch_metadata[idx]
                 valid_faces = []
 
-                # Detect faces using selected backend
-                if self.detector_backend == "opencv" and self.opencv_detector:
-                    # OpenCV YuNet detection (better for small faces)
-                    # Convert RGB back to BGR for OpenCV
-                    frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+                # Detect faces using OpenCV YuNet detector
+                if not self.opencv_detector:
+                    logger.warning("OpenCV face detector not initialized, skipping frame")
+                    continue
 
-                    # Use detect_with_landmarks for landmark validation
-                    detections_with_landmarks = self.opencv_detector.detect_with_landmarks(frame_bgr)
+                # OpenCV YuNet detection
+                # Convert RGB back to BGR for OpenCV
+                frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
-                    for det_data in detections_with_landmarks[:self.max_tracked_faces]:
+                # Use detect_with_landmarks for landmark validation
+                detections_with_landmarks = self.opencv_detector.detect_with_landmarks(frame_bgr)
+
+                for det_data in detections_with_landmarks[:self.max_tracked_faces]:
                         # Extract detection data
                         x, y, w, h = det_data['bbox']
                         confidence = det_data['confidence']
@@ -1054,133 +1015,23 @@ class FaceTracker:
                             )
                             continue
 
-                        # 4. Landmark consistency validation available but disabled
-                        # (was generating too many warnings for valid faces)
-                        # Uncomment below to enable landmark warnings:
-                        # if not self._validate_face_landmarks(landmarks):
-                        #     logger.debug("Warning: landmarks may be inconsistent")
-
-                        # 4. Profile detection available but disabled
-                        # (was generating too many warnings for valid faces)
-                        # Uncomment below to enable profile warnings:
-                        # face_angle = self._estimate_face_angle_from_landmarks(landmarks)
-                        # if abs(face_angle) > 75:
-                        #     logger.debug(f"Warning: extreme profile angle {face_angle:.1f}°")
-
                         valid_faces.append(face_box)
-
-                else:
-                    # MediaPipe detection
-                    if self.face_detection is None:
-                        logger.warning("MediaPipe face detection not initialized, skipping frame")
-                        continue
-                    
-                    results = self.face_detection.process(frame_rgb)
-
-                    if results.detections:
-                        for detection in results.detections[:self.max_tracked_faces]:
-                            # Get bounding box (normalized coordinates from detection resolution)
-                            bbox = detection.location_data.relative_bounding_box
-
-                            # Convert to pixel coordinates at detection resolution
-                            x_detect = int(bbox.xmin * detection_width)
-                            y_detect = int(bbox.ymin * detection_height_final)
-                            w_detect = int(bbox.width * detection_width)
-                            h_detect = int(bbox.height * detection_height_final)
-
-                            # Scale back to original resolution
-                            x = int(x_detect * scale_x)
-                            y = int(y_detect * scale_y)
-                            w = int(w_detect * scale_x)
-                            h = int(h_detect * scale_y)
-
-                            # Ensure coordinates are within frame bounds
-                            x = max(0, x)
-                            y = max(0, y)
-                            w = min(w, self.video_width - x)
-                            h = min(h, self.video_height - y)
-
-                            # Create face box
-                            face_box = FaceBox(
-                                x=x, y=y, width=w, height=h,
-                                confidence=detection.score[0]
-                            )
-
-                            # Conservative filtering to reduce false positives
-                            # 1. Size filter (keep original threshold)
-                            area_ratio = face_box.area_ratio(self.video_width, self.video_height)
-                            if area_ratio < self.min_face_size_ratio:
-                                continue
-
-                            # 2. Geometric validation (relaxed - accommodate real-world face bounding boxes)
-                            aspect_ratio = face_box.aspect_ratio
-                            if aspect_ratio < 0.65 or aspect_ratio > 2.0:  # Relaxed: allows wider/taller boxes, rejects only extreme distortions
-                                logger.debug(
-                                    f"Rejected detection: aspect ratio {aspect_ratio:.2f} out of range [0.65-2.0]"
-                                )
-                                continue
-
-                            # 3. Edge proximity filter (reject faces too close to frame edges)
-                            EDGE_MARGIN = 0.10  # 10% of frame dimensions (increased from 5%)
-                            center_x, center_y = face_box.center
-                            normalized_x = center_x / self.video_width
-                            normalized_y = center_y / self.video_height
-
-                            if (normalized_x < EDGE_MARGIN or normalized_x > (1 - EDGE_MARGIN) or
-                                normalized_y < EDGE_MARGIN or normalized_y > (1 - EDGE_MARGIN)):
-                                logger.debug(
-                                    f"Rejected edge detection at ({center_x}, {center_y}), "
-                                    f"normalized ({normalized_x:.2f}, {normalized_y:.2f})"
-                                )
-                                continue
-
-                            valid_faces.append(face_box)
 
                 # Store valid faces
                 if valid_faces:
-                        # Apply Non-Maximum Suppression to remove overlapping detections
-                        valid_faces = self._apply_nms(valid_faces, iou_threshold=0.3)
+                    # Apply Non-Maximum Suppression to remove overlapping detections
+                    valid_faces = self._apply_nms(valid_faces)
 
-                        # Sort by priority score (size + centrality) to identify main speaker
-                        # This prioritizes larger faces that are centered in the frame
-                        valid_faces.sort(key=lambda f: self._calculate_face_priority_score(f), reverse=True)
+                    # Sort by priority score (size + centrality) to identify main speaker
+                    # This prioritizes larger faces that are centered in the frame
+                    valid_faces.sort(key=lambda f: self._calculate_face_priority_score(f), reverse=True)
 
-                        # Store highest priority face for legacy single-face tracking
-                        face_positions[timestamp] = valid_faces[0]
-                        faces_detected += 1
+                    # Store highest priority face for legacy single-face tracking
+                    face_positions[timestamp] = valid_faces[0]
+                    faces_detected += 1
 
-                        # Store ALL valid faces for multi-face tracking
-                        all_faces_by_timestamp[timestamp] = valid_faces
-
-                # Lip movement detection (if enabled)
-                if self.enable_lip_detection and self.face_mesh and results.detections:
-                    try:
-                        # Process frame with Face Mesh
-                        mesh_results = self.face_mesh.process(frame_rgb)
-
-                        if mesh_results.multi_face_landmarks:
-                            # Calculate lip movement for each detected face
-                            # Store temporarily - will be associated with face tracks later
-                            if timestamp not in all_faces_by_timestamp:
-                                all_faces_by_timestamp[timestamp] = []
-
-                            # For each face mesh detection, calculate lip score
-                            for face_landmarks in mesh_results.multi_face_landmarks:
-                                lip_score = self._calculate_lip_movement(
-                                    face_landmarks,
-                                    detection_width,  # Use detection resolution
-                                    detection_height_final
-                                )
-
-                                # Store lip score with timestamp
-                                # Note: We'll associate these with face tracks later in _build_face_tracks
-                                # For now, just log for the first face
-                                if lip_score > 0.2:  # Only log significant lip movement
-                                    logger.debug(f"Lip movement at t={timestamp:.2f}s: {lip_score:.3f}")
-                                break  # Only process first face for now (most prominent)
-
-                    except Exception as e:
-                        logger.debug(f"Lip detection failed at t={timestamp:.2f}s: {e}")
+                    # Store ALL valid faces for multi-face tracking
+                    all_faces_by_timestamp[timestamp] = valid_faces
 
                 frames_processed += 1
 
@@ -1253,94 +1104,80 @@ class FaceTracker:
 
         return face_positions
 
+    
     def _build_face_tracks(self, all_faces_by_timestamp: Dict[float, List[FaceBox]]):
         """
         Build face tracks from detected faces across all frames.
-
-        Uses spatial proximity AND velocity constraints to track faces.
-        Rejects impossible position jumps to improve person identity persistence.
-
-        Args:
-            all_faces_by_timestamp: Dict mapping timestamp -> List[FaceBox]
+        
+        Uses configurable velocity constraints to prevent ID switching.
+        Applies NMS and filters tracks based on minimum frames and confidence.
         """
         if not all_faces_by_timestamp:
             return
 
         logger.info("Building face tracks with velocity constraints...")
 
-        # Track faces with velocity-aware matching
         current_tracks: List[FaceTrack] = []
         track_id_counter = 0
 
-        # Maximum velocity in pixels per second (50% of frame width per second = very fast movement)
-        MAX_VELOCITY = self.video_width * 0.5
+        # Use configurable max velocity from constants
+        max_velocity = self.video_width * MAX_FACE_VELOCITY
 
-        # Process frames in chronological order
         for timestamp in sorted(all_faces_by_timestamp.keys()):
             faces = all_faces_by_timestamp[timestamp]
+            
+            # Apply NMS before tracking (uses configured threshold)
+            faces = self._apply_nms(faces)
 
             for face in faces:
-                # Try to assign this face to an existing track
                 best_track = None
                 best_score = float('inf')
-                POSITION_THRESHOLD = self.video_width * 0.5  # 50% of frame width (increased from 30% to reduce track fragmentation)
+                
+                # FIXED: Stricter position threshold
+                POSITION_THRESHOLD = self.video_width * 0.25  # Changed from 0.5
 
                 for track in current_tracks:
-                    # Get the most recent face in this track
                     if track.positions:
                         recent_timestamps = sorted(track.positions.keys())
                         last_timestamp = recent_timestamps[-1]
                         last_face = track.positions[last_timestamp]
 
-                        # Calculate time elapsed since last detection
                         time_elapsed = timestamp - last_timestamp
 
-                        # Skip if too much time has passed (face might have left and returned)
-                        # Increased tolerance to reduce multiple track IDs for same person
-                        if time_elapsed > 5.0:  # More than 5 seconds gap (increased from 2.0)
+                        # FIXED: Stricter time gap
+                        if time_elapsed > 1.5:  # Changed from 5.0
                             continue
 
-                        # Calculate distance from current face to last known position
+                        # Calculate distance
                         face_x, face_y = face.center
                         last_x, last_y = last_face.center
                         distance = np.sqrt((face_x - last_x)**2 + (face_y - last_y)**2)
 
-                        # Velocity constraint: reject impossible movements
+                        # Velocity constraint
                         if time_elapsed > 0:
                             velocity = distance / time_elapsed
-                            if velocity > MAX_VELOCITY:
-                                # Movement too fast - likely a different person
+                            if velocity > max_velocity:
                                 logger.debug(
                                     f"Rejected track match: velocity {velocity:.1f} px/s "
-                                    f"exceeds max {MAX_VELOCITY:.1f} px/s"
+                                    f"exceeds max {max_velocity:.1f} px/s"
                                 )
                                 continue
 
-                        # Calculate average position of recent faces for stability
-                        recent_window = recent_timestamps[-5:]  # Last 5 positions
-                        recent_faces = [track.positions[ts] for ts in recent_window]
+                        # Size similarity check
+                        size_ratio = face.area / last_face.area if last_face.area > 0 else 1
+                        if size_ratio < 0.5 or size_ratio > 2.0:  # Face size shouldn't change too much
+                            continue
 
-                        avg_x = np.mean([f.center[0] for f in recent_faces])
-                        avg_y = np.mean([f.center[1] for f in recent_faces])
+                        # Calculate match score
+                        position_score = distance / self.video_width
+                        size_diff = abs(1 - size_ratio)
+                        match_score = position_score + size_diff * 0.5
 
-                        # Combined distance score: weighted average of instant and average distance
-                        instant_dist = distance
-                        avg_dist = np.sqrt((face_x - avg_x)**2 + (face_y - avg_y)**2)
-                        combined_distance = instant_dist * 0.7 + avg_dist * 0.3
-
-                        # Check position threshold
-                        if combined_distance < POSITION_THRESHOLD:
-                            # Calculate match score (lower is better)
-                            # Factor in size similarity for additional confidence
-                            size_diff = abs(face.area - last_face.area) / max(face.area, last_face.area)
-                            match_score = combined_distance + size_diff * 100  # Weight size difference
-
-                            if match_score < best_score:
-                                best_score = match_score
-                                best_track = track
+                        if match_score < best_score and position_score < POSITION_THRESHOLD / self.video_width:
+                            best_score = match_score
+                            best_track = track
 
                 if best_track:
-                    # Assign face to existing track
                     face.face_id = best_track.face_id
                     best_track.positions[timestamp] = face
                 else:
@@ -1353,48 +1190,27 @@ class FaceTracker:
                     current_tracks.append(new_track)
                     track_id_counter += 1
 
-        # Filter tracks: keep original behavior with slight improvement
-        MIN_TRACK_FRAMES = 10  # Restored to original value (was 15)
-
+        # Filter tracks based on minimum frames (uses configuration constant)
         self.face_tracks = [
             track for track in current_tracks
             if len(track.positions) >= MIN_TRACK_FRAMES
         ]
 
-        # Update statistics for each track
+        # Update statistics
         for track in self.face_tracks:
             track.update_statistics(self.video_width, self.video_height)
 
-        # Merge duplicate tracks (same person with multiple track IDs)
+        # Merge duplicate tracks
         self._merge_duplicate_tracks()
 
-        # Optional: Filter by average confidence (remove low confidence tracks)
-        MIN_AVG_CONFIDENCE = 0.4  # Increased to 0.4: filter low confidence tracks
-        initial_track_count = len(self.face_tracks)
+        # Filter by minimum confidence (uses configuration constant)
         self.face_tracks = [
             track for track in self.face_tracks
             if track.avg_confidence >= MIN_AVG_CONFIDENCE
         ]
 
-        filtered_count = initial_track_count - len(self.face_tracks)
-        if filtered_count > 0:
-            logger.debug(
-                f"Filtered {filtered_count} tracks with low average confidence "
-                f"(< {MIN_AVG_CONFIDENCE:.2f})"
-            )
-
-        # Sort tracks by average size (largest first)
         self.face_tracks.sort(key=lambda t: t.avg_area_ratio, reverse=True)
-
-        logger.info(f"Built {len(self.face_tracks)} face tracks from {len(all_faces_by_timestamp)} frames")
-        if self.face_tracks:
-            for i, track in enumerate(self.face_tracks[:3]):  # Log top 3 tracks
-                logger.debug(
-                    f"  Track {track.face_id}: {len(track.positions)} frames, "
-                    f"avg_size={track.avg_area_ratio:.3f}, "
-                    f"avg_conf={track.avg_confidence:.3f}, "
-                    f"pos=({track.avg_position[0]}, {track.avg_position[1]})"
-                )
+        logger.info(f"Built {len(self.face_tracks)} face tracks")
 
     def analyze_audio_for_speech(
         self,
@@ -1586,7 +1402,7 @@ class FaceTracker:
 
         # PRIORITY 2: Fall back to speech correlation method
         # If speaker detection disabled, fall back to largest face
-        if not self.enable_speaker_detection or not self.speech_segments:
+        if not self.enable_speaker_detection or not self.speech_segments or not self.speaker_detector:
             return self.get_face_position_at_time(timestamp)
 
         # Check if there's speech activity at this time
@@ -1756,7 +1572,7 @@ class FaceTracker:
 
             # Lip activity component (if available)
             lip_bonus = 0.0
-            if self.enable_lip_detection and track.lip_activity_scores:
+            if track.lip_activity_scores:
                 # Find lip score at current timestamp (within 0.2s window)
                 nearby_lip_scores = [
                     score for ts, score in track.lip_activity_scores.items()
@@ -1824,7 +1640,7 @@ class FaceTracker:
         Updates speech_correlation scores for each face track based on
         how well the face's presence aligns with detected speech segments.
         """
-        if not self.enable_speaker_detection or not self.speech_segments:
+        if not self.enable_speaker_detection or not self.speech_segments or not self.speaker_detector:
             logger.info("Speaker detection not enabled or no speech segments - skipping correlation")
             return
 
@@ -2119,7 +1935,7 @@ class FaceTracker:
     def detect_face_groups(
         self,
         timestamp: float,
-        separation_threshold: float = 0.60
+        separation_threshold: float = FACE_SEPARATION_THRESHOLD
     ) -> Dict[str, Any]:
         """
         Analyze faces at timestamp to detect spatial grouping.
@@ -2130,8 +1946,7 @@ class FaceTracker:
         Args:
             timestamp: Time in seconds to analyze
             separation_threshold: Distance threshold (as fraction of frame width)
-                                 for considering faces "separated" (default: 0.60 = 60%)
-                                 Increased from 0.40 to reduce false split-screen triggers
+                                 for considering faces "separated" (uses config constant)
 
         Returns:
             Dictionary with:
@@ -2251,7 +2066,7 @@ class FaceTracker:
     def get_separated_faces_at_time(
         self,
         timestamp: float,
-        separation_threshold: float = 0.60
+        separation_threshold: float = FACE_SEPARATION_THRESHOLD
     ) -> Optional[List[FaceBox]]:
         """
         Get the 2 most prominent separated faces at a timestamp.
@@ -2260,7 +2075,7 @@ class FaceTracker:
 
         Args:
             timestamp: Time in seconds
-            separation_threshold: Minimum separation score required (default: 0.60)
+            separation_threshold: Minimum separation score required (uses config constant)
 
         Returns:
             List of 2 FaceBox objects if faces are separated, None otherwise
@@ -2353,7 +2168,7 @@ class FaceTracker:
     def get_face_position_with_persistence(
         self,
         timestamp: float,
-        persistence_window: float = 2.0
+        persistence_window: float = FACE_PERSISTENCE_WINDOW
     ) -> Optional[FaceBox]:
         """
         Get face position with temporal persistence for speech-active periods.
@@ -2364,7 +2179,7 @@ class FaceTracker:
 
         Args:
             timestamp: Time in seconds
-            persistence_window: How far back to look for a face (seconds)
+            persistence_window: How far back to look for a face (uses config constant)
 
         Returns:
             FaceBox (current, interpolated, or persisted), or None if no face found
@@ -2485,7 +2300,7 @@ class FaceTracker:
         self,
         timestamp: float,
         padding_factor: float = 1.5,
-        smoothing_window: float = 1.5,
+        smoothing_window: float = SMOOTHING_WINDOW,
         content_timeline: Optional[List] = None
     ) -> CropBox:
         """
@@ -2497,8 +2312,7 @@ class FaceTracker:
         Args:
             timestamp: Time in seconds
             padding_factor: How much padding around face (1.0 = tight, 2.0 = loose)
-            smoothing_window: Window in seconds to average face positions (reduces jitter)
-                            Default 1.5s, reduced to 0.5s near mode transitions
+            smoothing_window: Window in seconds to average face positions (uses config constant)
             content_timeline: Optional list of ContentSegment objects for adaptive smoothing
 
         Returns:
@@ -2731,7 +2545,7 @@ class FaceTracker:
                 smoothed_x,
                 kind='cubic',
                 bounds_error=False,
-                fill_value="extrapolate"
+                fill_value=0.0  # Changed from "extrapolate" for type compatibility
             )
 
             return interpolator
@@ -2837,13 +2651,12 @@ class FaceTracker:
 
     def cleanup(self):
         """Clean up resources."""
-        if hasattr(self, 'face_detection') and self.face_detection is not None:
-            self.face_detection.close()
-        if hasattr(self, 'face_mesh') and self.face_mesh is not None:
-            self.face_mesh.close()
+        if hasattr(self, 'opencv_detector') and self.opencv_detector is not None:
+            # OpenCV detector doesn't need explicit cleanup
+            pass
         self.face_positions.clear()
 
-        # Cleanup new modules
+        # Cleanup enhancement modules
         if hasattr(self, 'face_recognition') and self.face_recognition:
             self.face_recognition.cleanup()
         if hasattr(self, 'scene_detector') and self.scene_detector:
