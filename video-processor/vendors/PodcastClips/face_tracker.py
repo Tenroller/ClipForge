@@ -198,7 +198,7 @@ class FaceTracker:
         use_gpu: bool = True,
         detection_height: int = 0,  # 0 = adaptive (use video resolution), otherwise fixed height
         batch_size: int = 4,
-        min_face_size_ratio: float = 0.006,  # Balanced: detects main speakers, filters background (allows ~150x150 px @ 1080p)
+        min_face_size_ratio: float = 0.015,  # Increased to 1.5%: filters small background faces (allows ~290x290 px @ 1080p)
         max_tracked_faces: int = 4,
         enable_speaker_detection: bool = False,
         enable_lip_detection: bool = False,
@@ -228,8 +228,8 @@ class FaceTracker:
                        - 4: Balanced batching (recommended for GPU) - DEFAULT
                        - 8: Aggressive batching (best GPU utilization)
             min_face_size_ratio: Minimum face size as ratio of frame area (0.002-0.1)
-                                Faces smaller than this are filtered out (audience members)
-                                Default: 0.002 (0.2% of frame) - lowered to detect small faces in wide shots
+                                Faces smaller than this are filtered out (background/audience members)
+                                Default: 0.015 (1.5% of frame) - filters small background faces
             max_tracked_faces: Maximum number of faces to track (1-8)
                               - 1: Track only largest face (legacy behavior)
                               - 2-4: Track main subjects (recommended for podcasts)
@@ -293,7 +293,7 @@ class FaceTracker:
             if OPENCV_FACE_DETECTION_AVAILABLE:
                 try:
                     self.opencv_detector = OpenCVFaceDetector(
-                        conf_threshold=0.3,  # Increased: filter low-confidence false positives
+                        conf_threshold=0.5,  # Increased to 0.5: filter low-confidence false positives
                         nms_threshold=0.3,
                         model_dir=cache_dir
                     )
@@ -318,7 +318,7 @@ class FaceTracker:
             mp_face_detection = mp.solutions.face_detection
             self.face_detection = mp_face_detection.FaceDetection(
                 model_selection=1,  # 1 = full range model (better for podcasts), 0 = short range
-                min_detection_confidence=0.3  # Increased: filter low-confidence false positives
+                min_detection_confidence=0.5  # Increased to 0.5: filter low-confidence false positives
             )
             logger.info("✓ Using MediaPipe BlazeFace face detector")
 
@@ -594,6 +594,149 @@ class FaceTracker:
 
         except (KeyError, IndexError, ZeroDivisionError):
             return 0.0
+
+    @staticmethod
+    def _calculate_iou(box1: FaceBox, box2: FaceBox) -> float:
+        """
+        Calculate Intersection over Union (IoU) between two face boxes.
+
+        Args:
+            box1: First face box
+            box2: Second face box
+
+        Returns:
+            IoU value between 0 and 1
+        """
+        # Calculate intersection coordinates
+        x1 = max(box1.x, box2.x)
+        y1 = max(box1.y, box2.y)
+        x2 = min(box1.x + box1.width, box2.x + box2.width)
+        y2 = min(box1.y + box1.height, box2.y + box2.height)
+
+        # Calculate intersection area
+        intersection_width = max(0, x2 - x1)
+        intersection_height = max(0, y2 - y1)
+        intersection_area = intersection_width * intersection_height
+
+        # Calculate union area
+        box1_area = box1.area
+        box2_area = box2.area
+        union_area = box1_area + box2_area - intersection_area
+
+        # Calculate IoU
+        if union_area == 0:
+            return 0.0
+        return intersection_area / union_area
+
+    def _calculate_center_score(self, face: FaceBox) -> float:
+        """
+        Calculate how centered a face is in the frame.
+
+        Main speakers are typically positioned in the center of the frame.
+        This returns a score from 0 (at edge) to 1 (perfectly centered).
+
+        Args:
+            face: Face box to score
+
+        Returns:
+            Center score from 0 to 1
+        """
+        center_x, center_y = face.center
+
+        # Normalize to 0-1 range
+        normalized_x = center_x / self.video_width
+        normalized_y = center_y / self.video_height
+
+        # Calculate distance from center (0.5, 0.5)
+        dx = abs(normalized_x - 0.5)
+        dy = abs(normalized_y - 0.5)
+
+        # Euclidean distance from center
+        distance_from_center = np.sqrt(dx**2 + dy**2)
+
+        # Convert to score (0 at corner, 1 at center)
+        # Maximum distance to corner is sqrt(0.5^2 + 0.5^2) = ~0.707
+        max_distance = 0.707
+        center_score = 1.0 - (distance_from_center / max_distance)
+
+        return max(0.0, min(1.0, center_score))
+
+    def _calculate_face_priority_score(self, face: FaceBox) -> float:
+        """
+        Calculate a priority score for face selection.
+
+        Combines multiple factors to identify the main speaker:
+        - Size: Larger faces are likely closer/more important (60% weight)
+        - Centrality: Center faces are likely main subjects (40% weight)
+
+        Args:
+            face: Face box to score
+
+        Returns:
+            Priority score (higher = more likely to be main speaker)
+        """
+        # Size score (normalized by frame area)
+        area_ratio = face.area_ratio(self.video_width, self.video_height)
+        # Normalize to reasonable range (0.01 to 0.2 of frame = 0 to 1)
+        size_score = min(1.0, area_ratio / 0.15)
+
+        # Center score
+        center_score = self._calculate_center_score(face)
+
+        # Combined score with weights
+        priority_score = (size_score * 0.60) + (center_score * 0.40)
+
+        return priority_score
+
+    @staticmethod
+    def _apply_nms(faces: List[FaceBox], iou_threshold: float = 0.3) -> List[FaceBox]:
+        """
+        Apply Non-Maximum Suppression to remove overlapping face detections.
+
+        Keeps the detection with highest confidence when multiple detections overlap.
+        This prevents multiple IDs being assigned to the same face.
+
+        Args:
+            faces: List of detected face boxes
+            iou_threshold: IoU threshold for considering boxes as overlapping (default: 0.3)
+
+        Returns:
+            Filtered list of face boxes with overlaps removed
+        """
+        if len(faces) <= 1:
+            return faces
+
+        # Sort by confidence (highest first)
+        sorted_faces = sorted(faces, key=lambda f: f.confidence, reverse=True)
+
+        kept_faces = []
+        suppressed_indices = set()
+
+        for i, face_i in enumerate(sorted_faces):
+            if i in suppressed_indices:
+                continue
+
+            # Keep this face
+            kept_faces.append(face_i)
+
+            # Suppress overlapping faces with lower confidence
+            for j in range(i + 1, len(sorted_faces)):
+                if j in suppressed_indices:
+                    continue
+
+                face_j = sorted_faces[j]
+                iou = FaceTracker._calculate_iou(face_i, face_j)
+
+                if iou > iou_threshold:
+                    # Faces overlap significantly - suppress the lower confidence one
+                    suppressed_indices.add(j)
+                    logger.debug(
+                        f"NMS: Suppressed face (conf={face_j.confidence:.2f}) "
+                        f"overlapping with higher confidence face (conf={face_i.confidence:.2f}, IoU={iou:.2f})"
+                    )
+
+        logger.debug(f"NMS: Kept {len(kept_faces)} / {len(faces)} faces")
+        return kept_faces
 
     def _calculate_lip_movement(
         self,
@@ -995,10 +1138,14 @@ class FaceTracker:
 
                 # Store valid faces
                 if valid_faces:
-                        # Sort by area (largest first)
-                        valid_faces.sort(key=lambda f: f.area, reverse=True)
+                        # Apply Non-Maximum Suppression to remove overlapping detections
+                        valid_faces = self._apply_nms(valid_faces, iou_threshold=0.3)
 
-                        # Store largest face for legacy single-face tracking
+                        # Sort by priority score (size + centrality) to identify main speaker
+                        # This prioritizes larger faces that are centered in the frame
+                        valid_faces.sort(key=lambda f: self._calculate_face_priority_score(f), reverse=True)
+
+                        # Store highest priority face for legacy single-face tracking
                         face_positions[timestamp] = valid_faces[0]
                         faces_detected += 1
 
@@ -1221,8 +1368,8 @@ class FaceTracker:
         # Merge duplicate tracks (same person with multiple track IDs)
         self._merge_duplicate_tracks()
 
-        # Optional: Filter by average confidence (only remove very low confidence tracks)
-        MIN_AVG_CONFIDENCE = 0.25  # Very permissive - only remove extremely low confidence
+        # Optional: Filter by average confidence (remove low confidence tracks)
+        MIN_AVG_CONFIDENCE = 0.4  # Increased to 0.4: filter low confidence tracks
         initial_track_count = len(self.face_tracks)
         self.face_tracks = [
             track for track in self.face_tracks
@@ -1232,7 +1379,7 @@ class FaceTracker:
         filtered_count = initial_track_count - len(self.face_tracks)
         if filtered_count > 0:
             logger.debug(
-                f"Filtered {filtered_count} tracks with very low average confidence "
+                f"Filtered {filtered_count} tracks with low average confidence "
                 f"(< {MIN_AVG_CONFIDENCE:.2f})"
             )
 
