@@ -198,7 +198,7 @@ class FaceTracker:
         use_gpu: bool = True,
         detection_height: int = 0,  # 0 = adaptive (use video resolution), otherwise fixed height
         batch_size: int = 4,
-        min_face_size_ratio: float = 0.015,  # Increased to 1.5%: filters small background faces (allows ~290x290 px @ 1080p)
+        min_face_size_ratio: float = 0.004,  # Reduced to 0.4%: allows detection of smaller faces (~100x100 px @ 1080p)
         max_tracked_faces: int = 4,
         enable_speaker_detection: bool = False,
         enable_lip_detection: bool = False,
@@ -1511,12 +1511,12 @@ class FaceTracker:
                                     max_distance = np.sqrt(0.5**2 + 0.5**2)
                                     centrality = 1.0 - (distance_from_center / max_distance)
 
-                                    # Weight: 30% speech, 20% confidence, 20% centrality, 30% size
-                                    # Prioritize size to select large foreground speakers over small centered faces
+                                    # Weight: 30% speech, 15% confidence, 10% centrality, 45% size
+                                    # Heavily prioritize size to select large foreground speakers over small centered faces
                                     return (t.speech_correlation * 0.30 +
-                                            avg_conf * 0.20 +
-                                            centrality * 0.20 +
-                                            t.avg_area_ratio * 0.30)
+                                            avg_conf * 0.15 +
+                                            centrality * 0.10 +
+                                            t.avg_area_ratio * 0.45)
 
                                 # Filter by instantaneous confidence (reject very low current frame confidence)
                                 MIN_INSTANT_CONFIDENCE = 0.25
@@ -1531,6 +1531,18 @@ class FaceTracker:
                                         logger.debug(
                                             f"Rejected Track {t.face_id} in fallback: instant_conf={instant_conf:.2f} < {MIN_INSTANT_CONFIDENCE}"
                                         )
+
+                                # Filter by minimum face size (reject tiny faces < 1% of frame)
+                                MIN_FALLBACK_SIZE = 0.01
+                                size_filtered_tracks = []
+                                for t in viable_tracks:
+                                    if t.avg_area_ratio >= MIN_FALLBACK_SIZE:
+                                        size_filtered_tracks.append(t)
+                                    else:
+                                        logger.debug(
+                                            f"Rejected Track {t.face_id} in fallback: size={t.avg_area_ratio:.4f} < {MIN_FALLBACK_SIZE}"
+                                        )
+                                viable_tracks = size_filtered_tracks
 
                                 if not viable_tracks:
                                     logger.debug("No viable tracks after instantaneous confidence filtering")
