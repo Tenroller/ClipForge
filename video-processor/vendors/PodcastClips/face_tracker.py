@@ -78,7 +78,7 @@ try:
     backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'backend'))
     if backend_path not in sys.path:
         sys.path.insert(0, backend_path)
-    from utils.gpu_manager import should_use_gpu, get_gpu_stats
+    from utils.gpu_manager import should_use_gpu
     GPU_MANAGER_AVAILABLE = True
 except ImportError:
     GPU_MANAGER_AVAILABLE = False
@@ -111,6 +111,24 @@ class FaceBox:
         frame_area = frame_width * frame_height
         return self.area / frame_area if frame_area > 0 else 0.0
 
+    @property
+    def aspect_ratio(self) -> float:
+        """Get aspect ratio of face box (height/width)."""
+        return self.height / self.width if self.width > 0 else 0.0
+
+    def is_valid_face_shape(self) -> bool:
+        """
+        Validate that the face box has a realistic aspect ratio.
+
+        Real human faces have aspect ratios between 0.75 and 1.5 (height/width).
+        This filters out false detections like logos, text, or rectangular objects.
+
+        Returns:
+            True if aspect ratio is within valid range, False otherwise
+        """
+        ratio = self.aspect_ratio
+        return 0.75 <= ratio <= 1.5
+
 
 @dataclass
 class FaceTrack:
@@ -123,6 +141,7 @@ class FaceTrack:
     speech_correlation: float = 0.0  # Correlation with speech activity (0-1)
     lip_activity_scores: Dict[float, float] = field(default_factory=dict)  # timestamp -> lip movement score (0-1)
     avg_lip_activity: float = 0.0  # Average lip movement activity
+    avg_confidence: float = 0.0  # Average detection confidence across all frames (0-1)
 
     def update_statistics(self, frame_width: int, frame_height: int):
         """Update aggregate statistics for this face track."""
@@ -134,7 +153,7 @@ class FaceTrack:
             face.area_ratio(frame_width, frame_height)
             for face in self.positions.values()
         ]
-        self.avg_area_ratio = np.mean(area_ratios)
+        self.avg_area_ratio = float(np.mean(area_ratios))
 
         # Calculate average position
         centers = [face.center for face in self.positions.values()]
@@ -143,9 +162,13 @@ class FaceTrack:
             int(np.mean([c[1] for c in centers]))
         )
 
+        # Calculate average confidence
+        confidences = [face.confidence for face in self.positions.values()]
+        self.avg_confidence = float(np.mean(confidences))
+
         # Calculate average lip activity if available
         if self.lip_activity_scores:
-            self.avg_lip_activity = np.mean(list(self.lip_activity_scores.values()))
+            self.avg_lip_activity = float(np.mean(list(self.lip_activity_scores.values())))
 
 
 @dataclass
@@ -175,7 +198,7 @@ class FaceTracker:
         use_gpu: bool = True,
         detection_height: int = 0,  # 0 = adaptive (use video resolution), otherwise fixed height
         batch_size: int = 4,
-        min_face_size_ratio: float = 0.002,  # Lowered to detect smaller faces in wide shots (allows ~65x65 px faces)
+        min_face_size_ratio: float = 0.006,  # Balanced: detects main speakers, filters background (allows ~150x150 px @ 1080p)
         max_tracked_faces: int = 4,
         enable_speaker_detection: bool = False,
         enable_lip_detection: bool = False,
@@ -227,7 +250,7 @@ class FaceTracker:
         self.use_gpu_actual = False  # Will be set based on GPU manager decision
         self.detection_height = detection_height
         self.batch_size = max(1, min(8, batch_size))  # Clamp to 1-8 range
-        self.min_face_size_ratio = max(0.001, min(0.1, min_face_size_ratio))  # Allow very small faces
+        self.min_face_size_ratio = max(0.001, min(0.1, min_face_size_ratio))  # Balanced size threshold
         self.max_tracked_faces = max(1, min(8, max_tracked_faces))
         self.enable_speaker_detection = enable_speaker_detection
         self.enable_lip_detection = enable_lip_detection
@@ -270,7 +293,7 @@ class FaceTracker:
             if OPENCV_FACE_DETECTION_AVAILABLE:
                 try:
                     self.opencv_detector = OpenCVFaceDetector(
-                        conf_threshold=0.2,  # Lowered for better small face detection
+                        conf_threshold=0.3,  # Increased: filter low-confidence false positives
                         nms_threshold=0.3,
                         model_dir=cache_dir
                     )
@@ -289,12 +312,13 @@ class FaceTracker:
                     "MediaPipe is not available. Install it with: pip install mediapipe\n"
                     "Or use the OpenCV backend with: detector_backend='opencv'"
                 )
+                
             # Initialize MediaPipe Face Detection
             # Note: MediaPipe automatically uses GPU when available through its delegate system
             mp_face_detection = mp.solutions.face_detection
             self.face_detection = mp_face_detection.FaceDetection(
                 model_selection=1,  # 1 = full range model (better for podcasts), 0 = short range
-                min_detection_confidence=0.2  # Lowered for better small face detection in wide shots
+                min_detection_confidence=0.3  # Increased: filter low-confidence false positives
             )
             logger.info("✓ Using MediaPipe BlazeFace face detector")
 
@@ -467,6 +491,110 @@ class FaceTracker:
             if enable_quality_metrics and not TRACKING_METRICS_AVAILABLE:
                 logger.warning("Quality metrics requested but module not available")
 
+    @staticmethod
+    def _validate_face_landmarks(landmarks: dict) -> bool:
+        """
+        Validate that facial landmarks are anatomically consistent.
+
+        Checks:
+        1. Eyes are roughly horizontally aligned (±20% tolerance)
+        2. Nose is below eyes
+        3. Mouth is below nose
+        4. Eyes are not too far apart or too close
+
+        Args:
+            landmarks: Dict with 'right_eye', 'left_eye', 'nose', 'right_mouth', 'left_mouth' keys
+
+        Returns:
+            True if landmarks are consistent, False otherwise
+        """
+        try:
+            right_eye = landmarks['right_eye']
+            left_eye = landmarks['left_eye']
+            nose = landmarks['nose']
+            right_mouth = landmarks['right_mouth']
+            left_mouth = landmarks['left_mouth']
+
+            # 1. Check eyes are horizontally aligned (±20% tolerance)
+            eye_y_diff = abs(right_eye[1] - left_eye[1])
+            eye_distance = abs(right_eye[0] - left_eye[0])
+            if eye_distance > 0:
+                eye_alignment_ratio = eye_y_diff / eye_distance
+                if eye_alignment_ratio > 0.2:  # Eyes differ by more than 20% of distance
+                    logger.debug(
+                        f"Rejected landmarks: eyes not horizontally aligned "
+                        f"(y_diff={eye_y_diff}, distance={eye_distance}, ratio={eye_alignment_ratio:.2f})"
+                    )
+                    return False
+
+            # 2. Check nose is below eyes (average eye y-position)
+            avg_eye_y = (right_eye[1] + left_eye[1]) / 2
+            if nose[1] <= avg_eye_y:
+                logger.debug(
+                    f"Rejected landmarks: nose not below eyes "
+                    f"(nose_y={nose[1]}, avg_eye_y={avg_eye_y})"
+                )
+                return False
+
+            # 3. Check mouth is below nose
+            avg_mouth_y = (right_mouth[1] + left_mouth[1]) / 2
+            if avg_mouth_y <= nose[1]:
+                # Only log if significantly above (avoid spam)
+                if avg_mouth_y < nose[1] - 10:
+                    logger.debug(
+                        f"Rejected landmarks: mouth significantly above nose "
+                        f"(mouth_y={avg_mouth_y}, nose_y={nose[1]})"
+                    )
+                return False
+
+            # Note: Eye distance check removed - was generating too many false warnings
+            # (ratio of 1.0 when eye_distance == face_width is normal for some faces)
+
+            return True
+
+        except (KeyError, IndexError, ZeroDivisionError) as e:
+            logger.debug(f"Landmark validation failed: {e}")
+            return False
+
+    @staticmethod
+    def _estimate_face_angle_from_landmarks(landmarks: dict) -> float:
+        """
+        Estimate face angle (yaw) from eye positions.
+
+        Args:
+            landmarks: Dict with landmark positions
+
+        Returns:
+            Estimated face angle in degrees (0 = frontal, ±90 = profile)
+        """
+        try:
+            right_eye = landmarks['right_eye']
+            left_eye = landmarks['left_eye']
+            nose = landmarks['nose']
+
+            # Calculate center between eyes
+            eye_center_x = (right_eye[0] + left_eye[0]) / 2
+
+            # Calculate nose offset from eye center
+            nose_offset = nose[0] - eye_center_x
+
+            # Calculate eye distance for normalization
+            eye_distance = abs(right_eye[0] - left_eye[0])
+
+            if eye_distance > 0:
+                # Normalized offset: -1 (full left) to +1 (full right)
+                normalized_offset = nose_offset / (eye_distance / 2)
+
+                # Convert to approximate angle (simplified model)
+                # At profile view (~90°), nose appears ~50% offset from center
+                angle = normalized_offset * 60  # Scale to degrees
+
+                return angle
+            return 0.0
+
+        except (KeyError, IndexError, ZeroDivisionError):
+            return 0.0
+
     def _calculate_lip_movement(
         self,
         face_landmarks,
@@ -525,13 +653,110 @@ class FaceTracker:
             logger.debug(f"Failed to calculate lip movement: {e}")
             return 0.0
 
+    def _merge_duplicate_tracks(self):
+        """
+        Merge face tracks that likely represent the same person.
+
+        This reduces track fragmentation caused by temporary detection gaps,
+        movement, or occlusions. Same person shouldn't have multiple track IDs.
+
+        Tracks are merged if they:
+        1. Have no temporal overlap (can't be same person if both exist simultaneously)
+        2. Are temporally close (one ends, another starts within 3 seconds)
+        3. Have similar average position (within 40% of frame width)
+        4. Have similar average size (within 2x size ratio)
+        """
+        if len(self.face_tracks) <= 1:
+            return
+
+        # Sort tracks by start time
+        sorted_tracks = sorted(self.face_tracks, key=lambda t: min(t.positions.keys()))
+
+        merged_indices = set()  # Tracks that have been merged away
+
+        for i in range(len(sorted_tracks)):
+            if i in merged_indices:
+                continue
+
+            track_a = sorted_tracks[i]
+            timestamps_a = sorted(track_a.positions.keys())
+            time_start_a = timestamps_a[0]
+            time_end_a = timestamps_a[-1]
+
+            for j in range(i + 1, len(sorted_tracks)):
+                if j in merged_indices:
+                    continue
+
+                track_b = sorted_tracks[j]
+                timestamps_b = sorted(track_b.positions.keys())
+                time_start_b = timestamps_b[0]
+                time_end_b = timestamps_b[-1]
+
+                # Check 1: No temporal overlap
+                if time_end_a >= time_start_b and time_start_a <= time_end_b:
+                    # Tracks overlap in time - can't be same person
+                    continue
+
+                # Check 2: Temporally close
+                # Calculate gap between tracks (one ends, another starts)
+                if time_start_b > time_end_a:
+                    gap = time_start_b - time_end_a
+                elif time_start_a > time_end_b:
+                    gap = time_start_a - time_end_b
+                else:
+                    continue  # Shouldn't happen if check 1 passed
+
+                if gap > 3.0:  # More than 3 seconds gap
+                    continue
+
+                # Check 3: Similar average position
+                pos_a = track_a.avg_position
+                pos_b = track_b.avg_position
+                distance = np.sqrt((pos_a[0] - pos_b[0])**2 + (pos_a[1] - pos_b[1])**2)
+                position_threshold = self.video_width * 0.4  # 40% of frame width
+
+                if distance > position_threshold:
+                    continue
+
+                # Check 4: Similar size
+                size_ratio = track_b.avg_area_ratio / track_a.avg_area_ratio if track_a.avg_area_ratio > 0 else 0
+                if size_ratio < 0.5 or size_ratio > 2.0:  # More than 2x difference
+                    continue
+
+                # All checks passed - merge track_b into track_a
+                logger.debug(
+                    f"Merging tracks: {track_b.face_id} -> {track_a.face_id} "
+                    f"(gap={gap:.2f}s, dist={distance:.0f}px, size_ratio={size_ratio:.2f})"
+                )
+
+                # Merge positions
+                track_a.positions.update(track_b.positions)
+
+                # Merge lip activity scores if available
+                if hasattr(track_a, 'lip_activity_scores') and hasattr(track_b, 'lip_activity_scores'):
+                    track_a.lip_activity_scores.update(track_b.lip_activity_scores)
+
+                # Update statistics for merged track
+                track_a.update_statistics(self.video_width, self.video_height)
+
+                # Mark track_b for removal
+                merged_indices.add(j)
+
+        # Remove merged tracks
+        if merged_indices:
+            self.face_tracks = [
+                track for idx, track in enumerate(sorted_tracks)
+                if idx not in merged_indices
+            ]
+            logger.info(f"Merged {len(merged_indices)} duplicate tracks (reduced from {len(sorted_tracks)} to {len(self.face_tracks)} tracks)")
+
     def analyze_video(
         self,
         video_path: str,
         sample_rate: int = 2,
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
-        progress_callback: Optional[callable] = None
+        progress_callback: Optional[Callable] = None
     ) -> Dict[float, FaceBox]:
         """
         Analyze video and detect face positions at sampled frames.
@@ -626,10 +851,15 @@ class FaceTracker:
                     # OpenCV YuNet detection (better for small faces)
                     # Convert RGB back to BGR for OpenCV
                     frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-                    detections = self.opencv_detector.detect(frame_bgr, use_full_resolution=True)
 
-                    for det in detections[:self.max_tracked_faces]:
-                        x, y, w, h, confidence = det
+                    # Use detect_with_landmarks for landmark validation
+                    detections_with_landmarks = self.opencv_detector.detect_with_landmarks(frame_bgr)
+
+                    for det_data in detections_with_landmarks[:self.max_tracked_faces]:
+                        # Extract detection data
+                        x, y, w, h = det_data['bbox']
+                        confidence = det_data['confidence']
+                        landmarks = det_data['landmarks']
 
                         # Scale back to original resolution if downscaled
                         if detection_height_final < self.video_height:
@@ -637,6 +867,12 @@ class FaceTracker:
                             y = int(y * scale_y)
                             w = int(w * scale_x)
                             h = int(h * scale_y)
+
+                            # Scale landmarks too
+                            scaled_landmarks = {}
+                            for key, (lx, ly) in landmarks.items():
+                                scaled_landmarks[key] = (int(lx * scale_x), int(ly * scale_y))
+                            landmarks = scaled_landmarks
 
                         # Ensure coordinates are within frame bounds
                         x = max(0, x)
@@ -647,13 +883,55 @@ class FaceTracker:
                         # Create face box
                         face_box = FaceBox(x=x, y=y, width=w, height=h, confidence=confidence)
 
-                        # Filter by size
+                        # Conservative filtering to reduce false positives
+                        # 1. Size filter (keep original threshold)
                         area_ratio = face_box.area_ratio(self.video_width, self.video_height)
-                        if area_ratio >= self.min_face_size_ratio:
-                            valid_faces.append(face_box)
+                        if area_ratio < self.min_face_size_ratio:
+                            continue
+
+                        # 2. Geometric validation (relaxed - accommodate real-world face bounding boxes)
+                        aspect_ratio = face_box.aspect_ratio
+                        if aspect_ratio < 0.65 or aspect_ratio > 2.0:  # Relaxed: allows wider/taller boxes, rejects only extreme distortions
+                            logger.debug(
+                                f"Rejected detection: aspect ratio {aspect_ratio:.2f} out of range [0.65-2.0]"
+                            )
+                            continue
+
+                        # 3. Edge proximity filter (reject faces too close to frame edges)
+                        EDGE_MARGIN = 0.10  # 10% of frame dimensions (increased from 5%)
+                        center_x, center_y = face_box.center
+                        normalized_x = center_x / self.video_width
+                        normalized_y = center_y / self.video_height
+
+                        if (normalized_x < EDGE_MARGIN or normalized_x > (1 - EDGE_MARGIN) or
+                            normalized_y < EDGE_MARGIN or normalized_y > (1 - EDGE_MARGIN)):
+                            logger.debug(
+                                f"Rejected edge detection at ({center_x}, {center_y}), "
+                                f"normalized ({normalized_x:.2f}, {normalized_y:.2f})"
+                            )
+                            continue
+
+                        # 4. Landmark consistency validation available but disabled
+                        # (was generating too many warnings for valid faces)
+                        # Uncomment below to enable landmark warnings:
+                        # if not self._validate_face_landmarks(landmarks):
+                        #     logger.debug("Warning: landmarks may be inconsistent")
+
+                        # 4. Profile detection available but disabled
+                        # (was generating too many warnings for valid faces)
+                        # Uncomment below to enable profile warnings:
+                        # face_angle = self._estimate_face_angle_from_landmarks(landmarks)
+                        # if abs(face_angle) > 75:
+                        #     logger.debug(f"Warning: extreme profile angle {face_angle:.1f}°")
+
+                        valid_faces.append(face_box)
 
                 else:
                     # MediaPipe detection
+                    if self.face_detection is None:
+                        logger.warning("MediaPipe face detection not initialized, skipping frame")
+                        continue
+                    
                     results = self.face_detection.process(frame_rgb)
 
                     if results.detections:
@@ -685,10 +963,35 @@ class FaceTracker:
                                 confidence=detection.score[0]
                             )
 
-                            # Filter by size - ignore faces that are too small
+                            # Conservative filtering to reduce false positives
+                            # 1. Size filter (keep original threshold)
                             area_ratio = face_box.area_ratio(self.video_width, self.video_height)
-                            if area_ratio >= self.min_face_size_ratio:
-                                valid_faces.append(face_box)
+                            if area_ratio < self.min_face_size_ratio:
+                                continue
+
+                            # 2. Geometric validation (relaxed - accommodate real-world face bounding boxes)
+                            aspect_ratio = face_box.aspect_ratio
+                            if aspect_ratio < 0.65 or aspect_ratio > 2.0:  # Relaxed: allows wider/taller boxes, rejects only extreme distortions
+                                logger.debug(
+                                    f"Rejected detection: aspect ratio {aspect_ratio:.2f} out of range [0.65-2.0]"
+                                )
+                                continue
+
+                            # 3. Edge proximity filter (reject faces too close to frame edges)
+                            EDGE_MARGIN = 0.10  # 10% of frame dimensions (increased from 5%)
+                            center_x, center_y = face_box.center
+                            normalized_x = center_x / self.video_width
+                            normalized_y = center_y / self.video_height
+
+                            if (normalized_x < EDGE_MARGIN or normalized_x > (1 - EDGE_MARGIN) or
+                                normalized_y < EDGE_MARGIN or normalized_y > (1 - EDGE_MARGIN)):
+                                logger.debug(
+                                    f"Rejected edge detection at ({center_x}, {center_y}), "
+                                    f"normalized ({normalized_x:.2f}, {normalized_y:.2f})"
+                                )
+                                continue
+
+                            valid_faces.append(face_box)
 
                 # Store valid faces
                 if valid_faces:
@@ -833,7 +1136,7 @@ class FaceTracker:
                 # Try to assign this face to an existing track
                 best_track = None
                 best_score = float('inf')
-                POSITION_THRESHOLD = self.video_width * 0.3  # 30% of frame width
+                POSITION_THRESHOLD = self.video_width * 0.5  # 50% of frame width (increased from 30% to reduce track fragmentation)
 
                 for track in current_tracks:
                     # Get the most recent face in this track
@@ -846,7 +1149,8 @@ class FaceTracker:
                         time_elapsed = timestamp - last_timestamp
 
                         # Skip if too much time has passed (face might have left and returned)
-                        if time_elapsed > 2.0:  # More than 2 seconds gap
+                        # Increased tolerance to reduce multiple track IDs for same person
+                        if time_elapsed > 5.0:  # More than 5 seconds gap (increased from 2.0)
                             continue
 
                         # Calculate distance from current face to last known position
@@ -902,8 +1206,9 @@ class FaceTracker:
                     current_tracks.append(new_track)
                     track_id_counter += 1
 
-        # Filter tracks: only keep tracks with significant duration
-        MIN_TRACK_FRAMES = 10  # Must appear in at least 10 frames
+        # Filter tracks: keep original behavior with slight improvement
+        MIN_TRACK_FRAMES = 10  # Restored to original value (was 15)
+
         self.face_tracks = [
             track for track in current_tracks
             if len(track.positions) >= MIN_TRACK_FRAMES
@@ -913,6 +1218,24 @@ class FaceTracker:
         for track in self.face_tracks:
             track.update_statistics(self.video_width, self.video_height)
 
+        # Merge duplicate tracks (same person with multiple track IDs)
+        self._merge_duplicate_tracks()
+
+        # Optional: Filter by average confidence (only remove very low confidence tracks)
+        MIN_AVG_CONFIDENCE = 0.25  # Very permissive - only remove extremely low confidence
+        initial_track_count = len(self.face_tracks)
+        self.face_tracks = [
+            track for track in self.face_tracks
+            if track.avg_confidence >= MIN_AVG_CONFIDENCE
+        ]
+
+        filtered_count = initial_track_count - len(self.face_tracks)
+        if filtered_count > 0:
+            logger.debug(
+                f"Filtered {filtered_count} tracks with very low average confidence "
+                f"(< {MIN_AVG_CONFIDENCE:.2f})"
+            )
+
         # Sort tracks by average size (largest first)
         self.face_tracks.sort(key=lambda t: t.avg_area_ratio, reverse=True)
 
@@ -921,7 +1244,9 @@ class FaceTracker:
             for i, track in enumerate(self.face_tracks[:3]):  # Log top 3 tracks
                 logger.debug(
                     f"  Track {track.face_id}: {len(track.positions)} frames, "
-                    f"avg_size={track.avg_area_ratio:.3f}, pos=({track.avg_position[0]}, {track.avg_position[1]})"
+                    f"avg_size={track.avg_area_ratio:.3f}, "
+                    f"avg_conf={track.avg_confidence:.3f}, "
+                    f"pos=({track.avg_position[0]}, {track.avg_position[1]})"
                 )
 
     def analyze_audio_for_speech(
@@ -1006,54 +1331,88 @@ class FaceTracker:
 
                         # If diarization face is stale, check for currently detected faces
                         # with high speech correlation - they might be the actual speaker
-                        STALENESS_THRESHOLD = 0.5  # seconds - if face not seen in 0.5s, check alternatives
+                        STALENESS_THRESHOLD = 3.0  # seconds - allow temporary occlusions (increased from 0.5)
 
                         if time_diff > STALENESS_THRESHOLD:
-                            # Check for currently detected faces with high speech correlation
-                            HIGH_CORRELATION_THRESHOLD = 0.8
+                            # Diarization face is stale - find the best currently visible face
+                            # using combined score of speech correlation, confidence, and size
 
-                            # Find tracks that ARE currently visible (detected in this frame)
+                            # Helper to get average confidence for a track
+                            def get_track_avg_confidence(t):
+                                if not t.positions:
+                                    return 0.0
+                                return sum(pos.confidence for pos in t.positions.values()) / len(t.positions)
+
+                            # Find ALL tracks that are currently visible (detected in this frame)
                             current_tracks = [
                                 t for t in self.face_tracks
                                 if t.face_id != face_track_id and  # Exclude the stale diarization face
-                                any(abs(ts - timestamp) < 0.2 for ts in t.positions.keys()) and  # Must be recent
-                                t.speech_correlation >= HIGH_CORRELATION_THRESHOLD  # Must have high correlation
+                                any(abs(ts - timestamp) < 0.2 for ts in t.positions.keys())  # Must be recent
                             ]
 
                             if current_tracks:
-                                # Use the face with highest speech correlation
-                                best_track = max(current_tracks, key=lambda t: t.speech_correlation)
-                                best_ts = min(best_track.positions.keys(), key=lambda ts: abs(ts - timestamp))
+                                # Score by speech correlation, confidence, size, and centrality
+                                # Prefer centered faces over edge faces
+                                def get_combined_score(t):
+                                    avg_conf = get_track_avg_confidence(t)
+                                    # Calculate centrality (distance from center)
+                                    center_x_norm = t.avg_position[0] / self.video_width
+                                    center_y_norm = t.avg_position[1] / self.video_height
+                                    distance_from_center = np.sqrt(
+                                        (center_x_norm - 0.5)**2 + (center_y_norm - 0.5)**2
+                                    )
+                                    max_distance = np.sqrt(0.5**2 + 0.5**2)
+                                    centrality = 1.0 - (distance_from_center / max_distance)
 
-                                logger.debug(
-                                    f"Diarization: {current_speaker} -> Face {face_track_id} is stale "
-                                    f"({time_diff:.1f}s), using Face {best_track.face_id} instead "
-                                    f"(speech_correlation={best_track.speech_correlation:.2f})"
-                                )
-                                return best_track.positions[best_ts]
+                                    # Weight: 30% speech, 20% confidence, 20% centrality, 30% size
+                                    # Prioritize size to select large foreground speakers over small centered faces
+                                    return (t.speech_correlation * 0.30 +
+                                            avg_conf * 0.20 +
+                                            centrality * 0.20 +
+                                            t.avg_area_ratio * 0.30)
 
-                            # No high-correlation face found - use average historical position
+                                # Filter by instantaneous confidence (reject very low current frame confidence)
+                                MIN_INSTANT_CONFIDENCE = 0.25
+                                viable_tracks = []
+                                for t in current_tracks:
+                                    # Get the most recent detection for this track
+                                    recent_ts = min(t.positions.keys(), key=lambda ts: abs(ts - timestamp))
+                                    instant_conf = t.positions[recent_ts].confidence
+                                    if instant_conf >= MIN_INSTANT_CONFIDENCE:
+                                        viable_tracks.append(t)
+                                    else:
+                                        logger.debug(
+                                            f"Rejected Track {t.face_id} in fallback: instant_conf={instant_conf:.2f} < {MIN_INSTANT_CONFIDENCE}"
+                                        )
+
+                                if not viable_tracks:
+                                    logger.debug("No viable tracks after instantaneous confidence filtering")
+                                    current_tracks = []  # Trigger fallback to center crop
+                                else:
+                                    current_tracks = viable_tracks
+
+                                best_track = max(current_tracks, key=get_combined_score) if current_tracks else None
+
+                                if best_track:
+                                    best_ts = min(best_track.positions.keys(), key=lambda ts: abs(ts - timestamp))
+                                    best_score = get_combined_score(best_track)
+
+                                    logger.debug(
+                                        f"Diarization: {current_speaker} -> Face {face_track_id} is stale "
+                                        f"({time_diff:.1f}s), using Face {best_track.face_id} instead "
+                                        f"(score={best_score:.2f}, speech={best_track.speech_correlation:.2f}, "
+                                        f"conf={get_track_avg_confidence(best_track):.2f})"
+                                    )
+                                    return best_track.positions[best_ts]
+
+                            # No currently visible faces - return None to trigger center crop fallback
+                            # This handles wide shots where faces are too small to detect
                             logger.debug(
                                 f"Diarization: {current_speaker} -> Face {face_track_id} "
-                                f"position is {time_diff:.1f}s stale, using average track position"
+                                f"is stale ({time_diff:.1f}s) and no current faces detected - "
+                                f"returning None for center crop fallback"
                             )
-
-                            # Calculate average position from all positions in this track
-                            avg_x = sum(pos.x + pos.width // 2 for pos in track.positions.values()) / len(track.positions)
-                            avg_y = sum(pos.y + pos.height // 2 for pos in track.positions.values()) / len(track.positions)
-                            avg_width = sum(pos.width for pos in track.positions.values()) / len(track.positions)
-                            avg_height = sum(pos.height for pos in track.positions.values()) / len(track.positions)
-
-                            # Create a synthetic face box at the average position
-                            avg_face = FaceBox(
-                                x=int(avg_x - avg_width // 2),
-                                y=int(avg_y - avg_height // 2),
-                                width=int(avg_width),
-                                height=int(avg_height),
-                                confidence=0.5,  # Synthetic confidence
-                                face_id=face_track_id
-                            )
-                            return avg_face
+                            return None
                         else:
                             logger.debug(
                                 f"Diarization: {current_speaker} -> Face {face_track_id} "
@@ -1092,20 +1451,27 @@ class FaceTracker:
             # Fall back to single face tracking
             return self.get_face_position_at_time(timestamp)
 
-        # Score each track based on:
-        # 1. Speech correlation (primary factor)
-        # 2. Face size (larger = more likely to be speaking)
-        # 3. Temporal consistency (prefer face we were already tracking)
+        # Helper to get average confidence for a track
+        def get_avg_confidence(track: FaceTrack) -> float:
+            if not track.positions:
+                return 0.0
+            return sum(pos.confidence for pos in track.positions.values()) / len(track.positions)
+
+        # Score each track based on combined factors
+        # No threshold filtering - always pick the best by score
+        # Confidence is included in score, so low-confidence faces score lower naturally
         def calculate_score(track: FaceTrack) -> float:
             """Calculate composite score for speaker selection."""
+            avg_conf = get_avg_confidence(track)
             score = (
-                track.speech_correlation * 0.6 +
-                track.avg_area_ratio * 0.3 +
+                track.speech_correlation * 0.5 +
+                avg_conf * 0.3 +  # Higher weight on confidence to favor real faces
+                track.avg_area_ratio * 0.1 +
                 (0.1 if any(abs(ts - timestamp) < 0.1 for ts in track.positions.keys()) else 0)
             )
             return score
 
-        # Calculate scores for all tracks
+        # Calculate scores for all active tracks - always pick the best one
         track_scores = {track.face_id: calculate_score(track) for track in active_tracks}
 
         # Find best candidate
@@ -1193,6 +1559,9 @@ class FaceTracker:
             return self.get_face_position_at_time(timestamp)
 
         # Check if there's speech activity at this time with energy level
+        if self.speaker_detector is None:
+            return self.get_face_position_at_time(timestamp)
+            
         is_speech, current_energy = self.speaker_detector.is_speech_at_time(
             timestamp,
             self.speech_segments,
@@ -1246,7 +1615,7 @@ class FaceTracker:
                 (0.1 if any(abs(ts - timestamp) < 0.1 for ts in track.positions.keys()) else 0)  # Temporal proximity
             )
 
-            return composite_score
+            return float(composite_score)
 
         # Calculate scores for all tracks
         track_scores = {track.face_id: calculate_realtime_score(track) for track in active_tracks}
@@ -1417,24 +1786,50 @@ class FaceTracker:
             for track in self.face_tracks:
                 overlap_time = 0.0
 
+                # Calculate expected FPS from actual track data instead of hardcoding
+                if len(track.positions) >= 2:
+                    track_timestamps = sorted(track.positions.keys())
+                    track_duration_calc = track_timestamps[-1] - track_timestamps[0]
+                    expected_fps = len(track.positions) / track_duration_calc if track_duration_calc > 0 else 7.5
+                else:
+                    expected_fps = 7.5  # Fallback for very short tracks
+
                 for seg in speaker_segs:
                     # Count face track positions that fall within this speaker segment
-                    for ts in track.positions.keys():
-                        if seg.start_time <= ts <= seg.end_time:
-                            # Weight by segment duration (normalized)
-                            overlap_time += seg.duration / len([
-                                t for t in track.positions.keys()
-                                if seg.start_time <= t <= seg.end_time
-                            ]) if len([t for t in track.positions.keys() if seg.start_time <= t <= seg.end_time]) > 0 else 0
+                    positions_in_segment = [
+                        ts for ts in track.positions.keys()
+                        if seg.start_time <= ts <= seg.end_time
+                    ]
+
+                    if positions_in_segment:
+                        # Calculate coverage: what percentage of expected detections did we get?
+                        expected_detections = seg.duration * expected_fps
+                        if expected_detections > 0:
+                            coverage_ratio = min(1.0, len(positions_in_segment) / expected_detections)
+                            overlap_time += seg.duration * coverage_ratio
+                        else:
+                            overlap_time += seg.duration  # Short segment, give full credit
 
                 # Calculate overlap ratio
-                # Also factor in face size (larger faces are more likely main speakers)
                 overlap_ratio = overlap_time / total_speaker_time if total_speaker_time > 0 else 0
-                size_bonus = track.avg_area_ratio * 0.5  # Weight by face size
+
+                # Calculate track consistency (penalize fragmented tracks)
+                # A consistent track should have detections throughout its duration
+                if len(track.positions) >= 2:
+                    track_timestamps = sorted(track.positions.keys())
+                    track_duration = track_timestamps[-1] - track_timestamps[0]
+                    if track_duration > 0:
+                        expected_track_detections = track_duration * expected_fps
+                        consistency = min(1.0, len(track.positions) / max(1, expected_track_detections))
+                    else:
+                        consistency = 0.5  # Single point in time
+                else:
+                    consistency = 0.1  # Very short track, penalize heavily
+
+                # Size bonus (larger faces are more likely main speakers)
+                size_bonus = track.avg_area_ratio
 
                 # Position-based scoring (for 2-person podcasts)
-                # If speaker is first (SPEAKER_00), they might be on left
-                # This is heuristic and might need tuning
                 position_score = 0.0
                 if track.avg_position[0] < self.video_width * 0.4:  # Left side
                     if speaker.endswith("_00"):
@@ -1443,13 +1838,54 @@ class FaceTracker:
                     if speaker.endswith("_01"):
                         position_score = 0.1
 
-                final_score = overlap_ratio + size_bonus + position_score
+                # Calculate foreground score (larger faces are more likely foreground)
+                # Normalize to 5% area as "max foreground"
+                foreground_score = min(1.0, track.avg_area_ratio / 0.05)
+
+                # Calculate centrality score (faces near center are more likely main speakers)
+                # Distance from center normalized to 0-1 (0 = edge, 1 = center)
+                center_x_norm = track.avg_position[0] / self.video_width
+                center_y_norm = track.avg_position[1] / self.video_height
+                distance_from_center = np.sqrt(
+                    (center_x_norm - 0.5)**2 + (center_y_norm - 0.5)**2
+                )
+                max_distance = np.sqrt(0.5**2 + 0.5**2)  # Corner distance
+                centrality_score = 1.0 - (distance_from_center / max_distance)
+
+                # Calculate confidence score (higher detection confidence = more reliable)
+                confidence_score = track.avg_confidence
+
+                # Progressive edge penalty (gradual penalty from center outward)
+                # Faces near center (x=0.5) get no penalty, faces near edges get increasing penalty
+                normalized_x = track.avg_position[0] / self.video_width
+                center_distance = abs(normalized_x - 0.5)  # Distance from center (0 to 0.5)
+                # Progressive penalty: center=1.0 (no penalty), edge=0.5 (50% penalty)
+                edge_penalty = max(0.5, 1.0 - (center_distance * 1.0))
+
+                # Rebalanced scoring formula (prioritizes centrality over temporal overlap):
+                # - 25% speech correlation (crucial - who's actually speaking)
+                # - 25% centrality (INCREASED! - centered faces are primary speakers)
+                # - 15% foreground/size (larger faces are main speakers)
+                # - 15% overlap ratio (REDUCED - don't over-favor long-lived tracks)
+                # - 10% confidence (detection quality)
+                # - 10% consistency (temporal consistency)
+                # - 0% position (removed - centrality and edge penalty cover this)
+                final_score = (
+                    track.speech_correlation * 0.25 +
+                    centrality_score * 0.25 +
+                    foreground_score * 0.15 +
+                    overlap_ratio * 0.15 +
+                    confidence_score * 0.10 +
+                    consistency * 0.10
+                ) * edge_penalty
                 speaker_face_scores[speaker][track.face_id] = final_score
 
                 logger.debug(
                     f"  {speaker} -> Track {track.face_id}: "
-                    f"overlap={overlap_ratio:.2f}, size={size_bonus:.2f}, "
-                    f"pos={position_score:.2f}, total={final_score:.2f}"
+                    f"speech={track.speech_correlation:.2f}, central={centrality_score:.2f}, "
+                    f"fg={foreground_score:.2f}, overlap={overlap_ratio:.2f}, "
+                    f"conf={confidence_score:.2f}, consist={consistency:.2f}, "
+                    f"edge_pen={edge_penalty:.2f}, total={final_score:.2f}"
                 )
 
         # Assign speakers to face tracks (greedy assignment)
@@ -1856,6 +2292,10 @@ class FaceTracker:
         if before_ts is None and after_ts is None:
             return None
 
+        # Type guard: ensure both timestamps are valid before interpolation
+        if before_ts is None or after_ts is None:
+            return None
+
         # Interpolate between before and after
         face_before = self.face_positions[before_ts]
         face_after = self.face_positions[after_ts]
@@ -1935,37 +2375,41 @@ class FaceTracker:
         # If speaker detection enabled, get active speaker's face
         if self.enable_speaker_detection and self.speech_segments:
             speaker_face = self.get_active_speaker_at_time(timestamp)
-            if speaker_face:
-                # Use speaker's face with smoothing window
-                relevant_faces = [
-                    face for ts, face in self.face_positions.items()
-                    if timestamp - smoothing_window / 2 <= ts <= timestamp + smoothing_window / 2
-                    # Filter to faces similar in position to speaker (within 20% of frame width)
-                    and abs(face.center[0] - speaker_face.center[0]) < (self.video_width * 0.2)
-                ]
+            if not speaker_face:
+                # No active speaker detected (e.g., wide shot with no detectable faces)
+                # Use center crop as fallback
+                return self._get_center_crop_box()
 
-                if relevant_faces:
-                    avg_face_center_x = int(np.mean([face.center[0] for face in relevant_faces]))
-                else:
-                    avg_face_center_x = speaker_face.center[0]
+            # Use speaker's face with smoothing window
+            relevant_faces = [
+                face for ts, face in self.face_positions.items()
+                if timestamp - smoothing_window / 2 <= ts <= timestamp + smoothing_window / 2
+                # Filter to faces similar in position to speaker (within 20% of frame width)
+                and abs(face.center[0] - speaker_face.center[0]) < (self.video_width * 0.2)
+            ]
 
-                # Calculate target width for 9:16 aspect ratio
-                target_width = int(self.video_height * self.target_aspect)
+            if relevant_faces:
+                avg_face_center_x = int(np.mean([face.center[0] for face in relevant_faces]))
+            else:
+                avg_face_center_x = speaker_face.center[0]
 
-                # If video is already narrower than target, use full width
-                if self.video_width <= target_width:
-                    return CropBox(x=0, y=0, width=self.video_width, height=self.video_height)
+            # Calculate target width for 9:16 aspect ratio
+            target_width = int(self.video_height * self.target_aspect)
 
-                # Calculate crop box centered on speaker
-                crop_x = avg_face_center_x - target_width // 2
-                crop_x = max(0, min(crop_x, self.video_width - target_width))
+            # If video is already narrower than target, use full width
+            if self.video_width <= target_width:
+                return CropBox(x=0, y=0, width=self.video_width, height=self.video_height)
 
-                return CropBox(
-                    x=crop_x,
-                    y=0,
-                    width=target_width,
-                    height=self.video_height
-                )
+            # Calculate crop box centered on speaker
+            crop_x = avg_face_center_x - target_width // 2
+            crop_x = max(0, min(crop_x, self.video_width - target_width))
+
+            return CropBox(
+                x=crop_x,
+                y=0,
+                width=target_width,
+                height=self.video_height
+            )
 
         # Legacy behavior: use largest face with smoothing
         # Get face positions within smoothing window
@@ -2122,12 +2566,13 @@ class FaceTracker:
                 )
 
             # Create cubic spline interpolation for smooth lookup at any timestamp
+            # fill_value="extrapolate" allows extrapolation beyond data range automatically
             interpolator = interp1d(
                 relevant_timestamps,
                 smoothed_x,
                 kind='cubic',
                 bounds_error=False,
-                fill_value='extrapolate'
+                fill_value="extrapolate"
             )
 
             return interpolator
