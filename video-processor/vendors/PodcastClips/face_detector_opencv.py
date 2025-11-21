@@ -33,7 +33,7 @@ class OpenCVFaceDetector:
 
     def __init__(
         self,
-        conf_threshold: float = 0.3,
+        conf_threshold: float = 0.6,
         nms_threshold: float = 0.3,
         top_k: int = 5000,
         model_dir: str = ".face_detection_cache"
@@ -42,7 +42,7 @@ class OpenCVFaceDetector:
         Initialize OpenCV YuNet face detector.
 
         Args:
-            conf_threshold: Confidence threshold for detections (0.3 = more sensitive)
+            conf_threshold: Confidence threshold for detections (0.6 = balanced, higher = stricter)
             nms_threshold: Non-maximum suppression threshold
             top_k: Maximum number of faces to detect
             model_dir: Directory to store downloaded model
@@ -203,7 +203,7 @@ class OpenCVFaceDetector:
 
 
 def create_opencv_detector(
-    conf_threshold: float = 0.3,
+    conf_threshold: float = 0.6,
     nms_threshold: float = 0.3,
     model_dir: str = ".face_detection_cache"
 ) -> OpenCVFaceDetector:
@@ -211,7 +211,7 @@ def create_opencv_detector(
     Create an OpenCV YuNet face detector.
 
     Args:
-        conf_threshold: Confidence threshold (lower = more sensitive)
+        conf_threshold: Confidence threshold (higher = stricter, reduces false positives)
         nms_threshold: Non-maximum suppression threshold
         model_dir: Directory to store model
 

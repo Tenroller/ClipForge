@@ -21,8 +21,8 @@ from .face_tracker_filters import smooth_trajectory_with_one_euro
 # -------------------------
 # Minimum face size as ratio of frame area (0.002-0.1)
 # Faces smaller than this are filtered out (background/audience members)
-# Default: 0.008 (0.8% of frame) - filters small background faces
-MIN_FACE_SIZE_RATIO = 0.02
+# Default: 0.035 (3.5% of frame) - filters small background faces and distant people
+MIN_FACE_SIZE_RATIO = 0.035
 
 # Maximum number of faces to track simultaneously (1-8)
 # 1: Track only largest face (simplest)
@@ -37,7 +37,7 @@ MIN_TRACK_FRAMES = 10
 # Minimum average confidence for a face track to be kept (0-1)
 # Lower value = more lenient, may include uncertain detections
 # Higher value = stricter, only high-confidence tracks
-MIN_AVG_CONFIDENCE = 0.4
+MIN_AVG_CONFIDENCE = 0.6
 
 # IoU (Intersection over Union) threshold for NMS (Non-Maximum Suppression)
 # Lower value = stricter duplicate removal (fewer duplicates)
@@ -675,8 +675,9 @@ class FaceTracker:
         Calculate a priority score for face selection.
 
         Combines multiple factors to identify the main speaker:
-        - Size: Larger faces are likely closer/more important (60% weight)
-        - Centrality: Center faces are likely main subjects (40% weight)
+        - Size: Larger faces are likely closer/more important (40% weight)
+        - Centrality: Center faces are likely main subjects (50% weight)
+        - Confidence: Higher confidence detections (10% weight)
 
         Args:
             face: Face box to score
@@ -692,8 +693,11 @@ class FaceTracker:
         # Center score
         center_score = self._calculate_center_score(face)
 
-        # Combined score with weights
-        priority_score = (size_score * 0.60) + (center_score * 0.40)
+        # Confidence score
+        confidence_score = face.confidence
+
+        # Combined score with weights - prioritize center position
+        priority_score = (size_score * 0.40) + (center_score * 0.50) + (confidence_score * 0.10)
 
         return priority_score
 
@@ -993,16 +997,16 @@ class FaceTracker:
                         if area_ratio < self.min_face_size_ratio:
                             continue
 
-                        # 2. Geometric validation (relaxed - accommodate real-world face bounding boxes)
+                        # 2. Geometric validation (stricter - filter unrealistic face shapes)
                         aspect_ratio = face_box.aspect_ratio
-                        if aspect_ratio < 0.65 or aspect_ratio > 2.0:  # Relaxed: allows wider/taller boxes, rejects only extreme distortions
+                        if aspect_ratio < MIN_FACE_ASPECT_RATIO or aspect_ratio > MAX_FACE_ASPECT_RATIO:
                             logger.debug(
-                                f"Rejected detection: aspect ratio {aspect_ratio:.2f} out of range [0.65-2.0]"
+                                f"Rejected detection: aspect ratio {aspect_ratio:.2f} out of range [{MIN_FACE_ASPECT_RATIO}-{MAX_FACE_ASPECT_RATIO}]"
                             )
                             continue
 
                         # 3. Edge proximity filter (reject faces too close to frame edges)
-                        EDGE_MARGIN = 0.10  # 10% of frame dimensions (increased from 5%)
+                        EDGE_MARGIN = 0.15  # 15% of frame dimensions - stricter to filter background faces
                         center_x, center_y = face_box.center
                         normalized_x = center_x / self.video_width
                         normalized_y = center_y / self.video_height
@@ -1011,7 +1015,7 @@ class FaceTracker:
                             normalized_y < EDGE_MARGIN or normalized_y > (1 - EDGE_MARGIN)):
                             logger.debug(
                                 f"Rejected edge detection at ({center_x}, {center_y}), "
-                                f"normalized ({normalized_x:.2f}, {normalized_y:.2f})"
+                                f"normalized ({normalized_x:.2f}, {normalized_y:.2f}), margin={EDGE_MARGIN}"
                             )
                             continue
 
@@ -1022,16 +1026,23 @@ class FaceTracker:
                     # Apply Non-Maximum Suppression to remove overlapping detections
                     valid_faces = self._apply_nms(valid_faces)
 
-                    # Sort by priority score (size + centrality) to identify main speaker
-                    # This prioritizes larger faces that are centered in the frame
-                    valid_faces.sort(key=lambda f: self._calculate_face_priority_score(f), reverse=True)
+                    # Additional confidence filter after NMS to ensure high-quality detections
+                    # This removes any remaining low-confidence faces that passed initial filters
+                    MIN_DETECTION_CONFIDENCE = 0.65
+                    valid_faces = [f for f in valid_faces if f.confidence >= MIN_DETECTION_CONFIDENCE]
 
-                    # Store highest priority face for legacy single-face tracking
-                    face_positions[timestamp] = valid_faces[0]
-                    faces_detected += 1
+                    # Only proceed if we still have valid faces after confidence filter
+                    if valid_faces:
+                        # Sort by priority score (size + centrality + confidence) to identify main speaker
+                        # This prioritizes larger faces that are centered in the frame
+                        valid_faces.sort(key=lambda f: self._calculate_face_priority_score(f), reverse=True)
 
-                    # Store ALL valid faces for multi-face tracking
-                    all_faces_by_timestamp[timestamp] = valid_faces
+                        # Store highest priority face for legacy single-face tracking
+                        face_positions[timestamp] = valid_faces[0]
+                        faces_detected += 1
+
+                        # Store ALL valid faces for multi-face tracking
+                        all_faces_by_timestamp[timestamp] = valid_faces
 
                 frames_processed += 1
 
