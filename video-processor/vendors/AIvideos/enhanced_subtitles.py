@@ -27,27 +27,27 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 class SubtitleConfig:
     """Configuration for ASS subtitle styling."""
 
-    # Font settings
+    # Font settings - optimized for modern short-form video (TikTok/Reels style)
     font_family: str = "EpundaSlab-VariableFont_wght.ttf"  # Use centralized font
-    font_size: int = 28
+    font_size: int = 65  # Increased from 28 to 65 for better readability on mobile
 
     # Colors (ASS format &HAABBGGRR)
     primary_color: str = "&H00FFFFFF"      # White text
     border_color: str = "&H00000000"       # Black border
     highlight_color: str = "&H0000FFFF"    # Yellow highlight
-    
+
     # Additional color fields for compatibility
     default_color: str = "&H00FFFFFF"      # Default text color (alias for primary_color)
     stroke_color: str = "&H00000000"       # Stroke/outline color (alias for border_color)
     background_color: str = "&H00000000"   # Background color
 
-    # Styling
-    stroke_width: int = 2                  # Stroke/outline width
+    # Styling - improved contrast for mobile viewing
+    stroke_width: int = 4                  # Increased from 2 to 4 for better contrast
     background_opacity: float = 0.0        # Background opacity (0.0 to 1.0)
-    padding_x: int = 16                    # Horizontal padding
-    padding_y: int = 12                    # Vertical padding
+    padding_x: int = 20                    # Increased horizontal padding
+    padding_y: int = 16                    # Increased vertical padding
 
-    # Position
+    # Position - safer positioning to prevent cropping
     position: str = "center,bottom"
 
     # Shadow settings

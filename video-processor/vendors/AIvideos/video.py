@@ -821,14 +821,14 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
     
     # Generator that returns a CompositeVideoClip (background box + text)
     def generator(txt: str):
-        # Calculate font size relative to video height (targeting ~40-50px for 1920px height)
+        # Calculate font size relative to video height - optimized for modern short-form video
         try:
             video_height = int(getattr(base_clip, 'h', 1920) or 1920)
-            # Scale font size based on video height - aim for 2.5% of video height
-            font_size = max(24, int(video_height * 0.025))
+            # Increased from 2.5% to 3.5% for better readability on mobile devices
+            font_size = max(50, int(video_height * 0.035))
         except Exception:
             video_height = 1920  # Fallback height
-            font_size = 48  # Fallback for ~1920px height
+            font_size = 65  # Increased fallback for better visibility
             
         # Create TextClip with centralized font choices
         font_choices = get_font_fallback_list()
@@ -841,18 +841,19 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
                 max_text_width = int(video_width * 0.85)  # Use 85% of video width for better text fitting
                 
                 # Dynamically adjust font size for very long text to prevent cropping
+                # Increased minimum sizes for better readability
                 text_length = len(txt)
                 if text_length > 100:  # Very long text
-                    font_size = max(20, int(video_height * 0.02))
+                    font_size = max(40, int(video_height * 0.028))
                 elif text_length > 50:  # Moderately long text
-                    font_size = max(22, int(video_height * 0.022))
+                    font_size = max(45, int(video_height * 0.030))
                 
                 text_clip = TextClip(
                     text=txt,
                     font_size=font_size,
                     color=text_color,
                     stroke_color="black",
-                    stroke_width=2,
+                    stroke_width=4,  # Increased from 2 to 4 for better contrast
                     font=font_choice,
                     method='caption',  # Use caption method for better text rendering
                     size=(max_text_width, None),  # Set max width for text wrapping
@@ -875,11 +876,12 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
                 max_text_width = int(video_width * 0.85)  # Use 85% of video width for better text fitting
                 
                 # Dynamically adjust font size for very long text to prevent cropping
+                # Increased minimum sizes for better readability
                 text_length = len(txt)
                 if text_length > 100:  # Very long text
-                    font_size = max(20, int(video_height * 0.02))
+                    font_size = max(40, int(video_height * 0.028))
                 elif text_length > 50:  # Moderately long text
-                    font_size = max(22, int(video_height * 0.022))
+                    font_size = max(45, int(video_height * 0.030))
                 
                 text_clip = TextClip(
                     text=txt,
@@ -892,9 +894,9 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
             except Exception as e:
                 print(colored(f"[error] All TextClip creation methods failed: {e}", "red"))
                 raise e
-        # Match frontend padding: px-3 py-2 = 12px horizontal, 8px vertical
-        pad_x = 12
-        pad_y = 8
+        # Increased padding for modern short-form video style (better readability)
+        pad_x = 20  # Increased from 12px for more breathing room
+        pad_y = 14  # Increased from 8px for better vertical spacing
         bg_w = int(getattr(text_clip, 'w', 0) or 0) + 2 * pad_x
         bg_h = int(getattr(text_clip, 'h', 0) or 0) + 2 * pad_y
         # Semi-transparent background box - match frontend bg-black/40
@@ -1112,15 +1114,16 @@ def generate_video(combined_video_path: str, tts_path: str, subtitles_path: str,
         def _y_from_v(vpos: str) -> int:
             # Align to the same grid model used by the frontend preview
             # Grid anchors are interpreted as the CENTER of the subtitle box
-            # at 15% / 50% / 85% vertically.
+            # at 15% / 50% / 72% vertically (changed from 85% to prevent cropping with larger fonts).
             if sh > 0:
                 half_sh = int(sh / 2)
                 if vpos == 'top':
                     y = int(0.15 * h) - half_sh
                     return max(min(y, h - sh), 0)
                 if vpos == 'bottom':
-                    # Changed to align subtitle bottom with 85% line instead of centering
-                    y = int(0.85 * h) - sh
+                    # Changed from 85% to 72% to prevent bottom cropping with larger modern fonts
+                    # Aligns subtitle bottom with safe area, leaving ~10-15% margin at bottom
+                    y = int(0.72 * h) - sh
                     return max(min(y, h - sh), 0)
                 # center
                 return max(int((h - sh) / 2), 0)
