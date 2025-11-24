@@ -295,6 +295,19 @@ class ContentModeDetector:
             # Get content score and face info for this timestamp
             content_score = content_scores.get(timestamp, 0.0)
 
+            # Check if faces exist in CURRENT frame (AFTER filtering!)
+            # face_positions contains RAW detections (before background filtering)
+            # We need to check face_tracks which contains VALID tracked faces (after filtering)
+            current_frame_has_faces = False
+            if self.face_tracker and self.face_tracker.face_tracks:
+                # Check if ANY face track has a position near this timestamp
+                for track in self.face_tracker.face_tracks:
+                    # Look for faces at this exact timestamp (within 0.1s tolerance)
+                    nearby_times = [ts for ts in track.positions.keys() if abs(ts - timestamp) < 0.1]
+                    if nearby_times:
+                        current_frame_has_faces = True
+                        break
+
             # Use face tracker's persistence method if available for better wide shot handling
             if self.face_tracker and hasattr(self.face_tracker, 'get_face_position_with_persistence'):
                 face_box = self.face_tracker.get_face_position_with_persistence(timestamp, persistence_window=2.0)
@@ -338,14 +351,25 @@ class ContentModeDetector:
                 self.face_tracker.speaker_to_face_map):
                 diarization_speaker = self.face_tracker.get_speaker_at_time(timestamp)
                 if diarization_speaker:
-                    # Diarization says someone is speaking - stay in FACE mode
-                    should_be_horizontal = False
-                    face_id = self.face_tracker.speaker_to_face_map.get(diarization_speaker, "?")
-                    logger.debug(
-                        f"[{timestamp:.1f}s] Diarization override: {diarization_speaker} -> Face {face_id} → FACE"
-                    )
-                    # Skip all other checks - diarization is authoritative
-                    target_mode = ContentMode.FACE
+                    # PHASE 1: Wide shot detection
+                    # If someone is speaking but no high-quality face detected,
+                    # this is likely a wide audience shot → use horizontal mode
+                    if not face_box_for_mode:
+                        # Speech active but no visible face → wide shot
+                        should_be_horizontal = True
+                        logger.debug(
+                            f"[{timestamp:.1f}s] Wide shot detected: "
+                            f"{diarization_speaker} speaking but no face visible → HORIZONTAL"
+                        )
+                        target_mode = ContentMode.HORIZONTAL
+                    else:
+                        # Normal case: speaker detected with visible face
+                        should_be_horizontal = False
+                        face_id = self.face_tracker.speaker_to_face_map.get(diarization_speaker, "?")
+                        logger.debug(
+                            f"[{timestamp:.1f}s] Diarization override: {diarization_speaker} -> Face {face_id} → FACE"
+                        )
+                        target_mode = ContentMode.FACE
 
                     # Check if mode changed
                     if target_mode != current_mode:
@@ -359,6 +383,32 @@ class ContentModeDetector:
                         segment_start = timestamp
                         current_mode = target_mode
                     continue  # Skip to next timestamp
+            
+            # PRIORITY -0.5: Wide shot detection - no faces in current frame
+            # If there are NO faces detected in the current frame at all,
+            # this is likely a wide audience shot → use horizontal mode
+            # Persistence should NOT prevent this - if current frame has no faces, show full shot
+            if not current_frame_has_faces:
+                # No faces in current frame → wide shot, use horizontal mode
+                should_be_horizontal = True
+                logger.debug(
+                    f"[{timestamp:.1f}s] Wide shot detected: "
+                    f"no faces in current frame → HORIZONTAL"
+                )
+                target_mode = ContentMode.HORIZONTAL
+                
+                # Check if mode changed
+                if target_mode != current_mode:
+                    if timestamp > segment_start:
+                        confidence = self._calculate_segment_confidence(
+                            content_scores, segment_start, timestamp
+                        )
+                        segments.append(ContentSegment(
+                            segment_start, timestamp, current_mode, confidence
+                        ))
+                    segment_start = timestamp
+                    current_mode = target_mode
+                continue  # Skip to next timestamp
 
             # PRIORITY 0: Check for extreme content (overrides everything)
             if content_score > 0.7:

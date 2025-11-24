@@ -386,9 +386,9 @@ def visualize_face_tracking(
         # Get current content mode
         current_mode = get_mode_at_time(timestamp)
 
-        # Get crop region
+        # Get crop region - only for vertical mode
         crop_box = None
-        if show_crop_region:
+        if show_crop_region and current_mode != ContentMode.HORIZONTAL:
             crop_box = face_tracker.get_dynamic_crop_box_at_time(timestamp)
 
         # Draw crop region based on content mode

@@ -5,8 +5,8 @@
     "frames_with_active_speaker": 4247,
     "face_tracks": 12,
     "speech_segments": 39,
-    "content_segments": 8,
-    "frames_in_horizontal_mode": 235
+    "content_segments": 11,
+    "frames_in_horizontal_mode": 301
   },
   "face_tracks": [
     {
@@ -17687,7 +17687,7 @@
       "timestamp": 35.2,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17697,7 +17697,7 @@
       "timestamp": 35.22,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17707,7 +17707,7 @@
       "timestamp": 35.24,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17717,7 +17717,7 @@
       "timestamp": 35.26,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17727,7 +17727,7 @@
       "timestamp": 35.28,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17737,7 +17737,7 @@
       "timestamp": 35.3,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17747,7 +17747,7 @@
       "timestamp": 35.32,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17757,7 +17757,7 @@
       "timestamp": 35.34,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17767,7 +17767,7 @@
       "timestamp": 35.36,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17777,7 +17777,7 @@
       "timestamp": 35.38,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17787,7 +17787,7 @@
       "timestamp": 35.4,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17797,7 +17797,7 @@
       "timestamp": 35.42,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17807,7 +17807,7 @@
       "timestamp": 35.44,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17817,7 +17817,7 @@
       "timestamp": 35.46,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17827,7 +17827,7 @@
       "timestamp": 35.48,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17837,7 +17837,7 @@
       "timestamp": 35.5,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17847,7 +17847,7 @@
       "timestamp": 35.52,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17857,7 +17857,7 @@
       "timestamp": 35.54,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17867,7 +17867,7 @@
       "timestamp": 35.56,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17877,7 +17877,7 @@
       "timestamp": 35.58,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17887,7 +17887,7 @@
       "timestamp": 35.6,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17897,7 +17897,7 @@
       "timestamp": 35.62,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17907,7 +17907,7 @@
       "timestamp": 35.64,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17917,7 +17917,7 @@
       "timestamp": 35.66,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17927,7 +17927,7 @@
       "timestamp": 35.68,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17937,7 +17937,7 @@
       "timestamp": 35.7,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17947,7 +17947,7 @@
       "timestamp": 35.72,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17957,7 +17957,7 @@
       "timestamp": 35.74,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17967,7 +17967,7 @@
       "timestamp": 35.76,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17977,7 +17977,7 @@
       "timestamp": 35.78,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17987,7 +17987,7 @@
       "timestamp": 35.8,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -17997,7 +17997,7 @@
       "timestamp": 35.82,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18007,7 +18007,7 @@
       "timestamp": 35.84,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18017,7 +18017,7 @@
       "timestamp": 35.86,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18027,7 +18027,7 @@
       "timestamp": 35.88,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18037,7 +18037,7 @@
       "timestamp": 35.9,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18047,7 +18047,7 @@
       "timestamp": 35.92,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18057,7 +18057,7 @@
       "timestamp": 35.94,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18067,7 +18067,7 @@
       "timestamp": 35.96,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18077,7 +18077,7 @@
       "timestamp": 35.98,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18087,7 +18087,7 @@
       "timestamp": 36.0,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18097,7 +18097,7 @@
       "timestamp": 36.02,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18107,7 +18107,7 @@
       "timestamp": 36.04,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18117,7 +18117,7 @@
       "timestamp": 36.06,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18127,7 +18127,7 @@
       "timestamp": 36.08,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18137,7 +18137,7 @@
       "timestamp": 36.1,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18147,7 +18147,7 @@
       "timestamp": 36.12,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18157,7 +18157,7 @@
       "timestamp": 36.14,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18167,7 +18167,7 @@
       "timestamp": 36.16,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18177,7 +18177,7 @@
       "timestamp": 36.18,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18187,7 +18187,7 @@
       "timestamp": 36.2,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18197,7 +18197,7 @@
       "timestamp": 36.22,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18207,7 +18207,7 @@
       "timestamp": 36.24,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18217,7 +18217,7 @@
       "timestamp": 36.26,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18227,7 +18227,7 @@
       "timestamp": 36.28,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18237,7 +18237,7 @@
       "timestamp": 36.3,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18247,7 +18247,7 @@
       "timestamp": 36.32,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18257,7 +18257,7 @@
       "timestamp": 36.34,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18267,7 +18267,7 @@
       "timestamp": 36.36,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18277,7 +18277,7 @@
       "timestamp": 36.38,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18287,7 +18287,7 @@
       "timestamp": 36.4,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18297,7 +18297,7 @@
       "timestamp": 36.42,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18307,7 +18307,7 @@
       "timestamp": 36.44,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18317,7 +18317,7 @@
       "timestamp": 36.46,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18327,7 +18327,7 @@
       "timestamp": 36.48,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18337,7 +18337,7 @@
       "timestamp": 36.5,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18347,7 +18347,7 @@
       "timestamp": 36.52,
       "faces": [],
       "crop_region": {
-        "x": 491,
+        "x": 656,
         "y": 0,
         "width": 607,
         "height": 1080
@@ -18396,402 +18396,202 @@
     "1831": {
       "timestamp": 36.62,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1832": {
       "timestamp": 36.64,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1833": {
       "timestamp": 36.66,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1834": {
       "timestamp": 36.68,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1835": {
       "timestamp": 36.7,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1836": {
       "timestamp": 36.72,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1837": {
       "timestamp": 36.74,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1838": {
       "timestamp": 36.76,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1839": {
       "timestamp": 36.78,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1840": {
       "timestamp": 36.8,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1841": {
       "timestamp": 36.82,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1842": {
       "timestamp": 36.84,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1843": {
       "timestamp": 36.86,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1844": {
       "timestamp": 36.88,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1845": {
       "timestamp": 36.9,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1846": {
       "timestamp": 36.92,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1847": {
       "timestamp": 36.94,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1848": {
       "timestamp": 36.96,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1849": {
       "timestamp": 36.98,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1850": {
       "timestamp": 37.0,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1851": {
       "timestamp": 37.02,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1852": {
       "timestamp": 37.04,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1853": {
       "timestamp": 37.06,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1854": {
       "timestamp": 37.08,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1855": {
       "timestamp": 37.1,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1856": {
       "timestamp": 37.12,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1857": {
       "timestamp": 37.14,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1858": {
       "timestamp": 37.16,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1859": {
       "timestamp": 37.18,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1860": {
       "timestamp": 37.2,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1861": {
       "timestamp": 37.22,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1862": {
       "timestamp": 37.24,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1863": {
       "timestamp": 37.26,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1864": {
       "timestamp": 37.28,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1865": {
       "timestamp": 37.3,
       "faces": [],
-      "crop_region": {
-        "x": 491,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1866": {
       "timestamp": 37.32,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1867": {
       "timestamp": 37.34,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1868": {
       "timestamp": 37.36,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1869": {
       "timestamp": 37.38,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1870": {
       "timestamp": 37.4,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "1871": {
       "timestamp": 37.42,
@@ -26476,12 +26276,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2277": {
       "timestamp": 45.54,
@@ -26497,12 +26292,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2278": {
       "timestamp": 45.56,
@@ -26518,12 +26308,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2279": {
       "timestamp": 45.58,
@@ -26539,12 +26324,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2280": {
       "timestamp": 45.6,
@@ -26560,12 +26340,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2281": {
       "timestamp": 45.62,
@@ -26581,12 +26356,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2282": {
       "timestamp": 45.64,
@@ -26602,12 +26372,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2283": {
       "timestamp": 45.66,
@@ -26623,12 +26388,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2284": {
       "timestamp": 45.68,
@@ -26644,12 +26404,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2285": {
       "timestamp": 45.7,
@@ -26665,12 +26420,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2286": {
       "timestamp": 45.72,
@@ -26686,12 +26436,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2287": {
       "timestamp": 45.74,
@@ -26707,12 +26452,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2288": {
       "timestamp": 45.76,
@@ -26728,12 +26468,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2289": {
       "timestamp": 45.78,
@@ -26749,12 +26484,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2290": {
       "timestamp": 45.8,
@@ -26770,12 +26500,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2291": {
       "timestamp": 45.82,
@@ -26791,12 +26516,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2292": {
       "timestamp": 45.84,
@@ -26812,12 +26532,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2293": {
       "timestamp": 45.86,
@@ -26833,12 +26548,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2294": {
       "timestamp": 45.88,
@@ -26854,2072 +26564,1037 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 525,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2295": {
       "timestamp": 45.9,
       "faces": [],
-      "crop_region": {
-        "x": 525,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2296": {
       "timestamp": 45.92,
       "faces": [],
-      "crop_region": {
-        "x": 528,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2297": {
       "timestamp": 45.94,
       "faces": [],
-      "crop_region": {
-        "x": 528,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2298": {
       "timestamp": 45.96,
       "faces": [],
-      "crop_region": {
-        "x": 532,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2299": {
       "timestamp": 45.98,
       "faces": [],
-      "crop_region": {
-        "x": 532,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2300": {
       "timestamp": 46.0,
       "faces": [],
-      "crop_region": {
-        "x": 538,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2301": {
       "timestamp": 46.02,
       "faces": [],
-      "crop_region": {
-        "x": 538,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2302": {
       "timestamp": 46.04,
       "faces": [],
-      "crop_region": {
-        "x": 553,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2303": {
       "timestamp": 46.06,
       "faces": [],
-      "crop_region": {
-        "x": 553,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2304": {
       "timestamp": 46.08,
       "faces": [],
-      "crop_region": {
-        "x": 553,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2305": {
       "timestamp": 46.1,
       "faces": [],
-      "crop_region": {
-        "x": 553,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2306": {
       "timestamp": 46.12,
       "faces": [],
-      "crop_region": {
-        "x": 553,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2307": {
       "timestamp": 46.14,
       "faces": [],
-      "crop_region": {
-        "x": 553,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2308": {
       "timestamp": 46.16,
       "faces": [],
-      "crop_region": {
-        "x": 544,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2309": {
       "timestamp": 46.18,
       "faces": [],
-      "crop_region": {
-        "x": 544,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2310": {
       "timestamp": 46.2,
       "faces": [],
-      "crop_region": {
-        "x": 544,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2311": {
       "timestamp": 46.22,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2312": {
       "timestamp": 46.24,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2313": {
       "timestamp": 46.26,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2314": {
       "timestamp": 46.28,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2315": {
       "timestamp": 46.3,
       "faces": [],
-      "crop_region": {
-        "x": 542,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2316": {
       "timestamp": 46.32,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2317": {
       "timestamp": 46.34,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2318": {
       "timestamp": 46.36,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2319": {
       "timestamp": 46.38,
       "faces": [],
-      "crop_region": {
-        "x": 543,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2320": {
       "timestamp": 46.4,
       "faces": [],
-      "crop_region": {
-        "x": 542,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2321": {
       "timestamp": 46.42,
       "faces": [],
-      "crop_region": {
-        "x": 542,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2322": {
       "timestamp": 46.44,
       "faces": [],
-      "crop_region": {
-        "x": 542,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2323": {
       "timestamp": 46.46,
       "faces": [],
-      "crop_region": {
-        "x": 542,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2324": {
       "timestamp": 46.48,
       "faces": [],
-      "crop_region": {
-        "x": 541,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2325": {
       "timestamp": 46.5,
       "faces": [],
-      "crop_region": {
-        "x": 541,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2326": {
       "timestamp": 46.52,
       "faces": [],
-      "crop_region": {
-        "x": 541,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2327": {
       "timestamp": 46.54,
       "faces": [],
-      "crop_region": {
-        "x": 541,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2328": {
       "timestamp": 46.56,
       "faces": [],
-      "crop_region": {
-        "x": 541,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2329": {
       "timestamp": 46.58,
       "faces": [],
-      "crop_region": {
-        "x": 540,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2330": {
       "timestamp": 46.6,
       "faces": [],
-      "crop_region": {
-        "x": 540,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2331": {
       "timestamp": 46.62,
       "faces": [],
-      "crop_region": {
-        "x": 540,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2332": {
       "timestamp": 46.64,
       "faces": [],
-      "crop_region": {
-        "x": 540,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2333": {
       "timestamp": 46.66,
       "faces": [],
-      "crop_region": {
-        "x": 539,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2334": {
       "timestamp": 46.68,
       "faces": [],
-      "crop_region": {
-        "x": 539,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2335": {
       "timestamp": 46.7,
       "faces": [],
-      "crop_region": {
-        "x": 539,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2336": {
       "timestamp": 46.72,
       "faces": [],
-      "crop_region": {
-        "x": 539,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2337": {
       "timestamp": 46.74,
       "faces": [],
-      "crop_region": {
-        "x": 539,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2338": {
       "timestamp": 46.76,
       "faces": [],
-      "crop_region": {
-        "x": 538,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2339": {
       "timestamp": 46.78,
       "faces": [],
-      "crop_region": {
-        "x": 538,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2340": {
       "timestamp": 46.8,
       "faces": [],
-      "crop_region": {
-        "x": 538,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2341": {
       "timestamp": 46.82,
       "faces": [],
-      "crop_region": {
-        "x": 538,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2342": {
       "timestamp": 46.84,
       "faces": [],
-      "crop_region": {
-        "x": 537,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2343": {
       "timestamp": 46.86,
       "faces": [],
-      "crop_region": {
-        "x": 537,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2344": {
       "timestamp": 46.88,
       "faces": [],
-      "crop_region": {
-        "x": 537,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2345": {
       "timestamp": 46.9,
       "faces": [],
-      "crop_region": {
-        "x": 537,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2346": {
       "timestamp": 46.92,
       "faces": [],
-      "crop_region": {
-        "x": 536,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2347": {
       "timestamp": 46.94,
       "faces": [],
-      "crop_region": {
-        "x": 536,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2348": {
       "timestamp": 46.96,
       "faces": [],
-      "crop_region": {
-        "x": 536,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2349": {
       "timestamp": 46.98,
       "faces": [],
-      "crop_region": {
-        "x": 536,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2350": {
       "timestamp": 47.0,
       "faces": [],
-      "crop_region": {
-        "x": 536,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2351": {
       "timestamp": 47.02,
       "faces": [],
-      "crop_region": {
-        "x": 535,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2352": {
       "timestamp": 47.04,
       "faces": [],
-      "crop_region": {
-        "x": 535,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2353": {
       "timestamp": 47.06,
       "faces": [],
-      "crop_region": {
-        "x": 535,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2354": {
       "timestamp": 47.08,
       "faces": [],
-      "crop_region": {
-        "x": 535,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2355": {
       "timestamp": 47.1,
       "faces": [],
-      "crop_region": {
-        "x": 534,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2356": {
       "timestamp": 47.12,
       "faces": [],
-      "crop_region": {
-        "x": 534,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2357": {
       "timestamp": 47.14,
       "faces": [],
-      "crop_region": {
-        "x": 534,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2358": {
       "timestamp": 47.16,
       "faces": [],
-      "crop_region": {
-        "x": 534,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2359": {
       "timestamp": 47.18,
       "faces": [],
-      "crop_region": {
-        "x": 534,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2360": {
       "timestamp": 47.2,
       "faces": [],
-      "crop_region": {
-        "x": 533,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2361": {
       "timestamp": 47.22,
       "faces": [],
-      "crop_region": {
-        "x": 533,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2362": {
       "timestamp": 47.24,
       "faces": [],
-      "crop_region": {
-        "x": 533,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2363": {
       "timestamp": 47.26,
       "faces": [],
-      "crop_region": {
-        "x": 533,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2364": {
       "timestamp": 47.28,
       "faces": [],
-      "crop_region": {
-        "x": 532,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2365": {
       "timestamp": 47.3,
       "faces": [],
-      "crop_region": {
-        "x": 532,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2366": {
       "timestamp": 47.32,
       "faces": [],
-      "crop_region": {
-        "x": 532,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2367": {
       "timestamp": 47.34,
       "faces": [],
-      "crop_region": {
-        "x": 532,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2368": {
       "timestamp": 47.36,
       "faces": [],
-      "crop_region": {
-        "x": 532,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2369": {
       "timestamp": 47.38,
       "faces": [],
-      "crop_region": {
-        "x": 531,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2370": {
       "timestamp": 47.4,
       "faces": [],
-      "crop_region": {
-        "x": 531,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2371": {
       "timestamp": 47.42,
       "faces": [],
-      "crop_region": {
-        "x": 531,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2372": {
       "timestamp": 47.44,
       "faces": [],
-      "crop_region": {
-        "x": 531,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2373": {
       "timestamp": 47.46,
       "faces": [],
-      "crop_region": {
-        "x": 530,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2374": {
       "timestamp": 47.48,
       "faces": [],
-      "crop_region": {
-        "x": 530,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2375": {
       "timestamp": 47.5,
       "faces": [],
-      "crop_region": {
-        "x": 530,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2376": {
       "timestamp": 47.52,
       "faces": [],
-      "crop_region": {
-        "x": 530,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2377": {
       "timestamp": 47.54,
       "faces": [],
-      "crop_region": {
-        "x": 530,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2378": {
       "timestamp": 47.56,
       "faces": [],
-      "crop_region": {
-        "x": 529,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2379": {
       "timestamp": 47.58,
       "faces": [],
-      "crop_region": {
-        "x": 529,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2380": {
       "timestamp": 47.6,
       "faces": [],
-      "crop_region": {
-        "x": 529,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2381": {
       "timestamp": 47.62,
       "faces": [],
-      "crop_region": {
-        "x": 529,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2382": {
       "timestamp": 47.64,
       "faces": [],
-      "crop_region": {
-        "x": 528,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2383": {
       "timestamp": 47.66,
       "faces": [],
-      "crop_region": {
-        "x": 528,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2384": {
       "timestamp": 47.68,
       "faces": [],
-      "crop_region": {
-        "x": 528,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2385": {
       "timestamp": 47.7,
       "faces": [],
-      "crop_region": {
-        "x": 528,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2386": {
       "timestamp": 47.72,
       "faces": [],
-      "crop_region": {
-        "x": 528,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2387": {
       "timestamp": 47.74,
       "faces": [],
-      "crop_region": {
-        "x": 527,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2388": {
       "timestamp": 47.76,
       "faces": [],
-      "crop_region": {
-        "x": 527,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2389": {
       "timestamp": 47.78,
       "faces": [],
-      "crop_region": {
-        "x": 527,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2390": {
       "timestamp": 47.8,
       "faces": [],
-      "crop_region": {
-        "x": 527,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2391": {
       "timestamp": 47.82,
       "faces": [],
-      "crop_region": {
-        "x": 526,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2392": {
       "timestamp": 47.84,
       "faces": [],
-      "crop_region": {
-        "x": 526,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2393": {
       "timestamp": 47.86,
       "faces": [],
-      "crop_region": {
-        "x": 526,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2394": {
       "timestamp": 47.88,
       "faces": [],
-      "crop_region": {
-        "x": 526,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2395": {
       "timestamp": 47.9,
       "faces": [],
-      "crop_region": {
-        "x": 526,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2396": {
       "timestamp": 47.92,
       "faces": [],
-      "crop_region": {
-        "x": 525,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2397": {
       "timestamp": 47.94,
       "faces": [],
-      "crop_region": {
-        "x": 525,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2398": {
       "timestamp": 47.96,
       "faces": [],
-      "crop_region": {
-        "x": 525,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2399": {
       "timestamp": 47.98,
       "faces": [],
-      "crop_region": {
-        "x": 525,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2400": {
       "timestamp": 48.0,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2401": {
       "timestamp": 48.02,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2402": {
       "timestamp": 48.04,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2403": {
       "timestamp": 48.06,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2404": {
       "timestamp": 48.08,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2405": {
       "timestamp": 48.1,
       "faces": [],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2406": {
       "timestamp": 48.12,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2407": {
       "timestamp": 48.14,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2408": {
       "timestamp": 48.16,
       "faces": [],
-      "crop_region": {
-        "x": 524,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2409": {
       "timestamp": 48.18,
       "faces": [],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2410": {
       "timestamp": 48.2,
       "faces": [],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2411": {
       "timestamp": 48.22,
       "faces": [],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2412": {
       "timestamp": 48.24,
       "faces": [],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2413": {
       "timestamp": 48.26,
       "faces": [],
-      "crop_region": {
-        "x": 523,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2414": {
       "timestamp": 48.28,
       "faces": [],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2415": {
       "timestamp": 48.3,
       "faces": [],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2416": {
       "timestamp": 48.32,
       "faces": [],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2417": {
       "timestamp": 48.34,
       "faces": [],
-      "crop_region": {
-        "x": 522,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2418": {
       "timestamp": 48.36,
       "faces": [],
-      "crop_region": {
-        "x": 521,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2419": {
       "timestamp": 48.38,
       "faces": [],
-      "crop_region": {
-        "x": 521,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2420": {
       "timestamp": 48.4,
       "faces": [],
-      "crop_region": {
-        "x": 521,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2421": {
       "timestamp": 48.42,
       "faces": [],
-      "crop_region": {
-        "x": 521,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2422": {
       "timestamp": 48.44,
       "faces": [],
-      "crop_region": {
-        "x": 520,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2423": {
       "timestamp": 48.46,
       "faces": [],
-      "crop_region": {
-        "x": 520,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2424": {
       "timestamp": 48.48,
       "faces": [],
-      "crop_region": {
-        "x": 520,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2425": {
       "timestamp": 48.5,
       "faces": [],
-      "crop_region": {
-        "x": 520,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2426": {
       "timestamp": 48.52,
       "faces": [],
-      "crop_region": {
-        "x": 520,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2427": {
       "timestamp": 48.54,
       "faces": [],
-      "crop_region": {
-        "x": 519,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2428": {
       "timestamp": 48.56,
       "faces": [],
-      "crop_region": {
-        "x": 519,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2429": {
       "timestamp": 48.58,
       "faces": [],
-      "crop_region": {
-        "x": 519,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2430": {
       "timestamp": 48.6,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2431": {
       "timestamp": 48.62,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2432": {
       "timestamp": 48.64,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2433": {
       "timestamp": 48.66,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2434": {
       "timestamp": 48.68,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2435": {
       "timestamp": 48.7,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2436": {
       "timestamp": 48.72,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2437": {
       "timestamp": 48.74,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2438": {
       "timestamp": 48.76,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2439": {
       "timestamp": 48.78,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2440": {
       "timestamp": 48.8,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2441": {
       "timestamp": 48.82,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2442": {
       "timestamp": 48.84,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2443": {
       "timestamp": 48.86,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2444": {
       "timestamp": 48.88,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2445": {
       "timestamp": 48.9,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2446": {
       "timestamp": 48.92,
       "faces": [],
-      "crop_region": {
-        "x": 515,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2447": {
       "timestamp": 48.94,
       "faces": [],
-      "crop_region": {
-        "x": 515,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2448": {
       "timestamp": 48.96,
       "faces": [],
-      "crop_region": {
-        "x": 515,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2449": {
       "timestamp": 48.98,
       "faces": [],
-      "crop_region": {
-        "x": 514,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2450": {
       "timestamp": 49.0,
       "faces": [],
-      "crop_region": {
-        "x": 514,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2451": {
       "timestamp": 49.02,
       "faces": [],
-      "crop_region": {
-        "x": 514,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2452": {
       "timestamp": 49.04,
       "faces": [],
-      "crop_region": {
-        "x": 514,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2453": {
       "timestamp": 49.06,
       "faces": [],
-      "crop_region": {
-        "x": 514,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2454": {
       "timestamp": 49.08,
       "faces": [],
-      "crop_region": {
-        "x": 513,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2455": {
       "timestamp": 49.1,
       "faces": [],
-      "crop_region": {
-        "x": 513,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2456": {
       "timestamp": 49.12,
       "faces": [],
-      "crop_region": {
-        "x": 513,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2457": {
       "timestamp": 49.14,
       "faces": [],
-      "crop_region": {
-        "x": 513,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2458": {
       "timestamp": 49.16,
       "faces": [],
-      "crop_region": {
-        "x": 512,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2459": {
       "timestamp": 49.18,
       "faces": [],
-      "crop_region": {
-        "x": 512,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2460": {
       "timestamp": 49.2,
       "faces": [],
-      "crop_region": {
-        "x": 512,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2461": {
       "timestamp": 49.22,
       "faces": [],
-      "crop_region": {
-        "x": 512,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2462": {
       "timestamp": 49.24,
       "faces": [],
-      "crop_region": {
-        "x": 512,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2463": {
       "timestamp": 49.26,
       "faces": [],
-      "crop_region": {
-        "x": 511,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2464": {
       "timestamp": 49.28,
       "faces": [],
-      "crop_region": {
-        "x": 511,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2465": {
       "timestamp": 49.3,
       "faces": [],
-      "crop_region": {
-        "x": 511,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2466": {
       "timestamp": 49.32,
       "faces": [],
-      "crop_region": {
-        "x": 511,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2467": {
       "timestamp": 49.34,
       "faces": [],
-      "crop_region": {
-        "x": 510,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2468": {
       "timestamp": 49.36,
       "faces": [],
-      "crop_region": {
-        "x": 510,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2469": {
       "timestamp": 49.38,
       "faces": [],
-      "crop_region": {
-        "x": 510,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2470": {
       "timestamp": 49.4,
       "faces": [],
-      "crop_region": {
-        "x": 510,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2471": {
       "timestamp": 49.42,
       "faces": [],
-      "crop_region": {
-        "x": 510,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2472": {
       "timestamp": 49.44,
       "faces": [],
-      "crop_region": {
-        "x": 509,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2473": {
       "timestamp": 49.46,
       "faces": [],
-      "crop_region": {
-        "x": 509,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2474": {
       "timestamp": 49.48,
       "faces": [],
-      "crop_region": {
-        "x": 509,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2475": {
       "timestamp": 49.5,
       "faces": [],
-      "crop_region": {
-        "x": 509,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2476": {
       "timestamp": 49.52,
       "faces": [],
-      "crop_region": {
-        "x": 508,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2477": {
       "timestamp": 49.54,
       "faces": [],
-      "crop_region": {
-        "x": 508,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2478": {
       "timestamp": 49.56,
       "faces": [],
-      "crop_region": {
-        "x": 508,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2479": {
       "timestamp": 49.58,
       "faces": [],
-      "crop_region": {
-        "x": 508,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2480": {
       "timestamp": 49.6,
       "faces": [],
-      "crop_region": {
-        "x": 508,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2481": {
       "timestamp": 49.62,
       "faces": [],
-      "crop_region": {
-        "x": 507,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2482": {
       "timestamp": 49.64,
       "faces": [],
-      "crop_region": {
-        "x": 507,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2483": {
       "timestamp": 49.66,
       "faces": [],
-      "crop_region": {
-        "x": 507,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2484": {
       "timestamp": 49.68,
       "faces": [],
-      "crop_region": {
-        "x": 507,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2485": {
       "timestamp": 49.7,
       "faces": [],
-      "crop_region": {
-        "x": 506,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2486": {
       "timestamp": 49.72,
       "faces": [],
-      "crop_region": {
-        "x": 506,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2487": {
       "timestamp": 49.74,
       "faces": [],
-      "crop_region": {
-        "x": 506,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2488": {
       "timestamp": 49.76,
       "faces": [],
-      "crop_region": {
-        "x": 506,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2489": {
       "timestamp": 49.78,
       "faces": [],
-      "crop_region": {
-        "x": 505,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2490": {
       "timestamp": 49.8,
       "faces": [],
-      "crop_region": {
-        "x": 505,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2491": {
       "timestamp": 49.82,
       "faces": [],
-      "crop_region": {
-        "x": 505,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2492": {
       "timestamp": 49.84,
       "faces": [],
-      "crop_region": {
-        "x": 505,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2493": {
       "timestamp": 49.86,
       "faces": [],
-      "crop_region": {
-        "x": 505,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2494": {
       "timestamp": 49.88,
       "faces": [],
-      "crop_region": {
-        "x": 504,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2495": {
       "timestamp": 49.9,
       "faces": [],
-      "crop_region": {
-        "x": 504,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2496": {
       "timestamp": 49.92,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2497": {
       "timestamp": 49.94,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2498": {
       "timestamp": 49.96,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2499": {
       "timestamp": 49.98,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2500": {
       "timestamp": 50.0,
       "faces": [],
-      "crop_region": {
-        "x": 656,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "2501": {
       "timestamp": 50.02,
@@ -49289,12 +47964,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3965": {
       "timestamp": 79.3,
@@ -49310,12 +47980,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3966": {
       "timestamp": 79.32,
@@ -49331,12 +47996,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3967": {
       "timestamp": 79.34,
@@ -49352,12 +48012,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3968": {
       "timestamp": 79.36,
@@ -49373,12 +48028,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3969": {
       "timestamp": 79.38,
@@ -49394,12 +48044,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3970": {
       "timestamp": 79.4,
@@ -49415,12 +48060,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3971": {
       "timestamp": 79.42,
@@ -49436,12 +48076,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3972": {
       "timestamp": 79.44,
@@ -49457,12 +48092,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3973": {
       "timestamp": 79.46,
@@ -49478,12 +48108,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3974": {
       "timestamp": 79.48,
@@ -49499,12 +48124,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3975": {
       "timestamp": 79.5,
@@ -49520,12 +48140,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3976": {
       "timestamp": 79.52,
@@ -49541,12 +48156,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3977": {
       "timestamp": 79.54,
@@ -49562,12 +48172,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3978": {
       "timestamp": 79.56,
@@ -49583,12 +48188,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3979": {
       "timestamp": 79.58,
@@ -49604,12 +48204,7 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3980": {
       "timestamp": 79.6,
@@ -49625,202 +48220,102 @@
           "is_active_speaker": false
         }
       ],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3981": {
       "timestamp": 79.62,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3982": {
       "timestamp": 79.64,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3983": {
       "timestamp": 79.66,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3984": {
       "timestamp": 79.68,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3985": {
       "timestamp": 79.7,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3986": {
       "timestamp": 79.72,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3987": {
       "timestamp": 79.74,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3988": {
       "timestamp": 79.76,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3989": {
       "timestamp": 79.78,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3990": {
       "timestamp": 79.8,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3991": {
       "timestamp": 79.82,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3992": {
       "timestamp": 79.84,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3993": {
       "timestamp": 79.86,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3994": {
       "timestamp": 79.88,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3995": {
       "timestamp": 79.9,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3996": {
       "timestamp": 79.92,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3997": {
       "timestamp": 79.94,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3998": {
       "timestamp": 79.96,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "3999": {
       "timestamp": 79.98,
       "faces": [],
-      "crop_region": {
-        "x": 1119,
-        "y": 0,
-        "width": 607,
-        "height": 1080
-      }
+      "crop_region": null
     },
     "4000": {
       "timestamp": 80.0,
