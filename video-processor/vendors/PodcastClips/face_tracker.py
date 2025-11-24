@@ -165,6 +165,7 @@ class FaceBox:
     height: int
     confidence: float
     face_id: int = 0  # ID for tracking multiple faces
+    is_background: bool = False  # NEW (Phase 3): True if face is background/audience
 
     @property
     def center(self) -> Tuple[int, int]:
@@ -732,6 +733,46 @@ class FaceTracker:
 
         return priority_score
 
+    def _is_background_face(self, face: FaceBox, all_faces: List[FaceBox]) -> bool:
+        """
+        Detect if a face is likely a background/audience member.
+
+        Background faces are identified by:
+        1. Very small size (< 2% of frame area)
+        2. Small size (< 3%) combined with low quality
+        
+        These faces should be filtered from tracking to prevent them
+        from interfering with speaker selection.
+
+        Args:
+            face: Face box to check
+            all_faces: All faces detected in frame (for context)
+
+        Returns:
+            True if face is background, False otherwise
+        """
+        area_ratio = face.area_ratio(self.video_width, self.video_height)
+        
+        # Rule 1: Very small faces are always background
+        if area_ratio < 0.02:  # < 2% of frame
+            logger.debug(
+                f"Background face detected (very small): "
+                f"size={area_ratio*100:.1f}%, conf={face.confidence:.2f}"
+            )
+            return True
+        
+        # Rule 2: Small + low quality = background
+        if area_ratio < 0.03:  # < 3% of frame
+            quality = face.quality_score(self.video_width, self.video_height)
+            if quality < 0.25:
+                logger.debug(
+                    f"Background face detected (small + low quality): "
+                    f"size={area_ratio*100:.1f}%, quality={quality:.2f}"
+                )
+                return True
+        
+        return False
+
     @staticmethod
     def _apply_nms(faces: List[FaceBox], iou_threshold: float = NMS_IOU_THRESHOLD) -> List[FaceBox]:
         """
@@ -1036,8 +1077,13 @@ class FaceTracker:
                             )
                             continue
 
-                        # 3. Landmark validation (if available)
-                        # Already validated by detect_with_landmarks
+                        # 4. Background face filter (NEW - Phase 1)
+                        # Filter out small background/audience faces from tracking
+                        # This is done BEFORE adding to valid_faces to prevent them
+                        # from being tracked and interfering with speaker selection
+                        if self._is_background_face(face_box, valid_faces):
+                            # Background face - skip it entirely
+                            continue
 
                         valid_faces.append(face_box)
 
@@ -1346,7 +1392,7 @@ class FaceTracker:
 
                             if current_tracks:
                                 # Score by speech correlation, confidence, size, and centrality
-                                # Prefer centered faces over edge faces
+                                # PHASE 2 FIX: Prioritize speech correlation to select actual speakers
                                 def get_combined_score(t):
                                     avg_conf = get_track_avg_confidence(t)
                                     # Calculate centrality (distance from center)
@@ -1358,12 +1404,34 @@ class FaceTracker:
                                     max_distance = np.sqrt(0.5**2 + 0.5**2)
                                     centrality = 1.0 - (distance_from_center / max_distance)
 
-                                    # Weight: 30% speech, 15% confidence, 10% centrality, 45% size
-                                    # Heavily prioritize size to select large foreground speakers over small centered faces
-                                    return (t.speech_correlation * 0.30 +
-                                            avg_conf * 0.15 +
-                                            centrality * 0.10 +
-                                            t.avg_area_ratio * 0.45)
+                                    # NEW Weights (Phase 2): 50% speech, 25% size, 15% confidence, 10% centrality
+                                    # Speech correlation is now the PRIMARY factor for selecting speakers
+                                    # This prevents audience members from being selected over actual speakers
+                                    return (t.speech_correlation * 0.50 +  # INCREASED from 0.30
+                                            t.avg_area_ratio * 0.25 +      # DECREASED from 0.45
+                                            avg_conf * 0.15 +               # Same
+                                            centrality * 0.10)              # Same
+
+                                # Phase 2: Filter by minimum speech activity
+                                # Only consider faces that have meaningful speech correlation
+                                # This prevents audience members (speech ~0.3) from being selected
+                                MIN_SPEECH_FOR_SPEAKER = 0.40
+                                speech_filtered_tracks = [
+                                    t for t in current_tracks
+                                    if t.speech_correlation >= MIN_SPEECH_FOR_SPEAKER
+                                ]
+                                
+                                if speech_filtered_tracks:
+                                    logger.debug(
+                                        f"Filtered to {len(speech_filtered_tracks)}/{len(current_tracks)} "
+                                        f"tracks with speech >= {MIN_SPEECH_FOR_SPEAKER}"
+                                    )
+                                    current_tracks = speech_filtered_tracks
+                                else:
+                                    logger.debug(
+                                        f"No tracks with speech >= {MIN_SPEECH_FOR_SPEAKER}, "
+                                        f"using all {len(current_tracks)} tracks"
+                                    )
 
                                 # Filter by instantaneous confidence (reject very low current frame confidence)
                                 MIN_INSTANT_CONFIDENCE = 0.25
@@ -1868,21 +1936,20 @@ class FaceTracker:
                 # Progressive penalty: center=1.0 (no penalty), edge=0.5 (50% penalty)
                 edge_penalty = max(0.5, 1.0 - (center_distance * 1.0))
 
-                # Rebalanced scoring formula (prioritizes centrality over temporal overlap):
-                # - 25% speech correlation (crucial - who's actually speaking)
-                # - 25% centrality (INCREASED! - centered faces are primary speakers)
-                # - 15% foreground/size (larger faces are main speakers)
-                # - 15% overlap ratio (REDUCED - don't over-favor long-lived tracks)
+                # PHASE 4: Updated scoring formula to prioritize speech correlation
+                # - 35% speech correlation (INCREASED from 25% - who's actually speaking)
+                # - 20% overlap ratio (temporal match with diarization)
+                # - 20% foreground/size (larger faces are main speakers)
+                # - 10% centrality (DECREASED from 25% - position less important)
                 # - 10% confidence (detection quality)
-                # - 10% consistency (temporal consistency)
-                # - 0% position (removed - centrality and edge penalty cover this)
+                # - 5% consistency (temporal consistency)
                 final_score = (
-                    track.speech_correlation * 0.25 +
-                    centrality_score * 0.25 +
-                    foreground_score * 0.15 +
-                    overlap_ratio * 0.15 +
-                    confidence_score * 0.10 +
-                    consistency * 0.10
+                    track.speech_correlation * 0.35 +  # INCREASED from 0.25
+                    overlap_ratio * 0.20 +             # INCREASED from 0.15
+                    foreground_score * 0.20 +          # INCREASED from 0.15
+                    centrality_score * 0.10 +          # DECREASED from 0.25
+                    confidence_score * 0.10 +          # Same
+                    consistency * 0.05                 # DECREASED from 0.10
                 ) * edge_penalty
                 speaker_face_scores[speaker][track.face_id] = final_score
 
