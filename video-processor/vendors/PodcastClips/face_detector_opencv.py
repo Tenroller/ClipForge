@@ -36,7 +36,8 @@ class OpenCVFaceDetector:
         conf_threshold: float = 0.6,
         nms_threshold: float = 0.3,
         top_k: int = 5000,
-        model_dir: str = ".face_detection_cache"
+        model_dir: str = ".face_detection_cache",
+        use_gpu: bool = False
     ):
         """
         Initialize OpenCV YuNet face detector.
@@ -46,11 +47,14 @@ class OpenCVFaceDetector:
             nms_threshold: Non-maximum suppression threshold
             top_k: Maximum number of faces to detect
             model_dir: Directory to store downloaded model
+            use_gpu: Whether to use GPU acceleration (CUDA)
+                    Requires OpenCV built with CUDA support (CUDA Toolkit 9.2+, cuDNN 7.5+)
         """
         self.conf_threshold = conf_threshold
         self.nms_threshold = nms_threshold
         self.top_k = top_k
         self.model_dir = Path(model_dir)
+        self.use_gpu = use_gpu
 
         # Ensure model directory exists
         self.model_dir.mkdir(parents=True, exist_ok=True)
@@ -60,20 +64,160 @@ class OpenCVFaceDetector:
         if not self.model_path.exists():
             self._download_model()
 
-        # Initialize detector with placeholder size (will be set per-frame)
-        self.detector = cv2.FaceDetectorYN.create(
-            str(self.model_path),
-            "",  # Config file (not needed for ONNX)
-            (320, 320),  # Default input size (will be updated per frame)
-            self.conf_threshold,
-            self.nms_threshold,
-            self.top_k
-        )
+        # Configure backend and target for GPU acceleration
+        backend_id = cv2.dnn.DNN_BACKEND_DEFAULT
+        target_id = cv2.dnn.DNN_TARGET_CPU
+
+        if self.use_gpu:
+            # Check if CUDA backend is available in OpenCV build
+            cuda_available = self._check_cuda_available()
+
+            if cuda_available:
+                try:
+                    # Test if CUDA backend is available
+                    backend_id = cv2.dnn.DNN_BACKEND_CUDA
+                    target_id = cv2.dnn.DNN_TARGET_CUDA
+
+                    # Try to create detector with CUDA backend
+                    self.detector = cv2.FaceDetectorYN.create(
+                        str(self.model_path),
+                        "",  # Config file (not needed for ONNX)
+                        (320, 320),  # Default input size (will be updated per frame)
+                        self.conf_threshold,
+                        self.nms_threshold,
+                        self.top_k,
+                        backend_id,
+                        target_id
+                    )
+
+                    # Test with a dummy frame to ensure CUDA actually works
+                    test_frame = np.zeros((320, 320, 3), dtype=np.uint8)
+                    self.detector.setInputSize((320, 320))
+                    _, _ = self.detector.detect(test_frame)
+
+                    logger.info("OpenCV YuNet face detector initialized with CUDA backend")
+
+                except Exception as e:
+                    logger.warning(
+                        f"CUDA backend failed during runtime test: {e}. "
+                        f"Falling back to CPU."
+                    )
+                    self.use_gpu = False
+                    backend_id = cv2.dnn.DNN_BACKEND_DEFAULT
+                    target_id = cv2.dnn.DNN_TARGET_CPU
+
+                    # Create detector with CPU backend
+                    self.detector = cv2.FaceDetectorYN.create(
+                        str(self.model_path),
+                        "",
+                        (320, 320),
+                        self.conf_threshold,
+                        self.nms_threshold,
+                        self.top_k,
+                        backend_id,
+                        target_id
+                    )
+            else:
+                logger.warning(
+                    "CUDA backend not available in this OpenCV build. "
+                    "Falling back to CPU. To enable GPU acceleration, install opencv-python "
+                    "with CUDA support or build OpenCV from source with CUDA enabled."
+                )
+                self.use_gpu = False
+                backend_id = cv2.dnn.DNN_BACKEND_DEFAULT
+                target_id = cv2.dnn.DNN_TARGET_CPU
+
+                # Create detector with CPU backend
+                self.detector = cv2.FaceDetectorYN.create(
+                    str(self.model_path),
+                    "",
+                    (320, 320),
+                    self.conf_threshold,
+                    self.nms_threshold,
+                    self.top_k,
+                    backend_id,
+                    target_id
+                )
+        else:
+            # Create detector with CPU backend (default)
+            self.detector = cv2.FaceDetectorYN.create(
+                str(self.model_path),
+                "",
+                (320, 320),
+                self.conf_threshold,
+                self.nms_threshold,
+                self.top_k,
+                backend_id,
+                target_id
+            )
 
         logger.info(
             f"OpenCV YuNet face detector initialized "
-            f"(conf={conf_threshold}, nms={nms_threshold})"
+            f"(conf={conf_threshold}, nms={nms_threshold}, gpu={self.use_gpu})"
         )
+
+    def _check_cuda_available(self) -> bool:
+        """
+        Check if CUDA backend is available in OpenCV build.
+
+        Returns:
+            True if CUDA is available, False otherwise
+        """
+        try:
+            # Check if DNN_BACKEND_CUDA constant exists
+            if not hasattr(cv2.dnn, 'DNN_BACKEND_CUDA'):
+                logger.debug("DNN_BACKEND_CUDA not found in cv2.dnn")
+                return False
+
+            # Check if CUDA target constants exist
+            if not hasattr(cv2.dnn, 'DNN_TARGET_CUDA'):
+                logger.debug("DNN_TARGET_CUDA not found in cv2.dnn")
+                return False
+
+            # Check OpenCV build information for CUDA support
+            try:
+                build_info = cv2.getBuildInformation()
+                if 'CUDA' not in build_info:
+                    logger.debug("OpenCV build does not include CUDA support")
+                    return False
+
+                # Look for specific CUDA indicators in build info
+                cuda_indicators = ['CUDA:', 'CUDNN', 'NVIDIA CUDA']
+                has_cuda = any(indicator in build_info for indicator in cuda_indicators)
+
+                if not has_cuda:
+                    logger.debug("No CUDA indicators found in build info")
+                    return False
+
+                logger.debug("CUDA support detected in OpenCV build")
+
+            except Exception as e:
+                logger.debug(f"Error checking build information: {e}")
+
+            # Try to get available backends if the method exists (OpenCV 4.5.4+)
+            if hasattr(cv2.dnn, 'getAvailableBackends'):
+                try:
+                    backends = cv2.dnn.getAvailableBackends()
+                    cuda_backends = [b for b in backends if 'CUDA' in str(b)]
+
+                    if cuda_backends:
+                        logger.debug(f"CUDA backends found: {cuda_backends}")
+                        return True
+                    else:
+                        logger.debug(f"No CUDA backends in available backends: {backends}")
+                        return False
+                except Exception as e:
+                    logger.debug(f"Error calling getAvailableBackends: {e}")
+                    return False
+            else:
+                # If we got here, build info suggested CUDA but getAvailableBackends doesn't exist
+                # Do a runtime test later to be sure
+                logger.debug("getAvailableBackends() not available, will test CUDA at runtime")
+                return True
+
+        except Exception as e:
+            logger.debug(f"Error checking CUDA availability: {e}")
+            return False
 
     def _download_model(self):
         """Download YuNet model from OpenCV Zoo."""

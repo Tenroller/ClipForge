@@ -80,10 +80,13 @@ yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master
 scenedetect>=0.6.2
 
 # ML dependencies for brainrot
---extra-index-url https://download.pytorch.org/whl/cu126
-torch>=2.0.0,<3.0.0
-torchaudio>=2.0.0,<3.0.0
-torchvision>=0.15.0,<1.0.0
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0+cu124
+torchaudio==2.6.0+cu124
+torchvision==0.21.0+cu124
+
+# Speaker diarization (pinned to avoid torch 2.8.0 CPU-only requirement)
+pyannote-audio==3.3.2
 
 # =============================================================================
 # MONEYPRINTER EXTRAS (For advanced text-to-video features)

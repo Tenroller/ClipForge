@@ -301,10 +301,28 @@ class ContentModeDetector:
             else:
                 face_box = face_positions.get(timestamp)
 
-            # Calculate face area ratio if face present
+            # Quality filtering: Only use HIGH QUALITY faces for mode decisions
+            # This prevents small background false positives from blocking horizontal mode
+            MIN_QUALITY_FOR_MODE = 0.35  # Face must be reasonably sized, confident, and centered
+            face_is_high_quality = False
             face_area_ratio = 0.0
+            
             if face_box:
                 face_area_ratio = face_box.area / (video_width * video_height)
+                quality = face_box.quality_score(video_width, video_height)
+                face_is_high_quality = quality >= MIN_QUALITY_FOR_MODE
+                
+                if not face_is_high_quality:
+                    logger.debug(
+                        f"[{timestamp:.1f}s] Ignoring low-quality face "
+                        f"(quality={quality:.2f}, size={face_area_ratio*100:.1f}%) for mode decision"
+                    )
+                    # Treat as if no face detected for mode purposes
+                    face_box_for_mode = None
+                else:
+                    face_box_for_mode = face_box
+            else:
+                face_box_for_mode = None
 
             # Determine mode based on content-first logic, with split-screen detection
             should_be_horizontal = False
@@ -348,9 +366,9 @@ class ContentModeDetector:
                 should_be_horizontal = True
                 logger.debug(f"[{timestamp:.1f}s] Extreme content score: {content_score:.2f} → HORIZONTAL")
 
-            # PRIORITY 1: Large face presence override (prevents false positives from background text)
-            elif face_box and face_area_ratio > 0.15:
-                # Large face present → default to FACE mode (prevents podcast backgrounds from triggering horizontal)
+            # PRIORITY 1: Large HIGH-QUALITY face presence override (prevents false positives)
+            elif face_box_for_mode and face_area_ratio > 0.15:
+                # Large high-quality face present → default to FACE mode
                 should_be_horizontal = False
                 logger.debug(f"[{timestamp:.1f}s] Face override (size={face_area_ratio*100:.1f}%, score={content_score:.2f}) → FACE")
 
@@ -370,12 +388,12 @@ class ContentModeDetector:
 
             elif content_score < LOW_CONTENT_THRESHOLD:
                 # Weak content signal
-                if face_box:
-                    # Face present → face mode
+                if face_box_for_mode:
+                    # High-quality face present → face mode
                     should_be_horizontal = False
                     logger.debug(f"[{timestamp:.1f}s] Low content ({content_score:.2f}) + face → FACE")
                 else:
-                    # No face, low content → check speech activity
+                    # No high-quality face, low content → check speech activity
                     # If speech is active, someone is talking - prefer face mode
                     is_speech_active = False
                     if (self.face_tracker and
@@ -397,8 +415,8 @@ class ContentModeDetector:
                         logger.debug(f"[{timestamp:.1f}s] Low content, no face, no speech → maintain {current_mode.value}")
 
             else:
-                # Medium content score (0.3-0.6) → check face size
-                if face_box:
+                # Medium content score (0.3-0.7) → check face size
+                if face_box_for_mode:
                     if face_area_ratio < SMALL_FACE_THRESHOLD:
                         # Small face + medium content → horizontal mode (likely PiP)
                         should_be_horizontal = True

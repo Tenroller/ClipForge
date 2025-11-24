@@ -199,6 +199,37 @@ class FaceBox:
         ratio = self.aspect_ratio
         return MIN_FACE_ASPECT_RATIO <= ratio <= MAX_FACE_ASPECT_RATIO
 
+    def quality_score(self, frame_width: int, frame_height: int) -> float:
+        """
+        Calculate overall detection quality score (0-1).
+
+        Combines:
+        - Size: Larger faces (more likely main subject) = higher score
+        - Confidence: Higher detection confidence = higher score  
+        - Centrality: Centered faces (more likely main subject) = higher score
+
+        This is used to filter low-quality detections from mode decisions.
+
+        Returns:
+            Quality score from 0 to 1
+        """
+        # Size component (0-1, normalized to 10% of frame = max)
+        size_score = min(1.0, self.area_ratio(frame_width, frame_height) / 0.10)
+
+        # Confidence component (already 0-1)
+        conf_score = self.confidence
+
+        # Centrality component (0-1, center = 1, edges = 0)
+        center_x, center_y = self.center
+        norm_x = center_x / frame_width if frame_width > 0 else 0.5
+        norm_y = center_y / frame_height if frame_height > 0 else 0.5
+        distance_from_center = ((norm_x - 0.5)**2 + (norm_y - 0.5)**2)**0.5
+        max_distance = 0.707  # Corner distance
+        centrality_score = 1.0 - (distance_from_center / max_distance)
+
+        # Combined: 40% size, 40% confidence, 20% centrality
+        return size_score * 0.40 + conf_score * 0.40 + centrality_score * 0.20
+
 
 @dataclass
 class FaceTrack:
@@ -1005,19 +1036,8 @@ class FaceTracker:
                             )
                             continue
 
-                        # 3. Edge proximity filter (reject faces too close to frame edges)
-                        EDGE_MARGIN = 0.15  # 15% of frame dimensions - stricter to filter background faces
-                        center_x, center_y = face_box.center
-                        normalized_x = center_x / self.video_width
-                        normalized_y = center_y / self.video_height
-
-                        if (normalized_x < EDGE_MARGIN or normalized_x > (1 - EDGE_MARGIN) or
-                            normalized_y < EDGE_MARGIN or normalized_y > (1 - EDGE_MARGIN)):
-                            logger.debug(
-                                f"Rejected edge detection at ({center_x}, {center_y}), "
-                                f"normalized ({normalized_x:.2f}, {normalized_y:.2f}), margin={EDGE_MARGIN}"
-                            )
-                            continue
+                        # 3. Landmark validation (if available)
+                        # Already validated by detect_with_landmarks
 
                         valid_faces.append(face_box)
 

@@ -32,13 +32,16 @@
       "Bash(then echo \"HF_TOKEN is set\")",
       "Bash(else echo \"HF_TOKEN is not set\")",
       "Bash(fi)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(.venvScriptspython.exe -m pip show pyannote-audio)",
+      "Bash(.venv/Scripts/python.exe -m pip:*)",
+      "Bash(../.venv/Scripts/python.exe:*)"
     ],
     "deny": [],
     "ask": []
   },
   "sandbox": {
-    "autoAllowBashIfSandboxed": false,
-    "enabled": false
+    "enabled": false,
+    "autoAllowBashIfSandboxed": false
   }
 }
