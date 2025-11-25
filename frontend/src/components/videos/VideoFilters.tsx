@@ -34,13 +34,13 @@ export default function VideoFilters({
 }: VideoFiltersProps) {
   const t = useTranslations('videos');
   return (
-    <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
-      <CardContent className="p-5">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+    <Card className="border-2 rounded-2xl bg-gradient-to-br from-card/90 to-card/50 backdrop-blur-md shadow-lg hover:shadow-xl transition-all duration-300">
+      <CardContent className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-5">
           {/* Search */}
           <div className="md:col-span-2">
-            <Label htmlFor="search" className="flex items-center gap-2 mb-2">
-              <Search className="size-3" />
+            <Label htmlFor="search" className="flex items-center gap-2 mb-2.5 font-semibold text-sm">
+              <Search className="size-4 text-primary" />
               {t('filters.search')}
             </Label>
             <Input
@@ -48,17 +48,18 @@ export default function VideoFilters({
               placeholder={t('filters.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => onSearchChange(e.target.value)}
+              className="h-11 shadow-sm border-2 focus:border-primary/50 transition-all"
             />
           </div>
 
           {/* Workflow Filter */}
           <div>
-            <Label className="flex items-center gap-2 mb-2">
-              <Filter className="size-3" />
+            <Label className="flex items-center gap-2 mb-2.5 font-semibold text-sm">
+              <Filter className="size-4 text-primary" />
               {t('filters.workflow')}
             </Label>
             <Select value={workflowFilter} onValueChange={onWorkflowFilterChange}>
-              <SelectTrigger>
+              <SelectTrigger className="h-11 shadow-sm border-2 hover:border-primary/50 transition-all">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -72,9 +73,9 @@ export default function VideoFilters({
 
           {/* Posted Filter */}
           <div>
-            <Label className="mb-2 block">{t('filters.posted')}</Label>
+            <Label className="mb-2.5 block font-semibold text-sm">{t('filters.posted')}</Label>
             <Select value={postedFilter} onValueChange={onPostedFilterChange}>
-              <SelectTrigger>
+              <SelectTrigger className="h-11 shadow-sm border-2 hover:border-primary/50 transition-all">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -87,10 +88,10 @@ export default function VideoFilters({
 
           {/* Sort */}
           <div>
-            <Label className="mb-2 block">{t('sort.sortBy')}</Label>
+            <Label className="mb-2.5 block font-semibold text-sm">{t('sort.sortBy')}</Label>
             <div className="flex gap-2">
               <Select value={sortBy} onValueChange={onSortByChange}>
-                <SelectTrigger>
+                <SelectTrigger className="h-11 shadow-sm border-2 hover:border-primary/50 transition-all">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -100,7 +101,7 @@ export default function VideoFilters({
                 </SelectContent>
               </Select>
               <Select value={sortOrder} onValueChange={onSortOrderChange}>
-                <SelectTrigger className="w-20">
+                <SelectTrigger className="w-24 h-11 shadow-sm border-2 hover:border-primary/50 transition-all">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
