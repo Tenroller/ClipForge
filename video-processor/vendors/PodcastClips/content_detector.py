@@ -298,12 +298,13 @@ class ContentModeDetector:
             # Check if faces exist in CURRENT frame (AFTER filtering!)
             # face_positions contains RAW detections (before background filtering)
             # We need to check face_tracks which contains VALID tracked faces (after filtering)
-            # Use EXACT timestamp match - no tolerance to avoid nearby frames affecting decision
+            # Use timestamp tolerance to account for face detection sampling (every 10 frames)
             current_frame_has_faces = False
+            TIMESTAMP_TOLERANCE = 0.5  # 0.5 second tolerance (accounts for 10-frame sampling at 30fps = 0.33s)
             if self.face_tracker and self.face_tracker.face_tracks:
-                # Check if ANY face track has a position at this EXACT timestamp
+                # Check if ANY face track has a position near this timestamp (within tolerance)
                 current_frame_has_faces = any(
-                    timestamp in track.positions
+                    any(abs(ts - timestamp) <= TIMESTAMP_TOLERANCE for ts in track.positions.keys())
                     for track in self.face_tracker.face_tracks
                 )
                 # DEBUG: Log detailed info for specific timestamps
