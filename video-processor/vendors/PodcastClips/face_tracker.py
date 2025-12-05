@@ -393,7 +393,7 @@ class FaceTracker:
         try:
             logger.info("Initializing OpenCV YuNet face detector...")
             self.opencv_detector = OpenCVFaceDetector(
-                conf_threshold=0.5,
+                conf_threshold=0.4,  # Lowered from 0.5 for better profile face detection
                 nms_threshold=NMS_IOU_THRESHOLD,
                 model_dir=cache_dir
             )
@@ -434,6 +434,9 @@ class FaceTracker:
         self.speaker_to_face_map: Dict[str, int] = {}  # Maps SPEAKER_00 -> face_track_id
         self.face_to_speaker_map: Dict[int, str] = {}  # Maps face_track_id -> SPEAKER_00
         self.diarizer: Optional[Any] = None
+        
+        # Face persistence tracking for off-screen speaker continuity
+        self.last_active_speaker_track_id: Optional[int] = None
 
         # Initialize new enhancement modules
         self.enable_face_recognition = enable_face_recognition
@@ -1369,13 +1372,16 @@ class FaceTracker:
                         # Check position staleness
                         time_diff = abs(closest_ts - timestamp)
 
-                        # If diarization face is stale, check for currently detected faces
-                        # with high speech correlation - they might be the actual speaker
-                        STALENESS_THRESHOLD = 3.0  # seconds - allow temporary occlusions (increased from 0.5)
+                        # Check if face is currently visible (recent detection)
+                        is_currently_visible = any(abs(ts - timestamp) < 0.2 for ts in track.positions.keys())
 
-                        if time_diff > STALENESS_THRESHOLD:
-                            # Diarization face is stale - find the best currently visible face
-                            # using combined score of speech correlation, confidence, and size
+                        # If diarization face is stale AND not currently visible,
+                        # check for other currently detected faces
+                        STALENESS_THRESHOLD = 3.0  # seconds - allow temporary occlusions
+
+                        if time_diff > STALENESS_THRESHOLD and not is_currently_visible:
+                            # Diarization face is stale AND not detected recently
+                            # Find the best currently visible face (including other tracks)
 
                             # Helper to get average confidence for a track
                             def get_track_avg_confidence(t):
@@ -1384,10 +1390,11 @@ class FaceTracker:
                                 return sum(pos.confidence for pos in t.positions.values()) / len(t.positions)
 
                             # Find ALL tracks that are currently visible (detected in this frame)
+                            # NOTE: We DON'T exclude the diarized speaker here - if they're visible
+                            # now but with a stale average timestamp, they should still be considered
                             current_tracks = [
                                 t for t in self.face_tracks
-                                if t.face_id != face_track_id and  # Exclude the stale diarization face
-                                any(abs(ts - timestamp) < 0.2 for ts in t.positions.keys())  # Must be recent
+                                if any(abs(ts - timestamp) < 0.2 for ts in t.positions.keys())  # Must be recent
                             ]
 
                             if current_tracks:
@@ -1477,6 +1484,7 @@ class FaceTracker:
                                         f"(score={best_score:.2f}, speech={best_track.speech_correlation:.2f}, "
                                         f"conf={get_track_avg_confidence(best_track):.2f})"
                                     )
+                                    self.last_active_speaker_track_id = best_track.face_id
                                     return best_track.positions[best_ts]
 
                             # No currently visible faces - return None to trigger center crop fallback
@@ -1488,15 +1496,67 @@ class FaceTracker:
                             )
                             return None
                         else:
+                            # Face is either not stale OR is currently visible
+                            # Use the diarized speaker's face
                             logger.debug(
                                 f"Diarization: {current_speaker} -> Face {face_track_id} "
-                                f"at t={timestamp:.2f}s"
+                                f"at t={timestamp:.2f}s (time_diff={time_diff:.2f}s, visible={is_currently_visible})"
                             )
 
+                        # Track this as the last active speaker for persistence
+                        self.last_active_speaker_track_id = track.face_id
                         return track.positions[closest_ts]
 
             # No speaker at this time according to diarization
-            # Fall back to largest face
+            # Try intelligent fallback before using largest face
+            
+            # 1. Check if any currently visible faces have high speech correlation
+            current_tracks = [
+                t for t in self.face_tracks
+                if any(abs(ts - timestamp) < 0.2 for ts in t.positions.keys())
+            ]
+            
+            if current_tracks:
+                # Filter for faces with meaningful speech activity
+                MIN_SPEECH_FOR_CONTINUITY = 0.40
+                high_speech_tracks = [
+                    t for t in current_tracks
+                    if t.speech_correlation >= MIN_SPEECH_FOR_CONTINUITY
+                ]
+                
+                if high_speech_tracks:
+                    # Use the best speech-correlated visible face
+                    best_track = max(high_speech_tracks, key=lambda t: t.speech_correlation)
+                    best_ts = min(best_track.positions.keys(), key=lambda ts: abs(ts - timestamp))
+                    logger.debug(
+                        f"Diarization fallback: Using visible high-correlation face {best_track.face_id} "
+                        f"(speech={best_track.speech_correlation:.2f})"
+                    )
+                    self.last_active_speaker_track_id = best_track.face_id
+                    return best_track.positions[best_ts]
+            
+            # 2. If we have a last known speaker, check face persistence
+            if self.last_active_speaker_track_id is not None:
+                last_track = next(
+                    (t for t in self.face_tracks if t.face_id == self.last_active_speaker_track_id),
+                    None
+                )
+                
+                if last_track and last_track.positions:
+                    # Find most recent position
+                    recent_timestamps = sorted(last_track.positions.keys())
+                    most_recent_ts = recent_timestamps[-1]
+                    time_since_last_seen = timestamp - most_recent_ts
+                    
+                    # If within persistence window, use last known position
+                    if time_since_last_seen <= FACE_PERSISTENCE_WINDOW:
+                        logger.debug(
+                            f"Diarization fallback: Using persisted position for face {last_track.face_id} "
+                            f"(last seen {time_since_last_seen:.1f}s ago)"
+                        )
+                        return last_track.positions[most_recent_ts]
+            
+            # 3. Final fallback to largest visible face
             return self.get_face_position_at_time(timestamp)
 
         # PRIORITY 2: Fall back to speech correlation method
@@ -2447,9 +2507,34 @@ class FaceTracker:
         if self.enable_speaker_detection and self.speech_segments:
             speaker_face = self.get_active_speaker_at_time(timestamp)
             if not speaker_face:
-                # No active speaker detected (e.g., wide shot with no detectable faces)
-                # Use center crop as fallback
-                return self._get_center_crop_box()
+                # No active speaker detected - try to use largest visible face as fallback
+                # This prevents crop jumping to center when speaker detection fails
+                # but a face is still detected
+                
+                # Try to find any visible face near this timestamp
+                FALLBACK_TOLERANCE = 0.5  # seconds
+                visible_faces = []
+                for track in self.face_tracks:
+                    nearest_ts = None
+                    min_diff = float('inf')
+                    for ts in track.positions.keys():
+                        diff = abs(ts - timestamp)
+                        if diff < FALLBACK_TOLERANCE and diff < min_diff:
+                            min_diff = diff
+                            nearest_ts = ts
+                    if nearest_ts is not None:
+                        visible_faces.append(track.positions[nearest_ts])
+                
+                if visible_faces:
+                    # Use largest visible face as fallback
+                    speaker_face = max(visible_faces, key=lambda f: f.area)
+                    logger.debug(
+                        f"No active speaker at t={timestamp:.2f}s, "
+                        f"using largest face {speaker_face.face_id} as fallback"
+                    )
+                else:
+                    # No faces visible at all - use center crop
+                    return self._get_center_crop_box()
 
             # Use speaker's face with smoothing window
             relevant_faces = [

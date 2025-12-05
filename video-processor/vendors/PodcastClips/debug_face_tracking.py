@@ -83,8 +83,6 @@ except Exception as e:
     logger.error(f"Failed to import modules: {e}")
     import traceback
     traceback.print_exc()
-    logger.error("Make sure all dependencies are installed:")
-    logger.error("  pip install mediapipe opencv-python numpy scipy librosa tqdm loguru")
     sys.exit(1)
 
 
@@ -159,7 +157,6 @@ def visualize_face_tracking(
     output_path: str,
     enable_speaker_detection: bool = True,
     enable_diarization: bool = True,
-    detector_backend: str = "mediapipe",
     show_crop_region: bool = True,
     show_all_faces: bool = True,
     show_face_ids: bool = True,
@@ -180,7 +177,6 @@ def visualize_face_tracking(
         output_path: Path for output annotated video
         enable_speaker_detection: Enable audio-based speaker detection
         enable_diarization: Enable speaker diarization for better speaker identification
-        detector_backend: Face detection backend ("mediapipe" or "opencv")
         show_crop_region: Draw the crop region (9:16 or 16:9)
         show_all_faces: Show all detected faces (not just active speaker)
         show_face_ids: Display face IDs on boxes
@@ -206,11 +202,8 @@ def visualize_face_tracking(
         min_face_size_ratio=0.002,  # Lowered to detect smaller faces in wide shots (allows ~65x65 px faces)
         max_tracked_faces=max_tracked_faces,
         enable_speaker_detection=enable_speaker_detection,
-        enable_lip_detection=False,
-        detector_backend=detector_backend  # "mediapipe" or "opencv"
+        enable_lip_detection=False
     )
-
-    logger.info(f"Using face detector backend: {detector_backend}")
 
     # Analyze video for faces
     logger.info("Step 1/4: Analyzing video for face detection...")
@@ -281,7 +274,7 @@ def visualize_face_tracking(
             content_detector = ContentModeDetector(
                 face_loss_threshold=face_loss_threshold,
                 min_segment_duration=min_segment_duration,
-                use_ocr=False,  # Disable OCR for faster processing
+                use_ocr=False,
                 face_tracker=face_tracker
             )
 
@@ -691,11 +684,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Basic usage (MediaPipe backend)
+  # Basic usage
   python debug_face_tracking.py --video podcast.mp4
-
-  # Use OpenCV YuNet backend (better for small faces in wide shots)
-  python debug_face_tracking.py --video podcast.mp4 --detector opencv
 
   # Custom output path
   python debug_face_tracking.py --video podcast.mp4 --output debug_output.mp4
@@ -738,14 +728,6 @@ Examples:
         '--no-diarization',
         action='store_true',
         help='Disable speaker diarization (faster but less accurate speaker identification)'
-    )
-
-    parser.add_argument(
-        '--detector',
-        type=str,
-        default='mediapipe',
-        choices=['mediapipe', 'opencv'],
-        help='Face detection backend: "mediapipe" (default) or "opencv" (better for small faces)'
     )
 
     parser.add_argument(
@@ -834,7 +816,6 @@ Examples:
             output_path=output_path,
             enable_speaker_detection=not args.no_speaker_detection,
             enable_diarization=not args.no_diarization,
-            detector_backend=args.detector,
             show_crop_region=not args.no_crop_region,
             show_all_faces=True,
             show_face_ids=not args.hide_ids,

@@ -784,6 +784,27 @@ class PodcastClipsProcessor:
             OBJECTIVE
             Return the best possible set of moments (0..{max_count}) ordered BEST-FIRST. Do NOT pad quantity—quality is paramount.
 
+            HOOK QUALITY EXAMPLES
+            
+            EXCELLENT HOOKS (Hook Strength: 90+):
+            ✓ "I lost $2 million in 48 hours because of this mistake"
+            ✓ "Why do we park in driveways and drive on parkways?"
+            ✓ "This will make you question everything you know about sleep"
+            ✓ "Never, ever do this in a job interview"
+            
+            WEAK HOOKS TO AVOID (Hook Strength: <50):
+            ✗ "So, continuing from where we left off earlier..."
+            ✗ "That's actually a really interesting question"
+            ✗ "Um, I think what's important to understand is..."
+            ✗ "Another aspect of this topic that we should discuss..."
+            
+            TRANSFORMATION EXAMPLES:
+            Poor: "That's a good point about productivity" 
+            Better: "The #1 productivity myth that's destroying your workflow"
+            
+            Poor: "So there's this study I read about relationships"
+            Better: "Couples who do this one thing are 60% more likely to divorce"
+
             TRANSCRIPT FORMAT
             You will receive a transcript in TOON format (a compact tabular format). The data is a table with columns:
             - i: index number
@@ -812,13 +833,35 @@ class PodcastClipsProcessor:
             - For interview-style podcasts, favor guest responses over host questions
             - Look for controversial disagreements or surprising agreements between speakers
 
+            HOOK REQUIREMENT (MANDATORY GATE)
+            Every selected clip MUST pass this gate or be discarded:
+            - First 3 seconds MUST contain one or more of:
+              • Shocking statement or controversial claim
+              • Provocative question that creates curiosity
+              • Surprising statistic or fact
+              • Strong emotional declaration (anger, excitement, awe)
+              • Direct challenge to common belief
+              • Immediate actionable insight
+              • Pattern interrupt (unexpected sound, interruption, laughter)
+
+            ANTI-PATTERNS TO REJECT:
+            - Starting mid-sentence or mid-thought
+            - Opening with context that requires prior knowledge
+            - Slow build-ups or explanations before payoff
+            - Filler phrases ("um", "like", "so basically")
+            - References to earlier parts ("as I mentioned", "going back to")
+            - Generic transitions ("another thing is", "moving on")
+
+            If a moment has great content at seconds 10-40 but weak opening, it should be REJECTED 
+            unless you can identify an earlier hook point within the same topic.
+
             VIRAL HEURISTICS (PRIORITIZE)
-            1. Immediate hook in first ~3 seconds (shock, controversy, strong opinion, emotional spike, surprising stat, concise advice, punchline setup/reveal).
-            2. Emotional resonance (laughter, anger, awe), audible reactions, tension + release.
-            3. Standalone clarity—clip makes sense with minimal prior context.
-            4. Quotability—memorable lines, shareable phrasing.
-            5. Actionable or contrarian insight.
-            6. Visually compelling moments likely to show facial reactions / emphasis.
+            1. Hook strength in first 3-5 seconds (CRITICAL - 40% of score)
+            2. Emotional resonance (laughter, anger, awe), audible reactions, tension + release (25%)
+            3. Standalone clarity—clip makes sense with minimal prior context (10%)
+            4. Quotability—memorable lines, shareable phrasing (15%)
+            5. Actionable or contrarian insight (10%)
+            6. Visually compelling moments likely to show facial reactions / emphasis
 
             DE-PREFER / AVOID
             - Long multi-step setups without payoff.
@@ -827,18 +870,50 @@ class PodcastClipsProcessor:
             - Redundant restatements.
 
             SCORING & FIELDS (Provide meaningful, non-default values)
-            - viral_score (0–100): Composite of hook strength, emotional impact, shareability, clarity, novelty. Scores ≥60 indicate publishable; ≤50 should generally be excluded unless transcript is very weak.
+            - viral_score (0–100): Weighted composite calculated as:
+              viral_score = (hook_strength × 0.4) + (emotional × 0.25) + (shareability × 0.15) + (clarity × 0.1) + (novelty × 0.1)
+              Scores ≥60 indicate publishable; ≤50 should generally be excluded unless transcript is very weak.
+              
+            - hook_strength (0–100): SEPARATE score evaluating ONLY the first 3-5 seconds. This is NOT viral_score.
+              • 90-100: Instant attention grab, impossible to scroll past
+              • 70-89: Strong opener, clearly engaging
+              • 50-69: Moderate interest, might retain viewer
+              • Below 50: REJECT - weak opening that loses viewers
+              Minimum acceptable hook_strength: 70. Clips below 70 MUST be discarded even if overall content is strong.
+              
             - confidence (0.0–1.0): Your certainty this moment will perform (NOT identical to viral_score—confidence reflects selection reliability).
+            
             - title: Punchy ≤60 chars, no clickbait fluff words repeated (avoid "insane", "shocking" unless justified).
-            - hook: First spoken line or distilled opener ≤120 chars—must GRAB attention instantly.
+            
+            - hook: The EXACT spoken words from seconds 0-5 of the clip (max 120 chars). This must be a direct quote, not a summary.
+              Evaluate this text independently: "Would a viewer stop scrolling after reading/hearing this in 3 seconds?"
+              If answer is "maybe" or "no", reject the clip.
+              
             - reason: 1–2 sentences explaining WHY it will go viral (no generic phrasing like "engaging" alone).
+            
             - caption: Social-ready copy ≤150 chars; may include 1 relevant emoji IF it enhances, not decorates.
+            
             - tags: Up to 6 lowercase thematic tags (no #, no duplicates, no generic "podcast", avoid more than 2 ultra-broad terms). If none strong, fewer is better.
+            
             - thumbnail_text: ≤25 chars, ultra-punchy, no quotation marks.
+            
             - recommended_crop: one of [close-up, mid, wide, focus-on-person-X]; prefer close-up if emotional emphasis.
+            
             - cut_padding_before / cut_padding_after: 0.0–2.0s each; add slight breathing room without exceeding bounds.
+            
             - subtitles: Exact transcript excerpt inside the chosen time window (≤300 chars) — preserve original words only.
+            
             - notes: Speaker changes, audible cues ("laughter", "applause"), pacing suggestions, or why padding was added.
+
+            HOOK VALIDATION CHECKLIST
+            Before including any moment, verify:
+            1. ✓ First sentence is complete (not mid-thought)
+            2. ✓ Opening creates immediate curiosity or emotion
+            3. ✓ No context dependency - makes sense standalone
+            4. ✓ First 3 seconds contain clear value proposition
+            5. ✓ Viewer would want to hear "what happens next"
+
+            If any check fails, adjust start_time to earlier hook point or REJECT.
 
             TIMING INTEGRITY
             - Ensure end_time > start_time.
@@ -854,6 +929,7 @@ class PodcastClipsProcessor:
             If transcript language != English, produce title/hook/caption in that language. Tags may be in transcript language too.
 
             OUTPUT QUALITY FILTER
+            - Discard any candidate whose hook_strength < 70 (MANDATORY).
             - Discard any candidate whose viral_score < 55 unless very few high moments exist—in scarcity, include up to the strongest available.
             - Final list MUST be sorted by viral_score descending.
 
@@ -863,6 +939,7 @@ class PodcastClipsProcessor:
             - Do not mention you are an AI.
             - Provide ONLY high-quality moments; zero is acceptable if nothing meets criteria.
             - Only use words present in the transcript. Never invent, alter, or guess missing words.
+            - Hook strength is CRITICAL: if first 3-5 seconds don't grab attention, REJECT the clip.
             """
 
             # CONTENT - Only the data to analyze
@@ -898,6 +975,7 @@ class PodcastClipsProcessor:
                     thumbnail_text=moment.get('thumbnail_text', ''),
                     # AI-generated metadata fields
                     viral_score=float(moment.get('viral_score', 0)),
+                    hook_strength=float(moment.get('hook_strength', 0)),
                     confidence=float(moment.get('confidence', 0.0)),
                     caption=moment.get('caption', ''),
                     tags=moment.get('tags', []),
@@ -909,6 +987,19 @@ class PodcastClipsProcessor:
                 ))
 
             logger.info(f"AI detected {len(viral_moments)} viral moments")
+
+            # Filter out clips with weak hooks (minimum hook_strength threshold)
+            MIN_HOOK_STRENGTH = 70
+            moments_before_filter = len(viral_moments)
+            viral_moments = [
+                m for m in viral_moments 
+                if m.hook_strength >= MIN_HOOK_STRENGTH
+            ]
+            
+            if moments_before_filter > len(viral_moments):
+                logger.info(f"Filtered out {moments_before_filter - len(viral_moments)} clips with hook_strength < {MIN_HOOK_STRENGTH}")
+            
+            logger.info(f"Final selection: {len(viral_moments)} clips with strong hooks (hook_strength >= {MIN_HOOK_STRENGTH})")
 
             # Persist viral moments
             persist_artifact(

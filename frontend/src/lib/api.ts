@@ -435,4 +435,160 @@ export function getThumbnailUrl(thumbnailPath: string): string {
   return `/api/thumbnail/${filename}`;
 }
 
+// ============================================================================
+// Podcast Projects API Types
+// ============================================================================
+
+export interface PodcastProject {
+  id: string;
+  source_video_id: string | null;
+  youtube_url: string;
+  title: string;
+  channel: string;
+  thumbnail_url: string | null;
+  total_duration: number | null;
+  total_duration_formatted: string;
+  clips_count: number;
+  status: 'active' | 'analysis_complete' | 'expired' | 'error';
+  job_status: string;
+  created_at: string | null;
+  updated_at: string | null;
+  format_options: {
+    aspect_ratio: string;
+    mode: string;
+    face_tracking: boolean;
+  };
+  time_range: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface PodcastClip {
+  id: string;
+  filename: string;
+  file_path: string;
+  download_url: string;
+  thumbnail_url: string | null;
+  duration_seconds: number | null;
+  duration_formatted: string;
+  size_bytes: number | null;
+  size_mb: number;
+  posted: boolean;
+  posted_at: string | null;
+  created_at: string | null;
+  viral_score: number;
+  title: string;
+  hook: string;
+  time_interval: {
+    start: number;
+    end: number;
+    start_formatted: string;
+    end_formatted: string;
+  };
+  engagement_factors: string[];
+  likes: number;
+  dislikes: number;
+  render_status: 'preview' | 'rendering' | 'rendered';
+  file_exists: boolean;
+}
+
+export interface PodcastProjectDetail extends PodcastProject {
+  clips: PodcastClip[];
+  request_params: Record<string, unknown>;
+}
+
+export interface ListProjectsResponse {
+  projects: PodcastProject[];
+  total: number;
+  offset: number;
+  limit: number;
+  has_more: boolean;
+}
+
+// ============================================================================
+// Podcast Projects API Functions
+// ============================================================================
+
+export async function listPodcastProjects(params?: {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  sort_by?: string;
+  sort_order?: string;
+}): Promise<ListProjectsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
+  if (params?.sort_order) searchParams.set('sort_order', params.sort_order);
+
+  const res = await apiFetch(`${API_BASE}/api/projects/podcast?${searchParams}`);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to list podcast projects');
+  }
+  return await res.json();
+}
+
+export async function getPodcastProject(projectId: string): Promise<PodcastProjectDetail> {
+  const res = await apiFetch(`${API_BASE}/api/projects/podcast/${encodeURIComponent(projectId)}`);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to get podcast project');
+  }
+  return await res.json();
+}
+
+export async function updateClipMetadata(
+  projectId: string,
+  clipId: string,
+  updates: { likes?: number; dislikes?: number; render_status?: string; title?: string }
+): Promise<{ clip_id: string; updated_fields: string[]; metadata: Record<string, unknown> }> {
+  const res = await apiFetch(
+    `${API_BASE}/api/projects/podcast/${encodeURIComponent(projectId)}/clips/${encodeURIComponent(clipId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to update clip metadata');
+  }
+  return await res.json();
+}
+
+export async function renderClip(
+  projectId: string,
+  clipId: string
+): Promise<{ clip_id: string; render_status: string; download_url: string }> {
+  const res = await apiFetch(
+    `${API_BASE}/api/projects/podcast/${encodeURIComponent(projectId)}/clips/${encodeURIComponent(clipId)}/render`,
+    { method: 'POST' }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to render clip');
+  }
+  return await res.json();
+}
+
+export async function deleteClip(
+  projectId: string,
+  clipId: string,
+  deleteFile = true
+): Promise<{ clip_id: string; record_deleted: boolean; file_deleted: boolean }> {
+  const res = await apiFetch(
+    `${API_BASE}/api/projects/podcast/${encodeURIComponent(projectId)}/clips/${encodeURIComponent(clipId)}?delete_file=${deleteFile}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to delete clip');
+  }
+  return await res.json();
+}
+
 export { API_BASE };

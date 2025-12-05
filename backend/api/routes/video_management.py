@@ -440,6 +440,376 @@ def sync_orphaned_videos() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to sync orphaned videos: {e}")
 
 
+# ============================================================================
+# Podcast Projects API - Source videos and their clips
+# ============================================================================
+
+@router.get("/projects/podcast", summary="List Podcast Projects")
+def list_podcast_projects(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    status: Optional[str] = Query(None, description="Filter by status: active, expired, analysis_complete"),
+    sort_by: Optional[str] = Query("created_at", description="Sort by: created_at, clips_count, title"),
+    sort_order: Optional[str] = Query("desc", description="Sort order: asc or desc")
+) -> Dict[str, Any]:
+    """
+    List podcast projects (source YouTube videos with their generated clips).
+
+    Each project represents a source YouTube video that was used to generate clips.
+    Returns metadata about the source video and count of clips generated from it.
+    """
+    try:
+        from sqlalchemy import func, distinct
+        from ...database import SessionLocal, Video, Job, YouTubeVideo
+
+        with SessionLocal() as session:
+            # Get unique source videos from podcastclips jobs
+            # Join jobs with videos to get source info and clip counts
+            projects = []
+
+            # Get all podcastclips jobs
+            jobs = session.query(Job).filter(
+                Job.workflow == "podcastclips",
+                Job.status.in_(["done", "completed", "running", "queued"])
+            ).order_by(Job.created_at.desc()).all()
+
+            seen_sources = set()
+
+            for job in jobs:
+                request_data = job.request_data or {}
+                youtube_url = request_data.get("youtubeUrl", "")
+
+                if not youtube_url or youtube_url in seen_sources:
+                    continue
+
+                seen_sources.add(youtube_url)
+
+                # Get clips count for this job
+                clips = session.query(Video).filter(
+                    Video.job_id == job.id,
+                    Video.workflow == "podcastclips"
+                ).all()
+
+                # Get source video info from YouTube cache if available
+                from ...utils.youtube import extract_video_id
+                try:
+                    video_id = extract_video_id(youtube_url)
+                    yt_cache = session.query(YouTubeVideo).filter(
+                        YouTubeVideo.video_id == video_id
+                    ).first()
+                except Exception:
+                    video_id = None
+                    yt_cache = None
+
+                # Determine project status
+                project_status = "active"
+                if job.status in ["done", "completed"]:
+                    project_status = "analysis_complete"
+                elif job.status == "error":
+                    project_status = "error"
+
+                # Get total duration from request or cache
+                total_duration = None
+                if yt_cache:
+                    total_duration = yt_cache.duration_seconds
+
+                # Build project info
+                project = {
+                    "id": job.id,
+                    "source_video_id": video_id,
+                    "youtube_url": youtube_url,
+                    "title": yt_cache.title if yt_cache else request_data.get("title", "Unknown Video"),
+                    "channel": yt_cache.normalized_url.split("/")[-1] if yt_cache and yt_cache.normalized_url else "",
+                    "thumbnail_url": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None,
+                    "total_duration": total_duration,
+                    "total_duration_formatted": _format_duration(total_duration) if total_duration else "Unknown",
+                    "clips_count": len(clips),
+                    "status": project_status,
+                    "job_status": job.status,
+                    "created_at": job.created_at.isoformat() if job.created_at else None,
+                    "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+                    # Format options from request
+                    "format_options": {
+                        "aspect_ratio": "9:16",
+                        "mode": request_data.get("enableMixedMode", True) and "Auto" or "Single",
+                        "face_tracking": request_data.get("enableMixedMode", True)
+                    },
+                    # Time range used
+                    "time_range": {
+                        "start": "0:00",
+                        "end": _format_duration(total_duration) if total_duration else "Unknown"
+                    }
+                }
+
+                projects.append(project)
+
+                if len(projects) >= limit:
+                    break
+
+            # Apply sorting
+            def get_sort_value(p: Dict[str, Any]) -> Any:
+                if sort_by == "clips_count":
+                    return p.get("clips_count", 0)
+                elif sort_by == "title":
+                    return p.get("title", "")
+                else:  # created_at
+                    return p.get("created_at", "")
+
+            reverse_sort = (sort_order.lower() == "desc")
+            projects = sorted(projects, key=get_sort_value, reverse=reverse_sort)
+
+            # Apply offset and limit
+            projects = projects[offset:offset + limit]
+
+            return {
+                "projects": projects,
+                "total": len(seen_sources),
+                "offset": offset,
+                "limit": limit,
+                "has_more": len(projects) == limit
+            }
+
+    except Exception as e:
+        logger.error(f"Failed to list podcast projects: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to list projects: {e}")
+
+
+@router.get("/projects/podcast/{project_id}", summary="Get Podcast Project Details")
+def get_podcast_project(project_id: str) -> Dict[str, Any]:
+    """
+    Get detailed information about a podcast project including all its clips.
+    """
+    try:
+        from ...database import SessionLocal, Video, Job, YouTubeVideo
+
+        with SessionLocal() as session:
+            # Get the job
+            job = session.query(Job).filter(Job.id == project_id).first()
+            if not job:
+                raise HTTPException(status_code=404, detail="Project not found")
+
+            if job.workflow != "podcastclips":
+                raise HTTPException(status_code=400, detail="Not a podcast clips project")
+
+            request_data = job.request_data or {}
+            youtube_url = request_data.get("youtubeUrl", "")
+
+            # Get source video info
+            from ...utils.youtube import extract_video_id
+            try:
+                video_id = extract_video_id(youtube_url)
+                yt_cache = session.query(YouTubeVideo).filter(
+                    YouTubeVideo.video_id == video_id
+                ).first()
+            except Exception:
+                video_id = None
+                yt_cache = None
+
+            # Get all clips for this project
+            clips_query = session.query(Video).filter(
+                Video.job_id == project_id,
+                Video.workflow == "podcastclips"
+            ).order_by(Video.created_at.desc())
+
+            clips = []
+            for clip in clips_query.all():
+                clip_metadata = clip.video_metadata or {}
+
+                clips.append({
+                    "id": str(clip.id),
+                    "filename": clip.filename,
+                    "file_path": clip.file_path,
+                    "download_url": f"/api/download?path={clip.file_path}",
+                    "thumbnail_url": thumbnail_service.get_thumbnail_url(clip.file_path),
+                    "duration_seconds": clip.duration_seconds,
+                    "duration_formatted": _format_duration(clip.duration_seconds) if clip.duration_seconds else "0:00",
+                    "size_bytes": clip.size_bytes,
+                    "size_mb": round(clip.size_bytes / (1024 * 1024), 2) if clip.size_bytes else 0,
+                    "posted": clip.posted,
+                    "posted_at": clip.posted_at.isoformat() if clip.posted_at else None,
+                    "created_at": clip.created_at.isoformat() if clip.created_at else None,
+                    # Clip-specific metadata
+                    "viral_score": clip_metadata.get("viral_score", 0),
+                    "title": clip_metadata.get("title", ""),
+                    "hook": clip_metadata.get("hook", ""),
+                    "time_interval": {
+                        "start": clip_metadata.get("start_time", 0),
+                        "end": clip_metadata.get("end_time", 0),
+                        "start_formatted": _format_duration(clip_metadata.get("start_time", 0)),
+                        "end_formatted": _format_duration(clip_metadata.get("end_time", 0))
+                    },
+                    "engagement_factors": clip_metadata.get("engagement_factors", []),
+                    "likes": clip_metadata.get("likes", 0),
+                    "dislikes": clip_metadata.get("dislikes", 0),
+                    "render_status": clip_metadata.get("render_status", "preview"),
+                    "file_exists": Path(clip.file_path).exists() if clip.file_path else False
+                })
+
+            # Sort clips by viral score
+            clips = sorted(clips, key=lambda c: c.get("viral_score", 0), reverse=True)
+
+            # Build project response
+            total_duration = yt_cache.duration_seconds if yt_cache else None
+
+            return {
+                "id": project_id,
+                "source_video_id": video_id,
+                "youtube_url": youtube_url,
+                "title": yt_cache.title if yt_cache else request_data.get("title", "Unknown Video"),
+                "channel": "",  # Could extract from URL
+                "thumbnail_url": f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg" if video_id else None,
+                "total_duration": total_duration,
+                "total_duration_formatted": _format_duration(total_duration) if total_duration else "Unknown",
+                "clips": clips,
+                "clips_count": len(clips),
+                "status": "analysis_complete" if job.status in ["done", "completed"] else job.status,
+                "job_status": job.status,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+                "request_params": request_data
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get podcast project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get project: {e}")
+
+
+@router.patch("/projects/podcast/{project_id}/clips/{clip_id}", summary="Update Clip Metadata")
+def update_clip_metadata(project_id: str, clip_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update metadata for a specific clip (likes, dislikes, render_status, etc.).
+    """
+    try:
+        # Verify clip belongs to project
+        video = video_service.get_video(clip_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Clip not found")
+
+        if video.get("job_id") != project_id:
+            raise HTTPException(status_code=400, detail="Clip does not belong to this project")
+
+        # Get existing metadata and merge
+        existing_metadata = video.get("metadata", {})
+
+        # Only allow certain fields to be updated
+        allowed_fields = ["likes", "dislikes", "render_status", "title", "custom_notes"]
+        filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+
+        updated_metadata = {**existing_metadata, **filtered_updates}
+
+        # Update
+        success = job_store.update_video(clip_id, metadata=updated_metadata)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update clip")
+
+        return {
+            "clip_id": clip_id,
+            "updated_fields": list(filtered_updates.keys()),
+            "metadata": updated_metadata
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update clip {clip_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update clip: {e}")
+
+
+@router.post("/projects/podcast/{project_id}/clips/{clip_id}/render", summary="Mark Clip for Rendering")
+def render_clip(project_id: str, clip_id: str) -> Dict[str, Any]:
+    """
+    Mark a clip for high-quality rendering (changes render_status to 'rendering').
+
+    In the current implementation, clips are already rendered in preview quality.
+    This endpoint is a placeholder for future high-quality rendering support.
+    """
+    try:
+        video = video_service.get_video(clip_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Clip not found")
+
+        if video.get("job_id") != project_id:
+            raise HTTPException(status_code=400, detail="Clip does not belong to this project")
+
+        # Update render status
+        existing_metadata = video.get("metadata", {})
+        existing_metadata["render_status"] = "rendered"
+
+        success = job_store.update_video(clip_id, metadata=existing_metadata)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to update clip")
+
+        return {
+            "clip_id": clip_id,
+            "render_status": "rendered",
+            "message": "Clip marked as rendered",
+            "download_url": f"/api/download?path={video['file_path']}"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to render clip {clip_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to render clip: {e}")
+
+
+@router.delete("/projects/podcast/{project_id}/clips/{clip_id}", summary="Delete Clip")
+def delete_project_clip(project_id: str, clip_id: str, delete_file: bool = Query(True)) -> Dict[str, Any]:
+    """Delete a clip from a project."""
+    try:
+        video = video_service.get_video(clip_id)
+        if not video:
+            raise HTTPException(status_code=404, detail="Clip not found")
+
+        if video.get("job_id") != project_id:
+            raise HTTPException(status_code=400, detail="Clip does not belong to this project")
+
+        file_path = video["file_path"]
+        file_deleted = False
+
+        if delete_file:
+            try:
+                Path(file_path).unlink(missing_ok=True)
+                file_deleted = True
+            except Exception as e:
+                logger.warning(f"Failed to delete clip file {file_path}: {e}")
+
+        success = job_store.delete_video(clip_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete clip record")
+
+        return {
+            "clip_id": clip_id,
+            "project_id": project_id,
+            "record_deleted": True,
+            "file_deleted": file_deleted
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete clip {clip_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete clip: {e}")
+
+
+def _format_duration(seconds: Optional[float]) -> str:
+    """Format duration in seconds to MM:SS or HH:MM:SS string."""
+    if seconds is None:
+        return "0:00"
+
+    total_seconds = int(seconds)
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    secs = total_seconds % 60
+
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    else:
+        return f"{minutes}:{secs:02d}"
+
+
 @router.delete("/videos/managed/{video_id}", summary="Delete Video Record")
 def delete_video_record(video_id: str, delete_file: bool = Query(False)) -> Dict[str, Any]:
     """

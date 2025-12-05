@@ -38,6 +38,7 @@ class ViralMoment:
     hook: str
     clip_index: int
     viral_score: float = 0.0  # 0-100 quality score
+    hook_strength: float = 0.0  # 0-100 score for opening hook strength (first 3-5 seconds)
     engagement_factors: Dict[str, float] = field(default_factory=dict)  # Breakdown of score
     optimized_start: Optional[float] = None  # Hook-optimized start time
     optimized_end: Optional[float] = None  # Hook-optimized end time

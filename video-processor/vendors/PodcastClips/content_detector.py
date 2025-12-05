@@ -14,6 +14,8 @@ from loguru import logger as loguru_logger
 
 try:
     import pytesseract
+    # Configure tesseract executable path for Windows
+    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     HAS_OCR = True
 except ImportError:
     HAS_OCR = False
@@ -295,32 +297,53 @@ class ContentModeDetector:
             # Get content score and face info for this timestamp
             content_score = content_scores.get(timestamp, 0.0)
 
-            # Check if faces exist in CURRENT frame (AFTER filtering!)
-            # face_positions contains RAW detections (before background filtering)
-            # We need to check face_tracks which contains VALID tracked faces (after filtering)
-            # Use timestamp tolerance to account for face detection sampling (every 10 frames)
+            # TWO-TIER face detection check:
+            # 1. ACTUAL detection (tight tolerance) - for wide shot detection
+            # 2. PERSISTED detection (loose tolerance) - for continuity
+            
+            current_frame_has_actual_detection = False
             current_frame_has_faces = False
-            TIMESTAMP_TOLERANCE = 0.5  # 0.5 second tolerance (accounts for 10-frame sampling at 30fps = 0.33s)
-            if self.face_tracker and self.face_tracker.face_tracks:
-                # Check if ANY face track has a position near this timestamp (within tolerance)
-                current_frame_has_faces = any(
-                    any(abs(ts - timestamp) <= TIMESTAMP_TOLERANCE for ts in track.positions.keys())
-                    for track in self.face_tracker.face_tracks
-                )
-                # DEBUG: Log detailed info for specific timestamps
-                if 62.0 <= timestamp <= 63.0:  # Frame 3139 area
-                    logger.info(
-                        f"🔍 DEBUG [{timestamp:.2f}s]: current_frame_has_faces={current_frame_has_faces}, "
-                        f"num_tracks={len(self.face_tracker.face_tracks)}"
+            detected_face = None
+            
+            if self.face_tracker:
+                # Check 1: ACTUAL detection in current frame (1.0s tolerance)
+                # This is used for wide shot detection - we want to know if faces are 
+                # REALLY detected right now, not just persisted from earlier
+                # Tolerance increased from 0.5s to 1.0s to handle profile faces and detection gaps
+                # (face detection can fail briefly when speaker looks down or sideways)
+                ACTUAL_DETECTION_TOLERANCE = 1.0  # ~30 frames at 30fps
+                if self.face_tracker.face_tracks:
+                    current_frame_has_actual_detection = any(
+                        any(abs(ts - timestamp) <= ACTUAL_DETECTION_TOLERANCE for ts in track.positions.keys())
+                        for track in self.face_tracker.face_tracks
                     )
-                    for i, track in enumerate(self.face_tracker.face_tracks[:3]):  # Show first 3 tracks
-                        has_exact = timestamp in track.positions
-                        nearby_timestamps = sorted([ts for ts in track.positions.keys() 
-                                                   if abs(ts - timestamp) < 1.0])[:5]
-                        logger.info(
-                            f"  Track {track.face_id}: exact_match={has_exact}, "
-                            f"nearby_times={[f'{t:.2f}' for t in nearby_timestamps]}"
-                        )
+                
+                # Check 2: PERSISTED detection (uses face tracker's persistence logic)
+                # This is used for continuity - to maintain stable tracking even during brief occlusions
+                if hasattr(self.face_tracker, 'get_active_speaker_at_time'):
+                    detected_face = self.face_tracker.get_active_speaker_at_time(timestamp)
+                
+                # Fallback to largest face if no active speaker
+                if not detected_face and hasattr(self.face_tracker, 'get_face_position_at_time'):
+                    detected_face = self.face_tracker.get_face_position_at_time(timestamp)
+                
+                current_frame_has_faces = detected_face is not None
+                
+                # DEBUG: Log for troubleshooting
+                if 76.0 <= timestamp <= 77.0:  # Frame 3540 area (wide shot)
+                    logger.info(
+                        f"🔍 DEBUG [{timestamp:.2f}s]: "
+                        f"actual_detection={current_frame_has_actual_detection}, "
+                        f"has_faces_w_persistence={current_frame_has_faces}, "
+                        f"detected_face={detected_face.face_id if detected_face else None}"
+                    )
+                    if self.face_tracker.face_tracks:
+                        for track in self.face_tracker.face_tracks[:3]:
+                            nearby_timestamps = sorted([ts for ts in track.positions.keys() 
+                                                       if abs(ts - timestamp) < 1.0])[:5]
+                            logger.info(
+                                f"  Track {track.face_id}: nearby_times={[f'{t:.2f}' for t in nearby_timestamps]}"
+                            )
 
             # Use face tracker's persistence method if available for better wide shot handling
             if self.face_tracker and hasattr(self.face_tracker, 'get_face_position_with_persistence'):
@@ -365,16 +388,16 @@ class ContentModeDetector:
                 self.face_tracker.speaker_to_face_map):
                 diarization_speaker = self.face_tracker.get_speaker_at_time(timestamp)
                 if diarization_speaker:
-                    # PHASE 1: Wide shot detection with diar ization
-                    # If someone is speaking but NO FACES IN CURRENT FRAME,
+                    # PHASE 1: Wide shot detection with diarization
+                    # If someone is speaking but NO FACES ACTUALLY DETECTED,
                     # this is likely a wide audience shot → use horizontal mode
-                    # Check current_frame_has_faces (not face_box_for_mode which uses persistence)
-                    if not current_frame_has_faces:
-                        # Speech active but no visible face IN CURRENT FRAME → wide shot
+                    # Use ACTUAL detection, not persistence
+                    if not current_frame_has_actual_detection:
+                        # Speech active but no actual face detection → wide shot
                         should_be_horizontal = True
                         logger.info(
                             f"[{timestamp:.1f}s] 🎯 WIDE SHOT (diarization): "
-                            f"{diarization_speaker} speaking but no current faces → HORIZONTAL"
+                            f"{diarization_speaker} speaking but no actual detection → HORIZONTAL"
                         )
                         target_mode = ContentMode.HORIZONTAL
                     else:
@@ -399,20 +422,20 @@ class ContentModeDetector:
                         current_mode = target_mode
                     continue  # Skip to next timestamp
             
-            # PRIORITY -0.5: Wide shot detection - no faces in current frame
-            # If there are NO faces detected in the current frame at all,
+            # PRIORITY -0.5: Wide shot detection - no faces actually detected
+            # If there are NO faces ACTUALLY DETECTED in the current frame,
             # this is likely a wide audience shot → use horizontal mode
-            # Persistence should NOT prevent this - if current frame has no faces, show full shot
-            if not current_frame_has_faces:
-                # No faces in current frame → wide shot, use horizontal mode
+            # Use ACTUAL detection (not persistence) to properly detect wide shots
+            if not current_frame_has_actual_detection:
+                # No actual face detection → wide shot, use horizontal mode
                 should_be_horizontal = True
                 logger.info(
                     f"[{timestamp:.1f}s] 🎯 WIDE SHOT DETECTED: "
-                    f"current_frame_has_faces=False → HORIZONTAL MODE"
+                    f"actual_detection=False → HORIZONTAL MODE"
                 )
                 logger.debug(
                     f"  Face tracks: {len(self.face_tracker.face_tracks) if self.face_tracker else 0}, "
-                    f"Timestamps in tracks: {[sorted(t.positions.keys()) for t in self.face_tracker.face_tracks[:2]] if self.face_tracker and self.face_tracker.face_tracks else []}"
+                    f"Has persisted face: {current_frame_has_faces}"
                 )
                 target_mode = ContentMode.HORIZONTAL
                 

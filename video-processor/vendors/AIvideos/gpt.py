@@ -96,6 +96,7 @@ class ViralMomentSchema(BaseModel):
     reason: str = Field(description="1-2 sentences explaining why this will go viral")
     hook: str = Field(description="Attention-grabbing first sentence (max 120 chars)")
     viral_score: int = Field(description="Viral potential score from 0-100 (higher is better)")
+    hook_strength: int = Field(description="Hook strength score 0-100 for first 3-5 seconds only (minimum 70 required)")
     confidence: float = Field(description="Model confidence in selection (0.0-1.0)")
     caption: str = Field(description="Share caption/subtitle for social media (<= 150 chars)")
     tags: List[str] = Field(description="Up to 6 tags/hashtags (without # symbol)")

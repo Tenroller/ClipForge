@@ -222,6 +222,10 @@
         "label": "Clipes de Podcast",
         "description": "Gerar clipes de podcasts"
       },
+      "projects": {
+        "label": "Projetos",
+        "description": "Gerenciar projetos de clips"
+      },
       "videos": {
         "label": "Galeria de Vídeos",
         "description": "Ver todos os vídeos"

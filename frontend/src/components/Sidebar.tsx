@@ -18,6 +18,7 @@ import {
   LogOut,
   Radio,
   LayoutDashboard,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { logoutAction } from '@/app/login/actions';
@@ -63,6 +64,12 @@ export default function Sidebar({ username, className }: SidebarProps) {
   ];
 
   const utilityItems = [
+    {
+      id: 'projects',
+      href: '/projects',
+      label: t('navigation.projects.label'),
+      icon: <FolderKanban className="size-4" />,
+    },
     {
       id: 'videos',
       href: '/videos',
