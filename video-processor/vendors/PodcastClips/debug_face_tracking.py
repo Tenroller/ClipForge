@@ -427,6 +427,89 @@ def visualize_face_tracking(
                     (0, 165, 255),
                     2
                 )
+            elif current_mode == ContentMode.SPLIT_SCREEN:
+                # Split-screen mode: show crop regions around each speaker
+                # The final output will have TOP speaker and BOTTOM speaker stacked
+                
+                # Get split-screen face regions from face tracker
+                face_group_info = face_tracker.detect_face_groups(timestamp)
+                faces_for_split = face_group_info.get("faces", [])
+                
+                if len(faces_for_split) >= 2:
+                    # Sort faces by x position (left to right)
+                    faces_sorted = sorted(faces_for_split, key=lambda f: f.x)
+                    face_left = faces_sorted[0]  # Will be TOP
+                    face_right = faces_sorted[1]  # Will be BOTTOM
+                    
+                    # Calculate crop region for each face (with padding)
+                    # Each crop will be resized to 1080x960 (half of 9:16)
+                    padding_factor = 2.0  # Padding around face
+                    
+                    for i, (face, label, color) in enumerate([
+                        (face_left, "TOP", (0, 255, 255)),     # Yellow/Cyan for TOP
+                        (face_right, "BOTTOM", (255, 0, 255))  # Magenta for BOTTOM
+                    ]):
+                        # Calculate crop region centered on face
+                        crop_w = int(face.width * padding_factor)
+                        crop_h = int(face.height * padding_factor)
+                        
+                        # Maintain aspect ratio for 1080x960 (9:8 aspect)
+                        target_aspect = 1080 / 960  # ~1.125
+                        if crop_w / crop_h > target_aspect:
+                            crop_h = int(crop_w / target_aspect)
+                        else:
+                            crop_w = int(crop_h * target_aspect)
+                        
+                        crop_x = face.center[0] - crop_w // 2
+                        crop_y = face.center[1] - crop_h // 2
+                        
+                        # Clamp to frame bounds
+                        crop_x = max(0, min(crop_x, width - crop_w))
+                        crop_y = max(0, min(crop_y, height - crop_h))
+                        
+                        # Draw crop region
+                        draw_dashed_rectangle(
+                            frame,
+                            (crop_x, crop_y),
+                            (crop_x + crop_w, crop_y + crop_h),
+                            color,
+                            thickness=4,
+                            dash_length=12
+                        )
+                        
+                        # Add label (TOP or BOTTOM)
+                        cv2.putText(
+                            frame,
+                            f">>> {label} <<<",
+                            (crop_x + 10, crop_y + 35),
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            1.0,
+                            color,
+                            3
+                        )
+                
+                # Add "SPLIT-SCREEN MODE" label at top
+                cv2.putText(
+                    frame,
+                    "FORMAT: SPLIT-SCREEN (2 SPEAKERS)",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    (255, 255, 255),  # White
+                    2
+                )
+                
+                # Add separation score info
+                if face_group_info:
+                    cv2.putText(
+                        frame,
+                        f"Separation: {face_group_info.get('separation_score', 0):.2f}",
+                        (10, 60),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (255, 255, 255),
+                        2
+                    )
             elif crop_box:
                 # Draw blue dashed rectangle for face mode (9:16)
                 draw_dashed_rectangle(

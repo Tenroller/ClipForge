@@ -63,7 +63,7 @@ SPEAKER_SWITCH_HYSTERESIS = 0.3
 # Face separation threshold for split-screen detection (0-1)
 # Fraction of frame width required to consider faces "separated"
 # Higher value = stricter (only very separated faces trigger split-screen)
-FACE_SEPARATION_THRESHOLD = 0.7
+FACE_SEPARATION_THRESHOLD = 0.4  # Lowered from 0.7 for better dual-speaker detection
 
 # Face persistence window (seconds)
 # How long to persist last known face position during temporary gaps

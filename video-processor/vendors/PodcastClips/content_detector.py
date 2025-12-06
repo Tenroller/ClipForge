@@ -378,7 +378,7 @@ class ContentModeDetector:
             should_be_horizontal = False
             should_be_split_screen = False
 
-            # PRIORITY -1: Check diarization - if someone is speaking, ALWAYS use face mode
+            # PRIORITY -1: Check diarization - if someone is speaking, check for split-screen first
             # This is the highest priority check because diarization KNOWS who is talking
             diarization_speaker = None
             if (self.face_tracker and
@@ -401,13 +401,26 @@ class ContentModeDetector:
                         )
                         target_mode = ContentMode.HORIZONTAL
                     else:
-                        # Normal case: speaker detected with visible face
-                        should_be_horizontal = False
-                        face_id = self.face_tracker.speaker_to_face_map.get(diarization_speaker, "?")
-                        logger.debug(
-                            f"[{timestamp:.1f}s] Diarization override: {diarization_speaker} -> Face {face_id} → FACE"
-                        )
-                        target_mode = ContentMode.FACE
+                        # PHASE 2: Check for SPLIT-SCREEN before defaulting to FACE
+                        # If two separated faces are detected, use split-screen mode
+                        face_group_info = self.face_tracker.detect_face_groups(timestamp)
+                        if (face_group_info["mode"] == "separated" and
+                            len(face_group_info["faces"]) >= 2):
+                            should_be_split_screen = True
+                            logger.info(
+                                f"[{timestamp:.1f}s] 🎯 SPLIT-SCREEN (diarization): "
+                                f"{diarization_speaker} speaking with 2 separated faces "
+                                f"(separation={face_group_info['separation_score']:.2f}) → SPLIT_SCREEN"
+                            )
+                            target_mode = ContentMode.SPLIT_SCREEN
+                        else:
+                            # Normal case: speaker detected with visible face
+                            should_be_horizontal = False
+                            face_id = self.face_tracker.speaker_to_face_map.get(diarization_speaker, "?")
+                            logger.debug(
+                                f"[{timestamp:.1f}s] Diarization override: {diarization_speaker} -> Face {face_id} → FACE"
+                            )
+                            target_mode = ContentMode.FACE
 
                     # Check if mode changed
                     if target_mode != current_mode:
