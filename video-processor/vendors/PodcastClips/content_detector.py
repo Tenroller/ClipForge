@@ -25,6 +25,12 @@ from .face_tracker import FaceBox, FaceTracker
 
 logger = loguru_logger.bind(name="PodcastClips.content_detector")
 
+# Interview/Conversation Detection Constants
+INTERVIEW_MIN_FACE_SIZE = 0.04  # 4% of frame (larger than audience)
+INTERVIEW_MAX_FACE_SIZE = 0.25  # 25% of frame (smaller than close-ups)
+INTERVIEW_DIALOGUE_CONFIDENCE = 0.7  # 70% confidence for dialogue
+INTERVIEW_FACE_CONSISTENCY_WINDOW = 2.0  # 2 seconds consistency check
+
 
 class ContentMode(Enum):
     """Video content display mode."""
@@ -273,6 +279,10 @@ class ContentModeDetector:
         Returns:
             List of content segments
         """
+        # Store video dimensions for interview detection
+        self.video_width = video_width
+        self.video_height = video_height
+
         if not content_scores and not face_positions:
             # No data at all - default to horizontal
             return [ContentSegment(start_time, end_time, ContentMode.HORIZONTAL, 0.5)]
@@ -434,7 +444,63 @@ class ContentModeDetector:
                         segment_start = timestamp
                         current_mode = target_mode
                     continue  # Skip to next timestamp
-            
+
+            # PRIORITY -0.75: INTERVIEW/CONVERSATION DETECTION
+            # If 2 medium-sized faces are detected in a dialogue pattern,
+            # use FACE mode with active speaker tracking (not split-screen, not horizontal)
+            if self.face_tracker and hasattr(self.face_tracker, 'detect_face_groups'):
+                face_group_info = self.face_tracker.detect_face_groups(timestamp)
+
+                # Get interaction pattern if diarization available
+                interaction_pattern = None
+                if (self.face_tracker and
+                    hasattr(self.face_tracker, 'diarization_segments') and
+                    self.face_tracker.diarization_segments):
+                    # Get interaction pattern for current segment
+                    segment_start_check = max(0, timestamp - 2.0)
+                    segment_end_check = timestamp + 2.0
+
+                    if hasattr(self.face_tracker, 'diarizer') and self.face_tracker.diarizer:
+                        interaction_pattern = self.face_tracker.diarizer.detect_interaction_patterns(
+                            self.face_tracker.diarization_segments,
+                            segment_start_check,
+                            segment_end_check
+                        )
+
+                # Check if this is an interview scenario
+                is_interview = self._is_interview_scenario(
+                    timestamp,
+                    face_group_info,
+                    interaction_pattern
+                )
+
+                if is_interview:
+                    # Interview mode: Use FACE mode with active speaker tracking
+                    # The face tracker's get_active_speaker_at_time() will handle
+                    # intelligently switching between the 2 people based on who's talking
+                    should_be_horizontal = False
+                    should_be_split_screen = False
+
+                    logger.info(
+                        f"[{timestamp:.1f}s] INTERVIEW MODE: "
+                        f"2 people conversation → FACE mode with speaker tracking"
+                    )
+
+                    target_mode = ContentMode.FACE
+
+                    # Check if mode changed
+                    if target_mode != current_mode:
+                        if timestamp > segment_start:
+                            confidence = self._calculate_segment_confidence(
+                                content_scores, segment_start, timestamp
+                            )
+                            segments.append(ContentSegment(
+                                segment_start, timestamp, current_mode, confidence
+                            ))
+                        segment_start = timestamp
+                        current_mode = target_mode
+                    continue  # Skip to next timestamp
+
             # PRIORITY -0.5: Wide shot detection - no faces actually detected
             # If there are NO faces ACTUALLY DETECTED in the current frame,
             # this is likely a wide audience shot → use horizontal mode
@@ -1104,3 +1170,95 @@ class ContentModeDetector:
                 f"  Segment {i+1}: {segment.start_time:.1f}s-{segment.end_time:.1f}s "
                 f"[{segment.mode.value}] (confidence: {segment.confidence:.2f})"
             )
+
+    def _is_interview_scenario(
+        self,
+        timestamp: float,
+        face_group_info: Dict[str, any],
+        interaction_pattern: Optional[Dict[str, any]] = None
+    ) -> bool:
+        """
+        Detect if current timestamp represents an interview/conversation scenario.
+
+        Interview characteristics:
+        - Exactly 2 faces detected consistently
+        - Faces are medium-sized (not audience, not extreme close-ups)
+        - Dialogue interaction pattern (if diarization available)
+        - Faces not extremely separated (< split-screen threshold)
+
+        Args:
+            timestamp: Current timestamp
+            face_group_info: Face grouping information from detect_face_groups()
+            interaction_pattern: Diarization interaction pattern (optional)
+
+        Returns:
+            True if this is an interview scenario
+        """
+        # Check 1: Must have exactly 2 faces detected
+        if len(face_group_info.get("faces", [])) != 2:
+            return False
+
+        # Check 2: Faces must NOT be separated (otherwise it's split-screen)
+        if face_group_info["mode"] == "separated":
+            return False
+
+        # Check 3: Both faces must be medium-sized (not tiny audience members)
+        faces = face_group_info["faces"]
+
+        # Get video dimensions
+        if hasattr(self, 'video_width') and hasattr(self, 'video_height'):
+            frame_area = self.video_width * self.video_height
+        else:
+            # Fallback to common resolution
+            frame_area = 1920 * 1080
+
+        for face in faces:
+            face_area_ratio = face.area / frame_area
+            if face_area_ratio < INTERVIEW_MIN_FACE_SIZE or face_area_ratio > INTERVIEW_MAX_FACE_SIZE:
+                # Face is too small (audience) or too large (portrait mode)
+                return False
+
+        # Check 4: Check for dialogue interaction pattern (if diarization available)
+        if interaction_pattern:
+            interaction_type = interaction_pattern.get("interaction_type")
+            if interaction_type == "dialogue":
+                logger.info(
+                    f"[{timestamp:.1f}s] Interview detected: "
+                    f"2 medium faces + dialogue pattern"
+                )
+                return True
+            elif interaction_type == "monologue":
+                # 2 faces but only 1 speaking → still interview (interviewer + guest)
+                logger.info(
+                    f"[{timestamp:.1f}s] Interview detected (monologue): "
+                    f"2 medium faces, 1 speaker dominant"
+                )
+                return True
+
+        # Check 5: Verify face consistency over time (prevent false positives)
+        # Look at nearby timestamps to ensure 2 faces are consistently detected
+        if self.face_tracker:
+            consistent_count = 0
+            check_window = INTERVIEW_FACE_CONSISTENCY_WINDOW
+            check_times = [
+                timestamp - check_window,
+                timestamp - check_window / 2,
+                timestamp,
+                timestamp + check_window / 2,
+                timestamp + check_window
+            ]
+
+            for check_time in check_times:
+                check_group = self.face_tracker.detect_face_groups(check_time)
+                if len(check_group.get("faces", [])) == 2:
+                    consistent_count += 1
+
+            # Require at least 3/5 samples to have 2 faces
+            if consistent_count >= 3:
+                logger.debug(
+                    f"[{timestamp:.1f}s] Interview detected (consistency): "
+                    f"{consistent_count}/5 samples have 2 faces"
+                )
+                return True
+
+        return False

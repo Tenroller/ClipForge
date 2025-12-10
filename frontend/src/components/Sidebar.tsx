@@ -1,11 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { useActiveJobs } from '@/hooks/use-jobs';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -20,19 +17,34 @@ import {
   LayoutDashboard,
   FolderKanban,
 } from "lucide-react";
-import { cn } from '@/lib/utils';
 import { logoutAction } from '@/app/login/actions';
 import { useTranslations } from 'next-intl';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+} from '@/components/ui/sidebar';
+import { Button } from '@/components/ui/button';
 
-type SidebarProps = {
+type AppSidebarProps = {
   username: string;
-  className?: string;
-};
+} & React.ComponentProps<typeof Sidebar>;
 
-export default function Sidebar({ username, className }: SidebarProps) {
+export default function AppSidebar({ username, ...props }: AppSidebarProps) {
   const pathname = usePathname();
   const activeJobs = useActiveJobs();
   const t = useTranslations('sidebar');
+  const { state } = useSidebar();
 
   // Filter active jobs by workflow type
   const moneyprinterJobs = activeJobs.filter(job => job.workflow === 'moneyprinter');
@@ -44,21 +56,21 @@ export default function Sidebar({ username, className }: SidebarProps) {
       id: 'creator',
       href: '/creator',
       label: t('navigation.creator.label'),
-      icon: <Film className="size-4" />,
+      icon: Film,
       badge: moneyprinterJobs.length > 0 ? moneyprinterJobs.length.toString() : undefined,
     },
     {
       id: 'compilations',
       href: '/compilations',
       label: t('navigation.compilations.label'),
-      icon: <Brain className="size-4" />,
+      icon: Brain,
       badge: brainrotJobs.length > 0 ? brainrotJobs.length.toString() : undefined,
     },
     {
       id: 'podcastclips',
       href: '/podcastclips',
       label: t('navigation.podcastClips.label'),
-      icon: <Radio className="size-4" />,
+      icon: Radio,
       badge: podcastclipsJobs.length > 0 ? podcastclipsJobs.length.toString() : undefined,
     },
   ];
@@ -68,107 +80,104 @@ export default function Sidebar({ username, className }: SidebarProps) {
       id: 'projects',
       href: '/projects',
       label: t('navigation.projects.label'),
-      icon: <FolderKanban className="size-4" />,
+      icon: FolderKanban,
     },
     {
       id: 'videos',
       href: '/videos',
       label: t('navigation.videos.label'),
-      icon: <Images className="size-4" />,
+      icon: Images,
     },
     {
       id: 'activity',
       href: '/activity',
       label: t('navigation.activity.label'),
-      icon: <TrendingUp className="size-4" />,
+      icon: TrendingUp,
     },
     {
       id: 'cleanup',
       href: '/cleanup',
       label: t('navigation.cleanup.label'),
-      icon: <Trash2 className="size-4" />,
+      icon: Trash2,
     },
   ];
 
   return (
-    <aside
-      className={cn(
-        'flex flex-col h-full bg-background border-r w-64 transition-all duration-300',
-        className
-      )}
-    >
+    <Sidebar collapsible="icon" {...props}>
       {/* Header */}
-      <div className="h-16 flex items-center px-6 border-b">
-        <div className="flex items-center gap-2 font-semibold text-lg tracking-tight">
+      <SidebarHeader>
+        <div className="flex items-center gap-2 px-2 py-1 font-semibold text-lg tracking-tight">
           <div className="size-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
             <LayoutDashboard className="size-5" />
           </div>
-          <span>{t('appName')}</span>
+          <span className="group-data-[collapsible=icon]:hidden">{t('appName')}</span>
         </div>
-      </div>
+      </SidebarHeader>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-6 px-3 space-y-6">
-        <div className="space-y-1">
-          <h4 className="px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            {t('sections.create')}
-          </h4>
-          <nav className="space-y-1">
-            {navItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link key={item.id} href={item.href} className="block">
-                  <Button
-                    variant={isActive ? 'secondary' : 'ghost'}
-                    className={cn(
-                      'w-full justify-start gap-3 px-4 font-normal',
-                      isActive && 'bg-secondary font-medium'
-                    )}
-                  >
-                    {item.icon}
-                    <span className="flex-1 text-left truncate">{item.label}</span>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>{t('sections.create')}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={state === "collapsed" ? item.label : undefined}
+                    >
+                      <Link href={item.href}>
+                        <item.icon className="size-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
                     {item.badge && (
-                      <Badge variant="secondary" className="ml-auto h-5 px-1.5 min-w-5 flex items-center justify-center text-[10px]">
-                        {item.badge}
-                      </Badge>
+                      <SidebarMenuBadge>
+                        <Badge variant="secondary" className="h-5 px-1.5 min-w-5 flex items-center justify-center text-[10px]">
+                          {item.badge}
+                        </Badge>
+                      </SidebarMenuBadge>
                     )}
-                  </Button>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        <div className="space-y-1">
-          <h4 className="px-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-            {t('sections.tools')}
-          </h4>
-          <nav className="space-y-1">
-            {utilityItems.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link key={item.id} href={item.href} className="block">
-                  <Button
-                    variant={isActive ? 'secondary' : 'ghost'}
-                    className={cn(
-                      'w-full justify-start gap-3 px-4 font-normal',
-                      isActive && 'bg-secondary font-medium'
-                    )}
-                  >
-                    {item.icon}
-                    <span className="flex-1 text-left truncate">{item.label}</span>
-                  </Button>
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-      </div>
+        <SidebarGroup>
+          <SidebarGroupLabel>{t('sections.tools')}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {utilityItems.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive}
+                      tooltip={state === "collapsed" ? item.label : undefined}
+                    >
+                      <Link href={item.href}>
+                        <item.icon className="size-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
       {/* Footer */}
-      <div className="p-4 border-t bg-muted/20 space-y-4">
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-2">
+      <SidebarFooter>
+        <div className="flex items-center justify-between px-2 group-data-[collapsible=icon]:justify-center">
+          <div className="flex items-center gap-2 group-data-[collapsible=icon]:hidden">
             <div className="size-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
               {username.charAt(0).toUpperCase()}
             </div>
@@ -180,7 +189,7 @@ export default function Sidebar({ username, className }: SidebarProps) {
           <ThemeToggle />
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-2 group-data-[collapsible=icon]:hidden">
           <LanguageSwitcher />
           <form action={logoutAction}>
             <Button type="submit" variant="outline" className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground">
@@ -189,7 +198,9 @@ export default function Sidebar({ username, className }: SidebarProps) {
             </Button>
           </form>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
   );
 }

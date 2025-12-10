@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -20,17 +22,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, ArrowUpDown, CheckSquare, Filter, Plus, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpDown, CheckSquare, Filter, Plus, X, Loader2 } from 'lucide-react';
 import ClipCard from './ClipCard';
 import type { PodcastClip, PodcastProjectDetail } from '@/lib/api';
 import {
   getPodcastProject,
   updateClipMetadata,
-  renderClip,
   deleteClip,
-  API_BASE,
 } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useJob } from '@/hooks/use-jobs';
 
 interface ProjectClipsViewProps {
   projectId: string;
@@ -53,6 +54,11 @@ export default function ProjectClipsView({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clipToDelete, setClipToDelete] = useState<PodcastClip | null>(null);
 
+  // Fetch job details to show progress when job is still running
+  const { data: job } = useJob(projectId, {
+    refetchInterval: 3000, // Refresh every 3 seconds
+  });
+
   // Load project data
   const loadProject = useCallback(async () => {
     try {
@@ -74,6 +80,13 @@ export default function ProjectClipsView({
   useEffect(() => {
     loadProject();
   }, [loadProject]);
+
+  // Auto-reload project when job completes
+  useEffect(() => {
+    if (job && (job.status === 'done' || job.status === 'completed')) {
+      loadProject();
+    }
+  }, [job?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sort clips
   const getSortedClips = useCallback(() => {
@@ -152,37 +165,6 @@ export default function ProjectClipsView({
     }
   };
 
-  // Handle render
-  const handleRender = async (clip: PodcastClip) => {
-    try {
-      const result = await renderClip(projectId, clip.id);
-      // Trigger download
-      const downloadUrl = result.download_url.startsWith('http')
-        ? result.download_url
-        : `${API_BASE}${result.download_url}`;
-
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = clip.filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      loadProject();
-      toast({
-        title: 'Renderizado',
-        description: 'Download iniciado',
-      });
-    } catch (error) {
-      console.error('Failed to render clip:', error);
-      toast({
-        title: 'Erro',
-        description: 'Falha ao renderizar clip',
-        variant: 'destructive',
-      });
-    }
-  };
-
   // Handle delete
   const handleDelete = async (clip: PodcastClip) => {
     setClipToDelete(clip);
@@ -212,7 +194,40 @@ export default function ProjectClipsView({
     }
   };
 
+  // Helper to calculate progress from job data
+  const getJobProgress = () => {
+    if (!job) return null;
+
+    const steps = [
+      { key: 'initialization', label: 'Inicializacao' },
+      { key: 'download', label: 'Download do video' },
+      { key: 'transcription', label: 'Transcricao' },
+      { key: 'speaker_diarization', label: 'Identificacao de speakers' },
+      { key: 'ai_analysis', label: 'Analise de IA' },
+      { key: 'scoring', label: 'Pontuacao de clips' },
+      { key: 'hook_optimization', label: 'Otimizacao de hooks' },
+      { key: 'face_detection', label: 'Deteccao de rostos' },
+      { key: 'speaker_detection', label: 'Deteccao de speakers' },
+      { key: 'clip_generation', label: 'Geracao de clips' },
+      { key: 'finalization', label: 'Finalizacao' },
+      { key: 'post_processing', label: 'Pos-processamento' },
+      { key: 'completed', label: 'Concluido' },
+    ];
+
+    const currentStepIndex = steps.findIndex(s => s.key === job.current_step);
+    const currentStepLabel = currentStepIndex >= 0 ? steps[currentStepIndex].label : job.current_step;
+    const progress = job.progress ?? (currentStepIndex >= 0 ? Math.round(((currentStepIndex + 1) / steps.length) * 100) : 0);
+
+    return {
+      progress,
+      currentStep: currentStepLabel,
+      status: job.status,
+    };
+  };
+
   const sortedClips = getSortedClips();
+  const jobProgress = getJobProgress();
+  const isJobRunning = job && ['queued', 'running', 'processing'].includes(job.status);
 
   if (loading) {
     return (
@@ -247,12 +262,6 @@ export default function ProjectClipsView({
               {project.title} ({project.clips_count})
             </h1>
           </div>
-          <p className="text-sm text-muted-foreground pl-12">
-            Ajuste, edite legendas ou renderize seus cortes.
-          </p>
-          <p className="text-xs text-yellow-500 pl-12">
-            Visualizacao em baixa qualidade - Render final em resolucao nativa
-          </p>
         </div>
 
         <div className="flex items-center gap-2 pl-12 sm:pl-0">
@@ -312,14 +321,52 @@ export default function ProjectClipsView({
 
       {/* Clips Grid */}
       {sortedClips.length === 0 ? (
-        <div className="flex flex-col items-center justify-center min-h-[300px] gap-4 text-center">
-          <p className="text-lg text-muted-foreground">Nenhum clip encontrado</p>
-          <p className="text-sm text-muted-foreground/70">
-            {filterBy !== 'all'
-              ? 'Tente ajustar os filtros'
-              : 'Este projeto ainda nao tem clips gerados'}
-          </p>
-        </div>
+        isJobRunning && jobProgress ? (
+          // Show job progress when job is running and no clips yet
+          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md">
+            <CardContent className="p-8">
+              <div className="space-y-6">
+                <div className="flex items-center justify-center gap-3">
+                  <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+                  <h3 className="text-xl font-semibold">Processando video</h3>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Progresso</span>
+                    <span className="font-medium">{jobProgress.progress}%</span>
+                  </div>
+                  <Progress value={jobProgress.progress} className="h-2" />
+                </div>
+
+                <div className="text-center space-y-2">
+                  <p className="text-sm font-medium text-purple-400">
+                    Etapa atual: {jobProgress.currentStep}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Os clips aparecerão aqui assim que o processamento for concluído
+                  </p>
+                </div>
+
+                {job?.started_at && (
+                  <div className="text-center text-xs text-muted-foreground">
+                    Iniciado em: {new Date(job.started_at).toLocaleString('pt-BR')}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          // Show "no clips found" message when job is not running
+          <div className="flex flex-col items-center justify-center min-h-[300px] gap-4 text-center">
+            <p className="text-lg text-muted-foreground">Nenhum clip encontrado</p>
+            <p className="text-sm text-muted-foreground/70">
+              {filterBy !== 'all'
+                ? 'Tente ajustar os filtros'
+                : 'Este projeto ainda nao tem clips gerados'}
+            </p>
+          </div>
+        )
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {sortedClips.map((clip) => (
@@ -327,7 +374,7 @@ export default function ProjectClipsView({
               key={clip.id}
               clip={clip}
               projectId={projectId}
-              onRender={() => handleRender(clip)}
+              onRender={() => {}} // Keeping for backwards compatibility
               onDelete={() => handleDelete(clip)}
               onLike={() => handleLike(clip)}
               onDislike={() => handleDislike(clip)}

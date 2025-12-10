@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
-import Sidebar from '@/components/Sidebar';
+import AppSidebar from '@/components/Sidebar';
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 
 export default async function ProtectedLayout({
   children,
@@ -15,14 +16,14 @@ export default async function ProtectedLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Enhanced Sidebar */}
-      <Sidebar username={user.username} />
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto">
+    <SidebarProvider>
+      <AppSidebar username={user.username} />
+      <SidebarInset>
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger />
+        </header>
         {children}
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

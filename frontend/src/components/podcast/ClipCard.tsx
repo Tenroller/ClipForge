@@ -309,16 +309,6 @@ export default function ClipCard({
             </Button>
           )}
         </div>
-
-        {/* Render Button */}
-        <Button
-          className="w-full bg-teal-600 hover:bg-teal-700 text-white"
-          onClick={onRender}
-          disabled={clip.render_status === 'rendered'}
-        >
-          <Play className="h-4 w-4 mr-2" />
-          {clip.render_status === 'rendered' ? 'Renderizado' : 'Renderizar'}
-        </Button>
       </div>
     </Card>
   );

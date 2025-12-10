@@ -35,7 +35,9 @@
       "Bash(pip install:*)",
       "Bash(.venvScriptspython.exe -m pip show pyannote-audio)",
       "Bash(.venv/Scripts/python.exe -m pip:*)",
-      "Bash(../.venv/Scripts/python.exe:*)"
+      "Bash(../.venv/Scripts/python.exe:*)",
+      "WebFetch(domain:ui.shadcn.com)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": [],
     "ask": []

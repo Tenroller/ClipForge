@@ -242,7 +242,7 @@ export default function CompilationsPage() {
                   {/* YouTube URL Input */}
                   {inputMethod === 'youtube' && (
                     <div className="space-y-2">
-                      <Label htmlFor="youtubeUrl">{t('form.youtubeUrl')}</Label>
+                      <Label htmlFor="youtubeUrl">{t('youtubeUrl')}</Label>
                       <Input
                         id="youtubeUrl"
                         name="youtubeUrl"

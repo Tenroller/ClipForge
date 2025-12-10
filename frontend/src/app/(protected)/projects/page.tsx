@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
 export default function PodcastProjectsPage() {
+  const t = useTranslations('projects');
   const { toast } = useToast();
   const router = useRouter();
   const [projects, setProjects] = useState<PodcastProject[]>([]);
@@ -64,15 +66,15 @@ export default function PodcastProjectsPage() {
     } catch (error) {
       console.error('Failed to load projects:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao carregar projetos',
+        title: t('error'),
+        description: t('failedToLoad'),
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [offset, sortBy, sortOrder, toast]);
+  }, [offset, sortBy, sortOrder, toast, t]);
 
   // Initial load
   useEffect(() => {
@@ -116,12 +118,12 @@ export default function PodcastProjectsPage() {
         <div className="flex-1 space-y-2">
           <div className="inline-block">
             <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-              PROJETOS RECENTES
+              {t('title').toUpperCase()}
             </h1>
             <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
           </div>
           <p className="text-base text-muted-foreground max-w-2xl">
-            Gerencie seus projetos de clips de podcast. Clique em um projeto para ver e editar os clips gerados.
+            {t('description')}
           </p>
         </div>
 
@@ -143,7 +145,7 @@ export default function PodcastProjectsPage() {
             onClick={handleNewVideo}
           >
             <Plus className="h-4 w-4 mr-2" />
-            Novo Projeto
+            {t('newProject')}
           </Button>
         </div>
       </div>
@@ -151,26 +153,26 @@ export default function PodcastProjectsPage() {
       {/* Sorting */}
       <div className="mb-6 flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Ordenar por:</span>
+          <span className="text-sm text-muted-foreground">{t('sortBy')}</span>
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
             <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Ordenar por" />
+              <SelectValue placeholder={t('sortByPlaceholder')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="created_at">Data</SelectItem>
-              <SelectItem value="clips_count">Quantidade de Clips</SelectItem>
-              <SelectItem value="title">Titulo</SelectItem>
+              <SelectItem value="created_at">{t('date')}</SelectItem>
+              <SelectItem value="clips_count">{t('clipsCount')}</SelectItem>
+              <SelectItem value="title">{t('titleField')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className="flex items-center gap-2">
           <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as typeof sortOrder)}>
             <SelectTrigger className="w-[120px]">
-              <SelectValue placeholder="Ordem" />
+              <SelectValue placeholder={t('order')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="desc">Decrescente</SelectItem>
-              <SelectItem value="asc">Crescente</SelectItem>
+              <SelectItem value="desc">{t('descending')}</SelectItem>
+              <SelectItem value="asc">{t('ascending')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -199,17 +201,17 @@ export default function PodcastProjectsPage() {
                 <Film className="h-8 w-8 text-muted-foreground" />
               </div>
               <p className="text-lg font-medium text-muted-foreground">
-                Nenhum projeto encontrado
+                {t('noProjects')}
               </p>
               <p className="text-sm text-muted-foreground mt-2">
-                Crie seu primeiro projeto de clips de podcast
+                {t('createFirstProject')}
               </p>
               <Button
                 className="mt-6 bg-purple-600 hover:bg-purple-700 text-white"
                 onClick={handleNewVideo}
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Criar Projeto
+                {t('createProject')}
               </Button>
             </div>
           </CardContent>
@@ -238,12 +240,12 @@ export default function PodcastProjectsPage() {
                 {loadingMore ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Carregando...
+                    {t('loading')}
                   </>
                 ) : (
                   <>
                     <ChevronDown className="h-4 w-4 mr-2" />
-                    Carregar Mais
+                    {t('loadMore')}
                   </>
                 )}
               </Button>
