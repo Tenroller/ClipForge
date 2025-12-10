@@ -503,20 +503,47 @@ class ContentModeDetector:
 
             # PRIORITY -0.5: Wide shot detection - no faces actually detected
             # If there are NO faces ACTUALLY DETECTED in the current frame,
-            # this is likely a wide audience shot → use horizontal mode
-            # Use ACTUAL detection (not persistence) to properly detect wide shots
+            # check if this is truly a wide audience shot or just a temporary
+            # detection gap in an interview scenario
             if not current_frame_has_actual_detection:
-                # No actual face detection → wide shot, use horizontal mode
-                should_be_horizontal = True
-                logger.info(
-                    f"[{timestamp:.1f}s] 🎯 WIDE SHOT DETECTED: "
-                    f"actual_detection=False → HORIZONTAL MODE"
-                )
-                logger.debug(
-                    f"  Face tracks: {len(self.face_tracker.face_tracks) if self.face_tracker else 0}, "
-                    f"Has persisted face: {current_frame_has_faces}"
-                )
-                target_mode = ContentMode.HORIZONTAL
+                # Analyze scene layout from historical face tracking data
+                scene_layout = self._analyze_scene_layout_from_tracks(timestamp, window_seconds=5.0)
+                
+                if scene_layout["layout_type"] == "interview":
+                    # This is likely a brief detection gap in an interview
+                    # Use SPLIT_SCREEN mode to maintain continuity with both speakers
+                    should_be_horizontal = False
+                    should_be_split_screen = True
+                    logger.info(
+                        f"[{timestamp:.1f}s] 🎯 INTERVIEW DETECTED (no current detection): "
+                        f"historical layout={scene_layout['layout_type']}, "
+                        f"dominant_count={scene_layout['dominant_face_count']}, "
+                        f"confidence={scene_layout['confidence']:.2f} → SPLIT_SCREEN"
+                    )
+                    target_mode = ContentMode.SPLIT_SCREEN
+                elif scene_layout["layout_type"] in ("single", "talking_head"):
+                    # Single person or talking head video - maintain FACE mode during detection gap
+                    should_be_horizontal = False
+                    logger.info(
+                        f"[{timestamp:.1f}s] 🎯 TALKING HEAD DETECTED (no current detection): "
+                        f"historical layout={scene_layout['layout_type']}, "
+                        f"avg_size={scene_layout['avg_face_size']:.2%}, "
+                        f"confidence={scene_layout['confidence']:.2f} → FACE MODE"
+                    )
+                    target_mode = ContentMode.FACE
+                else:
+                    # Audience/unknown layout → wide shot, use horizontal mode
+                    should_be_horizontal = True
+                    logger.info(
+                        f"[{timestamp:.1f}s] 🎯 WIDE SHOT DETECTED: "
+                        f"layout={scene_layout['layout_type']}, "
+                        f"actual_detection=False → HORIZONTAL MODE"
+                    )
+                    logger.debug(
+                        f"  Face tracks: {len(self.face_tracker.face_tracks) if self.face_tracker else 0}, "
+                        f"Has persisted face: {current_frame_has_faces}"
+                    )
+                    target_mode = ContentMode.HORIZONTAL
                 
                 # Check if mode changed
                 if target_mode != current_mode:
@@ -536,6 +563,7 @@ class ContentModeDetector:
                     f"[{timestamp:.1f}s] Faces present in current frame, "
                     f"not triggering wide shot detection"
                 )
+
 
             # PRIORITY 0: Check for extreme content (overrides everything)
             if content_score > 0.7:
@@ -1262,3 +1290,191 @@ class ContentModeDetector:
                 return True
 
         return False
+
+    def _analyze_scene_layout_from_tracks(
+        self,
+        timestamp: float,
+        window_seconds: float = 5.0
+    ) -> Dict[str, any]:
+        """
+        Analyze scene layout from GLOBAL face tracking history.
+        
+        Uses overall face track statistics to determine if this is an interview
+        scenario (2 consistent faces) vs audience shot (many varying faces).
+        Now uses GLOBAL track statistics rather than just a local time window.
+        
+        Args:
+            timestamp: Current timestamp (used for logging)
+            window_seconds: Not used anymore - kept for compatibility
+            
+        Returns:
+            Dictionary with:
+                - layout_type: "interview", "talking_head", "audience", "single", or "unknown"
+                - dominant_face_count: Number of face tracks
+                - avg_face_size: Average face size as ratio of frame
+                - face_size_variance: Variance in face sizes (high = audience)
+                - confidence: Confidence in the layout detection (0-1)
+        """
+        if not self.face_tracker or not self.face_tracker.face_tracks:
+            return {
+                "layout_type": "unknown",
+                "dominant_face_count": 0,
+                "avg_face_size": 0.0,
+                "face_size_variance": 0.0,
+                "confidence": 0.0
+            }
+        
+        # Get frame dimensions
+        if hasattr(self, 'video_width') and hasattr(self, 'video_height'):
+            frame_area = self.video_width * self.video_height
+        else:
+            frame_area = 1920 * 1080  # Fallback
+        
+        # Use GLOBAL track statistics instead of time-window analysis
+        # This gives us the overall scene pattern regardless of current detection gaps
+        num_tracks = len(self.face_tracker.face_tracks)
+        
+        # Collect average face size from each track
+        track_avg_sizes = []
+        track_coverages = []  # What % of video each track covers
+        
+        total_video_frames = 0
+        for track in self.face_tracker.face_tracks:
+            if track.positions:
+                # Get average size for this track
+                sizes = [face.area / frame_area for face in track.positions.values()]
+                track_avg_sizes.append(np.mean(sizes))
+                
+                # Track coverage = # of detections for this track
+                track_coverages.append(len(track.positions))
+                total_video_frames = max(total_video_frames, len(track.positions))
+        
+        if not track_avg_sizes:
+            return {
+                "layout_type": "unknown",
+                "dominant_face_count": 0,
+                "avg_face_size": 0.0,
+                "face_size_variance": 0.0,
+                "confidence": 0.0
+            }
+        
+        avg_face_size = float(np.mean(track_avg_sizes))
+        face_size_variance = float(np.std(track_avg_sizes)) if len(track_avg_sizes) > 1 else 0.0
+        
+        # Determine layout type based on GLOBAL track statistics
+        layout_type = "unknown"
+        confidence = 0.5
+        
+        # INTERVIEW: Exactly 2 tracks with medium-sized faces
+        if num_tracks == 2:
+            if (INTERVIEW_MIN_FACE_SIZE <= avg_face_size <= INTERVIEW_MAX_FACE_SIZE and
+                face_size_variance < 0.05):
+                layout_type = "interview"
+                confidence = 0.9
+                logger.debug(
+                    f"[{timestamp:.1f}s] GLOBAL Interview layout: "
+                    f"tracks={num_tracks}, size={avg_face_size:.2%}, "
+                    f"variance={face_size_variance:.3f}"
+                )
+        
+        # TALKING HEAD: 1 track with medium-to-large face
+        elif num_tracks == 1:
+            if avg_face_size >= INTERVIEW_MIN_FACE_SIZE:
+                layout_type = "talking_head"
+                confidence = 0.85
+                logger.debug(
+                    f"[{timestamp:.1f}s] GLOBAL Talking head layout: "
+                    f"tracks={num_tracks}, size={avg_face_size:.2%}"
+                )
+            else:
+                # Small single face - could be audience or dynamic scene
+                layout_type = "single"
+                confidence = 0.6
+        
+        # AUDIENCE: 3+ tracks OR high size variance OR very small faces
+        elif num_tracks >= 3 or face_size_variance > 0.08 or avg_face_size < 0.03:
+            layout_type = "audience"
+            confidence = 0.7
+            logger.debug(
+                f"[{timestamp:.1f}s] GLOBAL Audience layout: "
+                f"tracks={num_tracks}, size={avg_face_size:.2%}, "
+                f"variance={face_size_variance:.3f}"
+            )
+        
+        return {
+            "layout_type": layout_type,
+            "dominant_face_count": num_tracks,
+            "avg_face_size": avg_face_size,
+            "face_size_variance": face_size_variance,
+            "confidence": confidence
+        }
+
+    
+    def _get_face_count_history(
+        self,
+        timestamp: float,
+        window_seconds: float = 5.0
+    ) -> Dict[str, any]:
+        """
+        Analyze face detection history to determine consistent scene pattern.
+        
+        Args:
+            timestamp: Current timestamp
+            window_seconds: Time window to analyze around current time
+            
+        Returns:
+            - avg_face_count: Average faces detected in window
+            - mode_face_count: Most common face count in window
+            - consistency: How consistent the face count is (0-1)
+        """
+        if not self.face_tracker or not self.face_tracker.face_tracks:
+            return {
+                "avg_face_count": 0.0,
+                "mode_face_count": 0,
+                "consistency": 0.0
+            }
+        
+        # Sample timestamps within the window
+        start_ts = timestamp - window_seconds
+        end_ts = timestamp + window_seconds
+        
+        # Count faces at each sample point (every 0.5 seconds)
+        sample_counts = []
+        sample_time = start_ts
+        while sample_time <= end_ts:
+            # Count how many tracks have positions near this sample time
+            faces_at_time = 0
+            for track in self.face_tracker.face_tracks:
+                # Check if track has a position within 0.5s of sample time
+                has_position = any(
+                    abs(ts - sample_time) <= 0.5 
+                    for ts in track.positions.keys()
+                )
+                if has_position:
+                    faces_at_time += 1
+            sample_counts.append(faces_at_time)
+            sample_time += 0.5
+        
+        if not sample_counts:
+            return {
+                "avg_face_count": 0.0,
+                "mode_face_count": 0,
+                "consistency": 0.0
+            }
+        
+        avg_count = float(np.mean(sample_counts))
+        
+        # Find mode (most common value)
+        from collections import Counter
+        count_freq = Counter(sample_counts)
+        mode_count = count_freq.most_common(1)[0][0]
+        mode_frequency = count_freq.most_common(1)[0][1]
+        
+        # Consistency is how often the mode appears
+        consistency = mode_frequency / len(sample_counts)
+        
+        return {
+            "avg_face_count": avg_count,
+            "mode_face_count": mode_count,
+            "consistency": consistency
+        }
