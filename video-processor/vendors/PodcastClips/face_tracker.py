@@ -81,10 +81,11 @@ SMOOTHING_WINDOW = 1.5
 TRANSITION_SMOOTHING_WINDOW = 1
 
 # Face aspect ratio validation range (height/width)
-# Real human faces typically have ratios between 0.75 and 1.5
+# Real human faces typically have ratios between 0.6 and 1.6
+# Widened to allow profile faces which appear wider (lower h/w ratio)
 # Filters out false detections like logos, text, rectangular objects
-MIN_FACE_ASPECT_RATIO = 0.75
-MAX_FACE_ASPECT_RATIO = 1.5
+MIN_FACE_ASPECT_RATIO = 0.6  # Lowered from 0.75 for profile faces
+MAX_FACE_ASPECT_RATIO = 1.6  # Slightly increased for tall faces
 
 # =============================================================================
 # END CONFIGURATION PARAMETERS
@@ -141,17 +142,6 @@ try:
     TRACKING_METRICS_AVAILABLE = True
 except ImportError:
     TRACKING_METRICS_AVAILABLE = False
-
-# Import GPU manager for intelligent GPU usage decisions
-try:
-    # Add backend path to import gpu_manager
-    backend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'backend'))
-    if backend_path not in sys.path:
-        sys.path.insert(0, backend_path)
-    from utils.gpu_manager import should_use_gpu
-    GPU_MANAGER_AVAILABLE = True
-except ImportError:
-    GPU_MANAGER_AVAILABLE = False
 
 logger = loguru_logger.bind(name="PodcastClips.face_tracker")
 
@@ -297,7 +287,6 @@ class FaceTracker:
 
     def __init__(
         self,
-        use_gpu: bool = True,
         detection_height: int = 0,  # 0 = adaptive (use video resolution), otherwise fixed height
         batch_size: int = 4,
         min_face_size_ratio: Optional[float] = None,  # Optional override for MIN_FACE_SIZE_RATIO
@@ -318,7 +307,6 @@ class FaceTracker:
         Initialize face tracker with OpenCV.
 
         Args:
-            use_gpu: Whether to prefer GPU acceleration (will fallback to CPU if GPU unavailable)
             detection_height: Target height for face detection processing
                              - 0: Adaptive (uses video resolution for best accuracy) - DEFAULT
                              - 1080: No downscaling for 1080p videos
@@ -348,8 +336,6 @@ class FaceTracker:
         if detector_backend != "opencv":
             logger.warning(f"detector_backend='{detector_backend}' is deprecated. Only OpenCV is supported now.")
         
-        self.use_gpu_requested = use_gpu
-        self.use_gpu_actual = False  # Will be set based on GPU manager decision
         self.detection_height = detection_height
         self.batch_size = max(1, min(8, batch_size))  # Clamp to 1-8 range
         
@@ -357,47 +343,13 @@ class FaceTracker:
         self.min_face_size_ratio = min_face_size_ratio if min_face_size_ratio is not None else MIN_FACE_SIZE_RATIO
         self.max_tracked_faces = max_tracked_faces if max_tracked_faces is not None else MAX_TRACKED_FACES
         self.enable_speaker_detection = enable_speaker_detection
-
-        # Make intelligent GPU decision using GPU manager
-        if use_gpu and GPU_MANAGER_AVAILABLE:
-            try:
-                # Estimate ~1.5GB GPU memory for face detection
-                gpu_decision = should_use_gpu(estimated_memory_gb=1.5)
-                self.use_gpu_actual = gpu_decision.get('use_gpu', False)
-
-                if self.use_gpu_actual:
-                    logger.info(f"✓ Using GPU for face detection: {gpu_decision.get('reason', 'GPU available')}")
-                    # Try to enable OpenCV GPU acceleration if available
-                    try:
-                        if cv2.cuda.getCudaEnabledDeviceCount() > 0:
-                            logger.info(f"  OpenCV CUDA devices available: {cv2.cuda.getCudaEnabledDeviceCount()}")
-                    except:
-                        pass
-                else:
-                    logger.info(f"→ GPU requested but using CPU: {gpu_decision.get('reason', 'GPU not recommended')}")
-
-            except Exception as e:
-                logger.warning(f"GPU manager check failed, falling back to CPU: {e}")
-                self.use_gpu_actual = False
-        else:
-            if not use_gpu:
-                logger.info("→ CPU mode requested for face detection")
-            else:
-                logger.info("→ GPU manager not available, MediaPipe will auto-detect GPU")
-                self.use_gpu_actual = use_gpu  # Let MediaPipe handle it
-
-        # Initialize OpenCV YuNet face detector (only backend)
-        if not OPENCV_FACE_DETECTION_AVAILABLE:
-            raise RuntimeError("OpenCV face detection is required but not available")
-        
+           
         try:
-            logger.info("Initializing OpenCV YuNet face detector...")
             self.opencv_detector = OpenCVFaceDetector(
-                conf_threshold=0.4,  # Lowered from 0.5 for better profile face detection
+                conf_threshold=0.4,
                 nms_threshold=NMS_IOU_THRESHOLD,
                 model_dir=cache_dir
             )
-            logger.info("✓ Using OpenCV YuNet face detector")
         except Exception as e:
             logger.error(f"Failed to initialize OpenCV detector: {e}")
             raise RuntimeError(f"OpenCV detector initialization failed: {e}")
@@ -434,6 +386,7 @@ class FaceTracker:
         self.speaker_to_face_map: Dict[str, int] = {}  # Maps SPEAKER_00 -> face_track_id
         self.face_to_speaker_map: Dict[int, str] = {}  # Maps face_track_id -> SPEAKER_00
         self.diarizer: Optional[Any] = None
+        self.use_gpu_actual = False  # GPU usage flag (can be configured)
         
         # Face persistence tracking for off-screen speaker continuity
         self.last_active_speaker_track_id: Optional[int] = None
@@ -445,6 +398,9 @@ class FaceTracker:
         self.enable_scene_detection = enable_scene_detection
         self.enable_caching = enable_caching
         self.enable_quality_metrics = enable_quality_metrics
+        
+        # Determine GPU usage (default to CPU for safety)
+        self.use_gpu_actual = False  # Can be set based on available hardware
 
         # Face recognition engine
         if self.enable_face_recognition and FACE_RECOGNITION_AVAILABLE:
@@ -454,6 +410,7 @@ class FaceTracker:
                     similarity_threshold=0.6,
                     gpu_id=0 if self.use_gpu_actual else -1
                 )
+                
                 logger.info("Face recognition enabled (InsightFace)")
             except Exception as e:
                 logger.warning(f"Failed to initialize face recognition: {e}")
@@ -952,7 +909,6 @@ class FaceTracker:
             Dictionary mapping timestamps to face boxes
         """
         logger.info(f"Analyzing video for face detection: {video_path}")
-        logger.info(f"  GPU mode: {'Enabled' if self.use_gpu_actual else 'CPU fallback'}")
 
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -1097,7 +1053,9 @@ class FaceTracker:
 
                     # Additional confidence filter after NMS to ensure high-quality detections
                     # This removes any remaining low-confidence faces that passed initial filters
-                    MIN_DETECTION_CONFIDENCE = 0.65
+                    # Post-detection confidence filter to remove uncertain detections
+                    # Set to 0.55 for balanced detection (not too many false positives)
+                    MIN_DETECTION_CONFIDENCE = 0.55
                     valid_faces = [f for f in valid_faces if f.confidence >= MIN_DETECTION_CONFIDENCE]
 
                     # Only proceed if we still have valid faces after confidence filter
@@ -2090,6 +2048,92 @@ class FaceTracker:
         """
         return self.speaker_to_face_map.get(speaker)
 
+    def get_interview_faces_from_speaker_mapping(
+        self,
+        timestamp: float,
+        persistence_window: float = 10.0
+    ) -> Optional[List[FaceBox]]:
+        """
+        Get faces for a confirmed interview using speaker-to-face mapping.
+
+        This uses the speaker mapping to get face positions from the correct tracks,
+        even when real-time face detection fails. It looks for the nearest detection
+        in each mapped track within the persistence window.
+
+        Args:
+            timestamp: Current timestamp
+            persistence_window: How far to look for face positions (seconds) - default 10s
+
+        Returns:
+            List of 2 FaceBox objects (one per speaker), or None if not available
+        """
+        if not self.speaker_to_face_map or len(self.speaker_to_face_map) != 2:
+            logger.debug(f"get_interview_faces: No valid speaker mapping (map={self.speaker_to_face_map})")
+            return None
+
+        faces = []
+        for speaker, face_id in self.speaker_to_face_map.items():
+            # Find the track for this speaker
+            track = next((t for t in self.face_tracks if t.face_id == face_id), None)
+            if not track:
+                logger.debug(f"get_interview_faces: Track {face_id} for {speaker} not found")
+                continue
+            if not track.positions:
+                logger.debug(f"get_interview_faces: Track {face_id} has no positions")
+                continue
+
+            # Find the nearest detection within the persistence window
+            nearby_timestamps = [
+                ts for ts in track.positions.keys()
+                if abs(ts - timestamp) <= persistence_window
+            ]
+
+            if nearby_timestamps:
+                closest_ts = min(nearby_timestamps, key=lambda ts: abs(ts - timestamp))
+                face = track.positions[closest_ts]
+                faces.append(face)
+            else:
+                # No detection in window - use the track's average position as fallback
+                # This creates a synthetic FaceBox from the track's average stats
+                if hasattr(track, 'avg_position') and track.avg_position != (0, 0):
+                    avg_x, avg_y = track.avg_position
+
+                    # Calculate size from avg_area_ratio
+                    # avg_area_ratio = (w * h) / (frame_w * frame_h)
+                    # Assume square-ish face: w ≈ h, so area ≈ w^2
+                    if hasattr(track, 'avg_area_ratio') and track.avg_area_ratio > 0:
+                        frame_area = self.video_width * self.video_height
+                        face_area = track.avg_area_ratio * frame_area
+                        avg_size = int(np.sqrt(face_area))  # Approximate as square
+                        avg_w = avg_size
+                        avg_h = int(avg_size * 1.2)  # Faces are typically taller than wide
+                    else:
+                        # Default size if no area ratio
+                        avg_w = int(self.video_width * 0.15)
+                        avg_h = int(self.video_height * 0.20)
+
+                    synthetic_face = FaceBox(
+                        x=int(avg_x - avg_w/2),
+                        y=int(avg_y - avg_h/2),
+                        width=int(avg_w),
+                        height=int(avg_h),
+                        confidence=0.7,  # Medium confidence for synthetic
+                        face_id=face_id
+                    )
+                    faces.append(synthetic_face)
+                    logger.debug(
+                        f"Using synthetic face for track {face_id} at {timestamp:.1f}s "
+                        f"(no detection within {persistence_window}s)"
+                    )
+
+        if len(faces) == 2:
+            # Sort by x position (left to right) for consistent ordering
+            faces.sort(key=lambda f: f.x)
+            return faces
+
+        logger.debug(f"get_interview_faces: Only found {len(faces)} faces (need 2) at {timestamp:.1f}s")
+        return None
+
     def detect_face_groups(
         self,
         timestamp: float,
@@ -2230,6 +2274,7 @@ class FaceTracker:
         Get the 2 most prominent separated faces at a timestamp.
 
         This is used by the clip generator to create split-screen layouts.
+        Falls back to speaker mapping if real-time detection fails.
 
         Args:
             timestamp: Time in seconds
@@ -2238,10 +2283,21 @@ class FaceTracker:
         Returns:
             List of 2 FaceBox objects if faces are separated, None otherwise
         """
+        # First try real-time detection
         face_group = self.detect_face_groups(timestamp, separation_threshold)
 
         if face_group["mode"] == "separated" and len(face_group["faces"]) >= 2:
             return face_group["faces"][:2]  # Return top 2 faces
+
+        # Fallback: Use speaker mapping for confirmed interviews
+        # This gets faces from the mapped tracks even when detection fails
+        interview_faces = self.get_interview_faces_from_speaker_mapping(timestamp)
+        if interview_faces:
+            logger.debug(
+                f"Using speaker-mapped faces at {timestamp:.1f}s "
+                f"(real-time detection failed)"
+            )
+            return interview_faces
 
         return None
 

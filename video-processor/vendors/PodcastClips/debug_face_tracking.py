@@ -196,7 +196,6 @@ def visualize_face_tracking(
 
     # Initialize face tracker with improved defaults for wide shots
     face_tracker = FaceTracker(
-        use_gpu=True,
         detection_height=0,  # Adaptive - use original resolution for best small face detection
         batch_size=4,
         min_face_size_ratio=0.002,  # Lowered to detect smaller faces in wide shots (allows ~65x65 px faces)
@@ -352,12 +351,14 @@ def visualize_face_tracking(
         timestamp = frame_idx / fps
 
         # Get all active faces at this timestamp
+        # Use a larger persistence window (2.0s) to handle detection gaps in interviews
         active_faces = []
+        FACE_PERSISTENCE_WINDOW = 2.0  # Increased from 0.5s for better interview support
         for track in face_tracker.face_tracks:
             # Find face position in this track near the timestamp
             nearby_timestamps = [
                 ts for ts in track.positions.keys()
-                if abs(ts - timestamp) < 0.5
+                if abs(ts - timestamp) < FACE_PERSISTENCE_WINDOW
             ]
             if nearby_timestamps:
                 closest_ts = min(nearby_timestamps, key=lambda ts: abs(ts - timestamp))
@@ -365,8 +366,24 @@ def visualize_face_tracking(
                 active_faces.append({
                     'face': face,
                     'track': track,
-                    'is_interpolated': abs(closest_ts - timestamp) > 0.1
+                    'is_interpolated': abs(closest_ts - timestamp) > 0.2  # Adjusted threshold
                 })
+
+        # Fallback: If no faces from tracks, try speaker mapping for interviews
+        if not active_faces and hasattr(face_tracker, 'get_interview_faces_from_speaker_mapping'):
+            interview_faces = face_tracker.get_interview_faces_from_speaker_mapping(timestamp)
+            if interview_faces:
+                for face in interview_faces:
+                    # Find the corresponding track
+                    track = next(
+                        (t for t in face_tracker.face_tracks if t.face_id == face.face_id),
+                        None
+                    )
+                    active_faces.append({
+                        'face': face,
+                        'track': track,
+                        'is_interpolated': True  # Mark as from speaker mapping
+                    })
 
         # Get active speaker (the face that would be zoomed)
         active_speaker_face = None

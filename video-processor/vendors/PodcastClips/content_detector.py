@@ -283,12 +283,40 @@ class ContentModeDetector:
         self.video_width = video_width
         self.video_height = video_height
 
+        # INTERVIEW DETECTION VIA SPEAKER MAPPING
+        # If we have exactly 2 speakers mapped to 2 different face tracks,
+        # this is definitively an interview - use SPLIT_SCREEN for the entire video
+        self.is_confirmed_interview = False
+        if (self.face_tracker and
+            hasattr(self.face_tracker, 'speaker_to_face_map') and
+            self.face_tracker.speaker_to_face_map):
+
+            num_speakers = len(self.face_tracker.speaker_to_face_map)
+            unique_face_tracks = len(set(self.face_tracker.speaker_to_face_map.values()))
+
+            if num_speakers == 2 and unique_face_tracks == 2:
+                self.is_confirmed_interview = True
+                logger.info(
+                    f"🎯 INTERVIEW CONFIRMED via speaker mapping: "
+                    f"{num_speakers} speakers → {unique_face_tracks} face tracks"
+                )
+                for speaker, face_id in self.face_tracker.speaker_to_face_map.items():
+                    logger.info(f"  {speaker} → Face Track {face_id}")
+            elif num_speakers >= 3:
+                logger.info(
+                    f"🎯 GROUP/PANEL detected via speaker mapping: "
+                    f"{num_speakers} speakers → HORIZONTAL mode"
+                )
+
         if not content_scores and not face_positions:
-            # No data at all - default to horizontal
+            # No data at all - but if confirmed interview, use SPLIT_SCREEN
+            if self.is_confirmed_interview:
+                return [ContentSegment(start_time, end_time, ContentMode.SPLIT_SCREEN, 0.9)]
             return [ContentSegment(start_time, end_time, ContentMode.HORIZONTAL, 0.5)]
 
         segments = []
-        current_mode = ContentMode.FACE
+        # Start with SPLIT_SCREEN if confirmed interview, otherwise FACE
+        current_mode = ContentMode.SPLIT_SCREEN if self.is_confirmed_interview else ContentMode.FACE
         segment_start = start_time
 
         # Get all timestamps and sort
@@ -296,6 +324,8 @@ class ContentModeDetector:
         all_timestamps = [ts for ts in all_timestamps if start_time <= ts <= end_time]
 
         if not all_timestamps:
+            if self.is_confirmed_interview:
+                return [ContentSegment(start_time, end_time, ContentMode.SPLIT_SCREEN, 0.9)]
             return [ContentSegment(start_time, end_time, ContentMode.FACE, 0.5)]
 
         # Thresholds for content detection
@@ -304,6 +334,34 @@ class ContentModeDetector:
         SMALL_FACE_THRESHOLD = 0.12   # Face area ratio threshold (reduced from 0.20 to only detect true PiP, not normal podcasts)
 
         for i, timestamp in enumerate(all_timestamps):
+            # PRIORITY -2: CONFIRMED INTERVIEW (from speaker mapping)
+            # If we confirmed this is a 2-person interview, check if BOTH faces are visible
+            # Only use SPLIT_SCREEN when both people are in frame, otherwise use FACE mode
+            if self.is_confirmed_interview:
+                # Check if both interview faces are visible at this timestamp
+                interview_faces = None
+                if hasattr(self.face_tracker, 'get_interview_faces_from_speaker_mapping'):
+                    interview_faces = self.face_tracker.get_interview_faces_from_speaker_mapping(
+                        timestamp, persistence_window=2.0
+                    )
+
+                if interview_faces and len(interview_faces) == 2:
+                    # Both faces visible → SPLIT_SCREEN
+                    target_mode = ContentMode.SPLIT_SCREEN
+                else:
+                    # Only 1 face or no faces → FACE mode (zoom on active speaker)
+                    target_mode = ContentMode.FACE
+
+                if target_mode != current_mode:
+                    if timestamp > segment_start:
+                        confidence = 0.90 if target_mode == ContentMode.SPLIT_SCREEN else 0.80
+                        segments.append(ContentSegment(
+                            segment_start, timestamp, current_mode, confidence
+                        ))
+                    segment_start = timestamp
+                    current_mode = target_mode
+                continue  # Skip other checks for confirmed interviews
+
             # Get content score and face info for this timestamp
             content_score = content_scores.get(timestamp, 0.0)
 
@@ -447,7 +505,7 @@ class ContentModeDetector:
 
             # PRIORITY -0.75: INTERVIEW/CONVERSATION DETECTION
             # If 2 medium-sized faces are detected in a dialogue pattern,
-            # use FACE mode with active speaker tracking (not split-screen, not horizontal)
+            # use SPLIT_SCREEN mode to show both speakers (9:16 vertical with stacked view)
             if self.face_tracker and hasattr(self.face_tracker, 'detect_face_groups'):
                 face_group_info = self.face_tracker.detect_face_groups(timestamp)
 
@@ -475,18 +533,49 @@ class ContentModeDetector:
                 )
 
                 if is_interview:
-                    # Interview mode: Use FACE mode with active speaker tracking
-                    # The face tracker's get_active_speaker_at_time() will handle
-                    # intelligently switching between the 2 people based on who's talking
+                    # Interview mode: Use SPLIT_SCREEN mode to show both speakers
+                    # This creates a 9:16 vertical layout with both people visible
                     should_be_horizontal = False
-                    should_be_split_screen = False
+                    should_be_split_screen = True
 
                     logger.info(
                         f"[{timestamp:.1f}s] INTERVIEW MODE: "
-                        f"2 people conversation → FACE mode with speaker tracking"
+                        f"2 people conversation → SPLIT_SCREEN (show both speakers)"
                     )
 
-                    target_mode = ContentMode.FACE
+                    target_mode = ContentMode.SPLIT_SCREEN
+
+                    # Check if mode changed
+                    if target_mode != current_mode:
+                        if timestamp > segment_start:
+                            confidence = self._calculate_segment_confidence(
+                                content_scores, segment_start, timestamp
+                            )
+                            segments.append(ContentSegment(
+                                segment_start, timestamp, current_mode, confidence
+                            ))
+                        segment_start = timestamp
+                        current_mode = target_mode
+                    continue  # Skip to next timestamp
+
+            # PRIORITY -0.6: GROUP/PANEL DETECTION (3+ people)
+            # If 3 or more faces are detected, use HORIZONTAL mode
+            # Split-screen only works well with 2 people
+            if self.face_tracker and hasattr(self.face_tracker, 'detect_face_groups'):
+                face_group_info = self.face_tracker.detect_face_groups(timestamp)
+                num_faces = len(face_group_info.get("faces", []))
+
+                if num_faces >= 3:
+                    # Group/panel scenario: Use HORIZONTAL mode
+                    should_be_horizontal = True
+                    should_be_split_screen = False
+
+                    logger.info(
+                        f"[{timestamp:.1f}s] GROUP MODE: "
+                        f"{num_faces} people detected → HORIZONTAL (group/panel)"
+                    )
+
+                    target_mode = ContentMode.HORIZONTAL
 
                     # Check if mode changed
                     if target_mode != current_mode:
@@ -1212,7 +1301,9 @@ class ContentModeDetector:
         - Exactly 2 faces detected consistently
         - Faces are medium-sized (not audience, not extreme close-ups)
         - Dialogue interaction pattern (if diarization available)
-        - Faces not extremely separated (< split-screen threshold)
+
+        NOTE: Both "grouped" and "separated" 2-person setups are considered interviews.
+        Both will use SPLIT_SCREEN mode to show both speakers.
 
         Args:
             timestamp: Current timestamp
@@ -1226,9 +1317,8 @@ class ContentModeDetector:
         if len(face_group_info.get("faces", [])) != 2:
             return False
 
-        # Check 2: Faces must NOT be separated (otherwise it's split-screen)
-        if face_group_info["mode"] == "separated":
-            return False
+        # NOTE: We no longer exclude separated faces - both grouped and separated
+        # 2-person setups are considered interviews and will use SPLIT_SCREEN
 
         # Check 3: Both faces must be medium-sized (not tiny audience members)
         faces = face_group_info["faces"]
