@@ -91,6 +91,41 @@ class ProcessingConfig:
 
 
 @dataclass
+class ClipScoringConfig:
+    """AI-powered clip scoring configuration"""
+    # Enable/disable smart selection
+    enable_smart_selection: bool = True
+    
+    # Score weights (should sum to 1.0)
+    face_weight: float = 0.35      # Face presence and size
+    motion_weight: float = 0.25   # Motion intensity
+    audio_weight: float = 0.25    # Audio energy
+    clarity_weight: float = 0.15  # Visual clarity
+    
+    # Face detection settings
+    min_face_confidence: float = 0.7
+    min_face_size_for_hook: float = 0.05  # 5% of frame area
+    
+    # Motion detection settings
+    motion_high_threshold: float = 30.0  # Frame diff threshold
+    
+    # Audio analysis settings
+    silence_threshold_db: float = -40.0
+    min_silence_duration: float = 0.3
+    energy_spike_threshold: float = 2.0
+    
+    # Visual clarity settings
+    blur_threshold: float = 100.0  # Laplacian variance threshold
+    
+    # Duplicate detection
+    duplicate_threshold: float = 0.85  # pHash similarity threshold
+    
+    # Sampling settings
+    sample_frames: int = 5
+    sample_audio_duration: float = 2.0
+
+
+@dataclass
 class UIConfig:
     """User interface and visual configuration"""
     # Video positioning
@@ -160,6 +195,7 @@ class TikYouConfig:
         self.video = VideoResolution(width=1080, height=1920)  # Default, will be overridden dynamically
         self.encoding = EncodingConfig()
         self.processing = ProcessingConfig()
+        self.clip_scoring = ClipScoringConfig()  # AI-powered clip scoring settings
         self.ui = UIConfig()
         self.paths = PathConfig()
         self.system = SystemConfig()

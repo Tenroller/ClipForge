@@ -11,6 +11,17 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
+# FFmpeg pool for centralized process management
+try:
+    from utils.ffmpeg_pool import run_ffmpeg_command, get_ffmpeg_pool
+    HAS_FFMPEG_POOL = True
+except ImportError:
+    HAS_FFMPEG_POOL = False
+    # Fallback if pool not available
+    def run_ffmpeg_command(cmd, description="FFmpeg", **kwargs):
+        import subprocess
+        return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+
 # Add vendors to path for video processing modules
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent
@@ -231,7 +242,7 @@ class VideoProcessingService:
                 try:
                     def get_audio_duration():
                         probe_cmd = ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_format', audio_file]
-                        result = subprocess.run(probe_cmd, capture_output=True, text=True)
+                        result = run_ffmpeg_command(probe_cmd, description=f"Probe audio duration: {job_id}", check=False)
                         if result.returncode == 0:
                             probe_data = json.loads(result.stdout)
                             format_info = probe_data.get('format', {})
@@ -277,7 +288,7 @@ class VideoProcessingService:
                             '-shortest', output_video
                         ]
 
-                        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+                        result = run_ffmpeg_command(ffmpeg_cmd, description=f"Combine bg video + audio: {job_id}", check=False)
                         if result.returncode != 0:
                             raise RuntimeError(f"FFmpeg background video failed: {result.stderr}")
 
@@ -307,7 +318,7 @@ class VideoProcessingService:
                             '-shortest', output_video
                         ]
 
-                        result = subprocess.run(ffmpeg_cmd, capture_output=True, text=True)
+                        result = run_ffmpeg_command(ffmpeg_cmd, description=f"Create simple video: {job_id}", check=False)
                         if result.returncode != 0:
                             raise RuntimeError(f"FFmpeg simple video failed: {result.stderr}")
 

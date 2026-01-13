@@ -28,6 +28,17 @@ import yt_dlp
 import shutil
 from loguru import logger
 
+# FFmpeg pool for centralized process management
+try:
+    from utils.ffmpeg_pool import run_ffmpeg_command, get_pool_stats
+    HAS_FFMPEG_POOL = True
+except ImportError:
+    HAS_FFMPEG_POOL = False
+    # Fallback to direct subprocess if pool not available
+    def run_ffmpeg_command(cmd, description="FFmpeg", **kwargs):
+        import subprocess
+        return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
+
 # Initialize logger for this module
 logger = logger.bind(name="Compilation.processor")
 
@@ -1277,7 +1288,7 @@ class CatVideoProcessor:
 
                 self._crop_log(f"[Crop Detection] Running FFmpeg: crop={crop_width}:{height}:{left_crop}:0")
                 self._crop_log(f"[Crop Detection] Using {'GPU (NVENC)' if has_gpu else 'CPU (libx264)'} encoding")
-                result = subprocess.run(cmd, capture_output=True, text=True)
+                result = run_ffmpeg_command(cmd, description=f"Crop video: {os.path.basename(video_path)}")
                 if result.returncode == 0:
                     self._crop_log(f"[Crop Detection] ✓ Successfully cropped video and saved to {output_path}", always=True)
                     output_info = self.get_video_info(output_path)
@@ -1327,7 +1338,7 @@ class CatVideoProcessor:
                 output_path
             ]
             print(f"   📋 FFmpeg command: {' '.join(cmd_copy)}")
-            result = subprocess.run(cmd_copy, capture_output=True, text=True)
+            result = run_ffmpeg_command(cmd_copy, description=f"Split video (copy): {os.path.basename(output_path)}", check=False)
             if result.returncode != 0:
                 print(f"   ❌ Stream copy failed: {result.stderr}")
             if os.path.exists(output_path):
@@ -1355,7 +1366,7 @@ class CatVideoProcessor:
                     output_path
                 ]
                 print(f"   🔄 Re-encoding with: {' '.join(cmd_encode)}")
-                result = subprocess.run(cmd_encode, capture_output=True, text=True)
+                result = run_ffmpeg_command(cmd_encode, description=f"Split video (encode): {os.path.basename(output_path)}", check=False)
                 if result.returncode != 0:
                     print(f"   ❌ Re-encoding failed: {result.stderr}")
                 elif os.path.exists(output_path):
@@ -1496,6 +1507,180 @@ class CatVideoProcessor:
                 'method': 'moviepy',
                 'error': str(e)
             }
+
+    def analyze_video_scenes_audio(self, video_path, visual_threshold: float = 17.0,
+                                    silence_threshold_db: float = -40.0,
+                                    min_silence_duration: float = 0.3,
+                                    energy_spike_threshold: float = 2.0):
+        """
+        Hybrid scene detection using visual + audio analysis.
+        
+        Combines:
+        - Visual: scenedetect ContentDetector for visual cuts
+        - Audio: librosa-based silence detection and energy spike detection
+        
+        Args:
+            video_path: Path to video file
+            visual_threshold: Threshold for visual scene detection (default 17.0)
+            silence_threshold_db: dB threshold below which is considered silence (default -40)
+            min_silence_duration: Minimum silence duration to consider as scene break (default 0.3s)
+            energy_spike_threshold: Factor above mean energy to detect spikes (default 2.0)
+            
+        Returns:
+            dict with merged scenes, is_compilation, and metadata
+        """
+        print(f"🎵 Analyzing video with audio-enhanced scene detection: {video_path}")
+        
+        # First, get visual scenes
+        visual_analysis = self.analyze_video_scenes(video_path, threshold=visual_threshold, method='scenedetect')
+        visual_scenes = visual_analysis.get('scenes', [])
+        duration = visual_analysis.get('duration', 0)
+        
+        print(f"   Visual detection found {len(visual_scenes)} scenes")
+        
+        # Try audio-based scene detection
+        audio_boundaries = []
+        try:
+            import librosa
+            import numpy as np
+            
+            # Load audio from video
+            print(f"   Loading audio for analysis...")
+            y, sr = librosa.load(video_path, sr=22050, mono=True)
+            
+            if len(y) == 0:
+                print(f"   ⚠️ No audio found, using visual-only detection")
+                return visual_analysis
+            
+            audio_duration = len(y) / sr
+            print(f"   Audio loaded: {audio_duration:.1f}s at {sr}Hz")
+            
+            # 1. Silence detection
+            print(f"   Detecting silence gaps (threshold: {silence_threshold_db}dB)...")
+            
+            # Calculate RMS energy in windows
+            frame_length = int(sr * 0.025)  # 25ms frames
+            hop_length = int(sr * 0.010)    # 10ms hop
+            rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
+            
+            # Convert to dB
+            rms_db = 20 * np.log10(rms + 1e-10)
+            
+            # Find silent regions
+            is_silent = rms_db < silence_threshold_db
+            
+            # Find silence boundaries (transitions from loud to silent or vice versa)
+            silence_changes = np.diff(is_silent.astype(int))
+            silence_start_frames = np.where(silence_changes == 1)[0]
+            silence_end_frames = np.where(silence_changes == -1)[0]
+            
+            # Convert frame indices to time
+            frame_times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=hop_length)
+            
+            # Find silences that are long enough to be scene breaks
+            for start_idx in silence_start_frames:
+                # Find matching end
+                matching_ends = silence_end_frames[silence_end_frames > start_idx]
+                if len(matching_ends) > 0:
+                    end_idx = matching_ends[0]
+                    silence_duration = frame_times[end_idx] - frame_times[start_idx]
+                    
+                    if silence_duration >= min_silence_duration:
+                        # Use the middle of the silence as the scene boundary
+                        boundary_time = (frame_times[start_idx] + frame_times[end_idx]) / 2
+                        audio_boundaries.append(('silence', boundary_time))
+            
+            print(f"   Found {len(audio_boundaries)} silence-based boundaries")
+            
+            # 2. Energy spike detection (sudden loud moments often indicate scene changes)
+            print(f"   Detecting energy spikes...")
+            
+            # Smooth RMS for spike detection
+            rms_smooth = np.convolve(rms, np.ones(10)/10, mode='same')
+            mean_energy = np.mean(rms_smooth)
+            
+            # Find spikes above threshold
+            spikes = rms_smooth > (mean_energy * energy_spike_threshold)
+            spike_frames = np.where(np.diff(spikes.astype(int)) == 1)[0]
+            
+            for frame_idx in spike_frames:
+                boundary_time = frame_times[frame_idx]
+                # Only add if not too close to existing boundaries
+                too_close = any(abs(boundary_time - b[1]) < 0.5 for b in audio_boundaries)
+                if not too_close:
+                    audio_boundaries.append(('spike', boundary_time))
+            
+            print(f"   Found {len([b for b in audio_boundaries if b[0] == 'spike'])} energy spike boundaries")
+            print(f"   Total audio boundaries: {len(audio_boundaries)}")
+            
+        except ImportError:
+            print(f"   ⚠️ librosa not available, using visual-only detection")
+            return visual_analysis
+        except Exception as e:
+            print(f"   ⚠️ Audio analysis failed ({e}), using visual-only detection")
+            return visual_analysis
+        
+        # 3. Merge visual and audio boundaries
+        print(f"   Merging visual and audio boundaries...")
+        
+        all_boundaries = set()
+        
+        # Add visual scene boundaries
+        for scene_start, scene_end in visual_scenes:
+            try:
+                start_time = scene_start.get_seconds()
+                all_boundaries.add(start_time)
+            except:
+                pass
+        
+        # Add audio boundaries (with deduplication)
+        merge_threshold = 0.5  # Boundaries within 0.5s are considered the same
+        for _, boundary_time in audio_boundaries:
+            # Check if this boundary is close to an existing one
+            is_duplicate = any(abs(boundary_time - b) < merge_threshold for b in all_boundaries)
+            if not is_duplicate and 0 < boundary_time < duration:
+                all_boundaries.add(boundary_time)
+        
+        # Sort boundaries and create scene list
+        sorted_boundaries = sorted(all_boundaries)
+        
+        # Build scene list (pairs of start/end)
+        merged_scenes = []
+        if sorted_boundaries:
+            # Add scene from 0 to first boundary
+            if sorted_boundaries[0] > 0.5:
+                merged_scenes.append((SimpleScene(0, sorted_boundaries[0]), 
+                                     SimpleScene(sorted_boundaries[0], sorted_boundaries[0])))
+            
+            # Add scenes between boundaries
+            for i in range(len(sorted_boundaries) - 1):
+                start = sorted_boundaries[i]
+                end = sorted_boundaries[i + 1]
+                if end - start >= 0.5:  # Minimum scene duration
+                    merged_scenes.append((SimpleScene(start, start), SimpleScene(end, end)))
+            
+            # Add scene from last boundary to end
+            if duration - sorted_boundaries[-1] > 0.5:
+                merged_scenes.append((SimpleScene(sorted_boundaries[-1], sorted_boundaries[-1]),
+                                     SimpleScene(duration, duration)))
+        
+        print(f"   Merged result: {len(merged_scenes)} scenes (visual: {len(visual_scenes)}, audio-only: {len(audio_boundaries)})")
+        
+        # Calculate scenes per minute
+        scenes_per_minute = len(merged_scenes) / (duration / 60) if duration > 0 else 0
+        is_compilation = len(merged_scenes) > 5 and scenes_per_minute > 3
+        
+        return {
+            'scenes': merged_scenes,
+            'is_compilation': is_compilation,
+            'duration': duration,
+            'scenes_per_minute': scenes_per_minute,
+            'scene_count': len(merged_scenes),
+            'method': 'audio_enhanced',
+            'visual_scene_count': len(visual_scenes),
+            'audio_boundary_count': len(audio_boundaries),
+            'audio_boundaries': [(b[0], b[1]) for b in audio_boundaries]
+        }
 
     def split_video_from_scenes(self, video_path, source_video_id, scene_list):
         """Split video into scene clips (optional concurrency) then crop pillarboxes.

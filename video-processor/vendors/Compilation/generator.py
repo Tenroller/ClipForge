@@ -38,6 +38,44 @@ def log_file_operation(logger, operation, path, **kwargs):
     logger.info(f"File {operation}: {path}, {kwargs}")
 
 
+# Pipeline checkpointing for resume capability
+try:
+    from utils.checkpointing import (
+        get_checkpoint_manager, 
+        PipelineStep,
+        can_resume_step,
+        load_step_checkpoint
+    )
+    HAS_CHECKPOINTING = True
+except ImportError:
+    HAS_CHECKPOINTING = False
+    # Stub functions if checkpointing not available
+    def get_checkpoint_manager(*args, **kwargs):
+        class DummyManager:
+            def is_step_completed(self, *a): return False
+            def load_step_data(self, *a): return None
+            def mark_step_started(self, *a): pass
+            def mark_step_completed(self, *a, **kw): pass
+        return DummyManager()
+    class PipelineStep:
+        DOWNLOAD = "download"
+        SCENE_DETECTION = "scene_detection"
+        CLIP_EXTRACTION = "clip_extraction"
+
+
+# Memory manager for automatic cleanup
+try:
+    from utils.memory_manager import get_memory_manager, cleanup_memory_if_needed, managed_processing
+    HAS_MEMORY_MANAGER = True
+except ImportError:
+    HAS_MEMORY_MANAGER = False
+    def get_memory_manager(): return None
+    def cleanup_memory_if_needed(): pass
+    def managed_processing(label=""): 
+        from contextlib import nullcontext
+        return nullcontext()
+
+
 from moviepy import (
     VideoFileClip,
     CompositeVideoClip,
@@ -55,6 +93,16 @@ except Exception:
 from .tiktok import TikTokVideoCreator
 
 from .title_generator import TitleGenerator
+
+# AI-powered clip scoring for smart selection
+try:
+    from .clip_scorer import ClipScorer, ScoringConfig
+    HAS_CLIP_SCORER = True
+except ImportError as e:
+    print(f"⚠️ ClipScorer not available: {e}")
+    HAS_CLIP_SCORER = False
+    ClipScorer = None
+    ScoringConfig = None
 
 # Font path setup for cross-platform compatibility
 try:
@@ -156,6 +204,21 @@ class TikYouGenerator:
             logger.warning(f"Title Generator initialization failed: {e} - Title overlays will be skipped")
             self.title_generator = None
             self.title_enabled = False
+        
+        # Initialize AI-powered clip scorer for smart selection
+        self.clip_scorer = None
+        self.smart_selection_enabled = False
+        if HAS_CLIP_SCORER and ClipScorer is not None:
+            try:
+                self.clip_scorer = ClipScorer()
+                self.smart_selection_enabled = True
+                logger.info("ClipScorer initialized successfully - Smart selection enabled")
+                print("🧠 AI Clip Scorer enabled - Smart clip selection active")
+            except Exception as e:
+                logger.warning(f"ClipScorer initialization failed: {e} - Using random selection")
+                print(f"⚠️ ClipScorer failed to initialize: {e}")
+        else:
+            logger.info("ClipScorer not available - Using random selection")
         
         # Memory monitoring
         self.memory_threshold = 0.85  # 85% memory usage threshold
@@ -809,6 +872,10 @@ class TikYouGenerator:
         self._log(f"Starting video processing for {source_type}: {youtube_url}", "info", "process_single_video")
         self._log(f"Using method: {method}, sensitivity: {sensitivity}", "info", "process_single_video")
         
+        # Initialize checkpoint manager for this job (use video_id as job_id)
+        job_id = None  # Will be set after extracting video_id
+        checkpointer = None
+        
         log_generation_step(logger, None, "compilation", "video_processing_started" if not is_youtube_url else "youtube_processing_started",
                            source=youtube_url)
 
@@ -827,6 +894,10 @@ class TikYouGenerator:
             logger.error(f"Failed to extract video ID from {source_type} {youtube_url}: {e}")
             self._log(f"Failed to extract video ID: {str(e)}", "error", "process_single_video")
             return []
+        
+        # Initialize checkpointer now that we have video_id
+        job_id = video_id
+        checkpointer = get_checkpoint_manager(job_id, workflow="brainrot")
 
         # Download the video (if YouTube) or use existing file (if local)
         download_duration = 0  # Initialize for local files
@@ -850,6 +921,13 @@ class TikYouGenerator:
             self._log(f"Video download completed in {download_duration:.1f}s", "info", "process_single_video")
             
             video_path = download_result[0]
+            
+            # Checkpoint: Save download completion
+            if checkpointer:
+                checkpointer.mark_step_completed(
+                    PipelineStep.DOWNLOAD,
+                    data={"video_path": video_path, "video_id": video_id, "duration": download_duration}
+                )
         else:
             # For local files, use the provided path directly
             video_path = youtube_url
@@ -908,6 +986,29 @@ class TikYouGenerator:
         print(f"   - Duration: {analysis['duration']:.1f}s")
         
         self._log(f"Scene analysis complete: {'compilation' if is_compilation else 'single video'} with {len(scenes)} scenes, duration {analysis['duration']:.1f}s", "info", "process_single_video")
+        
+        # Checkpoint: Save scene detection results
+        if checkpointer:
+            # Convert scenes to serializable format
+            scene_data = []
+            for scene in scenes:
+                if hasattr(scene, 'get_seconds'):
+                    scene_data.append({'start': scene.get_seconds()})
+                elif hasattr(scene, 'start_time'):
+                    scene_data.append({'start': scene.start_time, 'end': scene.end_time})
+                else:
+                    scene_data.append(str(scene))
+            
+            checkpointer.mark_step_completed(
+                PipelineStep.SCENE_DETECTION,
+                data={
+                    "is_compilation": is_compilation,
+                    "scene_count": len(scenes),
+                    "duration": analysis['duration'],
+                    "video_path": video_path,
+                    "scenes_summary": scene_data[:10]  # Save first 10 for reference
+                }
+            )
         
         video_clips = []
         
@@ -989,12 +1090,161 @@ class TikYouGenerator:
         
         return categorized
     
-    def _select_clips_with_constraints(self, all_clips, clip_usage, max_reuse, min_duration, max_duration, max_retries=20):
+    def _select_clips_with_constraints(self, all_clips, clip_usage, max_reuse, min_duration, max_duration, max_retries=20, use_smart_selection=None):
         """
-        Select a random set of clips that meets duration and reuse constraints.
-        Prioritizes vertical videos at the start of compilations.
+        Select clips for compilation using AI-powered scoring when available.
         
-        This is a helper function for the main generation logic.
+        When smart selection is enabled:
+        - First clip: Best hook candidate (highest face score)
+        - Middle clips: Balanced by engagement score + variety
+        - Avoids duplicate/similar clips
+        
+        Args:
+            all_clips: List of all available clips
+            clip_usage: Dict tracking clip usage counts
+            max_reuse: Maximum times a clip can be reused
+            min_duration: Minimum compilation duration
+            max_duration: Maximum compilation duration
+            max_retries: Maximum selection attempts
+            use_smart_selection: Override for smart selection (None = use self.smart_selection_enabled)
+        
+        Returns:
+            List of selected clips or None if selection failed
+        """
+        # Determine if we should use smart selection
+        should_use_smart = use_smart_selection if use_smart_selection is not None else self.smart_selection_enabled
+        
+        if should_use_smart and self.clip_scorer is not None:
+            return self._select_clips_smart(all_clips, clip_usage, max_reuse, min_duration, max_duration)
+        else:
+            return self._select_clips_random(all_clips, clip_usage, max_reuse, min_duration, max_duration, max_retries)
+    
+    def _select_clips_smart(self, all_clips, clip_usage, max_reuse, min_duration, max_duration):
+        """
+        AI-powered clip selection using ClipScorer.
+        
+        Strategy:
+        1. Score all available clips
+        2. Select first clip with best hook potential (face score)
+        3. Fill remaining duration with high-engagement clips
+        4. Avoid consecutive similar clips
+        """
+        print("🧠 Using AI-powered smart clip selection...")
+        
+        # Filter available clips
+        available_clips = [c for c in all_clips if clip_usage.get(c['path'], 0) < max_reuse]
+        
+        if not available_clips:
+            print("⚠️ No available clips after filtering")
+            return None
+        
+        # Score clips if not already scored
+        clips_to_score = [c for c in available_clips if 'engagement_score' not in c]
+        if clips_to_score:
+            print(f"📊 Scoring {len(clips_to_score)} clips...")
+            for clip in clips_to_score:
+                try:
+                    score = self.clip_scorer.score_clip(clip['path'])
+                    clip['score'] = score
+                    clip['engagement_score'] = score.overall_score
+                    clip['is_hook_candidate'] = score.is_hook_candidate
+                    clip['face_score'] = score.face_score
+                except Exception as e:
+                    print(f"⚠️ Failed to score {os.path.basename(clip['path'])}: {e}")
+                    clip['engagement_score'] = 50  # Default score
+                    clip['is_hook_candidate'] = False
+                    clip['face_score'] = 0
+        
+        # Detect duplicates
+        try:
+            available_clips = self.clip_scorer.detect_duplicates(available_clips, threshold=0.85)
+        except Exception as e:
+            print(f"⚠️ Duplicate detection failed: {e}")
+        
+        # Filter out duplicates
+        non_duplicate_clips = [c for c in available_clips if not c.get('is_duplicate', False)]
+        if not non_duplicate_clips:
+            non_duplicate_clips = available_clips  # Fallback to all if all are duplicates
+        
+        print(f"📊 {len(non_duplicate_clips)} unique clips available (filtered {len(available_clips) - len(non_duplicate_clips)} duplicates)")
+        
+        selected = []
+        total_duration = 0
+        used_paths = set()
+        
+        # 1. Select hook clip (best face score that's also a hook candidate)
+        hook_candidates = [c for c in non_duplicate_clips if c.get('is_hook_candidate', False)]
+        if hook_candidates:
+            hook_candidates.sort(key=lambda c: c.get('face_score', 0), reverse=True)
+            hook = hook_candidates[0]
+            print(f"🎯 Hook clip selected: face_score={hook.get('face_score', 0):.1f}, engagement={hook.get('engagement_score', 0):.1f}")
+        else:
+            # Fallback to highest engagement score
+            non_duplicate_clips.sort(key=lambda c: c.get('engagement_score', 0), reverse=True)
+            hook = non_duplicate_clips[0] if non_duplicate_clips else None
+            if hook:
+                print(f"🎯 Hook clip (fallback): engagement={hook.get('engagement_score', 0):.1f}")
+        
+        if hook:
+            selected.append(hook)
+            total_duration += hook.get('duration', 0)
+            used_paths.add(hook['path'])
+        
+        # 2. Fill with high-engagement clips
+        remaining = [c for c in non_duplicate_clips if c['path'] not in used_paths]
+        remaining.sort(key=lambda c: c.get('engagement_score', 0), reverse=True)
+        
+        for clip in remaining:
+            if total_duration >= max_duration:
+                break
+            
+            clip_duration = clip.get('duration', 0)
+            
+            # Check if adding this clip would exceed max too much
+            if total_duration + clip_duration > max_duration * 1.1:
+                continue
+            
+            # Variety check: avoid consecutive similar clips
+            if selected and self.clip_scorer:
+                try:
+                    last_clip = selected[-1]
+                    similarity = self.clip_scorer.compute_similarity(last_clip['path'], clip['path'])
+                    if similarity > 0.7:  # Too similar to previous
+                        print(f"   ⏭️ Skipping similar clip (similarity={similarity:.2f})")
+                        continue
+                except Exception:
+                    pass  # Skip similarity check on error
+            
+            selected.append(clip)
+            total_duration += clip_duration
+            used_paths.add(clip['path'])
+        
+        # 3. Ensure we meet minimum duration
+        if total_duration < min_duration:
+            remaining_all = [c for c in available_clips if c['path'] not in used_paths]
+            for clip in remaining_all:
+                if total_duration >= min_duration:
+                    break
+                selected.append(clip)
+                total_duration += clip.get('duration', 0)
+                used_paths.add(clip['path'])
+        
+        if total_duration < min_duration:
+            print(f"⚠️ Could not meet minimum duration: {total_duration:.1f}s < {min_duration}s")
+            return None
+        
+        # Log selection summary
+        hook_count = sum(1 for c in selected if c.get('is_hook_candidate', False))
+        avg_engagement = sum(c.get('engagement_score', 0) for c in selected) / len(selected) if selected else 0
+        print(f"✅ Smart selection complete: {len(selected)} clips, {total_duration:.1f}s")
+        print(f"   Hook candidates: {hook_count}, Avg engagement: {avg_engagement:.1f}")
+        
+        return selected
+    
+    def _select_clips_random(self, all_clips, clip_usage, max_reuse, min_duration, max_duration, max_retries=20):
+        """
+        Original random clip selection (fallback when ClipScorer unavailable).
+        Prioritizes vertical videos at the start of compilations.
         """
         for _ in range(max_retries):
             # Filter clips that haven't reached max reuse
