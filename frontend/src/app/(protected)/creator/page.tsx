@@ -176,21 +176,16 @@ export default function CreatorPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
-      {/* Header Section with Gradient */}
-      <div className="mb-8 space-y-2">
-        <div className="inline-block">
-          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-            {t('title')}
-          </h1>
-          <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
-        </div>
-        <p className="text-base text-muted-foreground max-w-2xl">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           {t('description')}
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[2fr,1fr]">
+      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[2fr,1fr]">
         <div className="space-y-6">
           {/* Show job notification while generating */}
           {currentJobId && !completedJob && (
@@ -286,13 +281,12 @@ export default function CreatorPage() {
                       <code className="text-xs font-mono text-muted-foreground group-hover:text-foreground transition-colors">
                         {job.id.substring(0, 8)}...
                       </code>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all ${
-                        job.status === 'completed'
-                          ? 'bg-success/10 text-success border border-success/20'
-                          : job.status === 'error' || job.status === 'cancelled'
+                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all ${job.status === 'completed'
+                        ? 'bg-success/10 text-success border border-success/20'
+                        : job.status === 'error' || job.status === 'cancelled'
                           ? 'bg-destructive/10 text-destructive border border-destructive/20'
                           : 'bg-info/10 text-info border border-info/20 animate-pulse'
-                      }`}>
+                        }`}>
                         {job.status}
                       </span>
                     </div>

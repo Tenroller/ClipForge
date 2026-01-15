@@ -1,0 +1,115 @@
+{
+  "video_name": "audience_wide.mp4",
+  "video_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\videos\\audience_wide.mp4",
+  "duration": 11.7,
+  "fps": 30.0,
+  "width": 1920,
+  "height": 1080,
+  "total_frames": 351,
+  "expected_mode": "horizontal",
+  "detected_mode": "horizontal",
+  "mode_match": true,
+  "face_track_count": 6,
+  "frames_with_faces": 151,
+  "frame_coverage_pct": 43.01994301994302,
+  "avg_simultaneous_faces": 5.509933774834437,
+  "max_simultaneous_faces": 6,
+  "face_metrics": [
+    {
+      "face_id": 1,
+      "avg_size_ratio": 0.02306100725104243,
+      "min_size_ratio": 0.02283709490740741,
+      "max_size_ratio": 0.023135609567901234,
+      "confidence_avg": 0.7783517536145962,
+      "confidence_min": 0.7689469546079636,
+      "speech_correlation": 0.9271523178807947,
+      "detection_count": 151,
+      "position_variance_x": 8.161458257191803e-08,
+      "position_variance_y": 1.192024704232589e-06
+    },
+    {
+      "face_id": 7,
+      "avg_size_ratio": 0.02028465163155305,
+      "min_size_ratio": 0.019351851851851853,
+      "max_size_ratio": 0.021048418209876543,
+      "confidence_avg": 0.7847310249356256,
+      "confidence_min": 0.7758320331573486,
+      "speech_correlation": 0.9202898550724637,
+      "detection_count": 138,
+      "position_variance_x": 8.005663328636607e-06,
+      "position_variance_y": 8.20548072343622e-05
+    },
+    {
+      "face_id": 3,
+      "avg_size_ratio": 0.013748255378540306,
+      "min_size_ratio": 0.008390721450617283,
+      "max_size_ratio": 0.01674141589506173,
+      "confidence_avg": 0.6477490838617086,
+      "confidence_min": 0.42630034089088437,
+      "speech_correlation": 0.9338235294117647,
+      "detection_count": 136,
+      "position_variance_x": 0.0005082014348588508,
+      "position_variance_y": 3.5391925470260716e-05
+    },
+    {
+      "face_id": 4,
+      "avg_size_ratio": 0.012746563143004114,
+      "min_size_ratio": 0.011280381944444445,
+      "max_size_ratio": 0.021643518518518517,
+      "confidence_avg": 0.7755150561928749,
+      "confidence_min": 0.7215572148561478,
+      "speech_correlation": 0.9266666666666666,
+      "detection_count": 150,
+      "position_variance_x": 0.002636432822145062,
+      "position_variance_y": 0.00029164319463496414
+    },
+    {
+      "face_id": 6,
+      "avg_size_ratio": 0.008720760233918129,
+      "min_size_ratio": 0.008305362654320988,
+      "max_size_ratio": 0.008858024691358025,
+      "confidence_avg": 0.7072945315194757,
+      "confidence_min": 0.4969272017478943,
+      "speech_correlation": 0.8947368421052632,
+      "detection_count": 76,
+      "position_variance_x": 7.778741866487711e-07,
+      "position_variance_y": 3.740467152286177e-07
+    },
+    {
+      "face_id": 2,
+      "avg_size_ratio": 0.007324489104002993,
+      "min_size_ratio": 0.006799768518518518,
+      "max_size_ratio": 0.011280381944444445,
+      "confidence_avg": 0.7834140848932845,
+      "confidence_min": 0.7653614163398742,
+      "speech_correlation": 0.9494949494949495,
+      "detection_count": 99,
+      "position_variance_x": 0.0006548688586021553,
+      "position_variance_y": 0.0013540265760513506
+    }
+  ],
+  "mode_segments": [
+    {
+      "start": 0.0,
+      "end": 0.8,
+      "mode": "horizontal",
+      "confidence": 0.8174135940893634
+    },
+    {
+      "start": 0.8,
+      "end": 5.0,
+      "mode": "split_screen",
+      "confidence": 0.8648745731011723
+    },
+    {
+      "start": 5.0,
+      "end": 11.7,
+      "mode": "horizontal",
+      "confidence": 0.887462178254522
+    }
+  ],
+  "issues": [],
+  "processing_time_seconds": 60.319138526916504,
+  "debug_video_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\outputs\\audience_wide_debug.mp4",
+  "json_data_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\outputs\\audience_wide_data.json"
+}

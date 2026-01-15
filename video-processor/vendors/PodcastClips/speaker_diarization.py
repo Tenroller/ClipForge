@@ -17,6 +17,25 @@ from loguru import logger as loguru_logger
 
 logger = loguru_logger.bind(name="PodcastClips.speaker_diarization")
 
+# =============================================================================
+# FFmpeg DLL Configuration for torio/torchaudio (MUST happen before pyannote import)
+# pyannote.audio → torchaudio → torio needs FFmpeg shared libraries on Windows
+# =============================================================================
+import platform
+if platform.system() == "Windows":
+    FFMPEG_SHARED_BIN = r"C:\ffmpeg-shared\ffmpeg-6.1.1-full_build-shared\bin"
+    if os.path.exists(FFMPEG_SHARED_BIN):
+        # CRITICAL: For Python 3.8+ on Windows, we must use os.add_dll_directory()
+        if hasattr(os, 'add_dll_directory'):
+            try:
+                os.add_dll_directory(FFMPEG_SHARED_BIN)
+            except Exception:
+                pass  # Already added or other issues
+        # Also add to PATH for subprocess calls
+        current_path = os.environ.get("PATH", "")
+        if FFMPEG_SHARED_BIN not in current_path:
+            os.environ["PATH"] = FFMPEG_SHARED_BIN + os.pathsep + current_path
+
 # Check if pyannote is available
 try:
     from pyannote.audio import Pipeline

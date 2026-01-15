@@ -15,7 +15,7 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'VideoHelper - AI Video Generation Platform',
+  title: 'ClipForge - AI Video Generation Platform',
   description:
     'Enterprise-grade AI video generation platform with MoneyPrinter (AI script + stock footage) and Brainrot (YouTube compilations) workflows.',
   keywords: [
@@ -25,6 +25,7 @@ export const metadata: Metadata = {
     'brainrot',
     'youtube automation',
     'video editing',
+    'clipforge',
   ],
 };
 
@@ -41,7 +42,7 @@ export default async function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <NextIntlClientProvider messages={messages} locale={locale}>
           <LanguageProvider initialLocale={locale}>
-            <ThemeProvider defaultTheme="system" storageKey="videohelper-ui-theme">
+            <ThemeProvider defaultTheme="system" storageKey="clipforge-ui-theme">
               <QueryProvider>
                 {children}
                 <Toaster />

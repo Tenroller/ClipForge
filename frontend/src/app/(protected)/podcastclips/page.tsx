@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { useJobs, useAvailableModels } from '@/hooks/use-jobs';
+import { useJobs } from '@/hooks/use-jobs';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import { useToast } from '@/hooks/use-toast';
@@ -11,35 +11,23 @@ import { generatePodcastClips, getYouTubeMetadata, getThumbnailUrl } from '@/lib
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { ChevronDown, ChevronUp, Clock, Eye, Play, Sparkles, Target, User, Video as VideoIcon, Zap } from "lucide-react";
 
 export default function PodcastClipsPage() {
   const { toast } = useToast();
   const t = useTranslations('podcastClips');
   const { data: recentJobs = [] } = useJobs({ limit: 10, refetchInterval: 5000 });
-  const { data: allModels = [] } = useAvailableModels();
 
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [completedJob, setCompletedJob] = useState<JobRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
+  // Form state - simplified
   const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [aiModel, setAiModel] = useState('gemini-2.5-flash');
-  const [whisperModel, setWhisperModel] = useState('base');
-  const [maxClipCount, setMaxClipCount] = useState(15);
   const [minDuration, setMinDuration] = useState(30);
   const [maxDuration, setMaxDuration] = useState(60);
   const [subtitleFontSize, setSubtitleFontSize] = useState(40);
@@ -54,61 +42,6 @@ export default function PodcastClipsPage() {
   const [videoMetadata, setVideoMetadata] = useState<YouTubeMetadata | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
 
-  // Viral keywords
-  const [viralKeywords, setViralKeywords] = useState('');
-
-  // Mixed-mode content detection
-  const [enableMixedMode, setEnableMixedMode] = useState(true);
-  const [useOCR, setUseOCR] = useState(true);
-  const [faceLossThreshold, setFaceLossThreshold] = useState(1.0);
-  const [faceReturnThreshold, setFaceReturnThreshold] = useState(0.5);
-  const [minSegmentDuration, setMinSegmentDuration] = useState(0.5);
-  const [transitionDuration, setTransitionDuration] = useState(0.5);
-  const [showMixedModeSettings, setShowMixedModeSettings] = useState(false);
-
-  // Phase 2: Speaker diarization settings
-  const [enableSpeakerDiarization, setEnableSpeakerDiarization] = useState(true);
-  const [targetSpeaker, setTargetSpeaker] = useState('');
-  const [minSpeakerPercentage, setMinSpeakerPercentage] = useState(0);
-  const [requireExchange, setRequireExchange] = useState(false);
-  const [prioritizeGuest, setPrioritizeGuest] = useState(false);
-  const [showSpeakerSettings, setShowSpeakerSettings] = useState(false);
-
-  // Debug mode
-  const [debugMode, setDebugMode] = useState(false);
-
-  // Organize models into categories for better UX (mutually exclusive)
-  const organizedModels = useMemo(() => {
-    if (!allModels.length) {
-      return {
-        recommended: ['gemini-2.0-flash', 'gemini-2.5-flash'],
-        stable: [],
-        experimental: [],
-      };
-    }
-
-    // First, identify experimental models (has precedence)
-    const experimental = allModels.filter(m =>
-      m.includes('exp') || m.includes('preview') || m.includes('thinking')
-    );
-
-    // Then, identify recommended models that are NOT experimental
-    const recommended = allModels.filter(m =>
-      !experimental.includes(m) &&
-      (m.includes('2.5-flash') || m.includes('2.0-flash') ||
-       m.includes('2.5-pro') || m.includes('2.0-pro'))
-    );
-
-    // Finally, stable models that are neither recommended nor experimental
-    const stable = allModels.filter(m =>
-      !recommended.includes(m) &&
-      !experimental.includes(m) &&
-      (m.includes('gemini') || m.includes('gemma'))
-    );
-
-    return { recommended, stable, experimental };
-  }, [allModels]);
-
   // Find the current job in the recent jobs list
   const currentJob = currentJobId
     ? recentJobs.find(job => job.id === currentJobId)
@@ -120,8 +53,8 @@ export default function PodcastClipsPage() {
       if (currentJob.status === 'completed') {
         setCompletedJob(currentJob);
         setCurrentJobId(null);
-        const clipsCount = (currentJob.result && typeof currentJob.result === 'object' && 'clips_count' in currentJob.result) 
-          ? (currentJob.result as { clips_count?: unknown }).clips_count 
+        const clipsCount = (currentJob.result && typeof currentJob.result === 'object' && 'clips_count' in currentJob.result)
+          ? (currentJob.result as { clips_count?: unknown }).clips_count
           : 'multiple';
         toast({
           title: t('clipsGenerated'),
@@ -182,17 +115,9 @@ export default function PodcastClipsPage() {
     setIsSubmitting(true);
 
     try {
-      // Parse viral keywords from comma-separated string
-      const keywordsArray = viralKeywords
-        .split(',')
-        .map(k => k.trim())
-        .filter(k => k.length > 0);
-
+      // Simplified payload - AI model, transcription, and feature flags are hardcoded in backend
       const payload = {
         youtubeUrl: youtubeUrl.trim(),
-        aiModel,
-        whisperModel,
-        maxClipCount,
         minDuration,
         maxDuration,
         useGPU: true,
@@ -203,22 +128,6 @@ export default function PodcastClipsPage() {
         subtitleVerticalOffset,
         subtitleHighlightColor,
         subtitleMaxWordsVisible,
-        viralFocusKeywords: keywordsArray,
-        // Mixed-mode content detection settings
-        enableMixedMode,
-        useOCR,
-        faceLossThreshold,
-        faceReturnThreshold,
-        minSegmentDuration,
-        transitionDuration,
-        // Phase 2: Speaker diarization settings
-        enableSpeakerDiarization,
-        targetSpeaker: targetSpeaker.trim() || undefined,
-        minSpeakerPercentage,
-        requireExchange,
-        prioritizeGuest,
-        // Debug mode
-        debugMode,
       };
 
       const data = await generatePodcastClips(payload);
@@ -226,7 +135,7 @@ export default function PodcastClipsPage() {
 
       toast({
         title: t('jobStarted'),
-        description: t('generatingClips', { max: maxClipCount }),
+        description: t('generatingClipsAuto'),
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to start podcast clips generation';
@@ -241,22 +150,17 @@ export default function PodcastClipsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
-      <div className="mb-8 space-y-2">
-        <div className="inline-block">
-          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-            {t('title')}
-          </h1>
-          <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
-        </div>
-        <p className="text-base text-muted-foreground max-w-2xl">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           {t('description')}
         </p>
       </div>
 
       {/* Features Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-6">
         <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
           <CardContent className="p-5">
             <div className="flex items-center gap-3">
@@ -391,102 +295,8 @@ export default function PodcastClipsPage() {
                   </Card>
                 )}
 
-                {/* AI Model */}
-                <div className="space-y-2">
-                  <Label htmlFor="aiModel">{t('aiModelViralDetection')}</Label>
-                  <Select value={aiModel} onValueChange={setAiModel}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[400px]">
-                      {/* Recommended Models */}
-                      {organizedModels.recommended.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                            {t('recommended')}
-                          </div>
-                          {organizedModels.recommended.slice(0, 6).map((model) => (
-                            <SelectItem key={model} value={model}>
-                              {model}
-                              {model === 'gemini-2.5-flash' && ` ${t('fastest')}`}
-                              {model === 'gemini-2.0-flash' && ` ${t('default')}`}
-                            </SelectItem>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Stable Models */}
-                      {organizedModels.stable.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
-                            {t('otherModels')}
-                          </div>
-                          {organizedModels.stable.map((model) => (
-                            <SelectItem key={model} value={model}>
-                              {model}
-                            </SelectItem>
-                          ))}
-                        </>
-                      )}
-
-                      {/* Experimental Models */}
-                      {organizedModels.experimental.length > 0 && (
-                        <>
-                          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground border-t mt-1 pt-2">
-                            {t('experimental')}
-                          </div>
-                          {organizedModels.experimental.slice(0, 5).map((model) => (
-                            <SelectItem key={model} value={model}>
-                              {model} 🧪
-                            </SelectItem>
-                          ))}
-                        </>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    {allModels.length > 0 ? t('modelsAvailable', { count: allModels.length }) : t('loadingModels')}
-                  </p>
-                </div>
-
-                {/* Whisper Model */}
-                <div className="space-y-2">
-                  <Label htmlFor="whisperModel">{t('transcriptionModel')}</Label>
-                  <Select value={whisperModel} onValueChange={setWhisperModel}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem key="tiny" value="tiny">{t('tiny')}</SelectItem>
-                      <SelectItem key="base" value="base">{t('base')}</SelectItem>
-                      <SelectItem key="small" value="small">{t('small')}</SelectItem>
-                      <SelectItem key="medium" value="medium">{t('medium')}</SelectItem>
-                      <SelectItem key="turbo" value="turbo">{t('turbo')}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Max Clip Count */}
-                <div className="space-y-2">
-                  <Label htmlFor="maxClipCount">
-                    {t('maximumClips')} <Badge variant="secondary">{maxClipCount}</Badge>
-                  </Label>
-                  <Slider
-                    id="maxClipCount"
-                    min={3}
-                    max={30}
-                    step={1}
-                    value={[maxClipCount]}
-                    onValueChange={(value) => setMaxClipCount(value[0])}
-                    disabled={isSubmitting}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t('aiWillGenerate', { max: maxClipCount })}
-                  </p>
-                </div>
-
                 {/* Duration Range */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="minDuration">
                       {t('minDuration')} <Badge variant="outline">{minDuration}s</Badge>
@@ -531,304 +341,6 @@ export default function PodcastClipsPage() {
                     onValueChange={(value) => setSubtitleFontSize(value[0])}
                     disabled={isSubmitting}
                   />
-                </div>
-
-                {/* Viral Keywords */}
-                <div className="space-y-2">
-                  <Label htmlFor="viralKeywords">
-                    {t('viralFocusKeywords')} <Badge variant="outline" className="ml-2">{t('optional')}</Badge>
-                  </Label>
-                  <Input
-                    id="viralKeywords"
-                    placeholder={t('keywordsPlaceholder')}
-                    value={viralKeywords}
-                    onChange={(e) => setViralKeywords(e.target.value)}
-                    disabled={isSubmitting}
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {t('keywordsDescription')}
-                  </p>
-                </div>
-
-                {/* Mixed-Mode Content Detection */}
-                <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor="enableMixedMode">{t('smartContentDetection')}</Label>
-                        <Badge variant="secondary">{t('aiPowered')}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {t('autoSwitchModes')}
-                      </p>
-                    </div>
-                    <Switch
-                      id="enableMixedMode"
-                      checked={enableMixedMode}
-                      onCheckedChange={setEnableMixedMode}
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="useOCR">{t('ocrTextDetection')}</Label>
-                      <p className="text-xs text-muted-foreground">
-                        {t('detectTextContent')}
-                      </p>
-                    </div>
-                    <Switch
-                      id="useOCR"
-                      checked={useOCR}
-                      onCheckedChange={setUseOCR}
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  {/* Advanced Mixed-Mode Settings */}
-                  {enableMixedMode && (
-                    <div className="pt-2 border-t">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="w-full flex items-center justify-between hover:bg-muted/50"
-                        onClick={() => setShowMixedModeSettings(!showMixedModeSettings)}
-                      >
-                        <span className="text-sm">{t('advancedDetectionSettings')}</span>
-                        {showMixedModeSettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </Button>
-
-                      {showMixedModeSettings && (
-                        <div className="mt-4 space-y-4">
-                          {/* Face Loss Threshold */}
-                          <div className="space-y-2">
-                            <Label htmlFor="faceLossThreshold">
-                              {t('faceLossThreshold')} <Badge variant="secondary">{faceLossThreshold}s</Badge>
-                            </Label>
-                            <Slider
-                              id="faceLossThreshold"
-                              min={0.5}
-                              max={3.0}
-                              step={0.1}
-                              value={[faceLossThreshold]}
-                              onValueChange={(value) => setFaceLossThreshold(value[0])}
-                              disabled={isSubmitting}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              {t('faceLossDescription')}
-                            </p>
-                          </div>
-
-                          {/* Face Return Threshold */}
-                          <div className="space-y-2">
-                            <Label htmlFor="faceReturnThreshold">
-                              Face Return Threshold: <Badge variant="secondary">{faceReturnThreshold}s</Badge>
-                            </Label>
-                            <Slider
-                              id="faceReturnThreshold"
-                              min={0.2}
-                              max={2.0}
-                              step={0.1}
-                              value={[faceReturnThreshold]}
-                              onValueChange={(value) => setFaceReturnThreshold(value[0])}
-                              disabled={isSubmitting}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Seconds with face to return to face-focused mode
-                            </p>
-                          </div>
-
-                          {/* Min Segment Duration */}
-                          <div className="space-y-2">
-                            <Label htmlFor="minSegmentDuration">
-                              Min Segment Duration: <Badge variant="secondary">{minSegmentDuration}s</Badge>
-                            </Label>
-                            <Slider
-                              id="minSegmentDuration"
-                              min={0.3}
-                              max={2.0}
-                              step={0.1}
-                              value={[minSegmentDuration]}
-                              onValueChange={(value) => setMinSegmentDuration(value[0])}
-                              disabled={isSubmitting}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Minimum duration to avoid flickering between modes
-                            </p>
-                          </div>
-
-                          {/* Transition Duration */}
-                          <div className="space-y-2">
-                            <Label htmlFor="transitionDuration">
-                              Transition Duration: <Badge variant="secondary">{transitionDuration}s</Badge>
-                            </Label>
-                            <Slider
-                              id="transitionDuration"
-                              min={0.2}
-                              max={1.0}
-                              step={0.1}
-                              value={[transitionDuration]}
-                              onValueChange={(value) => setTransitionDuration(value[0])}
-                              disabled={isSubmitting}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              Crossfade duration when switching between modes
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Speaker Diarization (Phase 2) */}
-                <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor="enableSpeakerDiarization">{t('speakerDiarization')}</Label>
-                        <Badge variant="secondary">{t('phase2')}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {t('identifyWhoSpeaksWhen')}
-                      </p>
-                    </div>
-                    <Switch
-                      id="enableSpeakerDiarization"
-                      checked={enableSpeakerDiarization}
-                      onCheckedChange={setEnableSpeakerDiarization}
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  {/* Advanced Speaker Settings */}
-                  {enableSpeakerDiarization && (
-                    <div className="pt-2 border-t">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="w-full flex items-center justify-between hover:bg-muted/50"
-                        onClick={() => setShowSpeakerSettings(!showSpeakerSettings)}
-                      >
-                        <span className="text-sm">{t('advancedSpeakerSettings')}</span>
-                        {showSpeakerSettings ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                      </Button>
-
-                      {showSpeakerSettings && (
-                        <div className="mt-4 space-y-4">
-                          {/* Prioritize Guest */}
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                              <Label htmlFor="prioritizeGuest">{t('prioritizeGuest')}</Label>
-                              <p className="text-xs text-muted-foreground">
-                                {t('prioritizeGuestDesc')}
-                              </p>
-                            </div>
-                            <Switch
-                              id="prioritizeGuest"
-                              checked={prioritizeGuest}
-                              onCheckedChange={setPrioritizeGuest}
-                              disabled={isSubmitting}
-                            />
-                          </div>
-
-                          {/* Require Exchange */}
-                          <div className="flex items-center justify-between">
-                            <div className="space-y-1">
-                              <Label htmlFor="requireExchange">{t('requireMultipleSpeakers')}</Label>
-                              <p className="text-xs text-muted-foreground">
-                                {t('requireExchangeDesc')}
-                              </p>
-                            </div>
-                            <Switch
-                              id="requireExchange"
-                              checked={requireExchange}
-                              onCheckedChange={setRequireExchange}
-                              disabled={isSubmitting}
-                            />
-                          </div>
-
-                          {/* Target Speaker */}
-                          <div className="space-y-2">
-                            <Label htmlFor="targetSpeaker">
-                              {t('targetSpeaker')} <Badge variant="outline" className="ml-2">{t('optional')}</Badge>
-                            </Label>
-                            <Input
-                              id="targetSpeaker"
-                              placeholder="SPEAKER_00, SPEAKER_01, etc."
-                              value={targetSpeaker}
-                              onChange={(e) => setTargetSpeaker(e.target.value)}
-                              disabled={isSubmitting}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              {t('targetSpeakerDesc')}
-                            </p>
-                          </div>
-
-                          {/* Min Speaker Percentage */}
-                          <div className="space-y-2">
-                            <Label htmlFor="minSpeakerPercentage">
-                              {t('minSpeakerPercentage')} <Badge variant="secondary">{minSpeakerPercentage}%</Badge>
-                            </Label>
-                            <Slider
-                              id="minSpeakerPercentage"
-                              min={0}
-                              max={100}
-                              step={5}
-                              value={[minSpeakerPercentage]}
-                              onValueChange={(value) => setMinSpeakerPercentage(value[0])}
-                              disabled={isSubmitting}
-                            />
-                            <p className="text-xs text-muted-foreground">
-                              {t('minSpeakerPercentageDesc')}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Debug Mode */}
-                <div className="border rounded-lg p-4 space-y-4 bg-gradient-to-br from-orange-50/50 to-red-50/50 dark:from-orange-950/20 dark:to-red-950/20 border-orange-200 dark:border-orange-800/30">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Label htmlFor="debugMode">🐛 Debug Mode</Label>
-                        <Badge variant="secondary" className="bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300">
-                          Developer
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Launch interactive Gradio UI for step-by-step visualization, face tracking overlays, and parameter tuning
-                      </p>
-                    </div>
-                    <Switch
-                      id="debugMode"
-                      checked={debugMode}
-                      onCheckedChange={setDebugMode}
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  {debugMode && (
-                    <div className="p-3 bg-orange-100/50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800/30">
-                      <div className="flex items-start gap-2 text-xs text-orange-800 dark:text-orange-200">
-                        <Sparkles className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                        <div className="space-y-1">
-                          <p className="font-semibold">Debug UI will auto-launch at http://localhost:7860</p>
-                          <ul className="list-disc list-inside space-y-0.5 text-orange-700 dark:text-orange-300">
-                            <li>View transcription & speaker timeline</li>
-                            <li>See face tracking with bounding boxes</li>
-                            <li>Inspect AI viral moment analysis</li>
-                            <li>Rerun steps with different parameters</li>
-                          </ul>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Advanced Subtitle Settings (Collapsible) */}
@@ -928,7 +440,7 @@ export default function PodcastClipsPage() {
 
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full h-12 sm:h-11 text-base sm:text-sm"
                   size="lg"
                   disabled={isSubmitting || !!currentJobId}
                 >

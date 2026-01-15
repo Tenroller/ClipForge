@@ -1,0 +1,43 @@
+{
+  "video_name": "single_speaker.mp4",
+  "video_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\videos\\single_speaker.mp4",
+  "duration": 11.0,
+  "fps": 30.0,
+  "width": 1280,
+  "height": 720,
+  "total_frames": 330,
+  "expected_mode": "face",
+  "detected_mode": "face",
+  "mode_match": true,
+  "face_track_count": 1,
+  "frames_with_faces": 150,
+  "frame_coverage_pct": 45.45454545454545,
+  "avg_simultaneous_faces": 1.0,
+  "max_simultaneous_faces": 1,
+  "face_metrics": [
+    {
+      "face_id": 0,
+      "avg_size_ratio": 0.04795795717592592,
+      "min_size_ratio": 0.03528862847222222,
+      "max_size_ratio": 0.06395182291666666,
+      "confidence_avg": 0.9296379085381826,
+      "confidence_min": 0.9088351130485535,
+      "speech_correlation": 0.9733333333333334,
+      "detection_count": 150,
+      "position_variance_x": 0.0011290388726128472,
+      "position_variance_y": 0.0011038605109739371
+    }
+  ],
+  "mode_segments": [
+    {
+      "start": 0.0,
+      "end": 11.0,
+      "mode": "face",
+      "confidence": 0.910507929288281
+    }
+  ],
+  "issues": [],
+  "processing_time_seconds": 151.72535610198975,
+  "debug_video_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\outputs\\single_speaker_debug.mp4",
+  "json_data_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\outputs\\single_speaker_data.json"
+}

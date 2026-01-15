@@ -161,15 +161,10 @@ export default function CompilationsPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
-      <div className="mb-8 space-y-2">
-        <div className="inline-block">
-          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-            {t('title')}
-          </h1>
-          <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
-        </div>
-        <p className="text-base text-muted-foreground max-w-2xl">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           {t('description')}
         </p>
       </div>

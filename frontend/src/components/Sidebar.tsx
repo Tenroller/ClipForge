@@ -14,7 +14,6 @@ import {
   Trash2,
   LogOut,
   Radio,
-  LayoutDashboard,
   FolderKanban,
 } from "lucide-react";
 import { logoutAction } from '@/app/login/actions';
@@ -106,11 +105,13 @@ export default function AppSidebar({ username, ...props }: AppSidebarProps) {
     <Sidebar collapsible="icon" {...props}>
       {/* Header */}
       <SidebarHeader>
-        <div className="flex items-center gap-2 px-2 py-1 font-semibold text-lg tracking-tight">
-          <div className="size-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-            <LayoutDashboard className="size-5" />
-          </div>
-          <span className="group-data-[collapsible=icon]:hidden">{t('appName')}</span>
+        <div className="flex items-center gap-3 px-2 py-2 font-semibold text-lg tracking-tight">
+          <img
+            src="/logo.png"
+            alt="ClipForge"
+            className="size-10 rounded-lg object-contain"
+          />
+          <span className="group-data-[collapsible=icon]:hidden text-xl">{t('appName')}</span>
         </div>
       </SidebarHeader>
 

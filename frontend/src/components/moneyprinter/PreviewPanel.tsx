@@ -48,12 +48,12 @@ export type PreviewPanelProps = {
   shadowLayer4Color?: string
 }
 
-export default function PreviewPanel({ 
-  position, 
-  onChangePosition, 
-  previewUrl, 
-  color = "#FFFF00", 
-  positionRaw, 
+export default function PreviewPanel({
+  position,
+  onChangePosition,
+  previewUrl,
+  color = "#FFFF00",
+  positionRaw,
   onChangePositionRaw,
   shadowLayersCount = 4,
   shadowLayer1Color = '#4A90E2',
@@ -232,7 +232,7 @@ export default function PreviewPanel({
       `4px 4px 0px ${shadowLayer2Color}`,
       `2px 2px 0px ${shadowLayer1Color}`   // Closest
     ];
-    
+
     // Select layers based on count (same logic as backend)
     if (shadowLayersCount === 2) {
       return [allLayers[0], allLayers[3]].join(', '); // Layer 4 and 1
@@ -257,7 +257,7 @@ export default function PreviewPanel({
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4">
-          <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[300px] overflow-hidden rounded-xl border bg-gradient-to-b from-neutral-900 to-neutral-800 shadow-2xl" aria-label="Video preview area">
+        <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[300px] overflow-hidden rounded-xl border bg-gradient-to-b from-neutral-900 to-neutral-800 shadow-2xl" aria-label="Video preview area">
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute inset-0 bg-[radial-gradient(transparent,rgba(0,0,0,0.35))]" />
             <div className="absolute inset-0 flex items-center justify-center">
@@ -274,10 +274,10 @@ export default function PreviewPanel({
           <div
             ref={itemRef}
             className="absolute px-3 py-2 select-none transition-all"
-            style={{ 
-              left: leftPx, 
-              top: topPx, 
-              color, 
+            style={{
+              left: leftPx,
+              top: topPx,
+              color,
               textShadow: textShadowStyle,
               letterSpacing: '1.5px',
               fontWeight: 'bold'
@@ -340,9 +340,9 @@ function PosChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "h-9 rounded-lg border text-xs font-medium transition-all duration-200",
-        active 
-          ? "bg-primary text-primary-foreground border-primary shadow-sm" 
+        "h-10 sm:h-9 rounded-lg border text-xs font-medium transition-all duration-200",
+        active
+          ? "bg-primary text-primary-foreground border-primary shadow-sm"
           : "bg-background border-border hover:bg-muted/60 hover:border-border/70"
       )}
       aria-pressed={active}

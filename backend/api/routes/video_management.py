@@ -794,6 +794,77 @@ def delete_project_clip(project_id: str, clip_id: str, delete_file: bool = Query
         raise HTTPException(status_code=500, detail=f"Failed to delete clip: {e}")
 
 
+@router.delete("/projects/podcast/{project_id}", summary="Delete Podcast Project")
+def delete_podcast_project(project_id: str, delete_files: bool = Query(True)) -> Dict[str, Any]:
+    """
+    Delete a podcast project and all its associated clips.
+    
+    Args:
+        project_id: ID of the project (job) to delete
+        delete_files: If true, also delete the physical video files (default: True)
+    
+    Returns:
+        Summary of deleted items (clips count, files deleted, etc.)
+    """
+    try:
+        from ...database import SessionLocal, Video, Job
+
+        with SessionLocal() as session:
+            # Verify the job exists and is a podcastclips job
+            job = session.query(Job).filter(Job.id == project_id).first()
+            if not job:
+                raise HTTPException(status_code=404, detail="Project not found")
+            
+            if job.workflow != "podcastclips":
+                raise HTTPException(status_code=400, detail="Not a podcast clips project")
+            
+            # Get all clips for this project
+            clips = session.query(Video).filter(
+                Video.job_id == project_id,
+                Video.workflow == "podcastclips"
+            ).all()
+            
+            clips_deleted = 0
+            files_deleted = 0
+            errors = []
+            
+            # Delete clip files and records
+            for clip in clips:
+                # Delete the physical file if requested
+                if delete_files and clip.file_path:
+                    try:
+                        Path(clip.file_path).unlink(missing_ok=True)
+                        files_deleted += 1
+                    except Exception as e:
+                        errors.append(f"Failed to delete file {clip.file_path}: {e}")
+                        logger.warning(f"Failed to delete clip file {clip.file_path}: {e}")
+                
+                # Delete the database record
+                session.delete(clip)
+                clips_deleted += 1
+            
+            # Delete the job record
+            session.delete(job)
+            session.commit()
+            
+            logger.info(f"Deleted project {project_id}: {clips_deleted} clips, {files_deleted} files")
+            
+            return {
+                "project_id": project_id,
+                "deleted": True,
+                "clips_deleted": clips_deleted,
+                "files_deleted": files_deleted,
+                "errors": errors if errors else None,
+                "message": f"Project deleted successfully with {clips_deleted} clips"
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete project {project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete project: {e}")
+
+
 def _format_duration(seconds: Optional[float]) -> str:
     """Format duration in seconds to MM:SS or HH:MM:SS string."""
     if seconds is None:

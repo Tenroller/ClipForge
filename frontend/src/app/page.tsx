@@ -10,8 +10,8 @@ export default function HomePage() {
     <div className="min-h-screen">
       {/* Hero Section */}
       <section className="relative overflow-hidden">
-  {/* Animated background gradients */}
-  <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-purple-50/80 to-emerald-50/80 pointer-events-none" />
+        {/* Animated background gradients */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-purple-50/80 to-emerald-50/80 pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
           <div className="mx-auto max-w-6xl pt-20 pb-24 sm:pt-28 sm:pb-32">
@@ -403,12 +403,12 @@ export default function HomePage() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
-                <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center">
-                  <svg className="size-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
-                  </svg>
-                </div>
-                <span className="font-bold text-lg">VideoHelper</span>
+                <img
+                  src="/logo.png"
+                  alt="ClipForge"
+                  className="size-8 rounded-lg object-contain"
+                />
+                <span className="font-bold text-lg">ClipForge</span>
               </div>
               <p className="text-sm text-muted-foreground">
                 {t('footer.tagline')}

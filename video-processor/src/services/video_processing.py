@@ -10,6 +10,25 @@ import subprocess
 import json
 from pathlib import Path
 from typing import Dict, Any
+import platform
+
+# =============================================================================
+# FFmpeg DLL Configuration for torio/torchaudio (MUST be FIRST before imports)
+# This enables pyannote.audio speaker diarization on Windows
+# =============================================================================
+if platform.system() == "Windows":
+    FFMPEG_SHARED_BIN = r"C:\ffmpeg-shared\ffmpeg-6.1.1-full_build-shared\bin"
+    if os.path.exists(FFMPEG_SHARED_BIN):
+        # CRITICAL: For Python 3.8+ on Windows, we must use os.add_dll_directory()
+        if hasattr(os, 'add_dll_directory'):
+            try:
+                os.add_dll_directory(FFMPEG_SHARED_BIN)
+            except Exception:
+                pass  # Already added or other issues
+        # Also add to PATH for subprocess calls
+        current_path = os.environ.get("PATH", "")
+        if FFMPEG_SHARED_BIN not in current_path:
+            os.environ["PATH"] = FFMPEG_SHARED_BIN + os.pathsep + current_path
 
 # FFmpeg pool for centralized process management
 try:
@@ -506,17 +525,58 @@ class VideoProcessingService:
                 loop=loop
             )
 
-            # Collect output files and convert to generated_videos format
+            # Collect output files and convert to generated_videos format with full AI metadata
             import os
             generated_videos = []
-            for video_file in job_output_dir.rglob("*.mp4"):
-                if video_file.is_file() and "_clip_" in video_file.name:
-                    file_size_mb = os.path.getsize(video_file) / (1024 * 1024)  # Convert to MB
+            
+            # Get clips from result which contains full AI metadata
+            clips_with_metadata = result.get("clips", result.get("generated_videos", []))
+            
+            for clip in clips_with_metadata:
+                # Get the output path from clip data
+                output_path = clip.get("output_path", "")
+                
+                # Verify file exists
+                if output_path and os.path.isfile(output_path):
+                    file_size_mb = os.path.getsize(output_path) / (1024 * 1024)
+                    
+                    # Extract AI metadata if available
+                    ai_metadata = clip.get("ai_metadata", {})
+                    
                     generated_videos.append({
-                        "path": str(video_file),
+                        "path": output_path,
                         "size_mb": round(file_size_mb, 2),
-                        "posted": False
+                        "posted": False,
+                        # Include rich metadata for frontend
+                        "title": clip.get("title", ai_metadata.get("title", "")),
+                        "clip_index": clip.get("clip_index", 0),
+                        "duration": clip.get("duration", 0),
+                        "start_time": ai_metadata.get("start_time", clip.get("start_time", 0)),
+                        "end_time": ai_metadata.get("end_time", clip.get("end_time", 0)),
+                        "viral_score": ai_metadata.get("viral_score", clip.get("viral_score", 0)),
+                        "hook_strength": ai_metadata.get("hook_strength", clip.get("hook_strength", 0)),
+                        "confidence": ai_metadata.get("confidence", clip.get("confidence", 0)),
+                        "hook": ai_metadata.get("hook", clip.get("hook", "")),
+                        "caption": ai_metadata.get("caption", clip.get("caption", "")),
+                        "reason": ai_metadata.get("reason", clip.get("viral_reason", "")),
+                        "tags": ai_metadata.get("tags", clip.get("tags", [])),
+                        "thumbnail_text": ai_metadata.get("thumbnail_text", clip.get("thumbnail_text", "")),
+                        "face_coverage_pct": clip.get("face_coverage_pct", 0),
                     })
+                else:
+                    logger.warning(f"Clip file not found: {output_path}")
+            
+            # Fallback: If no clips from metadata, scan directory for files
+            if not generated_videos:
+                logger.warning("No clips found in result metadata, scanning directory")
+                for video_file in job_output_dir.rglob("*.mp4"):
+                    if video_file.is_file() and "_clip_" in video_file.name:
+                        file_size_mb = os.path.getsize(video_file) / (1024 * 1024)
+                        generated_videos.append({
+                            "path": str(video_file),
+                            "size_mb": round(file_size_mb, 2),
+                            "posted": False
+                        })
 
             logger.info(f"Job {job_id}: PodcastClips job completed, generated {len(generated_videos)} clips")
 

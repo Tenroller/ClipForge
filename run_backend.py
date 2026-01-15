@@ -6,6 +6,54 @@ Backend startup script that properly sets up the Python path.
 import sys
 import os
 from pathlib import Path
+import warnings
+import logging
+
+# =============================================================================
+# FFmpeg Configuration for torio/torchaudio (used by pyannote.audio)
+# =============================================================================
+# Using FFmpeg 7.1 shared build with DLLs for proper torio integration
+# The shared build provides avcodec-61.dll, avformat-61.dll, etc.
+
+# Path to FFmpeg shared libraries (with DLLs)
+FFMPEG_SHARED_BIN = r"C:\ffmpeg-shared\ffmpeg-6.1.1-full_build-shared\bin"
+# Fallback to static FFmpeg for subprocess calls if shared not available
+FFMPEG_STATIC_BIN = r"C:\ffmpeg\bin"
+
+# Determine which FFmpeg to use
+if os.path.exists(FFMPEG_SHARED_BIN):
+    ffmpeg_bin_path = FFMPEG_SHARED_BIN
+    
+    # CRITICAL: For Python 3.8+ on Windows, we must use os.add_dll_directory()
+    # to allow torio/torchaudio to find FFmpeg DLLs
+    # This must be done BEFORE importing torchaudio or pyannote
+    if hasattr(os, 'add_dll_directory'):
+        os.add_dll_directory(FFMPEG_SHARED_BIN)
+        print(f"[FFmpeg] Added DLL directory: {FFMPEG_SHARED_BIN}")
+    
+    # Also add to PATH for subprocess calls
+    current_path = os.environ.get("PATH", "")
+    if FFMPEG_SHARED_BIN not in current_path:
+        os.environ["PATH"] = FFMPEG_SHARED_BIN + os.pathsep + current_path
+    
+    os.environ["FFMPEG_BINARY"] = os.path.join(FFMPEG_SHARED_BIN, "ffmpeg.exe")
+    print(f"[FFmpeg] Using shared build: {FFMPEG_SHARED_BIN}")
+    
+elif os.path.exists(FFMPEG_STATIC_BIN):
+    ffmpeg_bin_path = FFMPEG_STATIC_BIN
+    
+    # Suppress torio warnings for static FFmpeg (no DLLs available)
+    warnings.filterwarnings("ignore", message=".*FFmpeg.*extension.*")
+    logging.getLogger("torio._extension.utils").setLevel(logging.ERROR)
+    
+    current_path = os.environ.get("PATH", "")
+    if FFMPEG_STATIC_BIN not in current_path:
+        os.environ["PATH"] = FFMPEG_STATIC_BIN + os.pathsep + current_path
+    
+    os.environ["FFMPEG_BINARY"] = os.path.join(FFMPEG_STATIC_BIN, "ffmpeg.exe")
+    print(f"[FFmpeg] Using static build (torio may show warnings): {FFMPEG_STATIC_BIN}")
+else:
+    print("[FFmpeg] WARNING: No FFmpeg installation found!")
 
 def main():
     # Get the project root directory
@@ -25,7 +73,7 @@ def main():
     port = int(os.getenv("PORT", "9000"))
     reload = os.getenv("RELOAD", "false").lower() == "true"
     
-    print(f"Starting AI Video Generator API on {host}:{port}")
+    print(f"Starting ClipForge API on {host}:{port}")
     print(f"Project root: {project_root}")
     print(f"Python path includes: backend={str(backend_dir) in sys.path}")
     

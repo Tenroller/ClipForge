@@ -103,13 +103,31 @@ def _auto_register_videos(job_id: str, workflow: Optional[str], result_data: Dic
                         absolute_path = Path(video_path)
 
                     if absolute_path.exists():
-                        # Extract AI metadata from video_data if available
+                        # Extract AI metadata from video_data
+                        # Support both nested ai_metadata object and top-level fields
                         ai_metadata = video_data.get("ai_metadata", {})
-
-                        # Build comprehensive metadata for database storage
+                        
+                        # Build comprehensive metadata by merging all sources
                         video_metadata = {
                             "auto_registered": True,
-                            **ai_metadata  # Include all AI-generated metadata
+                            # Core fields with fallback chain
+                            "title": video_data.get("title") or ai_metadata.get("title", ""),
+                            "clip_index": video_data.get("clip_index") or ai_metadata.get("clip_index", 0),
+                            "duration": video_data.get("duration", 0),
+                            "start_time": video_data.get("start_time") or ai_metadata.get("start_time", 0),
+                            "end_time": video_data.get("end_time") or ai_metadata.get("end_time", 0),
+                            # AI scoring
+                            "viral_score": video_data.get("viral_score") or ai_metadata.get("viral_score", 0),
+                            "hook_strength": video_data.get("hook_strength") or ai_metadata.get("hook_strength", 0),
+                            "confidence": video_data.get("confidence") or ai_metadata.get("confidence", 0),
+                            # Content
+                            "hook": video_data.get("hook") or ai_metadata.get("hook", ""),
+                            "caption": video_data.get("caption") or ai_metadata.get("caption", ""),
+                            "reason": video_data.get("reason") or ai_metadata.get("reason", ""),
+                            "tags": video_data.get("tags") or ai_metadata.get("tags", []),
+                            "thumbnail_text": video_data.get("thumbnail_text") or ai_metadata.get("thumbnail_text", ""),
+                            # Technical
+                            "face_coverage_pct": video_data.get("face_coverage_pct", 0),
                         }
 
                         video_service.register_video(
@@ -124,10 +142,9 @@ def _auto_register_videos(job_id: str, workflow: Optional[str], result_data: Dic
                         registered_count += 1
 
                         # Log metadata inclusion
-                        if ai_metadata:
-                            logger.debug(f"Registered video with AI metadata: title={ai_metadata.get('title', 'N/A')}, "
-                                       f"viral_score={ai_metadata.get('viral_score', 0)}, "
-                                       f"tags={ai_metadata.get('tags', [])}")
+                        logger.debug(f"Registered video with metadata: title={video_metadata.get('title', 'N/A')}, "
+                                   f"viral_score={video_metadata.get('viral_score', 0)}, "
+                                   f"duration={video_metadata.get('duration', 0)}s")
 
             if registered_count > 0:
                 logger.info(f"Auto-registered {registered_count} PodcastClips videos for job {job_id}")

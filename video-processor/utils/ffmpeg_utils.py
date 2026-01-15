@@ -9,6 +9,35 @@ from loguru import logger
 # Bind logger with context for this module
 logger = logger.bind(name="utils.ffmpeg")
 
+# =============================================================================
+# FFmpeg Shared Library DLL Configuration for torio/torchaudio
+# This MUST happen at module import time, before pyannote.audio is imported
+# =============================================================================
+if platform.system() == "Windows":
+    FFMPEG_SHARED_BIN = r"C:\ffmpeg-shared\ffmpeg-6.1.1-full_build-shared\bin"
+    FFMPEG_STATIC_BIN = r"C:\ffmpeg\bin"
+    
+    if os.path.exists(FFMPEG_SHARED_BIN):
+        # CRITICAL: For Python 3.8+ on Windows, we must use os.add_dll_directory()
+        # to allow torio/torchaudio to find FFmpeg DLLs
+        if hasattr(os, 'add_dll_directory'):
+            try:
+                os.add_dll_directory(FFMPEG_SHARED_BIN)
+            except Exception:
+                pass  # Ignore if already added or other issues
+        
+        # Add to PATH for subprocess calls
+        current_path = os.environ.get("PATH", "")
+        if FFMPEG_SHARED_BIN not in current_path:
+            os.environ["PATH"] = FFMPEG_SHARED_BIN + os.pathsep + current_path
+        
+        # Pre-set the binary paths
+        if "FFMPEG_BINARY" not in os.environ:
+            os.environ["FFMPEG_BINARY"] = os.path.join(FFMPEG_SHARED_BIN, "ffmpeg.exe")
+        if "FFPROBE_BINARY" not in os.environ:
+            os.environ["FFPROBE_BINARY"] = os.path.join(FFMPEG_SHARED_BIN, "ffprobe.exe")
+
+
 def setup_ffmpeg_environment():
     """
     Set up FFmpeg and FFprobe environment variables for cross-platform compatibility.

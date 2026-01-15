@@ -18,6 +18,7 @@ from loguru import logger
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 import tempfile
+import gc  # For explicit garbage collection after major operations
 
 # Add parent directories to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -178,11 +179,13 @@ class PodcastClipsProcessor:
             if not youtube_url:
                 raise ValueError("YouTube URL is required")
             
-            ai_model = parameters.get('aiModel', 'gemini-2.5-pro')
-            whisper_model = parameters.get('whisperModel', 'turbo')
-            max_clip_count = parameters.get('maxClipCount', 15)  # Maximum clips, AI decides actual count
-            min_duration = parameters.get('minDuration', 30)
-            max_duration = parameters.get('maxDuration', 60)
+            # Hardcoded AI configuration (simplified - always use best settings)
+            ai_model = 'gemini-3-flash-preview'  # Always use latest flash model
+            whisper_model = 'turbo'  # Always use turbo for fast transcription
+            # max_clip_count removed - AI decides optimal clip count based on content quality
+            
+            min_duration = parameters.get('minDuration', 45)  # Minimum clip duration (45s default for viral shorts)
+            max_duration = parameters.get('maxDuration', 90)  # Maximum clip duration (90s default)
             use_gpu = parameters.get('useGPU', True)
             subtitle_font_size = parameters.get('subtitleFontSize', 50)
             subtitle_color = parameters.get('subtitleColor', '#FFFFFF')
@@ -193,12 +196,12 @@ class PodcastClipsProcessor:
             subtitle_max_words_visible = parameters.get('subtitleMaxWordsVisible', 5)
             viral_keywords = parameters.get('viralFocusKeywords', [])
 
-            # Mixed-mode configuration
-            enable_mixed_mode = parameters.get('enableMixedMode', True)
+            # Mixed-mode configuration (always enabled for best quality)
+            enable_mixed_mode = True  # Always enabled
             face_loss_threshold = parameters.get('faceLossThreshold', 1.0)
             face_return_threshold = parameters.get('faceReturnThreshold', 0.5)
             min_segment_duration = parameters.get('minSegmentDuration', 0.5)
-            use_ocr = parameters.get('useOCR', True)
+            use_ocr = True  # Always enabled
             transition_duration = parameters.get('transitionDuration', 0.5)
 
             # AI-powered thumbnail configuration
@@ -236,8 +239,8 @@ class PodcastClipsProcessor:
             min_face_size_ratio = parameters.get('minFaceSizeRatio', 0.02)  # Filter out audience (2% of frame)
             max_tracked_faces = parameters.get('maxTrackedFaces', 4)  # Track up to 4 people
 
-            # Speaker diarization configuration (who speaks when)
-            enable_speaker_diarization = parameters.get('enableSpeakerDiarization', True)
+            # Speaker diarization configuration (always enabled for best speaker tracking)
+            enable_speaker_diarization = True  # Always enabled
             min_speakers = parameters.get('minSpeakers', None)  # None = auto-detect
             max_speakers = parameters.get('maxSpeakers', None)  # None = auto-detect
 
@@ -283,7 +286,7 @@ class PodcastClipsProcessor:
 
             # Step 3: Detect viral moments (with speaker context if available)
             viral_moments = self._detect_viral_moments(
-                word_timings, ai_model, max_clip_count,
+                word_timings, ai_model,
                 min_duration, max_duration, viral_keywords,
                 speaker_segments=speaker_segments
             )
@@ -320,7 +323,7 @@ class PodcastClipsProcessor:
 
             # Step 5: Score and rank viral moments (NOW USES OPTIMIZED TIMINGS + SPEAKER DYNAMICS)
             viral_moments = self._score_and_rank_moments(
-                viral_moments, word_timings, max_clip_count,
+                viral_moments, word_timings,
                 speaker_segments=speaker_segments
             )
 
@@ -655,7 +658,6 @@ class PodcastClipsProcessor:
         self,
         word_timings: List[Dict[str, Any]],
         ai_model: str,
-        max_count: int,
         min_duration: int,
         max_duration: int,
         keywords: List[str],
@@ -765,9 +767,32 @@ class PodcastClipsProcessor:
             phrases = group_words_into_phrases(word_timings, speaker_segments or [])
             logger.info(f"Grouped {len(word_timings)} words into {len(phrases)} phrases")
 
-            # Format phrases as TOON for AI (30-60% token reduction vs JSON)
-            from toon_format import encode as toon_encode
-            transcript_toon = toon_encode(phrases)
+            # Format phrases as Natural Dialogue for better AI comprehension
+            def format_as_natural_dialogue(phrases: list) -> str:
+                """
+                Format phrases as natural dialogue (screenplay-style).
+                
+                Example output:
+                [00:00.00 - 00:03.42] SPEAKER_00: So this is an interesting thing about AI.
+                [00:03.50 - 00:07.21] SPEAKER_01: I completely agree, but here's the catch.
+                """
+                lines = []
+                for phrase in phrases:
+                    start = phrase.get('start', 0)
+                    end = phrase.get('end', 0)
+                    speaker = phrase.get('speaker', 'UNKNOWN')
+                    text = phrase.get('text', '')
+                    
+                    # Format time as MM:SS.cc
+                    start_min, start_sec = divmod(start, 60)
+                    end_min, end_sec = divmod(end, 60)
+                    
+                    time_str = f"[{int(start_min):02d}:{start_sec:05.2f} - {int(end_min):02d}:{end_sec:05.2f}]"
+                    lines.append(f"{time_str} {speaker}: {text}")
+                
+                return "\n".join(lines)
+            
+            transcript_dialogue = format_as_natural_dialogue(phrases)
 
             # Build speaker context information if available
             speaker_info = ""
@@ -782,7 +807,7 @@ class PodcastClipsProcessor:
             You are an elite short-form editorial strategist for TikTok/Reels/Shorts. You surgically extract only HIGH-CONVICTION viral moments from a podcast transcript.
 
             OBJECTIVE
-            Return the best possible set of moments (0..{max_count}) ordered BEST-FIRST. Do NOT pad quantity—quality is paramount.
+            Return ALL high-quality viral moments you can find, ordered BEST-FIRST. Do NOT pad quantity—quality is paramount. Extract as many or as few clips as the content deserves.
 
             HOOK QUALITY EXAMPLES
             
@@ -806,19 +831,20 @@ class PodcastClipsProcessor:
             Better: "Couples who do this one thing are 60% more likely to divorce"
 
             TRANSCRIPT FORMAT
-            You will receive a transcript in TOON format (a compact tabular format). The data is a table with columns:
-            - i: index number
-            - start: start time in seconds (float, 2 decimal places)
-            - end: end time in seconds (float, 2 decimal places)
-            - speaker: speaker label (e.g., "SPEAKER_00", "SPEAKER_01")
-            - text: the spoken text for this phrase
-
-            TOON uses pipe-delimited tabular rows after a header line. Parse each row to extract phrase data.
+            You will receive a transcript in Natural Dialogue format (screenplay-style). Each line follows this pattern:
+            [MM:SS.cc - MM:SS.cc] SPEAKER_ID: spoken text
+            
+            Example:
+            [00:00.00 - 00:03.42] SPEAKER_00: So this is an interesting thing about AI.
+            [00:03.50 - 00:07.21] SPEAKER_01: I completely agree, but here's the catch.
+            
+            The timestamps show [start_time - end_time] in minutes:seconds.centiseconds format.
+            Use these timestamps to identify clip boundaries.
 
             SELECTION RULES
-            - Dynamic count: Choose any number up to {max_count}; stop when quality drops. 1 amazing clip beats 8 mediocre ones.
-            - Duration: EACH clip MUST be >= {min_duration} seconds AND <= {max_duration} seconds. If a great moment is slightly short, extend start/end to reach the minimum without breaking semantic flow.
-            - Target optimal length: 45–50s when possible (still respecting bounds).
+            - Dynamic count: Choose any number of clips based on content quality. Stop when quality drops. 1 amazing clip beats 8 mediocre ones.
+            - **DURATION GUIDELINES**: Use {min_duration}s to {max_duration}s as the primary range for clip length. These are guiderails rather than hard limits; you may provide clips slightly shorter or longer if the natural narrative arc requires it or if additional context would be counterproductive to the clip's impact.
+            - Target optimal length: {min_duration}–{max_duration}s. Aim for the middle of this range when possible.
             - Time values: start_time, end_time, duration use seconds as float with ≤2 decimal places. duration MUST equal end_time - start_time.
             - Order: Sort strictly by viral potential descending (strongest first).
             - Overlap: Avoid near-duplicate clips. Merge overlapping segments if they cover the same punchline. Two clips may overlap only if they deliver distinct hooks.
@@ -946,15 +972,15 @@ class PodcastClipsProcessor:
             keywords_section = f"Priority keywords: {', '.join(keywords)}\n\n" if keywords else ""
             speaker_section = f"{speaker_info}\n\n" if speaker_info else ""
 
-            content = f"""{keywords_section}{speaker_section}TRANSCRIPT (TOON format):
-            {transcript_toon}"""
+            content = f"""{keywords_section}{speaker_section}TRANSCRIPT:
+{transcript_dialogue}"""
 
             logger.info(f"Sending transcript to {ai_model} for structured analysis")
 
             # Use structured output to guarantee valid JSON with system instruction
             response_data = generate_structured_response(
                 prompt=content,
-                ai_model=ai_model,
+                ai_model='gemini-3-flash-preview',
                 response_schema=ViralMomentsResponse,
                 system_instruction=system_instruction
             )
@@ -999,6 +1025,40 @@ class PodcastClipsProcessor:
             if moments_before_filter > len(viral_moments):
                 logger.info(f"Filtered out {moments_before_filter - len(viral_moments)} clips with hook_strength < {MIN_HOOK_STRENGTH}")
             
+            # Post-process: Validate and fix clip durations
+            valid_moments = []
+            for m in viral_moments:
+                clip_duration = m.end_time - m.start_time
+                
+                if clip_duration < min_duration:
+                    # Try to extend clip to minimum duration
+                    needed_extra = min_duration - clip_duration
+                    # Add padding equally to both ends
+                    extend_before = min(needed_extra / 2, m.start_time)  # Don't go before 0
+                    extend_after = needed_extra - extend_before
+                    
+                    new_start = m.start_time - extend_before
+                    new_end = m.end_time + extend_after
+                    new_duration = new_end - new_start
+                    
+                    if new_duration >= min_duration:
+                        logger.info(f"Extended clip '{m.title}' from {clip_duration:.1f}s to {new_duration:.1f}s")
+                        m.start_time = new_start
+                        m.end_time = new_end
+                        valid_moments.append(m)
+                    else:
+                        logger.warning(f"Skipping clip '{m.title}' - too short ({clip_duration:.1f}s < {min_duration}s) and cannot extend")
+                elif clip_duration > max_duration:
+                    logger.warning(f"Trimming clip '{m.title}' from {clip_duration:.1f}s to {max_duration}s")
+                    m.end_time = m.start_time + max_duration
+                    valid_moments.append(m)
+                else:
+                    valid_moments.append(m)
+            
+            if len(viral_moments) > len(valid_moments):
+                logger.info(f"Duration validation: {len(viral_moments)} -> {len(valid_moments)} clips")
+            viral_moments = valid_moments
+            
             logger.info(f"Final selection: {len(viral_moments)} clips with strong hooks (hook_strength >= {MIN_HOOK_STRENGTH})")
 
             # Persist viral moments
@@ -1029,7 +1089,6 @@ class PodcastClipsProcessor:
                         for m in viral_moments
                     ],
                     "ai_model": ai_model,
-                    "max_count": max_count,
                     "actual_count": len(viral_moments)
                 }
             )
@@ -1073,7 +1132,6 @@ class PodcastClipsProcessor:
                 logger.info("Found existing face detection data")
                 # Initialize face tracker with existing data
                 self.face_tracker = FaceTracker(
-                    use_gpu=use_gpu,
                     detection_height=detection_height,
                     batch_size=batch_size,
                     min_face_size_ratio=min_face_size_ratio,
@@ -1098,7 +1156,6 @@ class PodcastClipsProcessor:
                 logger.info(f"  Speaker detection: DISABLED (legacy single-face mode)")
 
             self.face_tracker = FaceTracker(
-                use_gpu=use_gpu,
                 detection_height=detection_height,
                 batch_size=batch_size,
                 min_face_size_ratio=min_face_size_ratio,
@@ -1170,7 +1227,6 @@ class PodcastClipsProcessor:
             # Face detection is not critical, continue with center crop
             logger.warning("Continuing with center crop fallback")
             self.face_tracker = FaceTracker(
-                use_gpu=use_gpu,
                 detection_height=detection_height,
                 batch_size=batch_size,
                 min_face_size_ratio=min_face_size_ratio,
@@ -1253,7 +1309,6 @@ class PodcastClipsProcessor:
 
             # Initialize face tracker
             self.face_tracker = FaceTracker(
-                use_gpu=use_gpu,
                 detection_height=detection_height,
                 batch_size=batch_size,
                 min_face_size_ratio=min_face_size_ratio,
@@ -1536,7 +1591,6 @@ class PodcastClipsProcessor:
         self,
         viral_moments: List[ViralMoment],
         word_timings: List[Dict[str, Any]],
-        max_count: int,
         speaker_segments: Optional[List[SpeakerSegment]] = None
     ) -> List[ViralMoment]:
         """Score and rank viral moments by quality (using optimized timing + speaker dynamics)."""
@@ -1584,31 +1638,29 @@ class PodcastClipsProcessor:
             # Rank by score
             ranked_moments = sorted(scored_moments, key=lambda m: m.viral_score, reverse=True)
 
-            # Filter to top clips (minimum score threshold: 60/100)
+            # Filter to qualified clips (minimum score threshold: 60/100)
             qualified_moments = [m for m in ranked_moments if m.viral_score >= 60.0]
 
-            # If we don't have enough qualified clips, include lower-scoring ones up to max_count
-            if len(qualified_moments) < max_count:
-                logger.warning(f"Only {len(qualified_moments)} clips meet quality threshold (60/100)")
-                qualified_moments = ranked_moments[:max_count]
-
-            # Limit to max count
-            final_moments = qualified_moments[:max_count]
+            # If no clips meet threshold, include the best available ones
+            if not qualified_moments:
+                logger.warning("No clips meet quality threshold (60/100), including top available clips")
+                qualified_moments = ranked_moments[:10]  # Include up to 10 best clips even if below threshold
 
             # Re-index clips
-            for i, moment in enumerate(final_moments):
+            for i, moment in enumerate(qualified_moments):
                 moment.clip_index = i + 1
 
-            logger.info(f"Selected top {len(final_moments)} clips (avg score: {sum(m.viral_score for m in final_moments)/len(final_moments):.1f})")
+            avg_score = sum(m.viral_score for m in qualified_moments) / len(qualified_moments) if qualified_moments else 0
+            logger.info(f"Selected {len(qualified_moments)} clips (avg score: {avg_score:.1f})")
 
-            self.update_progress("scoring", 59, f"Selected {len(final_moments)} top-quality clips")
+            self.update_progress("scoring", 59, f"Selected {len(qualified_moments)} quality clips")
 
-            return final_moments
+            return qualified_moments
 
         except Exception as e:
             logger.error(f"Scoring failed: {e}")
-            # Return original moments if scoring fails (limited to max_count)
-            return viral_moments[:max_count]
+            # Return original moments if scoring fails
+            return viral_moments
 
     def _optimize_hooks(
         self,
@@ -1661,17 +1713,13 @@ class PodcastClipsProcessor:
         generated_clips: List[Dict[str, Any]],
         viral_moments: List[ViralMoment]
     ) -> List[Dict[str, Any]]:
-        """Post-process clips: audio enhancement and AI-powered thumbnail generation."""
-        self.update_progress("post_processing", 96, "Enhancing audio and generating AI thumbnails")
+        """Post-process clips: audio enhancement only (thumbnail generation disabled)."""
+        self.update_progress("post_processing", 96, "Enhancing audio")
 
         try:
-            logger.info("Post-processing clips with AI thumbnail generation")
-
-            # Import AI functions
-            from vendors.AIvideos.gpt import select_best_thumbnail_frame
+            logger.info("Post-processing clips with audio enhancement")
 
             audio_enhancer = AudioEnhancer()
-            thumbnail_gen = ThumbnailGenerator(platform="universal")
 
             enhanced_clips = []
 
@@ -1680,12 +1728,9 @@ class PodcastClipsProcessor:
                 clip_index = clip_data['clip_index']
                 title = clip_data['title']
 
-                # Find corresponding viral moment
-                moment = next((m for m in viral_moments if m.clip_index == clip_index), None)
-
                 logger.info(f"Post-processing clip {clip_index}/{len(generated_clips)}: {title}")
 
-                # 1. Audio enhancement (quick normalize)
+                # Audio enhancement (quick normalize)
                 try:
                     logger.debug(f"Normalizing audio for clip {clip_index}")
                     audio_enhancer.quick_normalize(clip_path, output_path=clip_path)
@@ -1693,77 +1738,8 @@ class PodcastClipsProcessor:
                 except Exception as e:
                     logger.warning(f"Audio normalization failed for clip {clip_index}: {e}")
 
-                # 2. Generate AI-powered thumbnail
-                try:
-                    logger.debug(f"Generating AI thumbnail for clip {clip_index}")
-                    thumbnail_path = clip_path.replace('.mp4', '_thumbnail.jpg')
-
-                    # Extract catchy phrase from viral moment
-                    catchy_phrase = moment.thumbnail_text if moment and moment.thumbnail_text else title[:25]
-
-                    # Get AI-recommended crop style
-                    crop_style = moment.recommended_crop if moment and moment.recommended_crop else "mid"
-
-                    # Extract multiple candidate frames for AI selection
-                    candidate_frames = self._extract_candidate_frames(clip_path, num_frames=5)
-
-                    if candidate_frames and len(candidate_frames) > 0:
-                        # Use AI to select best frame
-                        try:
-                            viral_context = {
-                                'title': title,
-                                'hook': moment.hook if moment else '',
-                                'thumbnail_text': catchy_phrase
-                            }
-
-                            selection_result = select_best_thumbnail_frame(
-                                frame_images=candidate_frames,
-                                viral_context=viral_context,
-                                ai_model=self.ai_model
-                            )
-
-                            selected_frame_index = selection_result.get('selected_frame_index', 0)
-                            logger.info(f"AI selected frame {selected_frame_index} for clip {clip_index} "
-                                      f"(score: {selection_result.get('engagement_score', 0)}) with crop: {crop_style}")
-
-                            # Calculate timestamp for selected frame
-                            frame_timestamp = (selected_frame_index / 5.0) * 5.0  # Frame index to timestamp
-
-                        except Exception as e:
-                            logger.warning(f"AI frame selection failed for clip {clip_index}: {e}")
-                            frame_timestamp = 2.0  # Fallback to 2 seconds
-                    else:
-                        # Fallback if frame extraction fails
-                        logger.warning(f"Frame extraction failed for clip {clip_index}, using default timestamp")
-                        frame_timestamp = 2.0
-
-                    # Generate thumbnail with red box overlay and AI-recommended cropping
-                    red_box_config = {
-                        'box_color': self.thumbnail_config['box_color'],
-                        'text_color': self.thumbnail_config['text_color'],
-                        'position': self.thumbnail_config['position'],
-                        'opacity': self.thumbnail_config['opacity']
-                    }
-
-                    thumbnail_gen.generate_thumbnail(
-                        video_path=clip_path,
-                        title=title,
-                        output_path=thumbnail_path,
-                        timestamp=frame_timestamp,
-                        catchy_phrase=catchy_phrase,
-                        use_red_box=True,
-                        apply_blur=True,
-                        blur_intensity=self.thumbnail_config['blur_intensity'],
-                        red_box_config=red_box_config,
-                        crop_style=crop_style  # AI-recommended cropping
-                    )
-
-                    clip_data['thumbnail_path'] = thumbnail_path
-                    logger.debug(f"AI thumbnail generated for clip {clip_index}")
-
-                except Exception as e:
-                    logger.warning(f"Thumbnail generation failed for clip {clip_index}: {e}", exc_info=True)
-                    clip_data['thumbnail_path'] = None
+                # Thumbnail generation disabled - not needed for now
+                clip_data['thumbnail_path'] = None
 
                 enhanced_clips.append(clip_data)
 
@@ -2014,17 +1990,33 @@ class PodcastClipsProcessor:
         logger.info("Cleaning up resources")
 
         try:
+            # Clean up face tracker (clears accumulated face positions, tracks, etc.)
             if self.face_tracker:
                 self.face_tracker.cleanup()
+                self.face_tracker = None
 
+            # Clean up clip generator
             if self.clip_generator:
                 self.clip_generator.cleanup()
+                self.clip_generator = None
+
+            # Clean up subtitle generator
+            if self.subtitle_generator:
+                self.subtitle_generator = None
+
+            # Clear speaker segments
+            if hasattr(self, 'speaker_segments') and self.speaker_segments:
+                self.speaker_segments = None
 
             # Clean up temp directory
             if self.temp_dir.exists():
                 import shutil
                 shutil.rmtree(self.temp_dir, ignore_errors=True)
                 logger.info(f"Cleaned up temp directory: {self.temp_dir}")
+
+            # Force garbage collection to release memory
+            gc.collect()
+            logger.info("Garbage collection completed")
 
         except Exception as e:
             logger.warning(f"Cleanup encountered error: {e}")

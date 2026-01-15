@@ -212,9 +212,9 @@ export default function VideosPage() {
 
       toast({
         title: t('sync.videosSynced'),
-        description: t('sync.syncedFromJobs', { 
-          count: result.registered_videos, 
-          jobs: result.processed_jobs 
+        description: t('sync.syncedFromJobs', {
+          count: result.registered_videos,
+          jobs: result.processed_jobs
         }),
       });
 
@@ -249,9 +249,9 @@ export default function VideosPage() {
 
       toast({
         title: t('sync.orphanedSynced'),
-        description: t('sync.registeredOrphaned', { 
-          count: result.registered_videos, 
-          files: result.scanned_files 
+        description: t('sync.registeredOrphaned', {
+          count: result.registered_videos,
+          files: result.scanned_files
         }),
       });
 
@@ -448,7 +448,7 @@ export default function VideosPage() {
 
       toast({
         title: t('videosDeleted'),
-        description: t('successfullyDeleted', { 
+        description: t('successfullyDeleted', {
           count: selectedCount,
           plural: selectedCount !== 1 ? 's' : ''
         }),
@@ -553,25 +553,20 @@ export default function VideosPage() {
   ).length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div className="flex-1 space-y-2">
-          <div className="inline-block">
-            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-              {t('title')}
-            </h1>
-            <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
-          </div>
-          <p className="text-base text-muted-foreground max-w-2xl">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {t('description')}
             {selectedVideos.size > 0 && (
-              <span className="ml-2 text-primary font-semibold">
+              <span className="ml-2 font-medium">
                 · {selectedVideos.size} {t('selected')}
               </span>
             )}
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap justify-end">
+        <div className="flex gap-2 flex-wrap justify-start sm:justify-end">
           {/* View Toggle */}
           <div className="flex gap-0.5 border rounded-lg p-0.5 bg-muted/50">
             <Button
@@ -638,7 +633,7 @@ export default function VideosPage() {
         {/* Videos List */}
         {loading ? (
           viewMode === 'grid' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
               {Array.from({ length: 8 }).map((_, i) => (
                 <VideoCardSkeleton key={i} variant="grid" />
               ))}
@@ -669,7 +664,7 @@ export default function VideosPage() {
         ) : (
           <>
             {viewMode === 'grid' ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5">
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
                 {filteredVideos.map((video) => (
                   <GridVideoCard
                     key={video.id}
@@ -702,7 +697,7 @@ export default function VideosPage() {
 
             {/* Load More Button */}
             {hasMore && !searchTerm && (
-              <div className="flex justify-center pt-6">
+              <div className="flex justify-center pt-4 sm:pt-6 px-4 sm:px-0">
                 <Button
                   variant="outline"
                   onClick={loadMoreVideos}
@@ -726,7 +721,7 @@ export default function VideosPage() {
             {/* Loading More Skeletons */}
             {loadingMore && (
               viewMode === 'grid' ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-5 mt-5">
+                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5 mt-4 sm:mt-5">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <VideoCardSkeleton key={i} variant="grid" />
                   ))}
@@ -768,7 +763,7 @@ export default function VideosPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t('dialog.deleteTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t.rich('dialog.deleteDescription', { 
+              {t.rich('dialog.deleteDescription', {
                 filename: videoToDelete?.filename || '',
                 strong: (chunks) => <strong>{chunks}</strong>
               })}
@@ -792,7 +787,7 @@ export default function VideosPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>{t('dialog.deleteMultipleTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t.rich('dialog.deleteMultipleDescription', { 
+              {t.rich('dialog.deleteMultipleDescription', {
                 count: selectedVideos.size,
                 plural: selectedVideos.size !== 1 ? 's' : '',
                 strong: (chunks) => <strong>{chunks}</strong>

@@ -152,9 +152,10 @@ class BrainrotRequest(BaseModel):
 class PodcastClipsRequest(BaseModel):
     """Request model for podcast clips workflow - generates viral short-form videos from podcasts."""
     youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
-    aiModel: str = Field(default="gemini-2.0-flash", description="AI model for viral moment detection")
-    whisperModel: str = Field(default="base", description="Whisper model size: tiny, base, small, medium, large")
-    maxClipCount: int = Field(default=15, ge=3, le=30, description="Maximum number of clips to generate (AI decides actual count based on viral potential)")
+    # AI/Transcription models are hardcoded in processor - these fields kept for compatibility but ignored
+    aiModel: str = Field(default="gemini-3-flash-preview", description="AI model (hardcoded, ignored)")
+    whisperModel: str = Field(default="turbo", description="Whisper model (hardcoded to turbo)")
+    # maxClipCount removed - AI decides optimal clip count based on content quality
     minDuration: int = Field(default=30, ge=15, le=60, description="Minimum clip duration in seconds")
     maxDuration: int = Field(default=60, ge=30, le=120, description="Maximum clip duration in seconds")
     useGPU: bool = Field(default=True, description="Use GPU acceleration for processing")
@@ -170,16 +171,16 @@ class PodcastClipsRequest(BaseModel):
 
     viralFocusKeywords: List[str] = Field(default=[], description="Optional keywords to prioritize when detecting viral moments")
 
-    # Mixed-mode content detection options
-    enableMixedMode: bool = Field(default=True, description="Enable horizontal content mode for screen recordings/articles")
+    # Mixed-mode content detection options (always enabled in processor)
+    enableMixedMode: bool = Field(default=True, description="Enable horizontal content mode (always on)")
     faceLossThreshold: float = Field(default=1.0, ge=0.5, le=3.0, description="Seconds without face to trigger horizontal mode")
     faceReturnThreshold: float = Field(default=0.5, ge=0.2, le=2.0, description="Seconds with face to return to face mode")
     minSegmentDuration: float = Field(default=0.5, ge=0.3, le=2.0, description="Minimum segment duration to avoid flicker (seconds)")
-    useOCR: bool = Field(default=True, description="Use OCR for text-based content detection")
+    useOCR: bool = Field(default=True, description="Use OCR for text detection (always on)")
     transitionDuration: float = Field(default=0.5, ge=0.2, le=1.0, description="Crossfade duration between modes (seconds)")
 
-    # Phase 2: Speaker diarization options (who speaks when)
-    enableSpeakerDiarization: bool = Field(default=True, description="Enable speaker diarization to identify who speaks when")
+    # Phase 2: Speaker diarization options (always enabled in processor)
+    enableSpeakerDiarization: bool = Field(default=True, description="Enable speaker diarization (always on)")
     targetSpeaker: Optional[str] = Field(default=None, description="Target specific speaker (e.g., 'SPEAKER_00'). Leave empty for all speakers.")
     minSpeakerPercentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Minimum percentage of time target speaker must speak in clip")
     requireExchange: bool = Field(default=False, description="Require clips to have multiple speakers (exchanges)")

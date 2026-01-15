@@ -154,7 +154,7 @@
     },
     "cta": {
       "title": "Pronto para Criar Vídeos Incríveis?",
-      "subtitle": "Junte-se aos criadores que usam o VideoHelper para automatizar seu fluxo de trabalho de produção de vídeo",
+      "subtitle": "Junte-se aos criadores que usam o ClipForge para automatizar seu fluxo de trabalho de produção de vídeo",
       "start": "Começar Agora",
       "demo": "Ver Demonstração"
     },
@@ -178,11 +178,11 @@
         "blog": "Blog",
         "contact": "Contato"
       },
-      "copyright": "© {year} VideoHelper. Todos os direitos reservados."
+      "copyright": "© {year} ClipForge. Todos os direitos reservados."
     }
   },
   "login": {
-    "title": "VideoHelper",
+    "title": "ClipForge",
     "subtitle": "Plataforma de Geração de Vídeos com IA",
     "username": "Nome de Usuário",
     "password": "Senha",
@@ -203,7 +203,7 @@
     }
   },
   "sidebar": {
-    "appName": "VideoHelper",
+    "appName": "ClipForge",
     "welcomeMessage": "Bem-vindo, {username}",
     "sections": {
       "create": "Criar",
@@ -289,7 +289,7 @@
       "shadowLayers": "Camadas de Sombra",
       "soft": "Suave",
       "standard": "Padrão",
-      "professional": "Profissional", 
+      "professional": "Profissional",
       "moreLayers": "Mais camadas = efeito 3D mais profundo, mas tempo de processamento maior",
       "textColor": "Cor do Texto",
       "shadowLayer1": "Camada de Sombra 1",
@@ -436,6 +436,7 @@
     "enterValidUrl": "Por favor, insira uma URL válida de podcast do YouTube",
     "jobStarted": "🚀 Trabalho Iniciado",
     "generatingClips": "Gerando clipes virais do podcast (máx: {max})",
+    "generatingClipsAuto": "A IA está analisando o podcast e vai gerar clipes com base na qualidade do conteúdo",
     "error": "Erro",
     "clipsGenerated": "🎉 Clipes Gerados!",
     "successfullyCreated": "Criados com sucesso {count} clipes virais",
@@ -590,7 +591,7 @@
       "clearSelection": "Limpar Seleção"
     },
     "sync": {
-      "title": "Sincronizar Vídeos", 
+      "title": "Sincronizar Vídeos",
       "description": "Sincronizar vídeos dos resultados de jobs ou escanear por arquivos órfãos",
       "fromJobs": "Sincronizar de Jobs",
       "fromJobsDesc": "Registrar vídeos de trabalhos concluídos no banco de dados",
@@ -667,7 +668,7 @@
   "jobNotification": {
     "jobStartedSuccessfully": "Trabalho Iniciado com Sucesso",
     "jobInProgress": "Trabalho em Andamento",
-    "brainrotCompilation": "Compilação Brainrot", 
+    "brainrotCompilation": "Compilação Brainrot",
     "aiVideoGeneration": "Geração de Vídeo IA",
     "processing": "Processando...",
     "monitorProgress": "Monitorar Progresso",
@@ -749,6 +750,13 @@
     "loading": "Carregando...",
     "loadMore": "Carregar Mais",
     "error": "Erro",
-    "failedToLoad": "Falha ao carregar projetos"
+    "failedToLoad": "Falha ao carregar projetos",
+    "confirmDelete": "Excluir Projeto?",
+    "confirmDeleteDescription": "Tem certeza que deseja excluir \"{title}\"? Isso irá excluir permanentemente o projeto e todos os {clips} clip(s). Esta ação não pode ser desfeita.",
+    "deleteSuccess": "Projeto Excluído",
+    "deleteError": "Falha ao excluir projeto",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "deleting": "Excluindo..."
   }
 }

@@ -143,6 +143,14 @@ try:
 except ImportError:
     TRACKING_METRICS_AVAILABLE = False
 
+# Import YOLO person detector for fallback when face detection fails
+try:
+    from .person_detector_yolo import YOLOPersonDetector, is_yolo_available
+    YOLO_PERSON_DETECTION_AVAILABLE = is_yolo_available()
+except ImportError:
+    YOLO_PERSON_DETECTION_AVAILABLE = False
+
+
 logger = loguru_logger.bind(name="PodcastClips.face_tracker")
 
 
@@ -491,6 +499,29 @@ class FaceTracker:
             self.metrics_calculator = None
             if enable_quality_metrics and not TRACKING_METRICS_AVAILABLE:
                 logger.warning("Quality metrics requested but module not available")
+
+        # YOLO Person Detector - fallback when face detection fails
+        # Enabled by default when YOLO is available
+        self.enable_person_detection = YOLO_PERSON_DETECTION_AVAILABLE
+        self.person_detector = None
+        
+        if self.enable_person_detection:
+            try:
+                from .person_detector_yolo import YOLOPersonDetector
+                self.person_detector = YOLOPersonDetector(
+                    model_name="yolov8m.pt",  # Medium model for good accuracy
+                    confidence_threshold=0.5,
+                    use_gpu=True,  # Use GPU for faster detection
+                    enable_tracking=True
+                )
+                logger.info("YOLO person detection enabled (fallback for face detection)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize person detector: {e}")
+                self.person_detector = None
+                self.enable_person_detection = False
+        else:
+            logger.debug("YOLO person detection not available - face detection only")
+
 
     @staticmethod
     def _validate_face_landmarks(landmarks: dict) -> bool:
@@ -1070,6 +1101,70 @@ class FaceTracker:
 
                         # Store ALL valid faces for multi-face tracking
                         all_faces_by_timestamp[timestamp] = valid_faces
+                
+                # YOLO Person Detection Fallback
+                # If we have fewer than 2 faces but person detector is available,
+                # try to detect persons and estimate face positions from body detection
+                if len(valid_faces) < 2 and self.person_detector is not None:
+                    try:
+                        # Detect persons using YOLO
+                        persons = self.person_detector.detect_with_face_estimates(frame_bgr)
+                        
+                        if len(persons) >= 2:
+                            logger.debug(
+                                f"Frame {frame_num}: Face detection found {len(valid_faces)} faces, "
+                                f"YOLO found {len(persons)} persons - using person detection"
+                            )
+                            
+                            # Create synthetic face boxes from person detections
+                            synthetic_faces = []
+                            for i, person in enumerate(persons[:self.max_tracked_faces]):
+                                face_est = person["face_estimate"]
+                                
+                                # Create FaceBox from estimated face position
+                                # Use slightly lower confidence since this is an estimate
+                                synthetic_face = FaceBox(
+                                    x=face_est["x"],
+                                    y=face_est["y"],
+                                    width=face_est["width"],
+                                    height=face_est["height"],
+                                    confidence=person["confidence"] * 0.85,  # Reduce confidence for estimate
+                                    face_id=person["track_id"] if person["track_id"] else 1000 + i
+                                )
+                                
+                                # Validate synthetic face is in frame
+                                if (synthetic_face.x >= 0 and synthetic_face.y >= 0 and
+                                    synthetic_face.x + synthetic_face.width <= self.video_width and
+                                    synthetic_face.y + synthetic_face.height <= self.video_height):
+                                    synthetic_faces.append(synthetic_face)
+                            
+                            # Merge with existing faces (preferring real face detections)
+                            if synthetic_faces:
+                                # Keep existing real faces, add synthetic ones that don't overlap
+                                for syn_face in synthetic_faces:
+                                    is_duplicate = False
+                                    for real_face in valid_faces:
+                                        iou = self._calculate_iou(syn_face, real_face)
+                                        if iou > 0.3:  # Overlaps with real face
+                                            is_duplicate = True
+                                            break
+                                    if not is_duplicate:
+                                        valid_faces.append(syn_face)
+                                
+                                # Update storage if we now have more faces
+                                if valid_faces:
+                                    valid_faces.sort(key=lambda f: self._calculate_face_priority_score(f), reverse=True)
+                                    face_positions[timestamp] = valid_faces[0]
+                                    all_faces_by_timestamp[timestamp] = valid_faces
+                                    
+                                    if len(valid_faces) >= 2:
+                                        logger.info(
+                                            f"Frame {frame_num}: YOLO fallback added {len(synthetic_faces)} person(s) - "
+                                            f"now tracking {len(valid_faces)} subjects"
+                                        )
+                    except Exception as e:
+                        logger.debug(f"YOLO person detection failed for frame {frame_num}: {e}")
+
 
                 frames_processed += 1
 
@@ -1287,6 +1382,32 @@ class FaceTracker:
         logger.info(f"Detected {len(self.speech_segments)} speech segments")
 
         return self.speech_segments
+
+    def get_faces_at_time(
+        self,
+        timestamp: float,
+        tolerance: float = 0.5
+    ) -> List[FaceBox]:
+        """
+        Get all detected faces near a timestamp from all tracks.
+        
+        This is useful for checking how many subjects are tracked at a given time,
+        including faces from YOLO person detection fallback.
+        
+        Args:
+            timestamp: Time in seconds
+            tolerance: Time tolerance in seconds (default 0.5s)
+            
+        Returns:
+            List of FaceBox objects from all tracks within tolerance
+        """
+        faces = []
+        for track in self.face_tracks:
+            for ts, face in track.positions.items():
+                if abs(ts - timestamp) <= tolerance:
+                    faces.append(face)
+                    break  # Only one face per track per tolerance window
+        return faces
 
     def get_active_speaker_at_time(
         self,
@@ -2202,7 +2323,7 @@ class FaceTracker:
         # Sort faces by size (largest first)
         active_faces.sort(key=lambda f: f.area, reverse=True)
 
-        # Analyze top 2 faces for separation
+        # Analyze top 2 faces for separation score calculation
         face1, face2 = active_faces[0], active_faces[1]
         separation_score = self._calculate_face_separation_score(face1, face2)
 
@@ -2214,7 +2335,7 @@ class FaceTracker:
 
         return {
             "mode": mode,
-            "faces": active_faces[:2],  # Return top 2 faces
+            "faces": active_faces,  # Return ALL active faces for panel detection
             "separation_score": separation_score
         }
 
@@ -2298,6 +2419,54 @@ class FaceTracker:
                 f"(real-time detection failed)"
             )
             return interview_faces
+
+        # Final fallback: Use the 2 largest face tracks' average positions
+        # This works when we have tracks but timestamps don't align
+        if self.face_tracks and len(self.face_tracks) >= 2:
+            # Sort tracks by average area (largest first)
+            sorted_tracks = sorted(
+                [t for t in self.face_tracks if t.positions],
+                key=lambda t: getattr(t, 'avg_area_ratio', 0),
+                reverse=True
+            )
+            
+            if len(sorted_tracks) >= 2:
+                faces = []
+                for track in sorted_tracks[:2]:
+                    # Try to find a position near the timestamp
+                    nearby = [
+                        ts for ts in track.positions.keys()
+                        if abs(ts - timestamp) <= 30.0  # 30 second window
+                    ]
+                    
+                    if nearby:
+                        closest_ts = min(nearby, key=lambda ts: abs(ts - timestamp))
+                        faces.append(track.positions[closest_ts])
+                    elif hasattr(track, 'avg_position') and track.avg_position != (0, 0):
+                        # Create synthetic face from track average
+                        avg_x, avg_y = track.avg_position
+                        avg_ratio = getattr(track, 'avg_area_ratio', 0.05)
+                        frame_area = self.video_width * self.video_height
+                        face_area = avg_ratio * frame_area
+                        avg_size = int(np.sqrt(face_area))
+                        
+                        synthetic = FaceBox(
+                            x=int(avg_x - avg_size/2),
+                            y=int(avg_y - avg_size*0.6),
+                            width=avg_size,
+                            height=int(avg_size * 1.2),
+                            confidence=0.6,
+                            face_id=track.face_id
+                        )
+                        faces.append(synthetic)
+                
+                if len(faces) >= 2:
+                    faces.sort(key=lambda f: f.x)  # Sort left to right
+                    logger.info(
+                        f"Using track-based faces at {timestamp:.1f}s "
+                        f"(created from {len(sorted_tracks)} tracks)"
+                    )
+                    return faces[:2]
 
         return None
 
@@ -2889,14 +3058,83 @@ class FaceTracker:
         )
 
     def cleanup(self):
-        """Clean up resources."""
-        if hasattr(self, 'opencv_detector') and self.opencv_detector is not None:
-            # OpenCV detector doesn't need explicit cleanup
-            pass
-        self.face_positions.clear()
-
+        """
+        Clean up all resources and release memory.
+        
+        This method should be called when the FaceTracker is no longer needed
+        to free up RAM and GPU memory. For 1-hour videos, face tracking can
+        accumulate 50,000+ FaceBox objects.
+        """
+        import gc
+        
+        logger.info("Cleaning up FaceTracker resources...")
+        
+        # Clear face position data (major memory consumer)
+        if hasattr(self, 'face_positions') and self.face_positions:
+            positions_count = len(self.face_positions)
+            self.face_positions.clear()
+            logger.debug(f"Cleared {positions_count} face positions")
+        
+        # Clear face tracks (each track also stores positions dict)
+        if hasattr(self, 'face_tracks') and self.face_tracks:
+            tracks_count = len(self.face_tracks)
+            for track in self.face_tracks:
+                if hasattr(track, 'positions'):
+                    track.positions.clear()
+                if hasattr(track, 'lip_activity_scores'):
+                    track.lip_activity_scores.clear()
+            self.face_tracks.clear()
+            logger.debug(f"Cleared {tracks_count} face tracks")
+        
+        # Clear speech/speaker data
+        if hasattr(self, 'speech_segments'):
+            self.speech_segments.clear()
+        if hasattr(self, 'diarization_segments'):
+            self.diarization_segments.clear()
+        if hasattr(self, 'speaker_to_face_map'):
+            self.speaker_to_face_map.clear()
+        if hasattr(self, 'face_to_speaker_map'):
+            self.face_to_speaker_map.clear()
+        
+        # Clear scene changes
+        if hasattr(self, 'scene_changes'):
+            self.scene_changes.clear()
+        
+        # Release YOLO person detector (can hold GPU memory)
+        if hasattr(self, 'person_detector') and self.person_detector is not None:
+            try:
+                self.person_detector.reset_tracking()
+                # Try to release the YOLO model
+                if hasattr(self.person_detector, 'model'):
+                    del self.person_detector.model
+                self.person_detector = None
+                logger.debug("Released YOLO person detector")
+            except Exception as e:
+                logger.warning(f"Error releasing person detector: {e}")
+        
         # Cleanup enhancement modules
         if hasattr(self, 'face_recognition') and self.face_recognition:
-            self.face_recognition.cleanup()
+            try:
+                self.face_recognition.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up face recognition: {e}")
+        
         if hasattr(self, 'scene_detector') and self.scene_detector:
-            self.scene_detector.cleanup()
+            try:
+                self.scene_detector.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up scene detector: {e}")
+        
+        if hasattr(self, 'av_fusion') and self.av_fusion:
+            self.av_fusion = None
+        
+        if hasattr(self, 'face_cache') and self.face_cache:
+            self.face_cache = None
+        
+        if hasattr(self, 'diarizer') and self.diarizer:
+            self.diarizer = None
+        
+        # Force garbage collection to release memory
+        gc.collect()
+        
+        logger.info("FaceTracker cleanup complete")

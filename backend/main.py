@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Main entry point for the AI Video Generator backend.
+Main entry point for the ClipForge backend.
 
 This script runs the FastAPI application using the reorganized backend structure.
 """
@@ -25,7 +25,7 @@ def main():
     port = int(os.getenv("PORT", "9000"))
     reload = os.getenv("RELOAD", "false").lower() == "true"
     
-    print(f"Starting AI Video Generator API on {host}:{port}")
+    print(f"Starting ClipForge API on {host}:{port}")
     print(f"Working directory: {os.getcwd()}")
     print(f"Backend directory: {backend_dir}")
     print(f"Using containerized backend structure")

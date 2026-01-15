@@ -1,5 +1,5 @@
 /**
- * API Client for VideoHelper
+ * API Client for ClipForge
  * Works with Next.js cookies-based authentication
  */
 
@@ -587,6 +587,21 @@ export async function deleteClip(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
     throw new Error(error.detail || 'Failed to delete clip');
+  }
+  return await res.json();
+}
+
+export async function deletePodcastProject(
+  projectId: string,
+  deleteFiles = true
+): Promise<{ project_id: string; deleted: boolean; clips_deleted: number; files_deleted: number; message: string }> {
+  const res = await apiFetch(
+    `${API_BASE}/api/projects/podcast/${encodeURIComponent(projectId)}?delete_files=${deleteFiles}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to delete project');
   }
   return await res.json();
 }

@@ -1,0 +1,55 @@
+{
+  "video_name": "interview_2_people.mp4",
+  "video_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\videos\\interview_2_people.mp4",
+  "duration": 13.1993125,
+  "fps": 30.001562581384448,
+  "width": 1280,
+  "height": 720,
+  "total_frames": 396,
+  "expected_mode": "split_screen",
+  "detected_mode": "split_screen",
+  "mode_match": true,
+  "face_track_count": 2,
+  "frames_with_faces": 150,
+  "frame_coverage_pct": 37.878787878787875,
+  "avg_simultaneous_faces": 2.0,
+  "max_simultaneous_faces": 2,
+  "face_metrics": [
+    {
+      "face_id": 0,
+      "avg_size_ratio": 0.053717238136574065,
+      "min_size_ratio": 0.051663411458333336,
+      "max_size_ratio": 0.05748263888888889,
+      "confidence_avg": 0.8130283655722936,
+      "confidence_min": 0.8086825877428054,
+      "speech_correlation": 0.7466666666666667,
+      "detection_count": 150,
+      "position_variance_x": 3.365833875868056e-05,
+      "position_variance_y": 8.815586419753036e-06
+    },
+    {
+      "face_id": 1,
+      "avg_size_ratio": 0.03284929108796297,
+      "min_size_ratio": 0.032565104166666664,
+      "max_size_ratio": 0.033502604166666665,
+      "confidence_avg": 0.8006278323133786,
+      "confidence_min": 0.7983060032129288,
+      "speech_correlation": 0.7466666666666667,
+      "detection_count": 150,
+      "position_variance_x": 6.209038628472246e-07,
+      "position_variance_y": 4.20104595336075e-06
+    }
+  ],
+  "mode_segments": [
+    {
+      "start": 0.0,
+      "end": 13.1993125,
+      "mode": "split_screen",
+      "confidence": 0.925
+    }
+  ],
+  "issues": [],
+  "processing_time_seconds": 30.72886848449707,
+  "debug_video_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\outputs\\interview_2_people_debug.mp4",
+  "json_data_path": "F:\\Documentos\\Github\\VideoHelper\\video-processor\\vendors\\PodcastClips\\tests\\outputs\\interview_2_people_data.json"
+}

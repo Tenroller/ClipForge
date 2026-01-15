@@ -1,4 +1,4 @@
--- PostgreSQL database initialization for AI Video Generator
+-- PostgreSQL database initialization for ClipForge
 -- This script sets up the database with optimal settings for the application
 
 -- Set timezone to UTC for consistency
@@ -116,6 +116,6 @@ GRANT ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public TO videohelper_user;
 -- Log successful initialization
 DO $$
 BEGIN
-    RAISE NOTICE 'AI Video Generator PostgreSQL database initialized successfully with tables: jobs, videos';
+    RAISE NOTICE 'ClipForge PostgreSQL database initialized successfully with tables: jobs, videos';
     RAISE NOTICE 'Database optimizations applied for video processing workload';
 END $$;

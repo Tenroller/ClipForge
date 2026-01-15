@@ -84,8 +84,8 @@ class Video(Base):
     """Video model for tracking generated videos."""
     __tablename__ = "videos"
 
-    # Primary key - unique video ID
-    id = Column(UUID(as_uuid=True), primary_key=True)
+    # Primary key - unique video ID (stored as string/varchar in database)
+    id = Column(String, primary_key=True)
     
     # Video metadata
     filename = Column(String, nullable=False)

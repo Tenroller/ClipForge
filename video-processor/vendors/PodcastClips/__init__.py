@@ -19,6 +19,26 @@ Enhanced Features:
 - Smart hook optimization
 """
 
+# =============================================================================
+# FFmpeg DLL Configuration for torio/torchaudio (MUST be FIRST before imports)
+# This enables pyannote.audio speaker diarization on Windows
+# =============================================================================
+import os
+import platform
+if platform.system() == "Windows":
+    FFMPEG_SHARED_BIN = r"C:\ffmpeg-shared\ffmpeg-6.1.1-full_build-shared\bin"
+    if os.path.exists(FFMPEG_SHARED_BIN):
+        # CRITICAL: For Python 3.8+ on Windows, we must use os.add_dll_directory()
+        if hasattr(os, 'add_dll_directory'):
+            try:
+                os.add_dll_directory(FFMPEG_SHARED_BIN)
+            except Exception:
+                pass  # Already added or other issues
+        # Also add to PATH for subprocess calls
+        current_path = os.environ.get("PATH", "")
+        if FFMPEG_SHARED_BIN not in current_path:
+            os.environ["PATH"] = FFMPEG_SHARED_BIN + os.pathsep + current_path
+
 from .processor import PodcastClipsProcessor
 from .face_tracker import FaceTracker
 from .subtitle_generator import SubtitleGenerator

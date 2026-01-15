@@ -559,23 +559,57 @@ class ContentModeDetector:
                     continue  # Skip to next timestamp
 
             # PRIORITY -0.6: GROUP/PANEL DETECTION (3+ people)
-            # If 3 or more faces are detected, use HORIZONTAL mode
-            # Split-screen only works well with 2 people
+            # Distinguish between:
+            # - True panel (many similarly-sized faces) → HORIZONTAL
+            # - 2 speakers + audience (2 large faces + small background) → SPLIT_SCREEN
             if self.face_tracker and hasattr(self.face_tracker, 'detect_face_groups'):
                 face_group_info = self.face_tracker.detect_face_groups(timestamp)
-                num_faces = len(face_group_info.get("faces", []))
+                faces = face_group_info.get("faces", [])
+                num_faces = len(faces)
 
                 if num_faces >= 3:
-                    # Group/panel scenario: Use HORIZONTAL mode
-                    should_be_horizontal = True
-                    should_be_split_screen = False
-
-                    logger.info(
-                        f"[{timestamp:.1f}s] GROUP MODE: "
-                        f"{num_faces} people detected → HORIZONTAL (group/panel)"
+                    # Check if there are 2 DOMINANT faces (main speakers) vs small faces (audience)
+                    # Sort by area (already sorted in detect_face_groups)
+                    face_areas = [f.area / (video_width * video_height) for f in faces]
+                    
+                    # Check if top 2 faces are significantly larger than the rest
+                    top_2_avg = sum(face_areas[:2]) / 2 if len(face_areas) >= 2 else 0
+                    rest_avg = sum(face_areas[2:]) / len(face_areas[2:]) if len(face_areas) > 2 else 0
+                    
+                    # If top 2 faces are at least 2x larger than remaining faces on average,
+                    # this is likely "2 speakers + audience" → use SPLIT_SCREEN
+                    # Also check that top 2 are reasonably sized (>2% of frame each)
+                    MIN_SPEAKER_SIZE = 0.02  # 2% of frame
+                    DOMINANCE_RATIO = 2.0  # Top 2 must be 2x larger than rest
+                    
+                    has_dominant_speakers = (
+                        len(face_areas) >= 2 and
+                        face_areas[0] >= MIN_SPEAKER_SIZE and
+                        face_areas[1] >= MIN_SPEAKER_SIZE and
+                        (rest_avg == 0 or top_2_avg / rest_avg >= DOMINANCE_RATIO)
                     )
+                    
+                    if has_dominant_speakers:
+                        # 2 main speakers + background audience → SPLIT_SCREEN
+                        should_be_horizontal = False
+                        should_be_split_screen = True
+                        
+                        logger.info(
+                            f"[{timestamp:.1f}s] 2 SPEAKERS + AUDIENCE: "
+                            f"top2_avg={top_2_avg*100:.1f}%, rest_avg={rest_avg*100:.1f}% "
+                            f"→ SPLIT_SCREEN"
+                        )
+                        target_mode = ContentMode.SPLIT_SCREEN
+                    else:
+                        # True panel/group scenario: Use HORIZONTAL mode
+                        should_be_horizontal = True
+                        should_be_split_screen = False
 
-                    target_mode = ContentMode.HORIZONTAL
+                        logger.info(
+                            f"[{timestamp:.1f}s] GROUP MODE: "
+                            f"{num_faces} similarly-sized faces → HORIZONTAL (panel)"
+                        )
+                        target_mode = ContentMode.HORIZONTAL
 
                     # Check if mode changed
                     if target_mode != current_mode:
@@ -595,6 +629,83 @@ class ContentModeDetector:
             # check if this is truly a wide audience shot or just a temporary
             # detection gap in an interview scenario
             if not current_frame_has_actual_detection:
+                # NEW: First check if we have 2+ faces from any source (including YOLO)
+                # This is more reliable than layout analysis for detecting interviews
+                # with profile faces that the primary detector missed
+                yolo_detected_interview = False
+                
+                # Log face_tracker status once per video at first timestamp
+                if timestamp == start_time:
+                    has_tracker = self.face_tracker is not None
+                    has_method = hasattr(self.face_tracker, 'get_faces_at_time') if has_tracker else False
+                    num_tracks = len(self.face_tracker.face_tracks) if (has_tracker and self.face_tracker.face_tracks) else 0
+                    logger.info(
+                        f"[Content Detector] Face tracker status: "
+                        f"has_tracker={has_tracker}, has_method={has_method}, "
+                        f"num_tracks={num_tracks}"
+                    )
+                
+                if (self.face_tracker and 
+                    hasattr(self.face_tracker, 'get_faces_at_time')):
+                    faces_at_time = self.face_tracker.get_faces_at_time(timestamp, tolerance=1.0)
+                    num_tracks = len(self.face_tracker.face_tracks) if self.face_tracker.face_tracks else 0
+                    
+                    # Log every 10 seconds to avoid spam but still get diagnostics
+                    if int(timestamp) % 10 == 0:
+                        logger.info(
+                            f"[{timestamp:.1f}s] Track check: "
+                            f"tracks={num_tracks}, faces_at_time={len(faces_at_time)}"
+                        )
+                    
+                    # Also check if we have exactly 2 tracks globally (interview scenario)
+                    # This works even if we can't find faces at this specific timestamp
+                    if len(faces_at_time) >= 2:
+                        yolo_detected_interview = True
+                        logger.info(
+                            f"[{timestamp:.1f}s] 🎯 YOLO/face backup: {len(faces_at_time)} subjects "
+                            f"detected in tracks → SPLIT_SCREEN"
+                        )
+                        should_be_horizontal = False
+                        should_be_split_screen = True
+                        target_mode = ContentMode.SPLIT_SCREEN
+                        
+                        # Check if mode changed
+                        if target_mode != current_mode:
+                            if timestamp > segment_start:
+                                confidence = self._calculate_segment_confidence(
+                                    content_scores, segment_start, timestamp
+                                )
+                                segments.append(ContentSegment(
+                                    segment_start, timestamp, current_mode, confidence
+                                ))
+                            segment_start = timestamp
+                            current_mode = target_mode
+                        continue  # Skip to next timestamp
+                    elif num_tracks >= 2:
+                        # Fallback: We have 2+ tracks globally, likely an interview
+                        # This handles cases where timestamps don't align perfectly
+                        # or when YOLO creates 3 tracks for 2-3 visible people
+                        yolo_detected_interview = True
+                        logger.info(
+                            f"[{timestamp:.1f}s] 🎯 GLOBAL interview: {num_tracks} face tracks detected "
+                            f"(no faces at exact timestamp) → SPLIT_SCREEN"
+                        )
+                        should_be_horizontal = False
+                        should_be_split_screen = True
+                        target_mode = ContentMode.SPLIT_SCREEN
+                        
+                        if target_mode != current_mode:
+                            if timestamp > segment_start:
+                                confidence = self._calculate_segment_confidence(
+                                    content_scores, segment_start, timestamp
+                                )
+                                segments.append(ContentSegment(
+                                    segment_start, timestamp, current_mode, confidence
+                                ))
+                            segment_start = timestamp
+                            current_mode = target_mode
+                        continue
+                
                 # Analyze scene layout from historical face tracking data
                 scene_layout = self._analyze_scene_layout_from_tracks(timestamp, window_seconds=5.0)
                 
@@ -1456,7 +1567,9 @@ class ContentModeDetector:
         confidence = 0.5
         
         # INTERVIEW: Exactly 2 tracks with medium-sized faces
+        # OR: Exactly 2 tracks with YOLO-estimated faces (which are smaller but consistent)
         if num_tracks == 2:
+            # Standard interview detection (normal-sized faces)
             if (INTERVIEW_MIN_FACE_SIZE <= avg_face_size <= INTERVIEW_MAX_FACE_SIZE and
                 face_size_variance < 0.05):
                 layout_type = "interview"
@@ -1465,6 +1578,20 @@ class ContentModeDetector:
                     f"[{timestamp:.1f}s] GLOBAL Interview layout: "
                     f"tracks={num_tracks}, size={avg_face_size:.2%}, "
                     f"variance={face_size_variance:.3f}"
+                )
+            # NEW: YOLO-estimated interview (smaller faces but consistent 2-person setup)
+            # YOLO face estimates are ~18% of body height, resulting in ~1.5-3% face area
+            # for seated interview subjects. This is smaller than normal face detection
+            # but still valid for interview scenarios.
+            elif (avg_face_size >= 0.015 and  # Above tiny audience threshold
+                  avg_face_size < INTERVIEW_MIN_FACE_SIZE and  # Below normal interview
+                  face_size_variance < 0.03):  # Very consistent sizes (typical of YOLO estimates)
+                layout_type = "interview"
+                confidence = 0.75  # Lower confidence for YOLO-based detection
+                logger.debug(
+                    f"[{timestamp:.1f}s] YOLO-estimated interview layout: "
+                    f"tracks={num_tracks}, size={avg_face_size:.2%}, "
+                    f"variance={face_size_variance:.3f} (YOLO face estimates)"
                 )
         
         # TALKING HEAD: 1 track with medium-to-large face
@@ -1482,7 +1609,9 @@ class ContentModeDetector:
                 confidence = 0.6
         
         # AUDIENCE: 3+ tracks OR high size variance OR very small faces
-        elif num_tracks >= 3 or face_size_variance > 0.08 or avg_face_size < 0.03:
+        # Relaxed threshold from 0.03 to 0.015 to account for YOLO face estimates
+        # which are inherently smaller than actual face detections
+        elif num_tracks >= 3 or face_size_variance > 0.08 or avg_face_size < 0.015:
             layout_type = "audience"
             confidence = 0.7
             logger.debug(

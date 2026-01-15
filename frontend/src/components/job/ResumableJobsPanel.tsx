@@ -87,7 +87,7 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
   const getWorkflowName = (workflow: string) => {
     switch (workflow) {
       case 'moneyprinter':
-        return 'AI Video Generator';
+        return 'ClipForge AI Creator';
       case 'brainrot':
         return 'Brainrot Compilation';
       default:

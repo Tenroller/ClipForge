@@ -24,6 +24,34 @@ if sys.platform == "win32":
         subprocess.run(['chcp', '65001'], shell=True, capture_output=True)
     except Exception:
         pass
+    
+    # ==========================================================================
+    # FFmpeg Configuration for torio/torchaudio (used by pyannote.audio)
+    # This MUST be done before any import of torchaudio or pyannote
+    # ==========================================================================
+    FFMPEG_SHARED_BIN = r"C:\ffmpeg-shared\ffmpeg-6.1.1-full_build-shared\bin"
+    FFMPEG_STATIC_BIN = r"C:\ffmpeg\bin"
+    
+    if os.path.exists(FFMPEG_SHARED_BIN):
+        # CRITICAL: For Python 3.8+ on Windows, we must use os.add_dll_directory()
+        # to allow torio/torchaudio to find FFmpeg DLLs
+        if hasattr(os, 'add_dll_directory'):
+            os.add_dll_directory(FFMPEG_SHARED_BIN)
+        # Add to PATH for subprocess calls
+        current_path = os.environ.get("PATH", "")
+        if FFMPEG_SHARED_BIN not in current_path:
+            os.environ["PATH"] = FFMPEG_SHARED_BIN + os.pathsep + current_path
+        os.environ["FFMPEG_BINARY"] = os.path.join(FFMPEG_SHARED_BIN, "ffmpeg.exe")
+    elif os.path.exists(FFMPEG_STATIC_BIN):
+        # Fallback to static FFmpeg - suppress torio warnings
+        import warnings
+        import logging as std_logging
+        warnings.filterwarnings("ignore", message=".*FFmpeg.*extension.*")
+        std_logging.getLogger("torio._extension.utils").setLevel(std_logging.ERROR)
+        current_path = os.environ.get("PATH", "")
+        if FFMPEG_STATIC_BIN not in current_path:
+            os.environ["PATH"] = FFMPEG_STATIC_BIN + os.pathsep + current_path
+        os.environ["FFMPEG_BINARY"] = os.path.join(FFMPEG_STATIC_BIN, "ffmpeg.exe")
 
 # Import the proper logging configuration
 sys.path.append(str(Path(__file__).parent.parent))

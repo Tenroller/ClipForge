@@ -115,15 +115,13 @@ class SimpleUserStore:
     def __init__(self):
         # Default user credentials (change via environment variables)
         self.username = os.getenv("AUTH_USERNAME", "admin")
-        self._password_plain = os.getenv("AUTH_PASSWORD", "admin123")
-        logger.info(f"Loaded plain password: {self._password_plain} (type: {type(self._password_plain)})")
+        self._password_plain = os.getenv("AUTH_PASSWORD", "tenroller")
         self._password_hash = None  # Lazy initialization
 
     @property
     def password_hash(self):
         """Lazy hash the password on first access."""
         if self._password_hash is None:
-            logger.info(f"Hashing password: {self._password_plain} (type: {type(self._password_plain)})")
             self._password_hash = hash_password(self._password_plain)
         return self._password_hash
 
@@ -131,7 +129,6 @@ class SimpleUserStore:
         """Verify username and password."""
         if username != self.username:
             return False
-        logger.info(f"Verifying password for user '{username}'")
         return verify_password(password, self.password_hash)
 
     def get_user_info(self, username: str) -> Optional[dict]:

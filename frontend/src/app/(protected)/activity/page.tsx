@@ -105,7 +105,8 @@ export default function ActivityPage() {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
     try {
       return new Date(dateString).toLocaleString();
     } catch {
@@ -130,13 +131,14 @@ export default function ActivityPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">{t('title')}</h1>
-          <p className="text-muted-foreground mt-2">
+          <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {t('description')}
           </p>
         </div>
         <Button
           variant="outline"
+          size="sm"
           onClick={() => refetch()}
           disabled={isLoading}
         >

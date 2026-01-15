@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-VideoHelper is an enterprise-grade AI video generation platform with dual workflows, cloud GPU acceleration, and comprehensive monitoring capabilities. It combines MoneyPrinter (AI script generation + stock footage) and Brainrot (YouTube compilation videos) workflows into a unified system.
+ClipForge is an enterprise-grade AI video generation platform with dual workflows, cloud GPU acceleration, and comprehensive monitoring capabilities. It combines MoneyPrinter (AI script generation + stock footage) and Brainrot (YouTube compilation videos) workflows into a unified system.
 
 **Tech Stack:**
+
 - **Backend:** FastAPI (Python), PostgreSQL (mandatory), Redis (optional), SQLAlchemy ORM
 - **Frontend:** React 18 + TypeScript + Vite, Tailwind CSS, shadcn/ui components
 - **Video Processing:** MoviePy, FFmpeg, OpenCV
@@ -16,6 +17,7 @@ VideoHelper is an enterprise-grade AI video generation platform with dual workfl
 ## Development Commands
 
 ### Backend Development
+
 ```bash
 # Start backend server (development mode with auto-reload)
 cd backend
@@ -32,6 +34,7 @@ pytest --cov=. --cov-report=html        # Run with coverage
 ```
 
 ### Frontend Development
+
 ```bash
 cd frontend
 npm install          # Install dependencies
@@ -41,6 +44,7 @@ npm run preview      # Preview production build
 ```
 
 ### Database Setup
+
 ```bash
 # Using Docker (recommended for development)
 docker run -d \
@@ -62,6 +66,7 @@ python -m backend.migrations.001_add_resume_columns
 ```
 
 ### Docker Commands
+
 ```bash
 # Full stack deployment
 docker compose up --build -d
@@ -78,6 +83,7 @@ docker compose down
 ```
 
 ### All-in-One Development Start
+
 ```bash
 # Start all services (frontend, backend, video-processor)
 ./start.sh          # Linux/macOS
@@ -151,6 +157,7 @@ frontend/
 ### Video Generation Workflows
 
 **MoneyPrinter Flow** (`/api/moneyprinter/generate`):
+
 1. AI script generation from subject (using Gemini)
 2. Extract search terms from script
 3. Download stock videos from Pexels
@@ -159,12 +166,14 @@ frontend/
 6. Compose final video with MoviePy
 
 **Brainrot Flow** (`/api/brainrot/generate`):
+
 1. Download YouTube video via yt-dlp
 2. Scene detection and splitting
 3. Create compilation videos with specified duration
 4. Optional background video overlay
 
 **Key Implementation Details:**
+
 - Both workflows use `backend/job_queue_unified.py` for async processing
 - Job status persisted in PostgreSQL via `backend/database.py`
 - YouTube operations centralized in `backend/utils/youtube.py` (always use this, never duplicate yt-dlp logic)
@@ -173,6 +182,7 @@ frontend/
 ## Critical Patterns
 
 ### Service Layer Pattern
+
 All business logic goes in service classes, **not** in route handlers:
 
 ```python
@@ -196,6 +206,7 @@ class VideoGenerationService:
 ```
 
 ### Database Operations
+
 PostgreSQL is **mandatory**. Use the job store pattern:
 
 ```python
@@ -208,6 +219,7 @@ job = job_store.get_job(job_id)
 ```
 
 ### Logging Pattern
+
 Use centralized logging with structured context:
 
 ```python
@@ -221,6 +233,7 @@ log_job_event(logger, job_id, workflow, "tts_complete", duration=15.3, voice="af
 ```
 
 ### Error Handling
+
 Use standardized error handling:
 
 ```python
@@ -235,6 +248,7 @@ except Exception as e:
 ```
 
 ### YouTube Operations
+
 **Always** use the centralized YouTube utility:
 
 ```python
@@ -254,6 +268,7 @@ result = download_video(
 **Never** duplicate yt-dlp logic in workflow code.
 
 ### Job Resume & Artifact Persistence
+
 Jobs can be resumed after failure/cancellation:
 
 ```python
@@ -287,6 +302,7 @@ config = AppConfig.from_env()
 ```
 
 **Required Environment Variables:**
+
 ```bash
 # Database (MANDATORY)
 DATABASE_URL=postgresql://videohelper_user:videohelper_password@localhost:5432/videohelper
@@ -303,6 +319,7 @@ LOG_LEVEL=INFO
 ```
 
 **Environment File Locations:**
+
 1. `.env` (project root, canonical)
 2. `backend/.env` (optional override)
 3. `backend/vendors/moneyprinter/.env` (legacy override)
@@ -312,15 +329,18 @@ LOG_LEVEL=INFO
 All routes follow REST conventions with `/api` prefix:
 
 **Authentication:**
+
 - `POST /api/auth/login` - Login with username/password
 - `POST /api/auth/logout` - Logout
 - `GET /api/auth/me` - Get current user info
 
 **Video Generation (requires authentication):**
+
 - `POST /api/moneyprinter/generate` - MoneyPrinter workflow
 - `POST /api/brainrot/generate` - Brainrot workflow
 
 **Job Management:**
+
 - `GET /api/jobs` - List jobs (with filtering)
 - `GET /api/jobs/{job_id}` - Get job status
 - `POST /api/jobs/{job_id}/cancel` - Cancel job
@@ -328,6 +348,7 @@ All routes follow REST conventions with `/api` prefix:
 - `GET /api/jobs/{job_id}/lineage` - Get job ancestry/descendants
 
 **System:**
+
 - `GET /api/health` - Health check
 - `GET /api/models` - Available AI models
 - `GET /api/voices` - Available TTS voices
@@ -335,18 +356,21 @@ All routes follow REST conventions with `/api` prefix:
 - `GET /api/cache/stats` - Cache statistics
 
 **Files:**
+
 - `GET /api/download` - Download generated files
 - `GET /api/list-videos` - List videos in directory
 
 ## Testing
 
 Tests located in `backend/tests/`:
+
 - `test_api.py` - API endpoint tests
 - `test_enhanced_features.py` - Enterprise features
 - `test_models.py` - Data validation
 - `test_job_management.py` - Job lifecycle tests
 
 Use FastAPI test client for API tests:
+
 ```python
 from fastapi.testclient import TestClient
 from backend.app import app
@@ -366,6 +390,7 @@ def test_generate_video():
 ## Common Development Tasks
 
 ### Adding a New API Endpoint
+
 1. Define Pydantic models in `backend/models/requests.py`
 2. Create service method in appropriate `backend/services/*.py`
 3. Add route handler in `backend/api/routes/*.py`
@@ -373,6 +398,7 @@ def test_generate_video():
 5. Add tests in `backend/tests/`
 
 ### Adding a New Video Processing Step
+
 1. Implement logic in vendor directory (`backend/vendors/AIvideos/` or `backend/vendors/Compilation/`)
 2. Update job progress via `job_store.update_job_progress()`
 3. Log events using `log_job_event()`
@@ -380,7 +406,9 @@ def test_generate_video():
 5. Update frontend UI to show new step in progress tracking
 
 ### Working with Database Migrations
+
 Migrations in `backend/migrations/`:
+
 ```bash
 python -m backend.migrations.001_add_resume_columns
 ```
@@ -411,11 +439,11 @@ Migrations are idempotent and safe to re-run.
 ## Authentication
 
 JWT-based authentication with localStorage storage (frontend):
+
 - Demo accounts: `admin/admin123`, `demo/demo123`
 - Tokens stored in localStorage
 - Protected routes require valid token
 - Session persists until logout or token expiration
-
 
 ## Libraries
 

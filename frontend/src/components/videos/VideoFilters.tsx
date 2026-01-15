@@ -36,7 +36,7 @@ export default function VideoFilters({
   return (
     <Card className="border-2 rounded-2xl bg-gradient-to-br from-card/90 to-card/50 backdrop-blur-md shadow-lg hover:shadow-xl transition-all duration-300">
       <CardContent className="p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 sm:gap-5">
           {/* Search */}
           <div className="md:col-span-2">
             <Label htmlFor="search" className="flex items-center gap-2 mb-2.5 font-semibold text-sm">

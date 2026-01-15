@@ -105,9 +105,8 @@ export default function GridVideoCard({
                 alt={video.filename}
                 fill
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                className={`object-cover transition-all duration-500 group-hover:scale-110 group-hover:brightness-110 ${
-                  imageLoaded ? 'opacity-100' : 'opacity-0'
-                }`}
+                className={`object-cover transition-all duration-500 group-hover:scale-110 group-hover:brightness-110 ${imageLoaded ? 'opacity-100' : 'opacity-0'
+                  }`}
                 onLoad={() => setImageLoaded(true)}
               />
             </>
@@ -148,7 +147,7 @@ export default function GridVideoCard({
         </div>
 
         {/* Content Section */}
-        <div className="p-5 space-y-4">
+        <div className="p-4 sm:p-5 space-y-3 sm:space-y-4">
           {/* Title and Workflow Badge */}
           <div className="space-y-2.5">
             <div className="flex items-start justify-between gap-2">
@@ -165,13 +164,12 @@ export default function GridVideoCard({
               {video.metadata?.viral_score !== undefined && video.metadata.viral_score > 0 && (
                 <Badge
                   variant={video.metadata.viral_score >= 90 ? "default" : video.metadata.viral_score >= 80 ? "secondary" : "outline"}
-                  className={`text-xs font-semibold shadow-sm ${
-                    video.metadata.viral_score >= 90
+                  className={`text-xs font-semibold shadow-sm ${video.metadata.viral_score >= 90
                       ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white border-orange-400/30'
                       : video.metadata.viral_score >= 80
-                      ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white border-yellow-400/30'
-                      : ''
-                  }`}
+                        ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white border-yellow-400/30'
+                        : ''
+                    }`}
                 >
                   <TrendingUp className="size-3 mr-1" />
                   {video.metadata.viral_score}
@@ -219,7 +217,7 @@ export default function GridVideoCard({
               variant="outline"
               size="sm"
               onClick={() => onDownload(video)}
-              className="flex-1 h-10 font-semibold shadow-sm hover:shadow-md hover:border-primary/50 hover:bg-primary/5 transition-all"
+              className="flex-1 h-11 sm:h-10 font-semibold shadow-sm hover:shadow-md hover:border-primary/50 hover:bg-primary/5 transition-all"
             >
               <Download className="size-4 mr-2" />
               {t('download')}
@@ -229,7 +227,7 @@ export default function GridVideoCard({
                 variant="outline"
                 size="sm"
                 onClick={() => onMarkPosted(video)}
-                className="h-10 px-3.5 shadow-sm hover:shadow-md hover:border-green-500/50 hover:bg-green-500/5 transition-all"
+                className="h-11 sm:h-10 px-3.5 shadow-sm hover:shadow-md hover:border-green-500/50 hover:bg-green-500/5 transition-all"
                 title={t('markAsPosted')}
               >
                 <Check className="size-4" />
@@ -240,7 +238,7 @@ export default function GridVideoCard({
                 variant="outline"
                 size="sm"
                 onClick={() => onDelete(video)}
-                className="h-10 px-3.5 text-destructive hover:text-destructive shadow-sm hover:shadow-md hover:border-destructive/50 hover:bg-destructive/5 transition-all"
+                className="h-11 sm:h-10 px-3.5 text-destructive hover:text-destructive shadow-sm hover:shadow-md hover:border-destructive/50 hover:bg-destructive/5 transition-all"
                 title={t('deleteVideo')}
               >
                 <Trash2 className="size-4" />

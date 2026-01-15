@@ -44,14 +44,14 @@ class SubtitleGenerator:
 
     def __init__(
         self,
-        font_size: int = 50,
+        font_size: int = 55,
         color: str = "#FFFFFF",
         stroke_color: str = "#000000",
-        stroke_width: int = 3,
+        stroke_width: int = 2,
         position: str = "bottom",
         vertical_offset: int = 400,
-        highlight_color: str = "#FFEB3B",
-        max_words_visible: int = 5
+        highlight_color: str = "#6366f1",
+        max_words_visible: int = 4
     ):
         """
         Initialize subtitle generator.
@@ -380,7 +380,7 @@ class SubtitleGenerator:
 
             # Calculate horizontal layout for all words
             total_width = sum(clip_data['clip'].w for clip_data in word_clips)
-            spacing = 30  # Space between words
+            spacing = 15  # Space between words (tighter for better cohesion)
             total_width_with_spacing = total_width + spacing * (len(word_clips) - 1)
 
             # Start x position (centered)
@@ -414,12 +414,12 @@ class SubtitleGenerator:
             # Create rounded background box for current word
             if highlighted_clip_info and current_word_clip:
                 # Make padding proportional to font size for better scaling
-                # Significantly increased padding_y to fully prevent descender cropping
-                padding_x = max(25, int(self.font_size * 0.4))  # 40% of font size, minimum 25px
-                padding_y = max(40, int(self.font_size * 0.8))  # 80% of font size, minimum 40px (extra space for descenders)
+                # Compact padding for a sleeker, more modern look
+                padding_x = max(12, int(self.font_size * 0.22))  # 22% of font size, minimum 12px
+                padding_y = max(8, int(self.font_size * 0.15))  # 15% of font size, minimum 8px
 
-                # Add extra height to box to ensure descenders don't get cropped
-                extra_descender_space = int(self.font_size * 0.3)  # Additional 30% for descenders
+                # Add minimal extra height for descenders
+                extra_descender_space = int(self.font_size * 0.15)  # 15% for descenders
                 box_width = highlighted_clip_info['width'] + 2 * padding_x
                 box_height = highlighted_clip_info['height'] + 2 * padding_y + extra_descender_space
 
@@ -434,7 +434,7 @@ class SubtitleGenerator:
                 bg_box = self.create_rounded_rectangle(
                     width=box_width,
                     height=box_height,
-                    radius=25,
+                    radius=12,  # Smaller radius for a more compact, modern look
                     color=self.highlight_color,
                     duration=duration  # Pass actual word duration to match text clip
                 )
@@ -447,9 +447,9 @@ class SubtitleGenerator:
                     continue
 
                 # Position background box (accounting for padding and extra descender space)
-                # Position box higher to ensure descenders have room at bottom
+                # Center the box vertically around the text
                 box_x = highlighted_clip_info['x'] - padding_x
-                box_y = highlighted_clip_info['y'] - padding_y - int(extra_descender_space * 0.5)
+                box_y = highlighted_clip_info['y'] - padding_y - int(extra_descender_space * 0.3)
                 bg_box = bg_box.with_position((box_x, box_y))
 
                 # Composite: background box first, then all text clips

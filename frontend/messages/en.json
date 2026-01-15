@@ -154,7 +154,7 @@
     },
     "cta": {
       "title": "Ready to Create Amazing Videos?",
-      "subtitle": "Join creators using VideoHelper to automate their video production workflow",
+      "subtitle": "Join creators using ClipForge to automate their video production workflow",
       "start": "Get Started Now",
       "demo": "View Demo"
     },
@@ -178,11 +178,11 @@
         "blog": "Blog",
         "contact": "Contact"
       },
-      "copyright": "© {year} VideoHelper. All rights reserved."
+      "copyright": "© {year} ClipForge. All rights reserved."
     }
   },
   "login": {
-    "title": "VideoHelper",
+    "title": "ClipForge",
     "subtitle": "AI Video Generation Platform",
     "username": "Username",
     "password": "Password",
@@ -203,7 +203,7 @@
     }
   },
   "sidebar": {
-    "appName": "VideoHelper",
+    "appName": "ClipForge",
     "welcomeMessage": "Welcome, {username}",
     "sections": {
       "create": "Create",
@@ -288,7 +288,7 @@
       "fontSize": "Font Size",
       "shadowLayers": "Shadow Layers",
       "soft": "Soft",
-      "standard": "Standard", 
+      "standard": "Standard",
       "professional": "Professional",
       "moreLayers": "More layers = deeper 3D effect, but longer processing time",
       "textColor": "Text Color",
@@ -436,6 +436,7 @@
     "enterValidUrl": "Please enter a valid YouTube podcast URL",
     "jobStarted": "🚀 Job Started",
     "generatingClips": "Generating viral clips from podcast (max: {max})",
+    "generatingClipsAuto": "AI is analyzing the podcast and will generate clips based on content quality",
     "error": "Error",
     "clipsGenerated": "🎉 Clips Generated!",
     "successfullyCreated": "Successfully created {count} viral clips",
@@ -666,7 +667,7 @@
   },
   "jobNotification": {
     "jobStartedSuccessfully": "Job Started Successfully",
-    "jobInProgress": "Job In Progress", 
+    "jobInProgress": "Job In Progress",
     "brainrotCompilation": "Brainrot Compilation",
     "aiVideoGeneration": "AI Video Generation",
     "processing": "Processing...",
@@ -749,6 +750,13 @@
     "loading": "Loading...",
     "loadMore": "Load More",
     "error": "Error",
-    "failedToLoad": "Failed to load projects"
+    "failedToLoad": "Failed to load projects",
+    "confirmDelete": "Delete Project?",
+    "confirmDeleteDescription": "Are you sure you want to delete \"{title}\"? This will permanently delete the project and all {clips} clip(s). This action cannot be undone.",
+    "deleteSuccess": "Project Deleted",
+    "deleteError": "Failed to delete project",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleting": "Deleting..."
   }
 }

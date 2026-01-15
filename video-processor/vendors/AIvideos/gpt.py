@@ -189,6 +189,9 @@ def generate_structured_response(
     This function uses Gemini's Structured Outputs feature to guarantee that
     the AI returns valid JSON matching the provided Pydantic schema.
 
+    Includes automatic retry with exponential backoff and model fallback for
+    rate limiting (429) errors.
+
     Args:
         prompt: The prompt to send to the AI
         ai_model: The AI model to use (e.g., 'gemini-2.5-pro')
@@ -199,79 +202,138 @@ def generate_structured_response(
         Dictionary containing the validated response data
 
     Raises:
-        RuntimeError: If client initialization fails or API call fails
+        RuntimeError: If client initialization fails or API call fails after all retries
         ValidationError: If response doesn't match schema (unlikely with structured outputs)
     """
+    import time
     
-    model_name = ai_model or 'gemini-2.5-pro'
-
-    # Save debug prompt if enabled
-    debug_file = _save_debug_prompt(prompt, "generate_structured_response", {
-        "ai_model": model_name,
-        "schema": response_schema.__name__,
-        "schema_json": response_schema.model_json_schema()
-    })
+    # Model fallback order for rate limiting
+    FALLBACK_MODELS = [
+        ai_model or 'gemini-2.5-flash',
+        'gemini-2.0-pro',
+        'gemini-2.0-flash',
+        'gemini-2.0-flash-exp',
+    ]
+    seen = set()
+    fallback_models = []
+    for m in FALLBACK_MODELS:
+        if m not in seen:
+            fallback_models.append(m)
+            seen.add(m)
     
-    try:
-        logger.info("gemini.generate_structured_response: start", extra={
-            "ai_model": model_name,
-            "prompt_len": len(prompt),
-            "schema": response_schema.__name__,
-            "debug_file": debug_file
-        })
-
-        # Get the client
-        client = _get_client()
-        if not client:
-            raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
-
-        # Build config dictionary
-        config = {
-            "response_mime_type": "application/json",
-            "response_json_schema": response_schema.model_json_schema(),
-        }
-
-        # Add system instruction if provided
-        if system_instruction:
-            config["system_instruction"] = system_instruction
-
-        # Generate content with structured output
-        response_model = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=config
-        )
-
-        # Extract text from response
-        response_text = getattr(response_model, 'text', None)
-        if not response_text:
-            # Try alternative attribute paths
+    # Retry configuration
+    MAX_RETRIES = 3
+    BASE_DELAY = 5  # seconds
+    
+    last_error = None
+    
+    for model_name in fallback_models:
+        for attempt in range(MAX_RETRIES):
             try:
-                response_text = response_model.candidates[0].content.parts[0].text
-            except Exception:
-                response_text = ""
+                logger.info("gemini.generate_structured_response: start", extra={
+                    "ai_model": model_name,
+                    "prompt_len": len(prompt),
+                    "schema": response_schema.__name__,
+                    "attempt": attempt + 1
+                })
 
-        if not response_text:
-            raise RuntimeError("Empty response from Gemini API")
+                # Get the client
+                client = _get_client()
+                if not client:
+                    raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
 
-        # Parse and validate JSON against schema
-        response_data = response_schema.model_validate_json(response_text)
+                # Build config dictionary
+                config = {
+                    "response_mime_type": "application/json",
+                    "response_json_schema": response_schema.model_json_schema(),
+                }
 
-        logger.info("gemini.generate_structured_response: success", extra={
-            "ai_model": model_name,
-            "schema": response_schema.__name__
-        })
+                # Add system instruction if provided
+                if system_instruction:
+                    config["system_instruction"] = system_instruction
 
-        # Return as dictionary
-        return response_data.model_dump()
+                # Generate content with structured output
+                response_model = client.models.generate_content(
+                    model='gemini-3-flash-preview',
+                    contents=prompt,
+                    config=config
+                )
 
-    except Exception as e:
-        logger.error("gemini.generate_structured_response: error", exc_info=True, extra={
-            "ai_model": model_name,
-            "schema": response_schema.__name__ if response_schema else "None"
-        })
-        print(colored(f"[-] Gemini Structured Output Error: {e}", "red"))
-        raise
+                # Extract text from response
+                response_text = getattr(response_model, 'text', None)
+                if not response_text:
+                    # Try alternative attribute paths
+                    try:
+                        response_text = response_model.candidates[0].content.parts[0].text
+                    except Exception:
+                        response_text = ""
+
+                if not response_text:
+                    raise RuntimeError("Empty response from Gemini API")
+
+                # Parse and validate JSON against schema
+                response_data = response_schema.model_validate_json(response_text)
+
+                logger.info("gemini.generate_structured_response: success", extra={
+                    "ai_model": model_name,
+                    "schema": response_schema.__name__,
+                    "attempt": attempt + 1
+                })
+
+                # Return as dictionary
+                return response_data.model_dump()
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+                
+                # Check if this is a rate limit error (429)
+                is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower()
+                
+                if is_rate_limit:
+                    # Extract retry delay from error if available
+                    retry_delay = BASE_DELAY * (2 ** attempt)  # Exponential backoff
+                    
+                    # Try to parse retry delay from error message
+                    import re
+                    retry_match = re.search(r'retry in (\d+(?:\.\d+)?)', error_str.lower())
+                    if retry_match:
+                        suggested_delay = float(retry_match.group(1))
+                        retry_delay = max(retry_delay, suggested_delay + 1)
+                    
+                    if attempt < MAX_RETRIES - 1:
+                        logger.warning(f"Rate limit hit for {model_name}, attempt {attempt + 1}/{MAX_RETRIES}. "
+                                     f"Retrying in {retry_delay:.1f}s...", extra={
+                            "ai_model": model_name,
+                            "attempt": attempt + 1,
+                            "retry_delay": retry_delay
+                        })
+                        print(colored(f"[!] Rate limit hit. Retrying in {retry_delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})...", "yellow"))
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        # Max retries exceeded for this model, try next model
+                        logger.warning(f"Max retries exceeded for {model_name}, trying fallback model...", extra={
+                            "ai_model": model_name
+                        })
+                        print(colored(f"[!] Max retries exceeded for {model_name}. Trying next model...", "yellow"))
+                        break  # Break inner loop to try next model
+                else:
+                    # Non-rate-limit error, log and re-raise
+                    logger.error("gemini.generate_structured_response: error", exc_info=True, extra={
+                        "ai_model": model_name,
+                        "schema": response_schema.__name__ if response_schema else "None",
+                        "attempt": attempt + 1
+                    })
+                    print(colored(f"[-] Gemini Structured Output Error: {e}", "red"))
+                    raise
+    
+    # All models and retries exhausted
+    logger.error("All Gemini models exhausted due to rate limiting", extra={
+        "models_tried": fallback_models
+    })
+    print(colored(f"[-] All Gemini models rate limited. Please wait and try again.", "red"))
+    raise last_error or RuntimeError("All Gemini models exhausted due to rate limiting")
 
 def generate_script(video_subject: str, paragraph_number: int, ai_model: str, voice: str, customPrompt: str) -> Optional[str]:
 

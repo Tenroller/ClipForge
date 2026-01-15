@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Film, Lock, User } from "lucide-react";
+import { Lock, User } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { loginAction } from './actions';
 import { useTranslations } from 'next-intl';
@@ -75,8 +75,12 @@ export default function LoginPage() {
         <div className="bg-card/80 backdrop-blur-2xl rounded-3xl shadow-2xl p-10 border-2 border-border/50 hover:border-border/80 transition-all">
           {/* Logo and Title */}
           <div className="flex flex-col items-center mb-8">
-            <div className="size-20 rounded-3xl bg-gradient-to-br from-blue-500 via-purple-500 to-emerald-500 flex items-center justify-center shadow-2xl mb-4 hover:scale-110 transition-transform">
-              <Film className="size-10 text-white" />
+            <div className="size-20 rounded-3xl bg-card flex items-center justify-center shadow-2xl mb-4 hover:scale-110 transition-transform overflow-hidden">
+              <img
+                src="/logo.png"
+                alt="ClipForge"
+                className="size-16 object-contain"
+              />
             </div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent">
               {t('title')}
@@ -155,7 +159,7 @@ export default function LoginPage() {
                 {t('defaultCredentials')}
               </p>
               <p className="text-sm text-center font-mono bg-card/50 rounded-lg p-2 border">
-                admin / admin123
+                admin / tenroller
               </p>
               <p className="text-xs text-center text-muted-foreground mt-3 leading-relaxed">
                 {t('credentialsInfo')}

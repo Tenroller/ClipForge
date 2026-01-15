@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Download, Check, Film, Brain, Video as VideoIcon, Clock, Database } from "lucide-react";
-import type { Video } from './GridVideoCard';
+import type { Video } from './VideoCard';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -55,9 +55,9 @@ export default function VideoPreviewModal({
       case 'brainrot':
         return <Brain className="size-4" />;
       case 'podcastclips':
-  return <VideoIcon className="size-4" />;
+        return <VideoIcon className="size-4" />;
       default:
-  return <VideoIcon className="size-4" />;
+        return <VideoIcon className="size-4" />;
     }
   };
 

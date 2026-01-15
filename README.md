@@ -1,4 +1,4 @@
-# AI Video Generator - Enterprise Edition
+# ClipForge - Enterprise Edition
 
 [![CI/CD](https://github.com/your-repo/ai-video-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/your-repo/ai-video-generator/actions)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://hub.docker.com)
@@ -285,6 +285,7 @@ python test_modal_integration.py
 ```
 
 **Benefits:**
+
 - 🚀 **10x faster processing** with L40S, A100, or H100 GPUs
 - 💰 **Pay-per-use** - only charged for actual GPU time
 - 🌐 **No local GPU required** - works on any machine
@@ -357,18 +358,20 @@ pip install 'kokoro>=0.9.2' soundfile
 The application requires authentication for all video generation features.
 
 **Demo Accounts:**
+
 - **Username:** `admin` / **Password:** `admin123`
 - **Username:** `demo` / **Password:** `demo123`
 
 **Authentication Flow:**
-1. Navigate to http://localhost:5173
+
+1. Navigate to <http://localhost:5173>
 2. Login with credentials
 3. JWT token stored in localStorage
 4. Session persists until logout or token expiration
 
 ### 🎬 Web Interface
 
-1. **Login**: Access http://localhost:5173 and login
+1. **Login**: Access <http://localhost:5173> and login
 2. **Choose Workflow**: Select MoneyPrinter, Brainrot, or PodcastClips tab
 3. **Configure Parameters**: Fill in video subject, voice, quality settings
 4. **Generate Video**: Submit and watch real-time progress with detailed logs
@@ -443,7 +446,7 @@ The application requires authentication for all video generation features.
 # Login and get JWT token
 curl -X POST http://localhost:9000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin123"}'
+  -d '{"username": "admin", "password": "tenroller"}'
 
 # Returns: {"access_token": "eyJhbGc...", "token_type": "bearer"}
 ```
@@ -521,16 +524,19 @@ The system supports resuming failed or cancelled jobs with linkage metadata and 
 ### Resume Features by Workflow
 
 **MoneyPrinter:**
+
 - Records `start_step` for partial continuation
 - Persists script, search terms, and other intermediate data
 - Resumes from last successful step
 
 **Brainrot:**
+
 - Saves clip manifest for reuse
 - Skips completed processing phases
 - Continues from last failure point
 
 **PodcastClips:**
+
 - Preserves speaker diarization results
 - Reuses face tracking data
 - Resumes clip generation from last successful clip
@@ -542,6 +548,7 @@ GET /api/jobs/{id}/lineage
 ```
 
 Returns ancestry & descendant graph:
+
 ```json
 {
   "jobId": "<current>",
@@ -553,6 +560,7 @@ Returns ancestry & descendant graph:
 ```
 
 **Frontend Visualization:**
+
 - Ancestor chain with resume attempt numbers
 - Descendant jobs with status badges
 - Quick navigation and ID copying
@@ -581,7 +589,7 @@ curl http://localhost:9000/api/cache/stats
 
 ### Prometheus Metrics
 
-- **Endpoint**: http://localhost:9090/metrics
+- **Endpoint**: <http://localhost:9090/metrics>
 - **Format**: Prometheus text format
 - **Includes**: Request rates, job metrics, system resources, cache performance
 
@@ -705,6 +713,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ### Developer Documentation
 
 See [CLAUDE.md](CLAUDE.md) for detailed developer documentation including:
+
 - Service layer architecture
 - Critical patterns and best practices
 - Common development tasks
@@ -730,4 +739,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For detailed developer documentation and Claude Code integration, see [CLAUDE.md](CLAUDE.md).
 
-*Built with ❤️ by the AI Video Generator team*
+*Built with ❤️ by the ClipForge team*

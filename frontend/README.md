@@ -1,8 +1,8 @@
-# VideoHelper - Next.js Frontend
+# ClipForge - Next.js Frontend
 
 ## 🎉 Migration Complete: Core Infrastructure Ready
 
-This is the Next.js 15 version of the VideoHelper frontend, migrated from Vite + React.
+This is the Next.js 15 version of the ClipForge frontend, migrated from Vite + React.
 
 ### ✅ What's Working
 
@@ -34,6 +34,7 @@ npm start
 The app will be available at [http://localhost:3000](http://localhost:3000)
 
 **Default Login:**
+
 - Username: `admin`
 - Password: `admin123`
 
@@ -100,6 +101,7 @@ NODE_ENV=development
 ### 🧪 Testing the App
 
 1. **Start the backend** (from project root):
+
    ```bash
    python run_backend.py
    # or
@@ -107,6 +109,7 @@ NODE_ENV=development
    ```
 
 2. **Start this frontend**:
+
    ```bash
    cd frontend-next
    npm run dev
@@ -150,6 +153,7 @@ See [`MIGRATION.md`](./MIGRATION.md) for detailed migration patterns and example
 ### 🎯 Migration Progress
 
 **Completed:**
+
 - ✅ Project setup & configuration
 - ✅ Authentication infrastructure
 - ✅ API client & React Query hooks
@@ -158,6 +162,7 @@ See [`MIGRATION.md`](./MIGRATION.md) for detailed migration patterns and example
 - ✅ Protected route structure
 
 **Pending:**
+
 - ⏳ Page migrations (Creator, Compilations, Videos, etc.)
 - ⏳ Component migrations (Job panels, etc.)
 - ⏳ Feature enhancements (Theme toggle, etc.)

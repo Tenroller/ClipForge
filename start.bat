@@ -1,10 +1,10 @@
 @echo off
-REM VideoHelper - Start all services (Backend, Frontend, Video Processor)
+REM ClipForge - Start all services (Backend, Frontend, Video Processor)
 
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo    VideoHelper - Starting Services
+echo    ClipForge - Starting Services
 echo ========================================
 echo.
 
@@ -28,17 +28,17 @@ REM Create logs directory if it doesn't exist
 if not exist "logs" mkdir logs
 
 echo [Backend] Starting on port 9000...
-start "Backend" cmd /c "python run_backend.py 2>&1 | python -c \"import sys; [print('^[Backend^]', line.rstrip()) for line in sys.stdin]\""
+start "ClipForge - Backend (Port 9000)" cmd /k "cd /d %~dp0 && call .venv\Scripts\activate && python run_backend.py"
 
 timeout /t 2 /nobreak >nul
 
 echo [Video-Processor] Starting on port 8090...
-start "Video-Processor" cmd /c "cd video-processor && python main.py 2>&1 | python -c \"import sys; [print('^[Video-Processor^]', line.rstrip()) for line in sys.stdin]\""
+start "ClipForge - Video-Processor (Port 8090)" cmd /k "cd /d %~dp0 && call .venv\Scripts\activate && cd video-processor && python main.py"
 
 timeout /t 2 /nobreak >nul
 
 echo [Frontend] Starting on port 3000...
-start "Frontend" cmd /c "cd frontend && npm run dev 2>&1 | python -c \"import sys; [print('^[Frontend^]', line.rstrip()) for line in sys.stdin]\""
+start "ClipForge - Frontend (Port 3000)" cmd /k "cd /d %~dp0\frontend && npm run dev"
 
 echo.
 echo ========================================

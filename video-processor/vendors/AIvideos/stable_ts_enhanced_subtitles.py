@@ -33,6 +33,12 @@ except ImportError:
 _model_cache: Dict[str, Any] = {}
 _model_lock = threading.Lock()
 
+# Transcription lock to prevent concurrent inference on shared model
+# This is critical because Whisper models are NOT thread-safe during inference
+# Concurrent transcription causes tensor shape errors like:
+# "cannot reshape tensor of 0 elements into shape [1, 0, 20, -1]"
+_transcription_lock = threading.Lock()
+
 
 def _get_or_load_model(model_size: str, device: str) -> Any:
     """
@@ -134,42 +140,51 @@ def extract_word_timings_with_stable_ts(
     # This prevents concurrent model loads which cause segmentation faults
     model = _get_or_load_model(model_size, device)
     
-    # Transcribe with enhanced options
-    logger.info(f"Transcribing audio file: {audio_path}")
+    # Acquire transcription lock to prevent concurrent model inference
+    # Whisper models are NOT thread-safe and concurrent access causes tensor errors:
+    # "cannot reshape tensor of 0 elements into shape [1, 0, 20, -1]"
+    # "Expected key.size(1) == value.size(1) to be true"
+    logger.info(f"Waiting for transcription lock for: {audio_path}")
     
-    try:
-        # Use stable-ts specific options for better timing
-        result = model.transcribe(
-            audio_path,
-            # Basic Whisper options
-            task="transcribe",
-            language=None,  # Auto-detect
-
-            # stable-ts specific enhancements
-            vad=True,  # Enable Voice Activity Detection
-            vad_threshold=vad_threshold,  # VAD sensitivity
-            min_word_dur=0.1,  # Minimum word duration
-
-            # Word-level timing options
-            word_timestamps=True,
-            prepend_punctuations="\"'([{-",
-            append_punctuations="\"'.。,!?::)]}、",
-
-            # Refinement options (refine_whisper_precision removed in stable-ts 2.x)
-            min_silence_dur=0.1  # Minimum silence duration for word boundaries
-        )
+    with _transcription_lock:
+        # Transcribe with enhanced options
+        logger.info(f"🔒 Acquired transcription lock - Transcribing: {audio_path}")
         
-        logger.info("✅ Transcription completed with stable-ts")
+        try:
+            # Use stable-ts specific options for better timing
+            result = model.transcribe(
+                audio_path,
+                # Basic Whisper options
+                task="transcribe",
+                language=None,  # Auto-detect
+
+                # stable-ts specific enhancements
+                vad=True,  # Enable Voice Activity Detection
+                vad_threshold=vad_threshold,  # VAD sensitivity
+                min_word_dur=0.1,  # Minimum word duration
+
+                # Word-level timing options
+                word_timestamps=True,
+                prepend_punctuations="\"'([{-",
+                append_punctuations="\"'.。,!?::)]}、",
+
+                # Refinement options (refine_whisper_precision removed in stable-ts 2.x)
+                min_silence_dur=0.1  # Minimum silence duration for word boundaries
+            )
+            
+            logger.info("✅ Transcription completed with stable-ts")
+            
+        except Exception as e:
+            logger.error(f"stable-ts transcription failed: {e}")
+            logger.info("Falling back to basic transcription...")
+            # Fallback to basic transcription if advanced options fail
+            result = model.transcribe(
+                audio_path,
+                task="transcribe",
+                word_timestamps=True,
+            )
         
-    except Exception as e:
-        logger.error(f"stable-ts transcription failed: {e}")
-        logger.info("Falling back to basic transcription...")
-        # Fallback to basic transcription if advanced options fail
-        result = model.transcribe(
-            audio_path,
-            task="transcribe",
-            word_timestamps=True,
-        )
+        logger.info(f"🔓 Releasing transcription lock")
     
     # Extract word timings with enhanced metadata
     word_timings = []

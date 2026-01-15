@@ -1,5 +1,5 @@
 #!/bin/bash
-# VideoHelper - Start all services (Backend, Frontend, Video Processor)
+# ClipForge - Start all services (Backend, Frontend, Video Processor)
 
 set -e  # Exit on error
 
@@ -45,7 +45,7 @@ fi
 mkdir -p logs
 
 echo -e "${CYAN}========================================${NC}"
-echo -e "${CYAN}   VideoHelper - Starting Services${NC}"
+echo -e "${CYAN}   ClipForge - Starting Services${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 

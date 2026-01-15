@@ -71,7 +71,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     
     # Create FastAPI app
     app = FastAPI(
-        title="AI Video Generator API",
+        title="ClipForge API",
         description="""
         A comprehensive API for generating videos using AI-powered workflows.
         
@@ -94,7 +94,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         """,
         version="1.0.0",
         contact={
-            "name": "AI Video Generator",
+            "name": "ClipForge",
             "url": "https://github.com/your-repo",
         },
         license_info={

@@ -16,7 +16,7 @@ import { ChevronDown, Film, Loader2, Plus, RefreshCw } from 'lucide-react';
 import SourceVideoCard from '@/components/podcast/SourceVideoCard';
 import ProjectClipsView from '@/components/podcast/ProjectClipsView';
 import type { PodcastProject } from '@/lib/api';
-import { listPodcastProjects } from '@/lib/api';
+import { listPodcastProjects, deletePodcastProject } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
@@ -34,6 +34,10 @@ export default function PodcastProjectsPage() {
 
   // Selected project for detail view
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  // Delete confirmation state
+  const [projectToDelete, setProjectToDelete] = useState<PodcastProject | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const limit = 20;
 
@@ -98,6 +102,32 @@ export default function PodcastProjectsPage() {
     router.push('/podcastclips');
   };
 
+  // Handle project deletion
+  const handleDeleteProject = async () => {
+    if (!projectToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      const result = await deletePodcastProject(projectToDelete.id);
+      toast({
+        title: t('deleteSuccess'),
+        description: `${result.clips_deleted} clips deleted`,
+      });
+      // Remove from local state
+      setProjects((prev) => prev.filter((p) => p.id !== projectToDelete.id));
+      setProjectToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete project:', error);
+      toast({
+        title: t('error'),
+        description: t('deleteError'),
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // If a project is selected, show the clips view
   if (selectedProjectId) {
     return (
@@ -112,17 +142,12 @@ export default function PodcastProjectsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
-      <div className="mb-8 flex items-start justify-between gap-4">
-        <div className="flex-1 space-y-2">
-          <div className="inline-block">
-            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-accent to-secondary bg-clip-text text-transparent">
-              {t('title').toUpperCase()}
-            </h1>
-            <div className="h-1 w-24 bg-gradient-to-r from-primary to-accent rounded-full mt-2" />
-          </div>
-          <p className="text-base text-muted-foreground max-w-2xl">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             {t('description')}
           </p>
         </div>
@@ -141,7 +166,7 @@ export default function PodcastProjectsPage() {
             )}
           </Button>
           <Button
-            className="bg-purple-600 hover:bg-purple-700 text-white"
+            size="sm"
             onClick={handleNewVideo}
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -225,6 +250,7 @@ export default function PodcastProjectsPage() {
                 project={project}
                 onClick={() => handleProjectClick(project)}
                 onOpenExternal={() => handleOpenExternal(project)}
+                onDelete={() => setProjectToDelete(project)}
               />
             ))}
           </div>
@@ -252,6 +278,41 @@ export default function PodcastProjectsPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {projectToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-xl p-6 max-w-md mx-4 shadow-2xl border">
+            <h3 className="text-lg font-semibold mb-2">{t('confirmDelete')}</h3>
+            <p className="text-muted-foreground text-sm mb-4">
+              {t('confirmDeleteDescription', { title: projectToDelete.title, clips: projectToDelete.clips_count })}
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setProjectToDelete(null)}
+                disabled={isDeleting}
+              >
+                {t('cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleDeleteProject}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    {t('deleting')}
+                  </>
+                ) : (
+                  t('delete')
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
