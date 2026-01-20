@@ -167,20 +167,18 @@ async def lifespan(app: FastAPI):
         # Initialize utility systems
         try:
             from ..utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
-            from ..utils.streaming_processor import init_streaming_processor
             from ..utils.fonts import init_font_manager
             from ..utils.paths import init_path_manager
             from ..utils.gpu_manager import init_gpu_manager
         except ImportError:
             from utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
-            from utils.streaming_processor import init_streaming_processor
             from utils.fonts import init_font_manager
             from utils.paths import init_path_manager
             from utils.gpu_manager import init_gpu_manager
 
         init_temp_manager()
         cleanup_temp_files_on_startup()
-        init_streaming_processor()
+        # Note: streaming_processor is now handled by the video-processor service
         init_font_manager()
         init_path_manager()
         init_gpu_manager()
