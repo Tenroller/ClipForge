@@ -23,7 +23,9 @@ import BulkActionsBar from '@/components/videos/BulkActionsBar';
 import VideoStats, { type VideoStatsData } from '@/components/videos/VideoStats';
 import VideoFilters from '@/components/videos/VideoFilters';
 import SyncPanel from '@/components/videos/SyncPanel';
-import { ChevronDown, LayoutGrid, List, Loader2, RefreshCw, Film } from "lucide-react";
+import { ChevronDown, LayoutGrid, List, Loader2, RefreshCw, Film, PlaySquare, Settings2, Download } from "lucide-react";
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -553,68 +555,75 @@ export default function VideosPage() {
   ).length;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {t('description')}
-            {selectedVideos.size > 0 && (
-              <span className="ml-2 font-medium">
-                · {selectedVideos.size} {t('selected')}
-              </span>
-            )}
+    <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-8">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <PlaySquare className="h-8 w-8 text-primary" />
+            {t('title')}
+          </h1>
+          <p className="text-muted-foreground text-lg">
+            Manage and organize your generated videos
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap justify-start sm:justify-end">
-          {/* View Toggle */}
-          <div className="flex gap-0.5 border rounded-lg p-0.5 bg-muted/50">
-            <Button
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => handleViewModeChange('grid')}
-              className="h-8 px-3"
-            >
-              <LayoutGrid className="size-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => handleViewModeChange('list')}
-              className="h-8 px-3"
-            >
-              <List className="size-4" />
-            </Button>
-          </div>
+
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowSyncPanel(!showSyncPanel)}
+            className="h-10 border-dashed"
           >
+            <Settings2 className="mr-2 h-4 w-4" />
             {showSyncPanel ? t('hideSync') : t('showSync')}
           </Button>
-          <Button variant="outline" size="sm" onClick={refreshVideos} disabled={loading}>
-            {loading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <RefreshCw className="size-4" />
-            )}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={refreshVideos}
+            disabled={loading}
+            className="h-10 w-10 rounded-full"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
+          {/* View Toggle */}
+          <div className="flex bg-muted rounded-lg p-1">
+            <Button
+              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('grid')}
+              className="h-8 px-2 rounded-md transition-all"
+            >
+              <LayoutGrid className="size-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'secondary' : 'ghost'}
+              size="sm"
+              onClick={() => handleViewModeChange('list')}
+              className="h-8 px-2 rounded-md transition-all"
+            >
+              <List className="size-4" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Stats */}
         <VideoStats stats={stats} loading={loading && !stats} />
 
         {/* Sync Panel */}
         {showSyncPanel && (
-          <SyncPanel
-            onSyncFromJobs={syncVideosFromJobs}
-            onSyncOrphaned={syncOrphanedVideos}
-            syncing={syncing}
-          />
+          <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+            <SyncPanel
+              onSyncFromJobs={syncVideosFromJobs}
+              onSyncOrphaned={syncOrphanedVideos}
+              syncing={syncing}
+            />
+          </div>
         )}
+
+        <Separator />
 
         {/* Filters */}
         <VideoFilters
@@ -630,41 +639,54 @@ export default function VideosPage() {
           onSortOrderChange={setSortOrder}
         />
 
+        {/* Selection Info */}
+        {selectedVideos.size > 0 && (
+          <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-center justify-between animate-in fade-in duration-300">
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="bg-primary/20 text-primary hover:bg-primary/30">
+                {selectedVideos.size} Selected
+              </Badge>
+              <span className="text-sm text-muted-foreground">{t('selected')}</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={handleClearSelection} className="h-8 text-xs">
+              Clear Selection
+            </Button>
+          </div>
+        )}
+
         {/* Videos List */}
         {loading ? (
           viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
               {Array.from({ length: 8 }).map((_, i) => (
                 <VideoCardSkeleton key={i} variant="grid" />
               ))}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <VideoCardSkeleton key={i} variant="list" />
               ))}
             </div>
           )
         ) : filteredVideos.length === 0 ? (
-          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md">
-            <CardContent className="p-12">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-                  <Film className="size-8 text-muted-foreground" />
-                </div>
-                <p className="text-lg font-medium text-muted-foreground">{t('noVideos')}</p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  {searchTerm
-                    ? t('tryAdjusting')
-                    : t('generateToSee')}
-                </p>
+          <Card className="border-border/50 bg-muted/10 border-dashed">
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="size-20 rounded-full bg-muted flex items-center justify-center mb-6">
+                <Film className="size-10 text-muted-foreground" />
               </div>
+              <p className="text-lg font-medium text-foreground">{t('noVideos')}</p>
+              <p className="text-muted-foreground mt-2 max-w-sm">
+                {searchTerm
+                  ? t('tryAdjusting')
+                  : t('generateToSee')}
+              </p>
             </CardContent>
           </Card>
         ) : (
           <>
             {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                 {filteredVideos.map((video) => (
                   <GridVideoCard
                     key={video.id}
@@ -679,7 +701,7 @@ export default function VideosPage() {
                 ))}
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {filteredVideos.map((video) => (
                   <VideoCard
                     key={video.id}
@@ -697,11 +719,13 @@ export default function VideosPage() {
 
             {/* Load More Button */}
             {hasMore && !searchTerm && (
-              <div className="flex justify-center pt-4 sm:pt-6 px-4 sm:px-0">
+              <div className="flex justify-center pt-8 pb-4">
                 <Button
                   variant="outline"
+                  size="lg"
                   onClick={loadMoreVideos}
                   disabled={loadingMore}
+                  className="rounded-full px-8"
                 >
                   {loadingMore ? (
                     <>
@@ -721,13 +745,13 @@ export default function VideosPage() {
             {/* Loading More Skeletons */}
             {loadingMore && (
               viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5 mt-4 sm:mt-5">
+                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 mt-6">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <VideoCardSkeleton key={i} variant="grid" />
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3 mt-3">
+                <div className="space-y-4 mt-4">
                   {Array.from({ length: 3 }).map((_, i) => (
                     <VideoCardSkeleton key={i} variant="list" />
                   ))}
@@ -800,7 +824,7 @@ export default function VideosPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>{t('dialog.cancel')}</AlertDialogCancel>
             <AlertDialogAction onClick={handleBulkDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              {t('dialog.deleteAll')}
+              {t('dialog.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

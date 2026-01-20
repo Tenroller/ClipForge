@@ -10,7 +10,7 @@
 @layer base {
   :root {
     /* ===== Core Background & Foreground ===== */
-    --background: 0 0% 100%;
+    --background: 210 20% 98%; /* Soft cool gray background */
     --foreground: 240 10% 3.9%;
 
     /* ===== Card System ===== */
@@ -21,26 +21,26 @@
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
 
-    /* ===== Primary Brand Colors (Deep Blue) ===== */
-    --primary: 221 83% 53%;
+    /* ===== Primary Brand Colors (Vibrant Green) ===== */
+    --primary: 142 70% 45%;
     --primary-foreground: 0 0% 98%;
 
-    /* ===== Secondary Colors (Soft Purple) ===== */
-    --secondary: 262 52% 47%;
-    --secondary-foreground: 0 0% 98%;
+    /* ===== Secondary Colors (Soft Gray/Green tint) ===== */
+    --secondary: 142 20% 96%;
+    --secondary-foreground: 142 70% 45%;
 
     /* ===== Muted Colors ===== */
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
 
-    /* ===== Accent Colors (Vibrant Cyan) ===== */
-    --accent: 199 89% 48%;
+    /* ===== Accent Colors (Vibrant Green) ===== */
+    --accent: 142 70% 45%;
     --accent-foreground: 0 0% 98%;
 
     /* ===== Status Colors ===== */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --success: 142 76% 36%;
+    --success: 142 70% 45%;
     --success-foreground: 0 0% 98%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 98%;
@@ -50,25 +50,25 @@
     /* ===== Border & Input ===== */
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 221 83% 53%;
+    --ring: 142 70% 45%;
 
-    /* ===== Chart Colors (Vibrant Palette) ===== */
-    --chart-1: 221 83% 53%;  /* Blue */
-    --chart-2: 262 52% 47%;  /* Purple */
-    --chart-3: 142 76% 36%;  /* Green */
+    /* ===== Chart Colors (Reordered for Green Theme) ===== */
+    --chart-1: 142 70% 45%;  /* Green */
+    --chart-2: 221 83% 53%;  /* Blue */
+    --chart-3: 262 52% 47%;  /* Purple */
     --chart-4: 38 92% 50%;   /* Orange */
     --chart-5: 0 84% 60%;    /* Red */
 
     /* ===== Gradient Presets ===== */
-    --gradient-primary: linear-gradient(135deg, hsl(221 83% 53%) 0%, hsl(262 52% 47%) 100%);
-    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%) 0%, hsl(173 58% 39%) 100%);
+    --gradient-primary: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(160 60% 40%) 100%);
+    --gradient-success: linear-gradient(135deg, hsl(142 70% 45%) 0%, hsl(160 60% 40%) 100%);
     --gradient-warning: linear-gradient(135deg, hsl(38 92% 50%) 0%, hsl(27 87% 67%) 100%);
     --gradient-rainbow: linear-gradient(135deg,
-      hsl(221 83% 53%) 0%,
-      hsl(262 52% 47%) 25%,
-      hsl(199 89% 48%) 50%,
-      hsl(142 76% 36%) 75%,
-      hsl(38 92% 50%) 100%
+      hsl(142 70% 45%) 0%,
+      hsl(221 83% 53%) 25%,
+      hsl(262 52% 47%) 50%,
+      hsl(38 92% 50%) 75%,
+      hsl(0 84% 60%) 100%
     );
 
     /* ===== Border Radius ===== */
@@ -86,21 +86,21 @@
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
     --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-    --shadow-colored: 0 10px 40px -5px hsl(221 83% 53% / 0.25);
+    --shadow-colored: 0 10px 40px -5px hsl(142 70% 45% / 0.25);
 
     /* ===== Animation Timing ===== */
     --transition-fast: 150ms;
     --transition-base: 200ms;
     --transition-slow: 300ms;
     --transition-slower: 500ms;
-    --sidebar-background: 0 0% 98%;
+    --sidebar-background: 0 0% 100%;
     --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary: 142 70% 45%;
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-accent: 142 20% 96%;
+    --sidebar-accent-foreground: 142 70% 45%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 142 70% 45%;
   }
 
   /* ===== DARK MODE THEME ===== */

@@ -12,13 +12,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronDown, Film, Loader2, Plus, RefreshCw } from 'lucide-react';
+import { ChevronDown, Film, Loader2, Plus, RefreshCw, FolderOpen, ArrowUpDown, Filter } from 'lucide-react';
 import SourceVideoCard from '@/components/podcast/SourceVideoCard';
 import ProjectClipsView from '@/components/podcast/ProjectClipsView';
 import type { PodcastProject } from '@/lib/api';
 import { listPodcastProjects, deletePodcastProject } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function PodcastProjectsPage() {
   const t = useTranslations('projects');
@@ -131,7 +141,7 @@ export default function PodcastProjectsPage() {
   // If a project is selected, show the clips view
   if (selectedProjectId) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in-up">
+      <div className="container mx-auto px-4 py-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
         <ProjectClipsView
           projectId={selectedProjectId}
           onBack={() => setSelectedProjectId(null)}
@@ -142,64 +152,73 @@ export default function PodcastProjectsPage() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+            <FolderOpen className="h-8 w-8 text-primary" />
+            {t('title')}
+          </h1>
+          <p className="text-muted-foreground text-lg">
             {t('description')}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Button
             variant="outline"
-            size="sm"
+            size="icon"
             onClick={() => loadProjects(true)}
             disabled={loading}
+            className="rounded-full"
+            title={t('refresh')}
           >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
           <Button
-            size="sm"
+            size="lg"
             onClick={handleNewVideo}
+            className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/30"
           >
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="h-5 w-5 mr-2" />
             {t('newProject')}
           </Button>
         </div>
       </div>
 
-      {/* Sorting */}
-      <div className="mb-6 flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">{t('sortBy')}</span>
-          <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder={t('sortByPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="created_at">{t('date')}</SelectItem>
-              <SelectItem value="clips_count">{t('clipsCount')}</SelectItem>
-              <SelectItem value="title">{t('titleField')}</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Controls Bar */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-muted/20 p-4 rounded-xl border border-border/50 mb-8 backdrop-blur-sm">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Filter className="w-4 h-4" />
+          <span>{projects.length} Projects</span>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as typeof sortOrder)}>
-            <SelectTrigger className="w-[120px]">
-              <SelectValue placeholder={t('order')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="desc">{t('descending')}</SelectItem>
-              <SelectItem value="asc">{t('ascending')}</SelectItem>
-            </SelectContent>
-          </Select>
+
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+              <SelectTrigger className="w-full sm:w-[160px] bg-background">
+                <SelectValue placeholder={t('sortByPlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="created_at">{t('date')}</SelectItem>
+                <SelectItem value="clips_count">{t('clipsCount')}</SelectItem>
+                <SelectItem value="title">{t('titleField')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Select value={sortOrder} onValueChange={(v) => setSortOrder(v as typeof sortOrder)}>
+              <SelectTrigger className="w-full sm:w-[130px] bg-background">
+                <SelectValue placeholder={t('order')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="desc">{t('descending')}</SelectItem>
+                <SelectItem value="asc">{t('ascending')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -207,43 +226,44 @@ export default function PodcastProjectsPage() {
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Card key={i} className="overflow-hidden rounded-2xl">
+            <Card key={i} className="overflow-hidden rounded-xl border-border/50">
               <Skeleton className="aspect-video w-full" />
               <div className="p-4 space-y-3">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-                <Skeleton className="h-3 w-full" />
-                <Skeleton className="h-8 w-full" />
+                <div className="flex justify-between items-start">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-4 w-12 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-1/2" />
+                <div className="pt-4 flex gap-2">
+                  <Skeleton className="h-9 w-full rounded-md" />
+                </div>
               </div>
             </Card>
           ))}
         </div>
       ) : projects.length === 0 ? (
-        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md">
-          <CardContent className="p-12">
-            <div className="text-center">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-muted mb-4">
-                <Film className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <p className="text-lg font-medium text-muted-foreground">
-                {t('noProjects')}
-              </p>
-              <p className="text-sm text-muted-foreground mt-2">
-                {t('createFirstProject')}
-              </p>
-              <Button
-                className="mt-6 bg-purple-600 hover:bg-purple-700 text-white"
-                onClick={handleNewVideo}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                {t('createProject')}
-              </Button>
+        <Card className="border-border/50 bg-muted/10 border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center mb-6 animate-pulse">
+              <Film className="size-10 text-primary" />
             </div>
+            <h3 className="text-xl font-semibold mb-2">{t('noProjects')}</h3>
+            <p className="text-muted-foreground max-w-md mb-8">
+              {t('createFirstProject')}
+            </p>
+            <Button
+              size="lg"
+              onClick={handleNewVideo}
+              className="rounded-full px-8"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              {t('createProject')}
+            </Button>
           </CardContent>
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500">
             {projects.map((project) => (
               <SourceVideoCard
                 key={project.id}
@@ -257,11 +277,13 @@ export default function PodcastProjectsPage() {
 
           {/* Load More Button */}
           {hasMore && (
-            <div className="flex justify-center pt-8">
+            <div className="flex justify-center pt-12 pb-8">
               <Button
                 variant="outline"
+                size="lg"
                 onClick={() => loadProjects(false)}
                 disabled={loadingMore}
+                className="rounded-full px-8"
               >
                 {loadingMore ? (
                   <>
@@ -281,39 +303,33 @@ export default function PodcastProjectsPage() {
       )}
 
       {/* Delete Confirmation Dialog */}
-      {projectToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-6 max-w-md mx-4 shadow-2xl border">
-            <h3 className="text-lg font-semibold mb-2">{t('confirmDelete')}</h3>
-            <p className="text-muted-foreground text-sm mb-4">
-              {t('confirmDeleteDescription', { title: projectToDelete.title, clips: projectToDelete.clips_count })}
-            </p>
-            <div className="flex gap-3 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => setProjectToDelete(null)}
-                disabled={isDeleting}
-              >
-                {t('cancel')}
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={handleDeleteProject}
-                disabled={isDeleting}
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    {t('deleting')}
-                  </>
-                ) : (
-                  t('delete')
-                )}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AlertDialog open={!!projectToDelete} onOpenChange={(open) => !open && setProjectToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('confirmDelete')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {projectToDelete && t('confirmDeleteDescription', { title: projectToDelete.title, clips: projectToDelete.clips_count })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>{t('cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteProject}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  {t('deleting')}
+                </>
+              ) : (
+                t('delete')
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

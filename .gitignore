@@ -85,3 +85,4 @@ video-processor/vendors/PodcastClips/test.webm
 *.mp4
 *.webm
 .DS_Store
+subtitles_project/*

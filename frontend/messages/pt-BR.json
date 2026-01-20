@@ -318,6 +318,7 @@
   "compilations": {
     "title": "Gerador de Compilações de Vídeo",
     "description": "Crie vídeos de compilação envolventes a partir de conteúdo do YouTube",
+    "configuration": "Configuração",
     "brainrotGenerator": "Gerador Brainrot",
     "transformVideos": "Transforme vídeos do YouTube em compilações estilo TikTok",
     "videoSource": "Fonte do Vídeo",
@@ -369,6 +370,7 @@
   "podcastClips": {
     "title": "Clipes de Podcast",
     "description": "Gere vídeos curtos virais de podcasts com detecção de momentos impulsionada por IA",
+    "sourceVideo": "Vídeo Fonte",
     "aiDetection": "Detecção IA",
     "viralMoments": "Momentos virais",
     "faceTracking": "Rastreamento de Rosto",
@@ -735,6 +737,7 @@
   "projects": {
     "title": "Projetos Recentes",
     "description": "Gerencie seus projetos de clips de podcast. Clique em um projeto para ver e editar os clips gerados.",
+    "refresh": "Atualizar",
     "newProject": "Novo Projeto",
     "sortBy": "Ordenar por:",
     "sortByPlaceholder": "Ordenar por",

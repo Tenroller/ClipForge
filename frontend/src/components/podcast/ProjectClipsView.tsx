@@ -258,7 +258,7 @@ export default function ProjectClipsView({
             <Button variant="ghost" size="icon" onClick={onBack}>
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <h1 className="text-2xl font-bold text-purple-400 line-clamp-2">
+            <h1 className="text-2xl font-bold text-primary line-clamp-2">
               {project.title} ({project.clips_count})
             </h1>
           </div>
@@ -267,7 +267,7 @@ export default function ProjectClipsView({
         <div className="flex items-center gap-2 pl-12 sm:pl-0">
           {onNewVideo && (
             <Button
-              className="bg-purple-600 hover:bg-purple-700 text-white"
+              className=""
               onClick={onNewVideo}
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -327,7 +327,7 @@ export default function ProjectClipsView({
             <CardContent className="p-8">
               <div className="space-y-6">
                 <div className="flex items-center justify-center gap-3">
-                  <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   <h3 className="text-xl font-semibold">Processando video</h3>
                 </div>
 
@@ -340,7 +340,7 @@ export default function ProjectClipsView({
                 </div>
 
                 <div className="text-center space-y-2">
-                  <p className="text-sm font-medium text-purple-400">
+                  <p className="text-sm font-medium text-primary">
                     Etapa atual: {jobProgress.currentStep}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -374,7 +374,7 @@ export default function ProjectClipsView({
               key={clip.id}
               clip={clip}
               projectId={projectId}
-              onRender={() => {}} // Keeping for backwards compatibility
+              onRender={() => { }} // Keeping for backwards compatibility
               onDelete={() => handleDelete(clip)}
               onLike={() => handleLike(clip)}
               onDislike={() => handleDislike(clip)}

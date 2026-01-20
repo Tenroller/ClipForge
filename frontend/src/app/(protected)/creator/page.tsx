@@ -9,6 +9,9 @@ import MoneyPrinterForm from '@/components/moneyprinter/MoneyPrinterForm';
 import PreviewPanel from '@/components/moneyprinter/PreviewPanel';
 import { useToast } from '@/hooks/use-toast';
 import type { JobRecord } from '@/lib/api';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Sparkles, Wand2 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -176,24 +179,72 @@ export default function CreatorPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+      <div className="mb-8 space-y-2">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+          <Wand2 className="h-8 w-8 text-primary" />
+          {t('title')}
+        </h1>
+        <p className="text-muted-foreground text-lg max-w-2xl">
           {t('description')}
         </p>
       </div>
 
-      <div className="flex flex-col gap-6 lg:grid lg:grid-cols-[2fr,1fr]">
-        <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Form Configuration */}
+        <div className="lg:col-span-8 space-y-6">
+          {!currentJobId && !completedJob && (
+            <Card className="border-border/50 shadow-sm overflow-hidden bg-card/50 backdrop-blur-sm">
+              <CardHeader className="bg-muted/30 pb-6 border-b border-border/50">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <CardTitle className="text-lg font-medium">Video Configuration</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <MoneyPrinterForm
+                  models={models}
+                  aiModel={aiModel}
+                  onChangeAiModel={setAiModel}
+                  voices={voices}
+                  voice={voice}
+                  onChangeVoice={setVoice}
+                  subtitleColor={subtitleColor}
+                  onChangeSubtitleColor={setSubtitleColor}
+                  subtitlesPosition={subtitlesPosition}
+                  apiBase={API_BASE}
+                  busy={generateVideo.isPending}
+                  onSubmit={handleSubmit}
+                  onReset={handleReset}
+                  formId="moneyprinter-form"
+                  // Shadow layer control for real-time preview sync
+                  shadowLayersCount={shadowLayersCount}
+                  onChangeShadowLayersCount={setShadowLayersCount}
+                  shadowLayer1Color={shadowLayer1Color}
+                  onChangeShadowLayer1Color={setShadowLayer1Color}
+                  shadowLayer2Color={shadowLayer2Color}
+                  onChangeShadowLayer2Color={setShadowLayer2Color}
+                  shadowLayer3Color={shadowLayer3Color}
+                  onChangeShadowLayer3Color={setShadowLayer3Color}
+                  shadowLayer4Color={shadowLayer4Color}
+                  onChangeShadowLayer4Color={setShadowLayer4Color}
+                />
+              </CardContent>
+            </Card>
+          )}
+
           {/* Show job notification while generating */}
           {currentJobId && !completedJob && (
-            <JobStartedNotification
-              jobId={currentJobId}
-              workflow="moneyprinter"
-              autoRedirect={false}
-            />
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <JobStartedNotification
+                jobId={currentJobId}
+                workflow="moneyprinter"
+                autoRedirect={false}
+              />
+            </div>
           )}
 
           {/* Show result panel when job completes */}
@@ -203,116 +254,73 @@ export default function CreatorPage() {
               onClose={handleCloseResult}
             />
           )}
-
-          {/* Show form when no active job or result */}
-          {!currentJobId && !completedJob && (
-            <MoneyPrinterForm
-              models={models}
-              aiModel={aiModel}
-              onChangeAiModel={setAiModel}
-              voices={voices}
-              voice={voice}
-              onChangeVoice={setVoice}
-              subtitleColor={subtitleColor}
-              onChangeSubtitleColor={setSubtitleColor}
-              subtitlesPosition={subtitlesPosition}
-              apiBase={API_BASE}
-              busy={generateVideo.isPending}
-              onSubmit={handleSubmit}
-              onReset={handleReset}
-              formId="moneyprinter-form"
-              // Shadow layer control for real-time preview sync
-              shadowLayersCount={shadowLayersCount}
-              onChangeShadowLayersCount={setShadowLayersCount}
-              shadowLayer1Color={shadowLayer1Color}
-              onChangeShadowLayer1Color={setShadowLayer1Color}
-              shadowLayer2Color={shadowLayer2Color}
-              onChangeShadowLayer2Color={setShadowLayer2Color}
-              shadowLayer3Color={shadowLayer3Color}
-              onChangeShadowLayer3Color={setShadowLayer3Color}
-              shadowLayer4Color={shadowLayer4Color}
-              onChangeShadowLayer4Color={setShadowLayer4Color}
-            />
-          )}
         </div>
 
-        {/* Preview & Recent Jobs Column */}
-        <div className="space-y-6">
+        {/* Right Column: Preview & Recent Jobs */}
+        <div className="lg:col-span-4 space-y-6">
           {/* Preview Panel - Only show when form is visible */}
           {!currentJobId && !completedJob && (
-            <PreviewPanel
-              position={position}
-              onChangePosition={handlePositionChange}
-              color={subtitleColor}
-              positionRaw={positionRaw}
-              onChangePositionRaw={handlePositionRawChange}
-              shadowLayersCount={shadowLayersCount}
-              shadowLayer1Color={shadowLayer1Color}
-              shadowLayer2Color={shadowLayer2Color}
-              shadowLayer3Color={shadowLayer3Color}
-              shadowLayer4Color={shadowLayer4Color}
-            />
-          )}
+            <div className="sticky top-6 space-y-6">
+              <PreviewPanel
+                position={position}
+                onChangePosition={handlePositionChange}
+                color={subtitleColor}
+                positionRaw={positionRaw}
+                onChangePositionRaw={handlePositionRawChange}
+                shadowLayersCount={shadowLayersCount}
+                shadowLayer1Color={shadowLayer1Color}
+                shadowLayer2Color={shadowLayer2Color}
+                shadowLayer3Color={shadowLayer3Color}
+                shadowLayer4Color={shadowLayer4Color}
+              />
 
-          {/* Recent Jobs Card */}
-          <div className="border rounded-xl bg-card/50 backdrop-blur-sm p-5 shadow-md hover:shadow-lg transition-all duration-300">
-            <h3 className="text-base font-bold mb-4 flex items-center gap-2">
-              <div className="size-2 rounded-full bg-primary animate-pulse" />
-              {t('recentJobs')}
-            </h3>
-            <div className="space-y-2">
-              {recentJobs.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="size-12 rounded-full bg-muted mx-auto mb-3 flex items-center justify-center">
-                    <svg className="size-6 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{t('noRecentJobs')}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{t('startCreating')}</p>
-                </div>
-              ) : (
-                recentJobs.slice(0, 5).map((job) => (
-                  <div
-                    key={job.id}
-                    className="p-3 rounded-lg border bg-card hover:bg-accent/50 hover:border-primary/30 transition-all duration-200 cursor-pointer hover:-translate-y-0.5 hover:shadow-md group"
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <code className="text-xs font-mono text-muted-foreground group-hover:text-foreground transition-colors">
-                        {job.id.substring(0, 8)}...
-                      </code>
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all ${job.status === 'completed'
-                        ? 'bg-success/10 text-success border border-success/20'
-                        : job.status === 'error' || job.status === 'cancelled'
-                          ? 'bg-destructive/10 text-destructive border border-destructive/20'
-                          : 'bg-info/10 text-info border border-info/20 animate-pulse'
-                        }`}>
-                        {job.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate mb-1">
-                      {job.workflow === 'moneyprinter' ? t('aiVideo') : t('compilation')}
-                    </p>
-                    {job.current_step && (
-                      <p className="text-xs text-muted-foreground mt-1.5 truncate">
-                        <span className="font-medium">{t('step')}:</span> {job.current_step}
-                      </p>
-                    )}
-                    {job.progress !== undefined && job.progress >= 0 && (
-                      <div className="mt-2">
-                        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-300 rounded-full"
-                            style={{ width: `${job.progress}%` }}
-                          />
-                        </div>
+              <Card className="border-border/50 shadow-sm">
+                <CardHeader className="py-4">
+                  <CardTitle className="text-base font-medium flex items-center gap-2">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
+                    {t('recentJobs')}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="space-y-3">
+                    {recentJobs.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground text-sm">
+                        {t('noRecentJobs')}
                       </div>
+                    ) : (
+                      recentJobs.slice(0, 5).map((job) => (
+                        <div
+                          key={job.id}
+                          className="group flex flex-col gap-2 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 border border-transparent hover:border-border/50 transition-all cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-xs text-muted-foreground">{job.id.substring(0, 8)}</span>
+                            <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${job.status === 'completed'
+                                ? 'bg-green-500/10 text-green-600'
+                                : job.status === 'error' || job.status === 'cancelled'
+                                  ? 'bg-red-500/10 text-red-600'
+                                  : 'bg-blue-500/10 text-blue-600'
+                              }`}>
+                              {job.status}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-muted-foreground">{t('aiVideo')}</span>
+                            {job.progress !== undefined && job.progress > 0 && job.progress < 100 && (
+                              <span className="font-medium">{job.progress}%</span>
+                            )}
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
-                ))
-              )}
+                </CardContent>
+              </Card>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

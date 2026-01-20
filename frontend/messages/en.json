@@ -318,6 +318,7 @@
   "compilations": {
     "title": "Video Compilation Generator",
     "description": "Create engaging compilation videos from YouTube content",
+    "configuration": "Configuration",
     "brainrotGenerator": "Brainrot Generator",
     "transformVideos": "Transform YouTube videos into TikTok-style compilations",
     "videoSource": "Video Source",
@@ -369,6 +370,7 @@
   "podcastClips": {
     "title": "Podcast Clips",
     "description": "Generate viral short-form videos from podcasts with AI-powered moment detection",
+    "sourceVideo": "Source Video",
     "aiDetection": "AI Detection",
     "viralMoments": "Viral moments",
     "faceTracking": "Face Tracking",
@@ -735,6 +737,7 @@
   "projects": {
     "title": "Recent Projects",
     "description": "Manage your podcast clip projects. Click on a project to view and edit generated clips.",
+    "refresh": "Refresh",
     "newProject": "New Project",
     "sortBy": "Sort by:",
     "sortByPlaceholder": "Sort by",
