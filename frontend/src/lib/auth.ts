@@ -1,7 +1,9 @@
 import { cookies } from 'next/headers';
 import { jwtDecode } from 'jwt-decode';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+// For server-side routes, prefer the internal API_URL (for Docker networking)
+// Falls back to NEXT_PUBLIC_API_BASE for local development
+const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
 export interface User {
   username: string;

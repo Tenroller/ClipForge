@@ -3,12 +3,12 @@ FROM python:3.12-slim AS builder
 
 # Install build dependencies (including git for pip install from GitHub)
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    gcc \
-    g++ \
-    python3-dev \
-    git \
-    && rm -rf /var/lib/apt/lists/*
+  build-essential \
+  gcc \
+  g++ \
+  python3-dev \
+  git \
+  && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -26,10 +26,10 @@ FROM python:3.12-slim
 
 # Install only runtime dependencies
 RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    espeak-ng \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+  ffmpeg \
+  espeak-ng \
+  curl \
+  && rm -rf /var/lib/apt/lists/*
 
 # Copy the virtual environment from builder stage
 COPY --from=builder /opt/venv /opt/venv
@@ -53,7 +53,7 @@ EXPOSE 9000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:9000/health || exit 1
+  CMD curl -f http://localhost:9000/api/health || exit 1
 
 # Run the application using uvicorn directly, pointing to backend module
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "9000"]

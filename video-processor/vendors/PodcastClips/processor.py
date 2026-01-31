@@ -194,6 +194,9 @@ class PodcastClipsProcessor:
             subtitle_vertical_offset = parameters.get('subtitleVerticalOffset', 400)
             subtitle_highlight_color = parameters.get('subtitleHighlightColor', '#FFEB3B')
             subtitle_max_words_visible = parameters.get('subtitleMaxWordsVisible', 5)
+            subtitle_style = parameters.get('subtitleStyle', 'yellow_highlight')
+            subtitle_display_mode = parameters.get('subtitleDisplayMode', 'word')
+            subtitle_position = parameters.get('subtitlePosition', 'bottom')
             viral_keywords = parameters.get('viralFocusKeywords', [])
 
             # Mixed-mode configuration (always enabled for best quality)
@@ -398,7 +401,8 @@ class PodcastClipsProcessor:
                 enable_mixed_mode, face_loss_threshold, face_return_threshold,
                 min_segment_duration, use_ocr, transition_duration,
                 smoothing_strength, use_gpu,
-                enable_speaker_detection, min_face_size_ratio, max_tracked_faces
+                enable_speaker_detection, min_face_size_ratio, max_tracked_faces,
+                subtitle_style, subtitle_display_mode, subtitle_position
             )
 
             # Step 9: Post-processing (audio enhancement & thumbnails)
@@ -1273,7 +1277,10 @@ class PodcastClipsProcessor:
         use_gpu: bool = True,
         enable_speaker_detection: bool = True,
         min_face_size_ratio: float = 0.02,
-        max_tracked_faces: int = 4
+        max_tracked_faces: int = 4,
+        subtitle_style: str = "yellow_highlight",
+        subtitle_display_mode: str = "word",
+        subtitle_position: str = "bottom"
     ) -> List[Dict[str, Any]]:
         """
         Generate all video clips with optional mixed-mode support.
@@ -1424,7 +1431,10 @@ class PodcastClipsProcessor:
                 use_gpu=True,
                 content_mode_detector=content_mode_detector,
                 enable_mixed_mode=enable_mixed_mode,
-                ocr_height=ocr_height
+                ocr_height=ocr_height,
+                subtitle_style=subtitle_style,
+                subtitle_display_mode=subtitle_display_mode,
+                subtitle_position=subtitle_position
             )
 
             # Set transition duration if mixed mode enabled

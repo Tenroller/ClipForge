@@ -79,6 +79,12 @@ class PodcastClipsRequest(BaseModel):
     subtitleColor: str = Field("#FFFFFF", description="Subtitle text color (hex format)")
     subtitleStrokeColor: str = Field("#000000", description="Subtitle stroke/outline color")
     subtitleStrokeWidth: int = Field(2, description="Subtitle stroke width")
+    subtitleStyle: str = Field("yellow_highlight", description="Subtitle style: yellow_highlight, multicolor_pop, clean_outline")
+    subtitleDisplayMode: str = Field("word", description="Display mode: word (word-by-word) or sentence (full sentence)")
+    subtitlePosition: str = Field("bottom", description="Subtitle position: top, center, bottom")
+    subtitleHighlightColor: str = Field("#FFD700", description="Highlight/accent color for subtitles (hex format)")
+    subtitleVerticalOffset: int = Field(500, description="Vertical offset from subtitle position in pixels")
+    subtitleMaxWordsVisible: int = Field(5, description="Maximum words visible at once in word-by-word mode")
     viralFocusKeywords: List[str] = Field(default_factory=list, description="Optional keywords to prioritize when detecting viral moments")
 
 

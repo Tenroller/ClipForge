@@ -42,7 +42,8 @@ export async function proxy(request: NextRequest) {
   // For protected routes, verify token with backend
   if (isProtectedRoute && token) {
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+      // For server-side routes, prefer the internal API_URL (for Docker networking)
+      const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
       const response = await fetch(`${API_BASE}/api/auth/verify`, {
         headers: {
           'Authorization': `Bearer ${token}`,

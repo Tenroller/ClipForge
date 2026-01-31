@@ -33,6 +33,40 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+// Subtitle style options (matching subtitles_project)
+const SUBTITLE_STYLES = [
+  {
+    id: 'yellow_highlight',
+    name: 'Yellow Highlight',
+    description: 'Bold text with yellow highlight on current word',
+    previewClass: 'yellow-highlight'
+  },
+  {
+    id: 'multicolor_pop',
+    name: 'Multi-color Pop',
+    description: 'Vibrant alternating colors with heavy weight',
+    previewClass: 'multicolor'
+  },
+  {
+    id: 'clean_outline',
+    name: 'Clean Outline',
+    description: 'White italic text with dark stroke outline',
+    previewClass: 'outline'
+  }
+];
+
+const DISPLAY_MODES = [
+  { id: 'word', name: 'Word by Word' },
+  { id: 'sentence', name: 'Full Sentence' }
+];
+
+const SUBTITLE_POSITIONS = [
+  { id: 'top', name: 'Top' },
+  { id: 'center', name: 'Center' },
+  { id: 'bottom', name: 'Bottom' }
+];
+
+
 export default function PodcastClipsPage() {
   const { toast } = useToast();
   const t = useTranslations('podcastClips');
@@ -50,9 +84,15 @@ export default function PodcastClipsPage() {
 
   // Advanced subtitle settings
   const [subtitleVerticalOffset, setSubtitleVerticalOffset] = useState(500);
-  const [subtitleHighlightColor, setSubtitleHighlightColor] = useState('#6366f1');
+  const [subtitleHighlightColor, setSubtitleHighlightColor] = useState('#FFD700');
   const [subtitleMaxWordsVisible, setSubtitleMaxWordsVisible] = useState(5);
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Subtitle style options
+  const [subtitleStyle, setSubtitleStyle] = useState('yellow_highlight');
+  const [subtitleDisplayMode, setSubtitleDisplayMode] = useState('word');
+  const [subtitlePosition, setSubtitlePosition] = useState('bottom');
+  const [subtitleTextColor, setSubtitleTextColor] = useState('#FFFFFF');
 
   // YouTube metadata preview
   const [videoMetadata, setVideoMetadata] = useState<YouTubeMetadata | null>(null);
@@ -134,12 +174,15 @@ export default function PodcastClipsPage() {
         maxDuration,
         useGPU: true,
         subtitleFontSize,
-        subtitleColor: '#FFFFFF',
+        subtitleColor: subtitleTextColor,
         subtitleStrokeColor: '#000000',
         subtitleStrokeWidth: 2,
         subtitleVerticalOffset,
         subtitleHighlightColor,
         subtitleMaxWordsVisible,
+        subtitleStyle,
+        subtitleDisplayMode,
+        subtitlePosition,
       };
 
       const data = await generatePodcastClips(payload);
@@ -361,10 +404,105 @@ export default function PodcastClipsPage() {
 
                 <Separator />
 
+                {/* Subtitle Style */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Wand2 className="w-4 h-4 text-muted-foreground" />
+                    <h4 className="text-sm font-medium text-muted-foreground">Subtitle Style</h4>
+                  </div>
+
+                  {/* Style Cards */}
+                  <div className="space-y-2">
+                    {SUBTITLE_STYLES.map((style) => (
+                      <div
+                        key={style.id}
+                        className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${subtitleStyle === style.id
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border/50 hover:border-border'
+                          }`}
+                        onClick={() => setSubtitleStyle(style.id)}
+                      >
+                        {/* Style Preview */}
+                        <div className={`mb-2 p-2 rounded bg-black/80 text-center text-sm font-bold ${style.id === 'yellow_highlight' ? 'text-white' :
+                            style.id === 'multicolor_pop' ? 'text-white' :
+                              'text-white italic'
+                          }`}>
+                          {style.id === 'yellow_highlight' && (
+                            <>
+                              <span>WHAT </span>
+                              <span className="bg-yellow-400 text-black px-1 rounded">KIND</span>
+                              <span> OF</span>
+                            </>
+                          )}
+                          {style.id === 'multicolor_pop' && (
+                            <>
+                              <span className="text-cyan-400">ADD </span>
+                              <span className="text-yellow-400">COOL </span>
+                              <span className="text-pink-400">CAPTIONS</span>
+                            </>
+                          )}
+                          {style.id === 'clean_outline' && (
+                            <span style={{ textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' }}>
+                              HERE ARE THREE
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs font-medium">{style.name}</div>
+                        <div className="text-xs text-muted-foreground">{style.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Display Mode & Position */}
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium">Display Mode</Label>
+                    <div className="flex gap-2">
+                      {DISPLAY_MODES.map((mode) => (
+                        <Button
+                          key={mode.id}
+                          type="button"
+                          variant={subtitleDisplayMode === mode.id ? 'default' : 'outline'}
+                          size="sm"
+                          className="flex-1 text-xs"
+                          onClick={() => setSubtitleDisplayMode(mode.id)}
+                          disabled={isSubmitting}
+                        >
+                          {mode.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-xs font-medium">Position</Label>
+                    <div className="flex gap-2">
+                      {SUBTITLE_POSITIONS.map((pos) => (
+                        <Button
+                          key={pos.id}
+                          type="button"
+                          variant={subtitlePosition === pos.id ? 'default' : 'outline'}
+                          size="sm"
+                          className="flex-1 text-xs"
+                          onClick={() => setSubtitlePosition(pos.id)}
+                          disabled={isSubmitting}
+                        >
+                          {pos.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
                 {/* Appearance */}
                 <div className="space-y-5">
                   <div className="flex items-center gap-2 mb-2">
-                    <Wand2 className="w-4 h-4 text-muted-foreground" />
+                    <Settings2 className="w-4 h-4 text-muted-foreground" />
                     <h4 className="text-sm font-medium text-muted-foreground">Appearance</h4>
                   </div>
 
@@ -384,6 +522,51 @@ export default function PodcastClipsPage() {
                     />
                   </div>
 
+                  {/* Color Pickers */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Text Color</Label>
+                      <div className="flex items-center gap-2">
+                        <div className="relative overflow-hidden rounded-md border w-8 h-8 shrink-0">
+                          <Input
+                            type="color"
+                            value={subtitleTextColor}
+                            onChange={(e) => setSubtitleTextColor(e.target.value)}
+                            className="absolute inset-0 p-0 h-[150%] w-[150%] -top-[25%] -left-[25%] cursor-pointer border-0"
+                            disabled={isSubmitting}
+                          />
+                        </div>
+                        <Input
+                          value={subtitleTextColor}
+                          onChange={(e) => setSubtitleTextColor(e.target.value)}
+                          className="h-8 font-mono text-xs uppercase"
+                          maxLength={7}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Highlight Color</Label>
+                      <div className="flex items-center gap-2">
+                        <div className="relative overflow-hidden rounded-md border w-8 h-8 shrink-0">
+                          <Input
+                            type="color"
+                            value={subtitleHighlightColor}
+                            onChange={(e) => setSubtitleHighlightColor(e.target.value)}
+                            className="absolute inset-0 p-0 h-[150%] w-[150%] -top-[25%] -left-[25%] cursor-pointer border-0"
+                            disabled={isSubmitting}
+                          />
+                        </div>
+                        <Input
+                          value={subtitleHighlightColor}
+                          onChange={(e) => setSubtitleHighlightColor(e.target.value)}
+                          className="h-8 font-mono text-xs uppercase"
+                          maxLength={7}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Advanced Toggle */}
                   <div className="pt-2">
                     <Button
@@ -400,7 +583,7 @@ export default function PodcastClipsPage() {
                     {showAdvanced && (
                       <div className="mt-4 space-y-5 animate-in slide-in-from-top-2 duration-200">
                         <div className="space-y-2">
-                          <Label className="text-xs">Vertical Position</Label>
+                          <Label className="text-xs">Vertical Offset</Label>
                           <Slider
                             min={100}
                             max={1000}
@@ -409,27 +592,6 @@ export default function PodcastClipsPage() {
                             onValueChange={(v) => setSubtitleVerticalOffset(v[0])}
                             disabled={isSubmitting}
                           />
-                        </div>
-
-                        <div className="space-y-2">
-                          <Label className="text-xs">Highlight Color</Label>
-                          <div className="flex items-center gap-2">
-                            <div className="relative overflow-hidden rounded-md border w-8 h-8 shrink-0">
-                              <Input
-                                type="color"
-                                value={subtitleHighlightColor}
-                                onChange={(e) => setSubtitleHighlightColor(e.target.value)}
-                                className="absolute inset-0 p-0 h-[150%] w-[150%] -top-[25%] -left-[25%] cursor-pointer border-0"
-                                disabled={isSubmitting}
-                              />
-                            </div>
-                            <Input
-                              value={subtitleHighlightColor}
-                              onChange={(e) => setSubtitleHighlightColor(e.target.value)}
-                              className="h-8 font-mono text-xs uppercase"
-                              maxLength={7}
-                            />
-                          </div>
                         </div>
                       </div>
                     )}

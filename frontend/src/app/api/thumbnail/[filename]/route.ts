@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+// For server-side routes, prefer the internal API_URL (for Docker networking)
+// Falls back to NEXT_PUBLIC_API_BASE for local development
+const BACKEND_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
 export async function GET(
   request: NextRequest,
@@ -8,7 +10,7 @@ export async function GET(
 ) {
   try {
     const { filename } = await params;
-    
+
     // Validate filename to prevent path traversal
     if (!filename || filename.includes('..') || filename.includes('/')) {
       return new NextResponse('Invalid filename', { status: 400 });
@@ -24,7 +26,7 @@ export async function GET(
 
     // Get the content type from the backend response
     const contentType = response.headers.get('content-type') || 'image/jpeg';
-    
+
     // Stream the image data
     const imageData = await response.arrayBuffer();
 

@@ -22,8 +22,17 @@ from .content_detector import ContentModeDetector, ContentSegment, ContentMode
 
 # Import codec detection from AIvideos
 import os
+import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from AIvideos.video import get_video_codec_settings
+from vendors.AIvideos.video import get_video_codec_settings
+
+# Import new FFmpeg-based subtitle utilities
+from utils.video_ffmpeg import burn_subtitles, get_video_dimensions
+from utils.subtitle_generator import (
+    SubtitleGenerator as ASSSubtitleGenerator,
+    SubtitleStyle, DisplayMode, Position as SubtitlePosition,
+    word_timings_to_segments
+)
 
 logger = loguru_logger.bind(name="PodcastClips.clip_generator")
 
@@ -94,7 +103,10 @@ class ClipGenerator:
         use_gpu: bool = True,
         content_mode_detector: Optional[ContentModeDetector] = None,
         enable_mixed_mode: bool = True,
-        ocr_height: int = 720
+        ocr_height: int = 720,
+        subtitle_style: str = "yellow_highlight",
+        subtitle_display_mode: str = "word",
+        subtitle_position: str = "bottom"
     ):
         """
         Initialize clip generator.
@@ -107,6 +119,9 @@ class ClipGenerator:
             content_mode_detector: Optional ContentModeDetector for mixed-mode support
             enable_mixed_mode: Whether to enable horizontal content mode detection
             ocr_height: Target height for OCR processing (default 720p)
+            subtitle_style: Subtitle style (yellow_highlight, multicolor_pop, clean_outline)
+            subtitle_display_mode: Display mode (word, sentence)
+            subtitle_position: Position (top, center, bottom)
         """
         self.face_tracker = face_tracker
         self.subtitle_generator = subtitle_generator
@@ -115,6 +130,11 @@ class ClipGenerator:
         self.content_mode_detector = content_mode_detector
         self.enable_mixed_mode = enable_mixed_mode
         self.ocr_height = ocr_height
+        
+        # Subtitle customization options
+        self.subtitle_style = subtitle_style
+        self.subtitle_display_mode = subtitle_display_mode
+        self.subtitle_position = subtitle_position
 
         # Create content mode detector if not provided and mixed mode enabled
         if self.enable_mixed_mode and self.content_mode_detector is None:
@@ -959,16 +979,11 @@ class ClipGenerator:
                 viral_moment.end_time
             )
 
-            # Add subtitles
-            if clip_word_timings:
-                logger.debug("Adding subtitles to clip")
-                clip = self.subtitle_generator.add_subtitles_to_video(
-                    clip,
-                    word_timings,
-                    clip_start_time=viral_moment.start_time
-                )
-            else:
-                logger.warning("No word timings found for clip, skipping subtitles")
+            # Add subtitles using FFmpeg ASS burning (new approach)
+            # Export video without subtitles first, then burn subtitles with FFmpeg
+            has_subtitles = bool(clip_word_timings)
+            if has_subtitles:
+                logger.debug("Preparing for FFmpeg-based subtitle burning")
 
             # Generate output filename
             safe_title = "".join(c for c in viral_moment.title if c.isalnum() or c in (' ', '-', '_')).strip()
@@ -976,8 +991,20 @@ class ClipGenerator:
             output_filename = f"{job_id}_clip_{viral_moment.clip_index}_{safe_title}.mp4"
             output_path = self.output_dir / output_filename
 
+            # Determine export path (temp if adding subtitles, final if not)
+            if has_subtitles:
+                # Create temp dir in output directory for intermediate files
+                temp_dir = self.output_dir / "temp"
+                temp_dir.mkdir(exist_ok=True)
+                temp_video_path = temp_dir / f"temp_{output_filename}"
+                export_path = temp_video_path
+                ass_path = temp_dir / f"{job_id}_clip_{viral_moment.clip_index}.ass"
+            else:
+                export_path = output_path
+                logger.warning("No word timings found for clip, skipping subtitles")
+
             # Export video
-            logger.info(f"Exporting clip to: {output_path}")
+            logger.info(f"Exporting clip to: {export_path}")
 
             # Get optimal codec settings with full FFmpeg parameters
             codec_settings = get_video_codec_settings(use_gpu=self.use_gpu)
@@ -1002,7 +1029,7 @@ class ClipGenerator:
             try:
                 # Attempt export with optimal codec settings and matching FPS
                 clip.write_videofile(
-                    str(output_path),
+                    str(export_path),
                     codec=codec_settings['codec'],
                     audio_codec="aac",
                     fps=clip_fps,  # Use clip's actual FPS instead of hardcoded 30
@@ -1018,7 +1045,7 @@ class ClipGenerator:
                     # Add keyframe params to fallback as well
                     fallback_ffmpeg_params = fallback_settings.get('ffmpeg_params', []) + keyframe_params
                     clip.write_videofile(
-                        str(output_path),
+                        str(export_path),
                         codec=fallback_settings['codec'],
                         audio_codec="aac",
                         fps=clip_fps,  # Use clip's actual FPS, not hardcoded 30
@@ -1029,6 +1056,89 @@ class ClipGenerator:
                 else:
                     # Already using CPU encoding, re-raise the error
                     raise
+
+            # Burn subtitles if we have word timings
+            if has_subtitles:
+                logger.info("Burning ASS subtitles with FFmpeg")
+                
+                try:
+                    # Get video dimensions
+                    width, height = get_video_dimensions(str(export_path))
+                    
+                    # Convert word timings to segments (adjust timing relative to clip start)
+                    adjusted_timings = []
+                    for wt in clip_word_timings:
+                        adjusted = wt.copy()
+                        adjusted['start_time'] = wt.get('start_time', 0) - viral_moment.start_time
+                        adjusted['end_time'] = wt.get('end_time', 0) - viral_moment.start_time
+                        if adjusted['start_time'] >= 0:
+                            adjusted_timings.append(adjusted)
+                    
+                    segments = word_timings_to_segments(adjusted_timings)
+                    
+                    if segments:
+                        # Create ASS subtitle generator with configurable style
+                        try:
+                            style = SubtitleStyle(self.subtitle_style)
+                        except ValueError:
+                            logger.warning(f"Invalid subtitle style '{self.subtitle_style}', using yellow_highlight")
+                            style = SubtitleStyle.YELLOW_HIGHLIGHT
+                        
+                        try:
+                            display_mode = DisplayMode(self.subtitle_display_mode)
+                        except ValueError:
+                            logger.warning(f"Invalid display mode '{self.subtitle_display_mode}', using word")
+                            display_mode = DisplayMode.WORD
+                        
+                        try:
+                            position = SubtitlePosition(self.subtitle_position)
+                        except ValueError:
+                            logger.warning(f"Invalid position '{self.subtitle_position}', using bottom")
+                            position = SubtitlePosition.BOTTOM
+                        
+                        ass_generator = ASSSubtitleGenerator(
+                            style=style,
+                            display_mode=display_mode,
+                            position=position,
+                            text_color=self.subtitle_generator.color if hasattr(self.subtitle_generator, 'color') else None,
+                            highlight_color=self.subtitle_generator.highlight_color if hasattr(self.subtitle_generator, 'highlight_color') else None
+                        )
+                        
+                        # Generate ASS file
+                        ass_generator.generate(segments, str(ass_path), width, height)
+                        logger.debug(f"Generated ASS file: {ass_path}")
+                        
+                        # Burn subtitles with FFmpeg
+                        success = burn_subtitles(
+                            str(export_path),
+                            str(ass_path),
+                            str(output_path),
+                            use_gpu=self.use_gpu
+                        )
+                        
+                        if not success:
+                            logger.error("FFmpeg subtitle burning failed, using video without subtitles")
+                            # Move temp file to output as fallback
+                            import shutil
+                            shutil.move(str(export_path), str(output_path))
+                        
+                        # Cleanup temp files
+                        if export_path.exists():
+                            export_path.unlink()
+                        if ass_path.exists():
+                            ass_path.unlink()
+                    else:
+                        logger.warning("No segments generated from word timings, skipping subtitles")
+                        # Move temp file to final location
+                        import shutil
+                        shutil.move(str(export_path), str(output_path))
+                        
+                except Exception as e:
+                    logger.error(f"Subtitle burning failed: {e}, using video without subtitles")
+                    # Move temp file to output as fallback
+                    import shutil
+                    if export_path.exists():
+                        shutil.move(str(export_path), str(output_path))
 
             # Get file size
             file_size = output_path.stat().st_size

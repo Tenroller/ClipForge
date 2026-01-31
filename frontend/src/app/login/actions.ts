@@ -3,7 +3,9 @@
 import { redirect } from 'next/navigation';
 import { setAuthCookie, removeAuthCookie, type LoginResponse } from '@/lib/auth';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+// For server-side routes, prefer the internal API_URL (for Docker networking)
+// Falls back to NEXT_PUBLIC_API_BASE for local development
+const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
 export interface LoginResult {
   success: boolean;
