@@ -1,6 +1,7 @@
 import re
 import os
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple, List, Optional, Any, Dict
@@ -8,8 +9,12 @@ from typing import Tuple, List, Optional, Any, Dict
 from termcolor import colored
 from loguru import logger
 from dotenv import load_dotenv
-from google import genai  # type: ignore
 from pydantic import BaseModel, Field
+
+# Add project root to Python path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 # Load environment variables
 # Try loading local .env if present (vendored path)
@@ -18,8 +23,8 @@ try:
 except Exception:
     load_dotenv("../.env")
 
-# Configure Gemini - get API key
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+# Configure OpenRouter - get API key
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 
 # Debug configuration
 DEBUG_PROMPTS = os.getenv('DEBUG_PROMPTS', 'false').lower() == 'true'
@@ -28,18 +33,31 @@ DEBUG_DIR = Path(__file__).resolve().parent / "debug_prompts"
 # Bind logger with context for this module
 logger = logger.bind(name="AIvideos.gpt")
 
-# Initialize client lazily
-_client = None
+# Import OpenRouter client functions
+try:
+    from backend.utils.openrouter_client import (
+        get_client as _get_openrouter_client,
+        generate_content as openrouter_generate_content,
+        generate_structured_response as openrouter_structured_response,
+        generate_with_images as openrouter_generate_with_images,
+    )
+except ImportError as e:
+    logger.warning(f"Could not import openrouter_client: {e}")
+    _get_openrouter_client = None
+    openrouter_generate_content = None
+    openrouter_structured_response = None
+    openrouter_generate_with_images = None
 
 def _get_client():
-    """Get or create the Gemini client."""
-    global _client
-    if _client is None and GEMINI_API_KEY:
-        try:
-            _client = genai.Client(api_key=GEMINI_API_KEY)
-        except Exception as e:
-            logger.error(f"Failed to create Gemini client: {e}")
-    return _client
+    """Get or create the OpenRouter client."""
+    if _get_openrouter_client is None:
+        logger.error("OpenRouter client not available")
+        return None
+    try:
+        return _get_openrouter_client()
+    except Exception as e:
+        logger.error(f"Failed to get OpenRouter client: {e}")
+        return None
 
 
 def _save_debug_prompt(prompt: str, function_name: str, extra_data: Optional[Dict[str, Any]] = None) -> Optional[str]:
@@ -128,8 +146,11 @@ def generate_response(prompt: str, ai_model: str) -> str:
 
     """
 
-    # Force Gemini-only; allow ai_model to be a concrete Gemini model name
-    model_name = ai_model or 'gemini-2.0-flash'
+    # Convert old Gemini model names to OpenRouter format if needed
+    model_name = ai_model or 'openrouter/auto'
+    if not '/' in model_name:
+        # Convert bare model name to OpenRouter format
+        model_name = f"google/{model_name}"
     
     # Save debug prompt if enabled
     debug_file = _save_debug_prompt(prompt, "generate_response", {
@@ -137,44 +158,35 @@ def generate_response(prompt: str, ai_model: str) -> str:
     })
     
     try:
-        logger.info("gemini.generate_response: start", extra={
+        logger.info("openrouter.generate_response: start", extra={
             "ai_model": model_name, 
             "prompt_len": len(prompt),
             "debug_file": debug_file
         })
 
-        # Get the client
-        client = _get_client()
-        if not client:
-            raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
+        # Use OpenRouter client
+        if openrouter_generate_content is None:
+            raise RuntimeError("OpenRouter client not initialized. Check OPENROUTER_API_KEY.")
 
-        # Use new API: client.models.generate_content
-        response_model = client.models.generate_content(
+        response = openrouter_generate_content(
+            prompt=prompt,
             model=model_name,
-            contents=prompt
         )
 
-        # Extract text from response
-        response = getattr(response_model, 'text', None)
-        if not response:
-            # Try alternative attribute paths
-            try:
-                response = response_model.candidates[0].content.parts[0].text  # type: ignore[attr-defined]
-            except Exception:
-                response = ""
     except Exception as e:
         try:
-            logger.error("gemini.generate_response: error", exc_info=True, extra={"ai_model": model_name})
+            logger.error("openrouter.generate_response: error", exc_info=True, extra={"ai_model": model_name})
         except Exception:
             pass
-        print(colored(f"[-] Gemini Error: {e}", "red"))
+        print(colored(f"[-] OpenRouter Error: {e}", "red"))
         return ""
 
     try:
-        logger.info("gemini.generate_response: success", extra={"ai_model": model_name, "got_text": bool(response)})
+        logger.info("openrouter.generate_response: success", extra={"ai_model": model_name, "got_text": bool(response)})
     except Exception:
         pass
     return response or ""
+
 
 
 def generate_structured_response(
@@ -184,9 +196,9 @@ def generate_structured_response(
     system_instruction: str = None # type: ignore
 ) -> Dict[str, Any]:
     """
-    Generate a structured response using Gemini with JSON schema validation.
+    Generate a structured response using OpenRouter with JSON schema validation.
 
-    This function uses Gemini's Structured Outputs feature to guarantee that
+    This function uses OpenRouter's Structured Outputs feature to guarantee that
     the AI returns valid JSON matching the provided Pydantic schema.
 
     Includes automatic retry with exponential backoff and model fallback for
@@ -194,7 +206,7 @@ def generate_structured_response(
 
     Args:
         prompt: The prompt to send to the AI
-        ai_model: The AI model to use (e.g., 'gemini-2.5-pro')
+        ai_model: The AI model to use (e.g., 'google/gemini-2.5-flash')
         response_schema: Pydantic BaseModel class defining the expected JSON structure
         system_instruction: Optional system instruction to guide the AI's behavior
 
@@ -205,135 +217,44 @@ def generate_structured_response(
         RuntimeError: If client initialization fails or API call fails after all retries
         ValidationError: If response doesn't match schema (unlikely with structured outputs)
     """
-    import time
+    # Convert old Gemini model names to OpenRouter format if needed
+    model_name = ai_model or 'openrouter/auto'
+    if not '/' in model_name:
+        model_name = f"google/{model_name}"
     
-    # Model fallback order for rate limiting
-    FALLBACK_MODELS = [
-        ai_model or 'gemini-2.5-flash',
-        'gemini-2.0-pro',
-        'gemini-2.0-flash',
-        'gemini-2.0-flash-exp',
-    ]
-    seen = set()
-    fallback_models = []
-    for m in FALLBACK_MODELS:
-        if m not in seen:
-            fallback_models.append(m)
-            seen.add(m)
+    # Use the centralized OpenRouter client
+    if openrouter_structured_response is None:
+        raise RuntimeError("OpenRouter client not initialized. Check OPENROUTER_API_KEY.")
     
-    # Retry configuration
-    MAX_RETRIES = 3
-    BASE_DELAY = 5  # seconds
-    
-    last_error = None
-    
-    for model_name in fallback_models:
-        for attempt in range(MAX_RETRIES):
-            try:
-                logger.info("gemini.generate_structured_response: start", extra={
-                    "ai_model": model_name,
-                    "prompt_len": len(prompt),
-                    "schema": response_schema.__name__,
-                    "attempt": attempt + 1
-                })
+    try:
+        logger.info("openrouter.generate_structured_response: start", extra={
+            "ai_model": model_name,
+            "prompt_len": len(prompt),
+            "schema": response_schema.__name__,
+        })
+        
+        result = openrouter_structured_response(
+            prompt=prompt,
+            response_schema=response_schema,
+            model=model_name,
+            system_instruction=system_instruction,
+        )
+        
+        logger.info("openrouter.generate_structured_response: success", extra={
+            "ai_model": model_name,
+            "schema": response_schema.__name__,
+        })
+        
+        return result
+        
+    except Exception as e:
+        logger.error("openrouter.generate_structured_response: error", exc_info=True, extra={
+            "ai_model": model_name,
+            "schema": response_schema.__name__ if response_schema else "None",
+        })
+        print(colored(f"[-] OpenRouter Structured Output Error: {e}", "red"))
+        raise
 
-                # Get the client
-                client = _get_client()
-                if not client:
-                    raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
-
-                # Build config dictionary
-                config = {
-                    "response_mime_type": "application/json",
-                    "response_json_schema": response_schema.model_json_schema(),
-                }
-
-                # Add system instruction if provided
-                if system_instruction:
-                    config["system_instruction"] = system_instruction
-
-                # Generate content with structured output
-                response_model = client.models.generate_content(
-                    model='gemini-3-flash-preview',
-                    contents=prompt,
-                    config=config
-                )
-
-                # Extract text from response
-                response_text = getattr(response_model, 'text', None)
-                if not response_text:
-                    # Try alternative attribute paths
-                    try:
-                        response_text = response_model.candidates[0].content.parts[0].text
-                    except Exception:
-                        response_text = ""
-
-                if not response_text:
-                    raise RuntimeError("Empty response from Gemini API")
-
-                # Parse and validate JSON against schema
-                response_data = response_schema.model_validate_json(response_text)
-
-                logger.info("gemini.generate_structured_response: success", extra={
-                    "ai_model": model_name,
-                    "schema": response_schema.__name__,
-                    "attempt": attempt + 1
-                })
-
-                # Return as dictionary
-                return response_data.model_dump()
-
-            except Exception as e:
-                last_error = e
-                error_str = str(e)
-                
-                # Check if this is a rate limit error (429)
-                is_rate_limit = "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower()
-                
-                if is_rate_limit:
-                    # Extract retry delay from error if available
-                    retry_delay = BASE_DELAY * (2 ** attempt)  # Exponential backoff
-                    
-                    # Try to parse retry delay from error message
-                    import re
-                    retry_match = re.search(r'retry in (\d+(?:\.\d+)?)', error_str.lower())
-                    if retry_match:
-                        suggested_delay = float(retry_match.group(1))
-                        retry_delay = max(retry_delay, suggested_delay + 1)
-                    
-                    if attempt < MAX_RETRIES - 1:
-                        logger.warning(f"Rate limit hit for {model_name}, attempt {attempt + 1}/{MAX_RETRIES}. "
-                                     f"Retrying in {retry_delay:.1f}s...", extra={
-                            "ai_model": model_name,
-                            "attempt": attempt + 1,
-                            "retry_delay": retry_delay
-                        })
-                        print(colored(f"[!] Rate limit hit. Retrying in {retry_delay:.1f}s (attempt {attempt + 1}/{MAX_RETRIES})...", "yellow"))
-                        time.sleep(retry_delay)
-                        continue
-                    else:
-                        # Max retries exceeded for this model, try next model
-                        logger.warning(f"Max retries exceeded for {model_name}, trying fallback model...", extra={
-                            "ai_model": model_name
-                        })
-                        print(colored(f"[!] Max retries exceeded for {model_name}. Trying next model...", "yellow"))
-                        break  # Break inner loop to try next model
-                else:
-                    # Non-rate-limit error, log and re-raise
-                    logger.error("gemini.generate_structured_response: error", exc_info=True, extra={
-                        "ai_model": model_name,
-                        "schema": response_schema.__name__ if response_schema else "None",
-                        "attempt": attempt + 1
-                    })
-                    print(colored(f"[-] Gemini Structured Output Error: {e}", "red"))
-                    raise
-    
-    # All models and retries exhausted
-    logger.error("All Gemini models exhausted due to rate limiting", extra={
-        "models_tried": fallback_models
-    })
-    print(colored(f"[-] All Gemini models rate limited. Please wait and try again.", "red"))
-    raise last_error or RuntimeError("All Gemini models exhausted due to rate limiting")
 
 def generate_script(video_subject: str, paragraph_number: int, ai_model: str, voice: str, customPrompt: str) -> Optional[str]:
 
@@ -608,10 +529,10 @@ class ThumbnailFrameSelection(BaseModel):
 def select_best_thumbnail_frame(
     frame_images: List[str],
     viral_context: Dict[str, Any],
-    ai_model: str = "gemini-2.0-flash-exp"
+    ai_model: str = "openrouter/auto"
 ) -> Dict[str, Any]:
     """
-    Use Gemini Vision API to select the best frame for a viral thumbnail.
+    Use OpenRouter Vision API to select the best frame for a viral thumbnail.
 
     Analyzes multiple candidate frames and selects the one with highest viral potential.
     Considers facial expressions, composition, clarity, and engagement factors.
@@ -619,7 +540,7 @@ def select_best_thumbnail_frame(
     Args:
         frame_images: List of base64-encoded image data URIs (e.g., "data:image/jpeg;base64,...")
         viral_context: Context about the clip (title, hook, tags, etc.)
-        ai_model: Gemini model to use (must support vision)
+        ai_model: Vision-capable model to use
 
     Returns:
         Dictionary with selected_frame_index, reasoning, and engagement_score
@@ -627,16 +548,19 @@ def select_best_thumbnail_frame(
     Raises:
         RuntimeError: If API call fails
     """
+    # Convert old model names to OpenRouter format
+    model_name = ai_model
+    if not '/' in model_name:
+        model_name = f"google/{model_name}"
+    
     try:
-        logger.info("gemini.select_best_thumbnail_frame: start", extra={
-            "ai_model": ai_model,
+        logger.info("openrouter.select_best_thumbnail_frame: start", extra={
+            "ai_model": model_name,
             "frame_count": len(frame_images)
         })
 
-        # Get the client
-        client = _get_client()
-        if not client:
-            raise RuntimeError("Gemini client not initialized. Check GEMINI_API_KEY.")
+        if openrouter_generate_with_images is None:
+            raise RuntimeError("OpenRouter client not initialized. Check OPENROUTER_API_KEY.")
 
         # Build prompt with viral context
         title = viral_context.get('title', 'Viral Moment')
@@ -666,64 +590,35 @@ Analyze these {len(frame_images)} thumbnail candidate frames and select the ONE 
 - Avoid frames where the person is mid-word (open mouth, weird expression)
 - Select the frame with maximum viral/engagement potential
 
-Return your selection as JSON."""
+Return your selection as JSON with these fields:
+- selected_frame_index (int): Index of the best frame (0-based)
+- reasoning (str): Brief explanation of why this frame was selected
+- engagement_score (int): Estimated engagement potential (0-100)"""
 
         # Save debug prompt if enabled (without base64 image data for readability)
         _save_debug_prompt(prompt, "select_best_thumbnail_frame", {
-            "ai_model": ai_model,
+            "ai_model": model_name,
             "frame_count": len(frame_images),
             "viral_context": viral_context,
             "note": "Image data excluded from debug save for readability"
         })
 
-        # Create content with images
-        # Gemini expects a single content object with parts array
-        from typing import Any, Dict, List, Union
-        content_parts: List[Dict[str, Any]] = [{"text": prompt}]
-
-        for i, frame_data in enumerate(frame_images):
-            # Extract base64 data from data URI
-            if frame_data.startswith("data:"):
-                # Format: "data:image/jpeg;base64,<base64_data>"
-                mime_type, base64_data = frame_data.split(";base64,")
-                mime_type = mime_type.replace("data:", "")
-
-                # Create inline data part
-                inline_data_part: Dict[str, Any] = {
-                    "inline_data": {
-                        "mime_type": mime_type,
-                        "data": base64_data
-                    }
-                }
-                content_parts.append(inline_data_part)
-                content_parts.append({"text": f"Frame {i}"})
-
-        # Generate structured response with proper content structure
-        response_model = client.models.generate_content(
-            model=ai_model,
-            contents=[{"parts": content_parts}],
-            config={
-                "response_mime_type": "application/json",
-                "response_json_schema": ThumbnailFrameSelection.model_json_schema(),
-            }
+        # Use OpenRouter vision API with structured output
+        response_text = openrouter_generate_with_images(
+            prompt=prompt,
+            images=frame_images,
+            model=model_name,
+            response_schema=ThumbnailFrameSelection,
         )
 
-        # Extract text from response
-        response_text = getattr(response_model, 'text', None)
         if not response_text:
-            try:
-                response_text = response_model.candidates[0].content.parts[0].text
-            except Exception:
-                response_text = ""
-
-        if not response_text:
-            raise RuntimeError("Empty response from Gemini Vision API")
+            raise RuntimeError("Empty response from OpenRouter Vision API")
 
         # Parse and validate
         selection_data = ThumbnailFrameSelection.model_validate_json(response_text)
 
-        logger.info("gemini.select_best_thumbnail_frame: success", extra={
-            "ai_model": ai_model,
+        logger.info("openrouter.select_best_thumbnail_frame: success", extra={
+            "ai_model": model_name,
             "selected_index": selection_data.selected_frame_index,
             "engagement_score": selection_data.engagement_score
         })
@@ -731,13 +626,14 @@ Return your selection as JSON."""
         return selection_data.model_dump()
 
     except Exception as e:
-        logger.error("gemini.select_best_thumbnail_frame: error", exc_info=True, extra={
-            "ai_model": ai_model
+        logger.error("openrouter.select_best_thumbnail_frame: error", exc_info=True, extra={
+            "ai_model": model_name
         })
-        print(colored(f"[-] Gemini Vision Error: {e}", "red"))
+        print(colored(f"[-] OpenRouter Vision Error: {e}", "red"))
         # Fallback: return first frame
         return {
             "selected_frame_index": 0,
             "reasoning": "Fallback to first frame due to API error",
             "engagement_score": 50
         }
+

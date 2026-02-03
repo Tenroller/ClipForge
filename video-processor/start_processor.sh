@@ -26,8 +26,8 @@ if ! python3 -c "import fastapi" 2>/dev/null; then
 fi
 
 # Check for required API keys
-if [ -z "$GEMINI_API_KEY" ] && [ -z "$GOOGLE_API_KEY" ]; then
-    echo "⚠️  Warning: GEMINI_API_KEY not set"
+if [ -z "$OPENROUTER_API_KEY" ]; then
+    echo "⚠️  Warning: OPENROUTER_API_KEY not set"
     echo "   MoneyPrinter workflow may not work without API key"
 fi
 

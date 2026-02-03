@@ -76,8 +76,8 @@ class VideoProcessingService:
         # Set API keys
         if self.config.pexels_api_key:
             os.environ["PEXELS_API_KEY"] = self.config.pexels_api_key
-        if self.config.gemini_api_key:
-            os.environ["GEMINI_API_KEY"] = self.config.gemini_api_key
+        if self.config.openrouter_api_key:
+            os.environ["OPENROUTER_API_KEY"] = self.config.openrouter_api_key
         
         # Set output directories
         os.environ["VIDEOHELPER_OUTPUT_DIR"] = str(self.config.output_dir)

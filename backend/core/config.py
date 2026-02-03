@@ -69,7 +69,7 @@ class AppConfig:
     # API keys
     api_key: str = ""
     pexels_api_key: str = ""
-    gemini_api_key: str = ""
+    openrouter_api_key: str = ""
     
     # Authentication
     jwt_secret_key: str = 'your-secret-key-change-this-in-production'
@@ -200,7 +200,7 @@ class AppConfig:
             # API keys
             api_key=os.getenv("API_KEY", ""),
             pexels_api_key=os.getenv("PEXELS_API_KEY", ""),
-            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+            openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
             
             # Authentication
             jwt_secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production"),
@@ -223,9 +223,9 @@ class AppConfig:
             ('PEXELS_API_KEY', 'Required for stock video search'),
         ]
         
-        # Check for Gemini API key
-        if not os.getenv('GEMINI_API_KEY'):
-            env_issues.append("GEMINI_API_KEY is required for AI text generation")
+        # Check for OpenRouter API key
+        if not os.getenv('OPENROUTER_API_KEY'):
+            env_issues.append("OPENROUTER_API_KEY is required for AI text generation")
         
         for env_var, description in required_env:
             if not os.getenv(env_var):

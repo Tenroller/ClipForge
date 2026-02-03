@@ -3,27 +3,31 @@
 TTS Generator
 
 This module handles:
-1. Generating catchy intro messages using Gemini API
+1. Generating catchy intro messages using OpenRouter API
 2. Converting text to speech using Kokoro TTS
 3. Adding TTS audio to the beginning of compilations
 """
 
 from functools import lru_cache
 import os
+import sys
 import random
 import tempfile
 import warnings
 import soundfile as sf
 from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip, afx
-from google import genai
-from google.genai import types
 from kokoro import KPipeline
 import torch
+from pathlib import Path
 
 
 import uuid
-import sys
 from loguru import logger
+
+# Add project root to Python path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 try:
     from dotenv import load_dotenv
@@ -31,6 +35,12 @@ try:
 except ImportError:
     # dotenv not installed, environment variables must be set manually
     pass
+
+# Import OpenRouter client
+try:
+    from backend.utils.openrouter_client import generate_content as openrouter_generate_content
+except ImportError:
+    openrouter_generate_content = None
 
 # Initialize logger for this module
 logger = logger.bind(name="Compilation.tts_generator")
@@ -114,15 +124,14 @@ class TTSGenerator:
         Initialize TTS Generator
         
         Args:
-            api_key (str): Google Gemini API key. If None, will try to get from environment.
+            api_key (str): OpenRouter API key. If None, will try to get from environment.
         """
-        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
+        self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         if not self.api_key:
-            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError("OpenRouter API key is required. Set OPENROUTER_API_KEY environment variable or pass api_key parameter.")
         
-        # Initialize Gemini client
-        os.environ['GEMINI_API_KEY'] = self.api_key
-        self.client = genai.Client()
+        # Set environment variable for the client
+        os.environ['OPENROUTER_API_KEY'] = self.api_key
         
         # Initialize Kokoro TTS pipeline
         logger.info("Initializing Kokoro TTS pipeline...")
@@ -191,7 +200,7 @@ class TTSGenerator:
     
     def generate_intro_message(self, context="cat videos"):
         """
-        Generate a catchy intro message using Gemini API
+        Generate a catchy intro message using OpenRouter API
         
         Args:
             context (str): Context for the intro message
@@ -199,6 +208,10 @@ class TTSGenerator:
         Returns:
             str: Generated intro message
         """
+        if openrouter_generate_content is None:
+            print("⚠️ OpenRouter client not available, using fallback")
+            return self._get_fallback_intro()
+            
         try:
             # Much more specific and clear prompt to get just ONE clean phrase
             prompt = f"""Create ONE short, catchy intro phrase for a {context} compilation video that would be perfect for TikTok/social media.
@@ -217,16 +230,14 @@ EXAMPLES:
 
 Generate ONE phrase now:"""
             
-            response = self.client.models.generate_content(
-                model="gemini-2.0-flash",
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    temperature=0.7,  # Slightly lower for more focused output
-                    max_output_tokens=50  # Limit output to prevent long responses
-                )
+            raw_text = openrouter_generate_content(
+                prompt=prompt,
+                model="openrouter/auto",
+                temperature=0.7,
+                max_tokens=50
             )
             
-            raw_text = response.text.strip() if response.text else ""
+            raw_text = raw_text.strip() if raw_text else ""
             
             # Show what AI actually returned for debugging
             if len(raw_text) > 100:
@@ -245,7 +256,8 @@ Generate ONE phrase now:"""
             return intro_message
             
         except Exception as e:
-            print(f"⚠️ Error generating intro with Gemini: {e}")
+            print(f"⚠️ Error generating intro with OpenRouter: {e}")
+
             # Enhanced fallback with more variety
             fallback_messages = [
                 "Cat videos of the day!",

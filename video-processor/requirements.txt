@@ -53,7 +53,7 @@ psycopg2-binary
 # AI/ML DEPENDENCIES (For AI-powered video generation)
 # =============================================================================
 
-google-genai
+openrouter
 ultralytics
 mediapipe  # For face detection in podcast clips workflow
 toon-format @ git+https://github.com/toon-format/toon-python.git  # Token-efficient serialization for AI contexts

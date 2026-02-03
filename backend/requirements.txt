@@ -50,7 +50,7 @@ psycopg2-binary
 # AI/ML DEPENDENCIES (For AI-powered video generation)
 # =============================================================================
 
-google-genai
+openrouter
 ultralytics
 
 # Enhanced ASR for better word-level timestamps

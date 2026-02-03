@@ -1,88 +1,98 @@
+# ====================
+# Environment & Dependencies
+# ====================
 /.venv
-/cat-video-creator/backend/vendors/brainrot/tikyou_video_generator/__pycache__
-/cat-video-creator/backend/vendors/subtitles
-/cat-video-creator/backend/vendors/temp
-/cat-video-creator/output
-/cat-video-creator/backend/vendors/moneyprinter/__pycache__
-/cat-video-creator/backend/__pycache__
-/cat-video-creator/backend/__pycache__
-/cat-video-creator/backend/venv
-cat-video-creator/backend/vendors/moneyprinter/.env
-/cat-video-creator/backend/.venv
-/cat-video-creator/backend/tests/__pycache__
-/cat-video-creator/backend/cache
-/cat-video-creator/backend/vendors/moneyprinter/cache
-.env
-/backend/.venv
-/backend/tests/__pycache__
-/backend/vendors/moneyprinter/__pycache__
-/backend/vendors/temp
-/backend/vendors/moneyprinter/cache
-/backend/__pycache__
-/backend/vendors/subtitles
-/output
-/subtitles
 /venv
-backend/logs/app.log
-backend/logs/errors.log
-logs/backend.log
-backend/vendors/moneyprinter/moneyprinter_6859e14a-8dd2-4def-8a68-d7912cb2dbd1TEMP_MPY_wvf_snd.mp3
-/backend/vendors/moneyprinter/cat-video-creator/output
-logs/frontend.log
-# Database file in root directory
-jobs.db
+.env
+*.pyc
+__pycache__/
+
+# ====================
+# Build & Output
+# ====================
+/output
 /temp
-/backend/vendors/moneyprinter/resume_states
-/temp
-/logs
-jobs.db
-/backend/vendors/moneyprinter/subtitles
-/testing
-/backend/config/__pycache__
-/backend/temp_vertical
-/backend/tests
-/backend/debug_frames
-/backend/vendors/brainrot/tikyou_video_generator/__pycache__
 /temp_vertical
-/test_scene_detection/.venv
-/test_scene_detection
-/backend/vendors/Compilation/__pycache__
-/backend/vendors/AIvideos/subtitles
-/backend/vendors/AIvideos/__pycache__
-/backend/utils/__pycache__
+/debug_frames
+/logs
+/cache
+/subtitles
+*.mp4
+*.webm
+*.m4a
+
+# ====================
+# IDE & OS
+# ====================
+.DS_Store
+.idea/
+.vscode/
+
+# ====================
+# Backend
+# ====================
+/backend/.venv
+/backend/venv
+/backend/cache
+/backend/logs/*.log
+/backend/temp
+/backend/temp_vertical
+/backend/debug_frames
+/backend/tests/__pycache__
+/backend/output
+/backend/__pycache__
+/backend/api/__pycache__
 /backend/api/routes/__pycache__
 /backend/core/__pycache__
 /backend/middleware/__pycache__
 /backend/models/__pycache__
 /backend/services/__pycache__
-/backend/api/__pycache__
-/debug_frames
-*.m4a
-/backend/cache
-/backend/venv
-/video-processor/vendors/moneyprinter/__pycache__
-/video-processor/vendors/moneyprinter/subtitles
-/video-processor/vendors/temp
-/video-processor/vendors/subtitles
-/video-processor/vendors/Compilation/__pycache__
-/video-processor/vendors/AIvideos/__pycache__
+/backend/utils/__pycache__
+/backend/migrations/__pycache__
+
+# ====================
+# Video Processor
+# ====================
 /video-processor/output
+/video-processor/temp
+/video-processor/logs
+/video-processor/__pycache__
+/video-processor/src/__pycache__
+/video-processor/src/api/__pycache__
 /video-processor/src/core/__pycache__
 /video-processor/src/models/__pycache__
 /video-processor/src/services/__pycache__
-/video-processor/__pycache__
 /video-processor/utils/__pycache__
-/video-processor/utils/__pycache__
-/video-processor/src/__pycache__
-backups/
-video-processor/*.mp4
-backend/migrations/__pycache__/__init__.cpython-310.pyc
-/video-processor/src/api/__pycache__
+/video-processor/vendors/*/__pycache__
+/video-processor/vendors/AIvideos/__pycache__
+/video-processor/vendors/Compilation/__pycache__
 /video-processor/vendors/PodcastClips/__pycache__
-/video-processor/src/__pycache__
-/video-processor/src/api/__pycache__
-video-processor/vendors/PodcastClips/test.webm
-*.mp4
-*.webm
-.DS_Store
+/video-processor/vendors/moneyprinter/__pycache__
+/video-processor/vendors/temp
+/video-processor/vendors/subtitles
+/video-processor/*.mp4
+
+# ====================
+# Frontend
+# ====================
+/frontend/.next
+/frontend/node_modules
+
+# ====================
+# Database & Logs
+# ====================
+jobs.db
+*.db.backup
+*.json.backup
+logs/backend.log
+logs/frontend.log
+logs/errors.log
+backend/logs/app.log
+backend/logs/errors.log
+
+# ====================
+# Testing & Backups
+# ====================
+/testing
+backups/
 subtitles_project/*

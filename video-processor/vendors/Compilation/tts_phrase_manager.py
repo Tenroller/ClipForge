@@ -9,6 +9,7 @@ This module handles:
 """
 
 import os
+import sys
 import random
 import tempfile
 import hashlib
@@ -16,11 +17,20 @@ import warnings
 import soundfile as sf
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
-from google import genai
-from google.genai import types
 from kokoro import KPipeline
 import torch
 from loguru import logger
+
+# Add project root to Python path for imports
+_project_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Import OpenRouter client
+try:
+    from backend.utils.openrouter_client import generate_content as openrouter_generate_content
+except ImportError:
+    openrouter_generate_content = None
 
 # Initialize logger for this module
 logger = logger.bind(name="Compilation.tts_phrase_manager")
@@ -37,13 +47,13 @@ class TTSPhraseManager:
         Initialize TTS Phrase Manager
         
         Args:
-            api_key (str): Google Gemini API key
+            api_key (str): OpenRouter API key
             num_phrases (int): Number of phrases to pre-generate
             cache_dir (str): Directory to cache audio files
         """
-        self.api_key = api_key or os.getenv('GEMINI_API_KEY')
+        self.api_key = api_key or os.getenv('OPENROUTER_API_KEY')
         if not self.api_key:
-            raise ValueError("Gemini API key is required. Set GEMINI_API_KEY environment variable or pass api_key parameter.")
+            raise ValueError("OpenRouter API key is required. Set OPENROUTER_API_KEY environment variable or pass api_key parameter.")
         
         self.num_phrases = num_phrases
         self.phrases = []
@@ -57,9 +67,8 @@ class TTSPhraseManager:
             self.cache_dir = Path(tempfile.gettempdir()) / "tts_phrase_cache"
         self.cache_dir.mkdir(exist_ok=True, parents=True)
         
-        # Initialize Gemini client
-        os.environ['GEMINI_API_KEY'] = self.api_key
-        self.client = genai.Client()
+        # Set environment variable for the client
+        os.environ['OPENROUTER_API_KEY'] = self.api_key
         
         # Initialize Kokoro TTS pipeline
         logger.info("Initializing Kokoro TTS pipeline for phrase manager...")
@@ -245,16 +254,14 @@ EXAMPLES:
 
 Generate ONE unique phrase now:"""
                 
-                response = self.client.models.generate_content(
-                    model="gemini-2.0-flash",
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        temperature=0.7,
-                        max_output_tokens=50
-                    )
+                response = openrouter_generate_content(
+                    prompt=prompt,
+                    model="openrouter/auto",
+                    temperature=0.7,
+                    max_tokens=50
                 )
                 
-                raw_text = response.text.strip() if response.text else ""
+                raw_text = response.strip() if response else ""
                 phrase = self._extract_clean_phrase(raw_text)
                 
                 # Validate and add phrase

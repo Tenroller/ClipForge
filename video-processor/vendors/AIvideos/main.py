@@ -1,6 +1,26 @@
+"""
+DEPRECATED: This file is legacy Flask-based code.
+
+This Flask server has been replaced by the FastAPI-based video-processor service
+located at /video-processor/src/main.py. 
+
+DO NOT USE THIS FILE for new development. It remains here only for reference
+and potential backwards compatibility, but is not actively maintained.
+
+The active video processing endpoints are now served by:
+- Backend API: /backend/app.py (port 9000)
+- Video Processor: /video-processor/src/main.py (port 8090)
+"""
+
 import os
 import sys
-from backend.vendors.AIvideos.video import generate_video
+
+# Try to import, but this will likely fail since path doesn't exist anymore
+try:
+    from backend.vendors.AIvideos.video import generate_video
+except ImportError:
+    generate_video = None  # Legacy import, will not work
+
 from utils import *
 from dotenv import load_dotenv  # type: ignore
 

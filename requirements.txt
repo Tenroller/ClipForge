@@ -57,7 +57,7 @@ schedule>=1.2.0
 # AI/ML DEPENDENCIES (For AI-powered video generation)
 # =============================================================================
 
-google-genai>=0.3.0
+openrouter>=0.1.0
 ultralytics>=8.0.0
 mediapipe>=0.10.0
 assemblyai>=0.23.0

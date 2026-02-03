@@ -44,11 +44,11 @@ try:
         print(f"[ENV] Loaded {backend_env}")
 
     # Verify critical keys are loaded
-    gemini_key = os.getenv('GEMINI_API_KEY')
-    if gemini_key:
-        print(f"[ENV] GEMINI_API_KEY loaded (length: {len(gemini_key)})")
+    openrouter_key = os.getenv('OPENROUTER_API_KEY')
+    if openrouter_key:
+        print(f"[ENV] OPENROUTER_API_KEY loaded (length: {len(openrouter_key)})")
     else:
-        print("[ENV] WARNING: GEMINI_API_KEY not found in environment!")
+        print("[ENV] WARNING: OPENROUTER_API_KEY not found in environment!")
 except Exception as e:
     print(f"[ENV] Error loading .env files: {e}")
     pass

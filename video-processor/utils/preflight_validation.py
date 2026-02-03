@@ -314,11 +314,11 @@ class PreflightValidator:
                 "No YouTube URL provided for podcast"
             )
         
-        # Check for Gemini API (for viral moment detection)
-        if not os.getenv("GEMINI_API_KEY"):
+        # Check for OpenRouter API (for viral moment detection)
+        if not os.getenv("OPENROUTER_API_KEY"):
             self._add_result(
-                "gemini_api", False, ValidationSeverity.WARNING,
-                "GEMINI_API_KEY not set - viral moment detection may not work"
+                "openrouter_api", False, ValidationSeverity.WARNING,
+                "OPENROUTER_API_KEY not set - viral moment detection may not work"
             )
     
     def _check_input_sources(self, job_data: Dict[str, Any]):

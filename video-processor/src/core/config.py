@@ -37,7 +37,7 @@ class ProcessorConfig:
     
     # AI API keys
     pexels_api_key: str = ""
-    gemini_api_key: str = ""
+    openrouter_api_key: str = ""
     
     # Logging
     log_level: str = "INFO"
@@ -80,7 +80,7 @@ class ProcessorConfig:
             output_dir=Path(os.getenv("OUTPUT_DIR", "./output")),
             temp_dir=Path(os.getenv("TEMP_DIR", "./temp")),
             pexels_api_key=os.getenv("PEXELS_API_KEY", ""),
-            gemini_api_key=os.getenv("GEMINI_API_KEY", ""),
+            openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             health_check_interval=get_int("HEALTH_CHECK_INTERVAL", 30),
         )
@@ -99,8 +99,8 @@ class ProcessorConfig:
         if not self.pexels_api_key:
             issues.append("PEXELS_API_KEY is required for stock video search")
         
-        if not self.gemini_api_key:
-            issues.append("GEMINI_API_KEY is required for AI text generation")
+        if not self.openrouter_api_key:
+            issues.append("OPENROUTER_API_KEY is required for AI text generation")
         
         if not self.backend_api_key:
             warnings.append("BACKEND_API_KEY not set - communication may be insecure")
