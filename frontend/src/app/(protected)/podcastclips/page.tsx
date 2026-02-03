@@ -28,44 +28,16 @@ import {
   Zap,
   Settings2,
   Wand2,
-  Youtube
+  Youtube,
+  LayoutDashboard,
+  ArrowDownToLine,
+  AlignCenter,
+  ArrowUpToLine,
+  Type,
+  Palette
 } from "lucide-react";
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-// Subtitle style options (matching subtitles_project)
-const SUBTITLE_STYLES = [
-  {
-    id: 'yellow_highlight',
-    name: 'Yellow Highlight',
-    description: 'Bold text with yellow highlight on current word',
-    previewClass: 'yellow-highlight'
-  },
-  {
-    id: 'multicolor_pop',
-    name: 'Multi-color Pop',
-    description: 'Vibrant alternating colors with heavy weight',
-    previewClass: 'multicolor'
-  },
-  {
-    id: 'clean_outline',
-    name: 'Clean Outline',
-    description: 'White italic text with dark stroke outline',
-    previewClass: 'outline'
-  }
-];
-
-const DISPLAY_MODES = [
-  { id: 'word', name: 'Word by Word' },
-  { id: 'sentence', name: 'Full Sentence' }
-];
-
-const SUBTITLE_POSITIONS = [
-  { id: 'top', name: 'Top' },
-  { id: 'center', name: 'Center' },
-  { id: 'bottom', name: 'Bottom' }
-];
-
+import { cn } from '@/lib/utils';
 
 export default function PodcastClipsPage() {
   const { toast } = useToast();
@@ -97,6 +69,39 @@ export default function PodcastClipsPage() {
   // YouTube metadata preview
   const [videoMetadata, setVideoMetadata] = useState<YouTubeMetadata | null>(null);
   const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+
+  // Constants moved inside component to support i18n
+  const SUBTITLE_STYLES = [
+    {
+      id: 'yellow_highlight',
+      name: t('subtitleStyles.yellowHighlight.name'),
+      description: t('subtitleStyles.yellowHighlight.description'),
+      previewClass: 'yellow-highlight'
+    },
+    {
+      id: 'multicolor_pop',
+      name: t('subtitleStyles.multicolorPop.name'),
+      description: t('subtitleStyles.multicolorPop.description'),
+      previewClass: 'multicolor'
+    },
+    {
+      id: 'clean_outline',
+      name: t('subtitleStyles.cleanOutline.name'),
+      description: t('subtitleStyles.cleanOutline.description'),
+      previewClass: 'outline'
+    }
+  ];
+
+  const DISPLAY_MODES = [
+    { id: 'word', name: t('displayModes.word'), icon: Type },
+    { id: 'sentence', name: t('displayModes.sentence'), icon: LayoutDashboard } // Using LayoutDashboard as a proxy for 'block' of text
+  ];
+
+  const SUBTITLE_POSITIONS = [
+    { id: 'top', name: t('positions.top'), icon: ArrowUpToLine },
+    { id: 'center', name: t('positions.center'), icon: AlignCenter },
+    { id: 'bottom', name: t('positions.bottom'), icon: ArrowDownToLine }
+  ];
 
   // Find the current job in the recent jobs list
   const currentJob = currentJobId
@@ -172,7 +177,7 @@ export default function PodcastClipsPage() {
         youtubeUrl: youtubeUrl.trim(),
         minDuration,
         maxDuration,
-        useGPU: true,
+        useGPU: false, // User requested CPU only
         subtitleFontSize,
         subtitleColor: subtitleTextColor,
         subtitleStrokeColor: '#000000',
@@ -206,472 +211,298 @@ export default function PodcastClipsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
-      {/* Page Header */}
-      <div className="mb-8 space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">{t('title')}</h1>
-        <p className="text-muted-foreground text-lg max-w-2xl">
+
+      {/* Background Gradient Effect */}
+      <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-primary/5 to-transparent pointer-events-none -z-10" />
+
+      {/* Page Header - Cleaned up */}
+      <div className="text-center mb-10 space-y-4 pt-4">
+        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+          {t('title')}
+        </h1>
+        <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
           {t('description')}
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Input & Results (8 cols) */}
-        <div className="lg:col-span-8 space-y-6">
+      <form onSubmit={handleSubmit} className="relative space-y-8">
 
-          {/* Main Input Card */}
-          <Card className="border-border/50 shadow-sm overflow-hidden">
-            <CardHeader className="bg-muted/30 pb-6 border-b border-border/50">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg text-red-600 dark:text-red-400">
-                  <Youtube className="w-5 h-5" />
-                </div>
-                <CardTitle className="text-lg font-medium">{t('sourceVideo')}</CardTitle>
+        {/* ROW 1: YouTube Search Bar */}
+        <div className="relative z-10 w-full max-w-5xl mx-auto">
+          <div className="relative group">
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-violet-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
+            <div className="relative bg-background rounded-xl p-2 shadow-lg ring-1 ring-border flex items-center gap-3">
+              <div className="pl-3 text-muted-foreground">
+                <Youtube className="w-6 h-6" />
               </div>
-              <CardDescription className="text-base">
-                Paste a YouTube URL to automatically detect speakers, transcribe audio, and generate viral clips.
-              </CardDescription>
-            </CardHeader>
+              <Input
+                id="youtubeUrl"
+                placeholder={t('youtubeUrlLabel')}
+                value={youtubeUrl}
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+                disabled={isSubmitting || !!currentJobId}
+                className="border-0 shadow-none focus-visible:ring-0 text-lg py-6 px-2 placeholder:text-muted-foreground/50 h-14 bg-transparent"
+              />
+              {/* Optional: Add a 'Clear' or 'Paste' button here if needed */}
+            </div>
+          </div>
+        </div>
 
-            <CardContent className="p-6 space-y-6">
-              <div className="space-y-3">
-                <Label htmlFor="youtubeUrl" className="text-sm font-medium ml-1">YouTube URL</Label>
-                <div className="relative">
-                  <Input
-                    id="youtubeUrl"
-                    placeholder="https://www.youtube.com/watch?v=..."
-                    value={youtubeUrl}
-                    onChange={(e) => setYoutubeUrl(e.target.value)}
-                    disabled={isSubmitting || !!currentJobId}
-                    className="pl-10 h-12 text-base shadow-sm ring-offset-background placeholder:text-muted-foreground/50"
-                  />
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    <VideoIcon className="h-5 w-5" />
+        {/* ROW 2: Video Preview & Features (Moved here as requested) */}
+        <div className="w-full max-w-5xl mx-auto">
+          {/* Video Metadata Preview - Only show if URL is entered */}
+          {videoMetadata && !currentJob && !completedJob && (
+            <div className="w-full animate-in fade-in slide-in-from-top-4 duration-500 mb-6">
+              <div className="rounded-xl border bg-card/50 overflow-hidden flex flex-col md:flex-row shadow-sm hover:shadow-md transition-all">
+                <div className="relative md:w-64 aspect-video md:aspect-auto bg-muted group overflow-hidden shrink-0">
+                  {videoMetadata.thumbnail_url ? (
+                    <Image
+                      src={getThumbnailUrl(videoMetadata.thumbnail_url)}
+                      alt={videoMetadata.title}
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full w-full bg-muted">
+                      <VideoIcon className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+                    <Play className="w-10 h-10 text-white opacity-80" />
+                  </div>
+                </div>
+                <div className="p-5 flex flex-col justify-center gap-2">
+                  <h3 className="font-semibold text-lg line-clamp-1">{videoMetadata.title}</h3>
+                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded">
+                      <User className="w-3.5 h-3.5" /> {videoMetadata.channel}
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded">
+                      <Clock className="w-3.5 h-3.5" /> {videoMetadata.duration_formatted}
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded">
+                      <Eye className="w-3.5 h-3.5" /> {(videoMetadata.view_count / 1000000).toFixed(1)}M
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Features / Placeholder if no URL */}
+          {!videoMetadata && !currentJob && !completedJob && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full opacity-60 hover:opacity-100 transition-opacity mb-6">
+              <FeatureCard
+                icon={<Sparkles className="h-6 w-6 text-indigo-500" />}
+                title={t('aiDetection')}
+                desc={t('viralMoments')}
+                gradient="bg-indigo-500/10"
+              />
+              <FeatureCard
+                icon={<Target className="h-6 w-6 text-rose-500" />}
+                title={t('faceTracking')}
+                desc={t('smartCropping')}
+                gradient="bg-rose-500/10"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ROW 3: Horizontal Configuration Panel */}
+        <Card className="border-border/60 shadow-lg backdrop-blur-sm bg-background/95 ring-1 ring-border/50 overflow-hidden max-w-5xl mx-auto">
+          <CardHeader className="bg-muted/40 px-6 py-4 border-b border-border/50">
+            <div className="flex items-center gap-2">
+              <Settings2 className="w-5 h-5 text-primary" />
+              <CardTitle className="text-base font-semibold">{t('clipSettings')}</CardTitle>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-6">
+            {/* 3-Column Horizontal Grid for Settings */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
+
+              {/* Column 1: Duration (4 cols) */}
+              <div className="md:col-span-4 space-y-6 border-r md:border-r-border/60 md:pr-6 border-transparent">
+                <div className="flex items-center gap-2 mb-4">
+                  <Clock className="w-4 h-4 text-muted-foreground" />
+                  <h4 className="font-medium text-sm text-foreground">Duration</h4>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">{t('minDuration')}</span>
+                      <Badge variant="outline" className="font-mono bg-background">{minDuration}s</Badge>
+                    </div>
+                    <Slider
+                      min={15} max={60} step={5}
+                      value={[minDuration]}
+                      onValueChange={(v) => setMinDuration(v[0])}
+                      className="py-1"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">{t('maxDuration')}</span>
+                      <Badge variant="outline" className="font-mono bg-background">{maxDuration}s</Badge>
+                    </div>
+                    <Slider
+                      min={30} max={120} step={5}
+                      value={[maxDuration]}
+                      onValueChange={(v) => setMaxDuration(v[0])}
+                      className="py-1"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Video Preview State */}
-              <div className="min-h-[140px] transition-all duration-300 ease-in-out">
-                {isLoadingMetadata ? (
-                  <div className="h-32 rounded-xl border border-dashed border-muted-foreground/25 bg-muted/20 flex flex-col items-center justify-center gap-3 animate-pulse">
-                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent" />
-                    <p className="text-sm text-muted-foreground font-medium">{t('loadingVideoDetails')}</p>
-                  </div>
-                ) : videoMetadata ? (
-                  <div className="rounded-xl border bg-card overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-                    <div className="flex flex-col sm:flex-row">
-                      <div className="relative sm:w-48 aspect-video sm:aspect-auto bg-muted group">
-                        {videoMetadata.thumbnail_url ? (
-                          <Image
-                            src={getThumbnailUrl(videoMetadata.thumbnail_url)}
-                            alt={videoMetadata.title}
-                            fill
-                            className="object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex items-center justify-center h-full w-full">
-                            <VideoIcon className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-black/20 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                          <div className="bg-background/90 rounded-full p-2 shadow-lg backdrop-blur-sm">
-                            <Play className="h-5 w-5 text-primary fill-primary" />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="p-4 flex-1 flex flex-col justify-center gap-2">
-                        <h3 className="font-semibold text-base line-clamp-2 leading-tight">
-                          {videoMetadata.title}
-                        </h3>
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-                          <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded-md">
-                            <User className="h-3.5 w-3.5" />
-                            <span className="truncate max-w-[150px] font-medium">{videoMetadata.channel}</span>
-                          </div>
-                          {videoMetadata.duration && (
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="h-3.5 w-3.5" />
-                              <span>{videoMetadata.duration_formatted}</span>
-                            </div>
-                          )}
-                          {videoMetadata.view_count && (
-                            <div className="flex items-center gap-1.5">
-                              <Eye className="h-3.5 w-3.5" />
-                              <span>{(videoMetadata.view_count / 1000000).toFixed(1)}M views</span>
-                            </div>
-                          )}
+              {/* Column 2: Styles (4 cols) */}
+              <div className="md:col-span-4 space-y-6 border-r md:border-r-border/60 md:pr-6 border-transparent">
+                <div className="flex items-center gap-2 mb-4">
+                  <Wand2 className="w-4 h-4 text-muted-foreground" />
+                  <h4 className="font-medium text-sm text-foreground">{t('subtitleStyle')}</h4>
+                </div>
+
+                <div className="space-y-3">
+                  {SUBTITLE_STYLES.map((style) => (
+                    <div
+                      key={style.id}
+                      className={cn(
+                        "flex items-center justify-between p-2 rounded-lg border cursor-pointer transition-all hover:border-primary/50",
+                        subtitleStyle === style.id ? "bg-primary/5 border-primary shadow-sm" : "bg-muted/30 border-transparent"
+                      )}
+                      onClick={() => setSubtitleStyle(style.id)}
+                    >
+                      <span className="text-sm font-medium pl-2">{style.name}</span>
+                      {/* Mini Preview Dot/Box */}
+                      <div className="w-20 h-6 bg-black/80 rounded flex items-center justify-center overflow-hidden">
+                        <div className={cn(
+                          "text-[8px] font-bold whitespace-nowrap px-1",
+                          style.id === 'yellow_highlight' ? "text-white" :
+                            style.id === 'multicolor_pop' ? "text-white" : "text-white italic"
+                        )}>
+                          {style.id === 'yellow_highlight' && <span className="bg-yellow-400 text-black px-0.5 rounded-[1px]">ABC</span>}
+                          {style.id === 'multicolor_pop' && <span className="text-pink-400">ABC</span>}
+                          {style.id === 'clean_outline' && "ABC"}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ) : (
-                  <div className="h-32 rounded-xl border border-dashed border-muted-foreground/20 bg-muted/5 flex flex-col items-center justify-center gap-2">
-                    <div className="p-2 rounded-full bg-muted/30">
-                      <SearchIllustration className="h-6 w-6 text-muted-foreground/40" />
-                    </div>
-                    <p className="text-sm text-muted-foreground/60">Video details will appear here</p>
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Results Area */}
-          <div className="space-y-6">
-            {currentJob && (
+              {/* Column 3: Appearance & Act (4 cols) */}
+              <div className="md:col-span-4 space-y-6 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <Palette className="w-4 h-4 text-muted-foreground" />
+                    <h4 className="font-medium text-sm text-foreground">{t('appearance')}</h4>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase text-muted-foreground">{t('displayMode')}</Label>
+                      <div className="flex gap-1">
+                        {DISPLAY_MODES.map((mode) => (
+                          <div
+                            key={mode.id}
+                            className={cn(
+                              "flex-1 h-8 flex items-center justify-center rounded border cursor-pointer transition-colors",
+                              subtitleDisplayMode === mode.id ? "bg-primary/10 border-primary text-primary" : "bg-muted/30 border-transparent hover:bg-muted"
+                            )}
+                            onClick={() => setSubtitleDisplayMode(mode.id)}
+                            title={mode.name}
+                          >
+                            <mode.icon className="w-4 h-4" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-[10px] uppercase text-muted-foreground">{t('positionLabel')}</Label>
+                      <div className="flex gap-1">
+                        {SUBTITLE_POSITIONS.map((pos) => (
+                          <div
+                            key={pos.id}
+                            className={cn(
+                              "flex-1 h-8 flex items-center justify-center rounded border cursor-pointer transition-colors",
+                              subtitlePosition === pos.id ? "bg-primary/10 border-primary text-primary" : "bg-muted/30 border-transparent hover:bg-muted"
+                            )}
+                            onClick={() => setSubtitlePosition(pos.id)}
+                            title={pos.name}
+                          >
+                            <pos.icon className="w-4 h-4" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main Action Button */}
+                <Button
+                  type="submit"
+                  className="w-full font-bold shadow-xl shadow-primary/20 text-base py-6 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  size="lg"
+                  disabled={isSubmitting || !!currentJobId || !youtubeUrl}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="h-5 w-5 mr-3 animate-spin rounded-full border-2 border-background border-t-transparent" />
+                      {t('starting')}...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-5 h-5 mr-2 fill-current" />
+                      {t('generateViralClipsButton')}
+                    </>
+                  )}
+                </Button>
+              </div>
+
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* ROW 4: Results Section (At Bottom) */}
+        <div className="space-y-6 pb-20 max-w-5xl mx-auto">
+          {currentJob && (
+            <div className="w-full">
               <JobStartedNotification
                 jobId={currentJob.id}
                 status={currentJob.status}
                 progress={currentJob.progress}
                 currentStep={currentJob.current_step}
               />
-            )}
-
-            {completedJob && (
-              <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <ResultPanel
-                  job={completedJob}
-                  onClose={() => setCompletedJob(null)}
-                />
-              </div>
-            )}
-
-            {/* Features Info (When idle) */}
-            {!currentJob && !completedJob && (
-              <div className="grid grid-cols-2 gap-4">
-                <FeatureCard
-                  icon={<Sparkles className="h-5 w-5 text-purple-500" />}
-                  title={t('aiDetection')}
-                  desc={t('viralMoments')}
-                />
-                <FeatureCard
-                  icon={<Target className="h-5 w-5 text-blue-500" />}
-                  title={t('faceTracking')}
-                  desc={t('smartCropping')}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Column: Configuration (4 cols) */}
-        <div className="lg:col-span-4 space-y-6">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-
-            <Card className="border-border/50 shadow-sm h-fit">
-              <CardHeader className="bg-muted/30 pb-4 border-b border-border/50">
-                <div className="flex items-center gap-2">
-                  <Settings2 className="w-5 h-5 text-primary" />
-                  <CardTitle className="text-base font-medium">Clip Settings</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6 space-y-8">
-
-                {/* Duration Controls */}
-                <div className="space-y-5">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">{t('minDuration')}</Label>
-                      <Badge variant="secondary" className="font-mono">{minDuration}s</Badge>
-                    </div>
-                    <Slider
-                      min={15}
-                      max={60}
-                      step={5}
-                      value={[minDuration]}
-                      onValueChange={(value) => setMinDuration(value[0])}
-                      disabled={isSubmitting}
-                      className="py-1"
-                    />
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-medium">{t('maxDuration')}</Label>
-                      <Badge variant="secondary" className="font-mono">{maxDuration}s</Badge>
-                    </div>
-                    <Slider
-                      min={30}
-                      max={120}
-                      step={5}
-                      value={[maxDuration]}
-                      onValueChange={(value) => setMaxDuration(value[0])}
-                      disabled={isSubmitting}
-                      className="py-1"
-                    />
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Subtitle Style */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Wand2 className="w-4 h-4 text-muted-foreground" />
-                    <h4 className="text-sm font-medium text-muted-foreground">Subtitle Style</h4>
-                  </div>
-
-                  {/* Style Cards */}
-                  <div className="space-y-2">
-                    {SUBTITLE_STYLES.map((style) => (
-                      <div
-                        key={style.id}
-                        className={`p-3 rounded-lg border-2 cursor-pointer transition-all ${subtitleStyle === style.id
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border/50 hover:border-border'
-                          }`}
-                        onClick={() => setSubtitleStyle(style.id)}
-                      >
-                        {/* Style Preview */}
-                        <div className={`mb-2 p-2 rounded bg-black/80 text-center text-sm font-bold ${style.id === 'yellow_highlight' ? 'text-white' :
-                            style.id === 'multicolor_pop' ? 'text-white' :
-                              'text-white italic'
-                          }`}>
-                          {style.id === 'yellow_highlight' && (
-                            <>
-                              <span>WHAT </span>
-                              <span className="bg-yellow-400 text-black px-1 rounded">KIND</span>
-                              <span> OF</span>
-                            </>
-                          )}
-                          {style.id === 'multicolor_pop' && (
-                            <>
-                              <span className="text-cyan-400">ADD </span>
-                              <span className="text-yellow-400">COOL </span>
-                              <span className="text-pink-400">CAPTIONS</span>
-                            </>
-                          )}
-                          {style.id === 'clean_outline' && (
-                            <span style={{ textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000' }}>
-                              HERE ARE THREE
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs font-medium">{style.name}</div>
-                        <div className="text-xs text-muted-foreground">{style.description}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Display Mode & Position */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Display Mode</Label>
-                    <div className="flex gap-2">
-                      {DISPLAY_MODES.map((mode) => (
-                        <Button
-                          key={mode.id}
-                          type="button"
-                          variant={subtitleDisplayMode === mode.id ? 'default' : 'outline'}
-                          size="sm"
-                          className="flex-1 text-xs"
-                          onClick={() => setSubtitleDisplayMode(mode.id)}
-                          disabled={isSubmitting}
-                        >
-                          {mode.name}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium">Position</Label>
-                    <div className="flex gap-2">
-                      {SUBTITLE_POSITIONS.map((pos) => (
-                        <Button
-                          key={pos.id}
-                          type="button"
-                          variant={subtitlePosition === pos.id ? 'default' : 'outline'}
-                          size="sm"
-                          className="flex-1 text-xs"
-                          onClick={() => setSubtitlePosition(pos.id)}
-                          disabled={isSubmitting}
-                        >
-                          {pos.name}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Appearance */}
-                <div className="space-y-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Settings2 className="w-4 h-4 text-muted-foreground" />
-                    <h4 className="text-sm font-medium text-muted-foreground">Appearance</h4>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="subtitleFontSize" className="text-sm font-medium">{t('subtitleFontSize')}</Label>
-                      <span className="text-xs text-muted-foreground font-mono">{subtitleFontSize}px</span>
-                    </div>
-                    <Slider
-                      id="subtitleFontSize"
-                      min={20}
-                      max={80}
-                      step={5}
-                      value={[subtitleFontSize]}
-                      onValueChange={(value) => setSubtitleFontSize(value[0])}
-                      disabled={isSubmitting}
-                    />
-                  </div>
-
-                  {/* Color Pickers */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label className="text-xs">Text Color</Label>
-                      <div className="flex items-center gap-2">
-                        <div className="relative overflow-hidden rounded-md border w-8 h-8 shrink-0">
-                          <Input
-                            type="color"
-                            value={subtitleTextColor}
-                            onChange={(e) => setSubtitleTextColor(e.target.value)}
-                            className="absolute inset-0 p-0 h-[150%] w-[150%] -top-[25%] -left-[25%] cursor-pointer border-0"
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                        <Input
-                          value={subtitleTextColor}
-                          onChange={(e) => setSubtitleTextColor(e.target.value)}
-                          className="h-8 font-mono text-xs uppercase"
-                          maxLength={7}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label className="text-xs">Highlight Color</Label>
-                      <div className="flex items-center gap-2">
-                        <div className="relative overflow-hidden rounded-md border w-8 h-8 shrink-0">
-                          <Input
-                            type="color"
-                            value={subtitleHighlightColor}
-                            onChange={(e) => setSubtitleHighlightColor(e.target.value)}
-                            className="absolute inset-0 p-0 h-[150%] w-[150%] -top-[25%] -left-[25%] cursor-pointer border-0"
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                        <Input
-                          value={subtitleHighlightColor}
-                          onChange={(e) => setSubtitleHighlightColor(e.target.value)}
-                          className="h-8 font-mono text-xs uppercase"
-                          maxLength={7}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Advanced Toggle */}
-                  <div className="pt-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-between"
-                      onClick={() => setShowAdvanced(!showAdvanced)}
-                    >
-                      <span className="text-xs">{t('advancedSubtitleSettings')}</span>
-                      {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                    </Button>
-
-                    {showAdvanced && (
-                      <div className="mt-4 space-y-5 animate-in slide-in-from-top-2 duration-200">
-                        <div className="space-y-2">
-                          <Label className="text-xs">Vertical Offset</Label>
-                          <Slider
-                            min={100}
-                            max={1000}
-                            step={50}
-                            value={[subtitleVerticalOffset]}
-                            onValueChange={(v) => setSubtitleVerticalOffset(v[0])}
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="bg-muted/10 p-4 border-t border-border/50">
-                <Button
-                  type="submit"
-                  className="w-full font-semibold shadow-lg shadow-primary/20 transition-all hover:shadow-primary/30"
-                  size="lg"
-                  disabled={isSubmitting || !!currentJobId || !youtubeUrl}
-                >
-                  {isSubmitting ? (
-                    <>
-                      <div className="h-4 w-4 mr-2 animate-spin rounded-full border-2 border-background border-t-transparent" />
-                      {t('starting')}
-                    </>
-                  ) : currentJobId ? (
-                    <>
-                      {t('processing')}
-                      <span className="ml-1 opacity-70">...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-4 h-4 mr-2 fill-current" />
-                      {t('generateViralClipsButton')}
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-
-            {/* Helper Tips */}
-            <div className="bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200/50 dark:border-blue-800/30 rounded-lg p-4 text-sm text-blue-900 dark:text-blue-200">
-              <div className="flex items-start gap-3">
-                <div className="p-1 bg-blue-100 dark:bg-blue-900/40 rounded-full mt-0.5">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div className="space-y-1">
-                  <p className="font-semibold text-xs uppercase tracking-wide opacity-80">Pro Tip</p>
-                  <p className="opacity-90 leading-relaxed text-xs">
-                    Videos between <strong>15-30 minutes</strong> yield the best results. The AI looks for engaging dialogue hooks.
-                  </p>
-                </div>
-              </div>
             </div>
+          )}
 
-          </form>
+          {completedJob && (
+            <div className="animate-in fade-in slide-in-from-bottom-8 duration-700 w-full">
+              <ResultPanel
+                job={completedJob}
+                onClose={() => setCompletedJob(null)}
+              />
+            </div>
+          )}
         </div>
-      </div>
+
+      </form>
     </div>
   );
 }
 
 // Sub-components for cleaner render
-function FeatureCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
+function FeatureCard({ icon, title, desc, gradient }: { icon: React.ReactNode, title: string, desc: string, gradient: string }) {
   return (
-    <div className="flex items-center gap-3 p-4 rounded-xl border bg-card hover:bg-muted/50 transition-colors">
-      <div className="p-2 bg-muted rounded-lg">
+    <div className="flex items-center gap-4 p-4 rounded-xl border border-dashed bg-card/30 hover:bg-card hover:border-solid transition-all duration-300 group">
+      <div className={cn("p-3 rounded-xl transition-colors group-hover:scale-110 duration-300", gradient)}>
         {icon}
       </div>
       <div>
-        <p className="font-medium text-sm leading-none mb-1.5">{title}</p>
-        <p className="text-xs text-muted-foreground">{desc}</p>
+        <h4 className="font-semibold text-base mb-1">{title}</h4>
+        <p className="text-sm text-muted-foreground leading-snug">{desc}</p>
       </div>
     </div>
   );
-}
-
-function SearchIllustration({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-    </svg>
-  )
 }

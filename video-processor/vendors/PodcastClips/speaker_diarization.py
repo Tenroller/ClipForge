@@ -114,7 +114,7 @@ class SpeakerDiarizer:
 
         self.min_speakers = min_speakers
         self.max_speakers = max_speakers
-        self.use_gpu = use_gpu
+        self.use_gpu = False  # Force CPU
 
         # Auto-detect number of workers if not specified
         if num_workers is None:

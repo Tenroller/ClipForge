@@ -21,7 +21,21 @@ FFMPEG_SHARED_BIN = r"C:\ffmpeg-shared\ffmpeg-6.1.1-full_build-shared\bin"
 FFMPEG_STATIC_BIN = r"C:\ffmpeg\bin"
 
 # Determine which FFmpeg to use
-if os.path.exists(FFMPEG_SHARED_BIN):
+import platform
+import shutil
+
+# Check system PATH first (works for macOS/Linux and properly configured Windows)
+system_ffmpeg = shutil.which("ffmpeg")
+
+if system_ffmpeg:
+    print(f"[FFmpeg] Found on system PATH: {system_ffmpeg}")
+    # We don't set FFMPEG_BINARY here necessarily, allowing backend/utils/ffmpeg_utils.py to detect it too
+    # But setting it ensures consistency if we want
+    if "FFMPEG_BINARY" not in os.environ:
+        os.environ["FFMPEG_BINARY"] = system_ffmpeg
+
+# Windows-specific DLL handling for torio/pyannote
+elif os.path.exists(FFMPEG_SHARED_BIN) and platform.system() == "Windows":
     ffmpeg_bin_path = FFMPEG_SHARED_BIN
     
     # CRITICAL: For Python 3.8+ on Windows, we must use os.add_dll_directory()
@@ -39,7 +53,7 @@ if os.path.exists(FFMPEG_SHARED_BIN):
     os.environ["FFMPEG_BINARY"] = os.path.join(FFMPEG_SHARED_BIN, "ffmpeg.exe")
     print(f"[FFmpeg] Using shared build: {FFMPEG_SHARED_BIN}")
     
-elif os.path.exists(FFMPEG_STATIC_BIN):
+elif os.path.exists(FFMPEG_STATIC_BIN) and platform.system() == "Windows":
     ffmpeg_bin_path = FFMPEG_STATIC_BIN
     
     # Suppress torio warnings for static FFmpeg (no DLLs available)
@@ -53,7 +67,7 @@ elif os.path.exists(FFMPEG_STATIC_BIN):
     os.environ["FFMPEG_BINARY"] = os.path.join(FFMPEG_STATIC_BIN, "ffmpeg.exe")
     print(f"[FFmpeg] Using static build (torio may show warnings): {FFMPEG_STATIC_BIN}")
 else:
-    print("[FFmpeg] WARNING: No FFmpeg installation found!")
+    print("[FFmpeg] WARNING: No FFmpeg installation found! (Please install FFmpeg and add it to PATH)")
 
 def main():
     # Get the project root directory

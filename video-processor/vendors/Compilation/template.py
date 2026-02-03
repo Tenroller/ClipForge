@@ -10,7 +10,7 @@ import torch
 class TextToImageRenderer:
     def __init__(self):
         # Add GPU detection
-        self.has_gpu = torch.cuda.is_available()
+        self.has_gpu = False
 
     def close(self):
         """Cleanup method for compatibility (no-op for Pillow)"""

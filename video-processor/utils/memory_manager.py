@@ -26,14 +26,6 @@ from ..logging_config import get_logger
 logger = get_logger("memory_manager")
 
 
-# Try to import torch for GPU memory management
-try:
-    import torch
-    HAS_TORCH = True
-except ImportError:
-    HAS_TORCH = False
-
-
 @dataclass
 class MemoryStats:
     """Memory statistics snapshot."""
@@ -41,17 +33,13 @@ class MemoryStats:
     used_mb: float
     available_mb: float
     percent_used: float
-    gpu_used_mb: Optional[float] = None
-    gpu_total_mb: Optional[float] = None
     
     def to_dict(self) -> Dict[str, Any]:
         return {
             "total_mb": self.total_mb,
             "used_mb": self.used_mb,
             "available_mb": self.available_mb,
-            "percent_used": self.percent_used,
-            "gpu_used_mb": self.gpu_used_mb,
-            "gpu_total_mb": self.gpu_total_mb
+            "percent_used": self.percent_used
         }
 
 
@@ -97,7 +85,7 @@ class MemoryManager:
         self._callbacks: list[Callable] = []
         self._initialized = True
         
-        logger.info("MemoryManager initialized")
+        logger.info("MemoryManager initialized (CPU Mode)")
     
     def get_memory_stats(self) -> MemoryStats:
         """Get current memory statistics."""
@@ -109,16 +97,6 @@ class MemoryManager:
             available_mb=mem.available / (1024 * 1024),
             percent_used=mem.percent
         )
-        
-        # Check GPU memory if available
-        if HAS_TORCH and torch.cuda.is_available():
-            try:
-                gpu_used = torch.cuda.memory_allocated() / (1024 * 1024)
-                gpu_total = torch.cuda.get_device_properties(0).total_memory / (1024 * 1024)
-                stats.gpu_used_mb = gpu_used
-                stats.gpu_total_mb = gpu_total
-            except Exception:
-                pass
         
         return stats
     
@@ -157,13 +135,7 @@ class MemoryManager:
         # Python garbage collection
         gc.collect()
         
-        # GPU memory cleanup
-        if HAS_TORCH and torch.cuda.is_available():
-            try:
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-            except Exception as e:
-                logger.warning(f"GPU cleanup failed: {e}")
+        # GPU memory cleanup - REMOVED (CPU ONLY MODE)
         
         # Force a second gc pass
         gc.collect()
@@ -279,8 +251,7 @@ class MemoryManager:
         msg = (f"Memory: {stats.percent_used:.1f}% used "
                f"({stats.available_mb:.0f}MB available), pressure: {pressure}")
         
-        if stats.gpu_used_mb is not None:
-            msg += f", GPU: {stats.gpu_used_mb:.0f}MB/{stats.gpu_total_mb:.0f}MB"
+        # GPU stats removed
         
         if pressure == "critical":
             logger.warning(msg)

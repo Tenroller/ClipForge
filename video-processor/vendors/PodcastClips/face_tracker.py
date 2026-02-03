@@ -509,12 +509,12 @@ class FaceTracker:
             try:
                 from .person_detector_yolo import YOLOPersonDetector
                 self.person_detector = YOLOPersonDetector(
-                    model_name="yolov8m.pt",  # Medium model for good accuracy
+                    model_name="yolov8s.pt",  # Small model for good accuracy on CPU
                     confidence_threshold=0.5,
-                    use_gpu=True,  # Use GPU for faster detection
+                    use_gpu=False,  # Force CPU
                     enable_tracking=True
                 )
-                logger.info("YOLO person detection enabled (fallback for face detection)")
+                logger.info("YOLO person detection enabled (fallback for face detection) [CPU MODE]")
             except Exception as e:
                 logger.warning(f"Failed to initialize person detector: {e}")
                 self.person_detector = None

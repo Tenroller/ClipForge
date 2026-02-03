@@ -27,7 +27,6 @@ export default function CompilationsPage() {
   const { data: recentJobs = [] } = useJobs({ limit: 10, refetchInterval: 5000 });
 
   const [busy, setBusy] = useState(false);
-  const [useGpu, setUseGpu] = useState(true);
   const [isUnlimited, setIsUnlimited] = useState(false);
   const [generateNoBackground, setGenerateNoBackground] = useState(true);
   const [blurredPillarboxThreshold, setBlurredPillarboxThreshold] = useState(0.1);
@@ -289,7 +288,7 @@ export default function CompilationsPage() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <Clock className="w-4 h-4" />
-                      Clip Duration
+                      {t('clipDuration')}
                     </div>
                     <div className="grid grid-cols-2 gap-6">
                       <div className="space-y-2">
@@ -310,9 +309,9 @@ export default function CompilationsPage() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                         <Smartphone className="w-4 h-4" />
-                        Mobile Format
+                        {t('mobileFormat')}
                       </div>
-                      <Badge variant="outline">9:16 Vertical</Badge>
+                      <Badge variant="outline">{t('verticalFormat')}</Badge>
                     </div>
 
                     <div className="flex items-center justify-between p-4 rounded-lg bg-muted/40 border">
@@ -326,9 +325,9 @@ export default function CompilationsPage() {
                     {generateNoBackground && (
                       <div className="space-y-3 pt-2">
                         <div className="flex justify-between text-xs">
-                          <span>Stricter (More Blur)</span>
+                          <span>{t('stricterMoreBlur')}</span>
                           <span className="text-muted-foreground font-mono">{blurredPillarboxThreshold.toFixed(2)}</span>
-                          <span>Tolerant (Less Blur)</span>
+                          <span>{t('tolerantLessBlur')}</span>
                         </div>
                         <Slider
                           value={[blurredPillarboxThreshold]}
@@ -360,17 +359,7 @@ export default function CompilationsPage() {
                     <Label htmlFor="unlimited">{t('generateUnlimited')}</Label>
                   </div>
 
-                  {/* GPU Toggle */}
-                  <div className="flex items-center justify-between p-3 rounded-lg border bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/20 dark:to-teal-950/20">
-                    <div className="flex items-center gap-3">
-                      <Cpu className={`size-5 ${useGpu ? 'text-emerald-500' : 'text-muted-foreground'}`} />
-                      <div>
-                        <div className="font-medium text-sm">GPU Acceleration</div>
-                        <div className="text-xs text-muted-foreground">Use local GPU for faster processing</div>
-                      </div>
-                    </div>
-                    <Switch checked={useGpu} onCheckedChange={setUseGpu} />
-                  </div>
+
 
                   <Button type="submit" size="lg" disabled={busy} className="w-full relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-r from-primary to-purple-600 opacity-80 group-hover:opacity-100 transition-opacity" />
@@ -412,9 +401,9 @@ export default function CompilationsPage() {
               </div>
 
               <div className="p-4 rounded-lg bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/30 text-xs">
-                <span className="font-semibold text-orange-700 dark:text-orange-400 block mb-1">Pro Tip</span>
+                <span className="font-semibold text-orange-700 dark:text-orange-400 block mb-1">{t('proTip')}</span>
                 <span className="text-orange-600/80 dark:text-orange-300/80">
-                  Use longer source videos (20+ mins) to give the AI more context for better clip selection and coherence.
+                  {t('proTipContent')}
                 </span>
               </div>
             </CardContent>

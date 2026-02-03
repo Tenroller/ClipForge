@@ -19,7 +19,16 @@
     "retry": "Tentar Novamente",
     "status": "Status",
     "actions": "Ações",
-    "welcome": "Bem-vindo"
+    "welcome": "Bem-vindo",
+    "loadingResumableJobs": "Carregando trabalhos retomáveis...",
+    "loadingLineage": "Carregando linhagem...",
+    "loadingDescendants": "Carregando descendentes...",
+    "openMenu": "Abrir menu"
+  },
+  "dashboard": {
+    "title": "Painel",
+    "section": "Aplicação",
+    "page": "Visão Geral"
   },
   "landing": {
     "hero": {
@@ -32,7 +41,7 @@
       "stats": {
         "aiModels": "Modelos de IA",
         "ttsVoices": "Vozes TTS",
-        "gpuPowered": "GPU Powered",
+        "gpuPowered": "Otimizado para CPU",
         "processingSpeed": "Velocidade de Processamento"
       }
     },
@@ -250,6 +259,7 @@
   "creator": {
     "title": "Criador de Vídeo com IA",
     "description": "Gere vídeos profissionais com roteiros e imagens de arquivo geradas por IA em minutos",
+    "videoConfiguration": "Configuração do Vídeo",
     "recentJobs": "Trabalhos Recentes",
     "noRecentJobs": "Nenhum trabalho recente",
     "startCreating": "Comece a criar para ver os trabalhos aqui",
@@ -275,6 +285,12 @@
       "generateWithAI": "Gerar com IA",
       "playSample": "Reproduzir amostra",
       "loadingSample": "Carregando amostra…",
+      "videoConfiguration": "Configuração do Vídeo",
+      "basicSettings": "Configurações Básicas",
+      "advancedOptions": "Opções Avançadas",
+      "useLocalGpu": "Usar GPU Local",
+      "hardwareAcceleration": "Aceleração de Hardware",
+      "paragraphsTooltip": "Número de parágrafos para gerar por seção",
       "chooseCapableModel": "Escolha um modelo capaz e econômico",
       "backgroundMusic": "Música de Fundo",
       "zipUrlPlaceholder": "URL do ZIP com MP3s (opcional)",
@@ -319,7 +335,14 @@
     "title": "Gerador de Compilações de Vídeo",
     "description": "Crie vídeos de compilação envolventes a partir de conteúdo do YouTube",
     "configuration": "Configuração",
-    "brainrotGenerator": "Gerador Brainrot",
+    "clipDuration": "Duração do Clipe",
+    "mobileFormat": "Formato Mobile",
+    "verticalFormat": "9:16 Vertical",
+    "stricterMoreBlur": "Mais Rigoroso (Mais Desfoque)",
+    "tolerantLessBlur": "Tolerante (Menos Desfoque)",
+    "useLocalGpuFaster": "Usar GPU local para processamento mais rápido",
+    "proTip": "Dica",
+    "proTipContent": "Use vídeos de origem mais longos (20+ minutos) para dar mais contexto à IA para melhor seleção e coerência de clipes.",
     "transformVideos": "Transforme vídeos do YouTube em compilações estilo TikTok",
     "videoSource": "Fonte do Vídeo",
     "youtubeUrl": "URL do YouTube",
@@ -341,6 +364,7 @@
     "aspectRatioTolerance": "Tolerância de Proporção 9:16",
     "toleranceDescription": "Valores mais baixos = requisito 9:16 mais rigoroso (mais fundos desfocados), Valores mais altos = mais tolerância (menos fundos desfocados)",
     "gpuAcceleration": "Aceleração GPU",
+    "gpuAccelerated": "Acelerado por GPU",
     "cpuProcessing": "Processamento CPU",
     "usingLocalGPU": "Usando GPU local para processamento de vídeo mais rápido",
     "usingCPU": "Usando CPU para processamento de vídeo (mais lento)",
@@ -370,7 +394,44 @@
   "podcastClips": {
     "title": "Clipes de Podcast",
     "description": "Gere vídeos curtos virais de podcasts com detecção de momentos impulsionada por IA",
+    "sourceVideoDescription": "Cole uma URL do YouTube para detectar automaticamente os falantes, transcrever o áudio e gerar clipes virais.",
     "sourceVideo": "Vídeo Fonte",
+    "youtubeUrlLabel": "URL do YouTube",
+    "videoDetailsWillAppear": "Os detalhes do vídeo aparecerão aqui",
+    "views": "visualizações",
+    "clipSettings": "Configurações do Clipe",
+    "subtitleStyle": "Estilo de Legenda",
+    "displayMode": "Modo de Exibição",
+    "positionLabel": "Posição",
+    "appearance": "Aparência",
+    "textColor": "Cor do Texto",
+    "highlightColorLabel": "Cor de Destaque",
+    "verticalOffset": "Deslocamento Vertical",
+    "proTip": "Dica",
+    "proTipContent": "Vídeos entre 15-30 minutos geram os melhores resultados. A IA procura ganchos de diálogo envolventes.",
+    "subtitleStyles": {
+      "yellowHighlight": {
+        "name": "Destaque Amarelo",
+        "description": "Texto em negrito com destaque amarelo na palavra atual"
+      },
+      "multicolorPop": {
+        "name": "Pop Multicolorido",
+        "description": "Cores alternadas vibrantes com peso pesado"
+      },
+      "cleanOutline": {
+        "name": "Contorno Limpo",
+        "description": "Texto branco em itálico com contorno escuro"
+      }
+    },
+    "displayModes": {
+      "word": "Palavra por Palavra",
+      "sentence": "Frase Completa"
+    },
+    "positions": {
+      "top": "Topo",
+      "center": "Centro",
+      "bottom": "Inferior"
+    },
     "aiDetection": "Detecção IA",
     "viralMoments": "Momentos virais",
     "faceTracking": "Rastreamento de Rosto",

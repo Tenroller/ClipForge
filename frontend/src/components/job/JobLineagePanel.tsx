@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -27,6 +28,7 @@ interface JobLineagePanelProps {
 }
 
 export default function JobLineagePanel({ jobId, className }: JobLineagePanelProps) {
+  const t = useTranslations('common');
   const { toast } = useToast();
   const router = useRouter();
   const { data, isLoading, error, refetch } = useJobLineage(jobId);
@@ -134,7 +136,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
           </div>
           {isLoading && chain.length === 1 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading lineage...
+              <Loader2 className="size-4 animate-spin" /> {t('loadingLineage')}
             </div>
           ) : chain.length === 1 && ancestors.length === 0 ? (
             <div className="text-sm text-muted-foreground">This job has no ancestors (root of its chain).</div>
@@ -146,11 +148,10 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
                 return (
                   <div key={rec.id} className="flex items-center gap-2">
                     <div
-                      className={`group flex items-center gap-2 px-2 py-1 rounded border text-xs font-mono cursor-pointer transition ${
-                        isCurrent
+                      className={`group flex items-center gap-2 px-2 py-1 rounded border text-xs font-mono cursor-pointer transition ${isCurrent
                           ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700'
                           : 'bg-muted/40 border-border/50 hover:bg-muted'
-                      } `}
+                        } `}
                       onClick={() => {
                         if (!isCurrent) router.push(`/job/${rec.id}`);
                       }}
@@ -198,7 +199,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
           </div>
           {isLoading && descendants.length === 0 ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" /> Loading descendants...
+              <Loader2 className="size-4 animate-spin" /> {t('loadingDescendants')}
             </div>
           ) : descendants.length === 0 ? (
             <div className="text-sm text-muted-foreground">No descendant (resumed) jobs yet.</div>

@@ -43,7 +43,7 @@ class TikTokVideoCreator:
         Path(self.output_dir).mkdir(exist_ok=True)
         
         # Add GPU detection
-        self.has_gpu = torch.cuda.is_available()
+        self.has_gpu = False
     
     def validate_video_file(self, video_path):
         """Validate if a video file is readable and not corrupted"""

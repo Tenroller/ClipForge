@@ -180,13 +180,13 @@ class PodcastClipsProcessor:
                 raise ValueError("YouTube URL is required")
             
             # Hardcoded AI configuration (simplified - always use best settings)
-            ai_model = 'gemini-3-flash-preview'  # Always use latest flash model
+            ai_model = 'openrouter/free'  # Always use latest flash model
             whisper_model = 'turbo'  # Always use turbo for fast transcription
             # max_clip_count removed - AI decides optimal clip count based on content quality
             
             min_duration = parameters.get('minDuration', 45)  # Minimum clip duration (45s default for viral shorts)
             max_duration = parameters.get('maxDuration', 90)  # Maximum clip duration (90s default)
-            use_gpu = parameters.get('useGPU', True)
+            use_gpu = parameters.get('useGPU', False)
             subtitle_font_size = parameters.get('subtitleFontSize', 50)
             subtitle_color = parameters.get('subtitleColor', '#FFFFFF')
             subtitle_stroke_color = parameters.get('subtitleStrokeColor', '#000000')
@@ -984,7 +984,7 @@ class PodcastClipsProcessor:
             # Use structured output to guarantee valid JSON with system instruction
             response_data = generate_structured_response(
                 prompt=content,
-                ai_model='gemini-3-flash-preview',
+                ai_model=ai_model,
                 response_schema=ViralMomentsResponse,
                 system_instruction=system_instruction
             )

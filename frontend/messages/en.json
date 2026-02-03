@@ -19,7 +19,16 @@
     "retry": "Retry",
     "status": "Status",
     "actions": "Actions",
-    "welcome": "Welcome"
+    "welcome": "Welcome",
+    "loadingResumableJobs": "Loading resumable jobs...",
+    "loadingLineage": "Loading lineage...",
+    "loadingDescendants": "Loading descendants...",
+    "openMenu": "Open menu"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "section": "Application",
+    "page": "Overview"
   },
   "landing": {
     "hero": {
@@ -32,7 +41,7 @@
       "stats": {
         "aiModels": "AI Models",
         "ttsVoices": "TTS Voices",
-        "gpuPowered": "GPU Powered",
+        "gpuPowered": "CPU Optimized",
         "processingSpeed": "Processing Speed"
       }
     },
@@ -250,6 +259,7 @@
   "creator": {
     "title": "AI Video Creator",
     "description": "Generate professional videos with AI-powered scripts and stock footage in minutes",
+    "videoConfiguration": "Video Configuration",
     "recentJobs": "Recent Jobs",
     "noRecentJobs": "No recent jobs",
     "startCreating": "Start creating to see jobs here",
@@ -275,6 +285,12 @@
       "generateWithAI": "Generate with AI",
       "playSample": "Play sample",
       "loadingSample": "Loading sample…",
+      "videoConfiguration": "Video Configuration",
+      "basicSettings": "Basic Settings",
+      "advancedOptions": "Advanced Options",
+      "useLocalGpu": "Use Local GPU",
+      "hardwareAcceleration": "Hardware acceleration",
+      "paragraphsTooltip": "Number of paragraphs to generate per section",
       "chooseCapableModel": "Choose a capable, cost‑effective model",
       "backgroundMusic": "Background Music",
       "zipUrlPlaceholder": "ZIP URL of MP3s (optional)",
@@ -319,6 +335,14 @@
     "title": "Video Compilation Generator",
     "description": "Create engaging compilation videos from YouTube content",
     "configuration": "Configuration",
+    "clipDuration": "Clip Duration",
+    "mobileFormat": "Mobile Format",
+    "verticalFormat": "9:16 Vertical",
+    "stricterMoreBlur": "Stricter (More Blur)",
+    "tolerantLessBlur": "Tolerant (Less Blur)",
+    "useLocalGpuFaster": "Use local GPU for faster processing",
+    "proTip": "Pro Tip",
+    "proTipContent": "Use longer source videos (20+ mins) to give the AI more context for better clip selection and coherence.",
     "brainrotGenerator": "Brainrot Generator",
     "transformVideos": "Transform YouTube videos into TikTok-style compilations",
     "videoSource": "Video Source",
@@ -341,6 +365,7 @@
     "aspectRatioTolerance": "9:16 Aspect Ratio Tolerance",
     "toleranceDescription": "Lower values = stricter 9:16 requirement (more blurred backgrounds), Higher values = more tolerance (fewer blurred backgrounds)",
     "gpuAcceleration": "GPU Acceleration",
+    "gpuAccelerated": "GPU Accelerated",
     "cpuProcessing": "CPU Processing",
     "usingLocalGPU": "Using local GPU for faster video processing",
     "usingCPU": "Using CPU for video processing (slower)",
@@ -370,7 +395,44 @@
   "podcastClips": {
     "title": "Podcast Clips",
     "description": "Generate viral short-form videos from podcasts with AI-powered moment detection",
+    "sourceVideoDescription": "Paste a YouTube URL to automatically detect speakers, transcribe audio, and generate viral clips.",
     "sourceVideo": "Source Video",
+    "youtubeUrlLabel": "YouTube URL",
+    "videoDetailsWillAppear": "Video details will appear here",
+    "views": "views",
+    "clipSettings": "Clip Settings",
+    "subtitleStyle": "Subtitle Style",
+    "displayMode": "Display Mode",
+    "positionLabel": "Position",
+    "appearance": "Appearance",
+    "textColor": "Text Color",
+    "highlightColorLabel": "Highlight Color",
+    "verticalOffset": "Vertical Offset",
+    "proTip": "Pro Tip",
+    "proTipContent": "Videos between 15-30 minutes yield the best results. The AI looks for engaging dialogue hooks.",
+    "subtitleStyles": {
+      "yellowHighlight": {
+        "name": "Yellow Highlight",
+        "description": "Bold text with yellow highlight on current word"
+      },
+      "multicolorPop": {
+        "name": "Multi-color Pop",
+        "description": "Vibrant alternating colors with heavy weight"
+      },
+      "cleanOutline": {
+        "name": "Clean Outline",
+        "description": "White italic text with dark stroke outline"
+      }
+    },
+    "displayModes": {
+      "word": "Word by Word",
+      "sentence": "Full Sentence"
+    },
+    "positions": {
+      "top": "Top",
+      "center": "Center",
+      "bottom": "Bottom"
+    },
     "aiDetection": "AI Detection",
     "viralMoments": "Viral moments",
     "faceTracking": "Face Tracking",

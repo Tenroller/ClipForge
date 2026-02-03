@@ -253,30 +253,11 @@ class PreflightValidator:
     
     def _check_gpu(self):
         """Check GPU availability."""
-        try:
-            import torch
-            if torch.cuda.is_available():
-                gpu_name = torch.cuda.get_device_name(0)
-                self._add_result(
-                    "gpu", True, ValidationSeverity.INFO,
-                    f"CUDA GPU available: {gpu_name}",
-                    {"gpu_name": gpu_name, "cuda_version": torch.version.cuda}
-                )
-            elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-                self._add_result(
-                    "gpu", True, ValidationSeverity.INFO,
-                    "Apple MPS GPU available"
-                )
-            else:
-                self._add_result(
-                    "gpu", False, ValidationSeverity.WARNING,
-                    "No GPU detected - processing will use CPU (slower)"
-                )
-        except ImportError:
-            self._add_result(
-                "gpu", False, ValidationSeverity.WARNING,
-                "PyTorch not installed - cannot check GPU availability"
-            )
+        # Always report CPU mode, GPU checks disabled
+        self._add_result(
+            "gpu", True, ValidationSeverity.INFO,
+            "CPU Mode: Processing will run on CPU (GPU disabled project-wide)"
+        )
     
     def _check_brainrot_requirements(self, job_data: Dict[str, Any]):
         """Check Brainrot/Compilation specific requirements."""

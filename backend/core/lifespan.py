@@ -100,16 +100,7 @@ def _cleanup_resources():
             except Exception as e:
                 logger.warning(f"Temp file cleanup failed: {e}")
 
-            # Cleanup GPU resources
-            try:
-                try:
-                    from ..utils.gpu_manager import cleanup_gpu_memory
-                except ImportError:
-                    from utils.gpu_manager import cleanup_gpu_memory
-                cleanup_gpu_memory(force=True)
-                logger.debug("GPU cleanup completed")
-            except Exception as e:
-                logger.warning(f"GPU cleanup failed: {e}")
+            # Cleanup GPU resources - REMOVED (CPU ONLY MODE)
 
         except Exception as e:
             logger.error(f"Error during resource cleanup: {e}")
@@ -169,19 +160,16 @@ async def lifespan(app: FastAPI):
             from ..utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
             from ..utils.fonts import init_font_manager
             from ..utils.paths import init_path_manager
-            from ..utils.gpu_manager import init_gpu_manager
         except ImportError:
             from utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
             from utils.fonts import init_font_manager
             from utils.paths import init_path_manager
-            from utils.gpu_manager import init_gpu_manager
 
         init_temp_manager()
         cleanup_temp_files_on_startup()
         # Note: streaming_processor is now handled by the video-processor service
         init_font_manager()
         init_path_manager()
-        init_gpu_manager()
 
         # Initialize and start job queue worker (delayed import to avoid circular dependency)
         try:

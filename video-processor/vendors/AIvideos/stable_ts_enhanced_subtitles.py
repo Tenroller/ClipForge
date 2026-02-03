@@ -125,16 +125,10 @@ def extract_word_timings_with_stable_ts(
     if not os.path.exists(audio_path):
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
     
-    # Determine device - check environment variable first
-    env_device = os.environ.get("WHISPER_DEVICE", "").lower()
-    if env_device in ["cpu", "cuda"]:
-        device = env_device
-        logger.info(f"Using device from WHISPER_DEVICE env: {device}")
-    elif TORCH_AVAILABLE and torch and use_gpu and torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
-    logger.info(f"Using device: {device}")
+    # Determine device - FORCE CPU
+    use_gpu = False
+    device = "cpu" 
+    logger.info(f"Using device: {device} (CPU Mode Forced)")
 
     # Load stable-ts model with thread-safe singleton pattern
     # This prevents concurrent model loads which cause segmentation faults

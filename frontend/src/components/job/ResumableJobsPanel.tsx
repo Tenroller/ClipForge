@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,7 @@ interface ResumableJobsPanelProps {
 
 export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelProps) {
   const { toast } = useToast();
+  const t = useTranslations('common');
   const router = useRouter();
   const { data: resumableJobs = [], isLoading, refetch } = useResumableJobs();
   const resumeJobMutation = useResumeJob();
@@ -101,7 +103,7 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <RefreshCw className="size-5 animate-spin" />
-            Loading resumable jobs...
+            {t('loadingResumableJobs')}
           </CardTitle>
         </CardHeader>
       </Card>

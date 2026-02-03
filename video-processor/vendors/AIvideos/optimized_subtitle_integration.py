@@ -21,7 +21,7 @@ def create_optimized_enhanced_subtitles(
     use_stable_ts: bool = True,
     use_optimized_renderer: bool = True,
     whisper_model: str = "base",
-    use_gpu: bool = True,
+    use_gpu: bool = False, # Default to False
     config_overrides: Optional[Dict[str, Any]] = None
 ) -> Tuple[Union[CompositeVideoClip, Any], str]:
     """
@@ -41,17 +41,18 @@ def create_optimized_enhanced_subtitles(
         use_stable_ts: Whether to use stable-ts for enhanced timing
         use_optimized_renderer: Whether to use pre-rendered frame optimization
         whisper_model: Model size to use
-        use_gpu: Whether to use GPU acceleration
+        use_gpu: Whether to use GPU acceleration - IGNORED IN CPU MODE
         config_overrides: Optional configuration overrides
         
     Returns:
         Tuple of (subtitle_clip, subtitle_data_path)
     """
+    use_gpu = False # Force CPU
     print(f"🚀 Creating optimized enhanced subtitles...")
     print(f"   - stable-ts: {'✅ Enabled' if use_stable_ts else '❌ Disabled'}")
     print(f"   - Optimized renderer: {'✅ Enabled' if use_optimized_renderer else '❌ Disabled'}")
     print(f"   - Model: {whisper_model}")
-    print(f"   - GPU: {'✅ Enabled' if use_gpu else '❌ Disabled'}")
+    print(f"   - GPU: ❌ Disabled (CPU Mode)")
     
     subtitle_data_path = None
     
@@ -67,7 +68,7 @@ def create_optimized_enhanced_subtitles(
                 audio_path=audio_path,
                 use_stable_ts=True,
                 model_size=whisper_model,
-                use_gpu=use_gpu,
+                use_gpu=False, # Force CPU
                 config=config_overrides,
                 video_size=video_size
             )
@@ -254,8 +255,8 @@ def is_optimized_subtitle_available() -> Dict[str, bool]:
     try:
         import torch
         availability['torch'] = True
-        if torch.cuda.is_available():
-            availability['cuda'] = True
+        # CUDA explicitly disabled for this project
+        availability['cuda'] = False 
     except ImportError:
         pass
     
@@ -277,22 +278,18 @@ def get_recommended_settings() -> Dict[str, Any]:
     settings = {
         'use_stable_ts': availability['stable_ts'],
         'use_optimized_renderer': availability['optimized_renderer'],
-        'use_gpu': availability['cuda'],
+        'use_gpu': False, # Force CPU
         'whisper_model': 'base'  # Safe default
     }
     
     # Adjust model size based on GPU availability
-    if availability['cuda']:
-        # With GPU, can use larger models
-        settings['whisper_model'] = 'small'  # Good balance of speed/accuracy
-    else:
-        # CPU only - use smaller model
-        settings['whisper_model'] = 'tiny'  # Faster on CPU
+    # CPU only - use smaller model
+    settings['whisper_model'] = 'tiny'  # Faster on CPU
     
     print("🔧 Recommended settings based on your system:")
     print(f"   - stable-ts: {'✅ Available' if availability['stable_ts'] else '❌ Install: pip install stable-ts'}")
     print(f"   - PyTorch: {'✅ Available' if availability['torch'] else '❌ Install PyTorch'}")
-    print(f"   - CUDA: {'✅ Available' if availability['cuda'] else '❌ No CUDA GPU detected'}")
+    print(f"   - CUDA: ❌ Disabled (CPU Mode)")
     print(f"   - Optimized renderer: {'✅ Available' if availability['optimized_renderer'] else '❌ Missing PIL'}")
     print(f"   - Recommended model: {settings['whisper_model']}")
     

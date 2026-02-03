@@ -267,9 +267,10 @@ def validate_ai_model(model: str) -> str:
         "gemini-1.5-pro",
         "gemini-1.5-flash",
         "gemini-2.0-flash-lite",
+        "openrouter/free",
     ]
     
-    if model in allowed_models:
+    if model in allowed_models or model.startswith("openrouter/"):
         return model
     
     # Default fallback

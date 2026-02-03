@@ -31,6 +31,7 @@ import type { JobRecord } from '@/lib/api';
 export default function ActivityPage() {
   const router = useRouter();
   const t = useTranslations('activity');
+  const tCommon = useTranslations('common');
   const { toast } = useToast();
   const { data: jobs = [], isLoading, refetch } = useJobs({ limit: 50, refetchInterval: 5000 });
   const remakeJobMutation = useRemakeJob();
@@ -299,7 +300,7 @@ export default function ActivityPage() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-muted">
-                            <span className="sr-only">Open menu</span>
+                            <span className="sr-only">{tCommon('openMenu')}</span>
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>

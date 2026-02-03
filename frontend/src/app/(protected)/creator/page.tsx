@@ -100,7 +100,7 @@ export default function CreatorPage() {
       subtitles_position: String(form.get('subtitlesPosition') || subtitlesPosition),
       color: String(form.get('color') || subtitleColor),
       use_music: form.get('useMusic') === '1',
-      use_gpu: form.get('useGPU') === '1',
+      use_gpu: false,
       custom_prompt: String(form.get('customPrompt') || '') || null,
       zip_url: String(form.get('zipUrl') || '') || null,
 
@@ -201,7 +201,7 @@ export default function CreatorPage() {
                   <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
                     <Sparkles className="w-5 h-5" />
                   </div>
-                  <CardTitle className="text-lg font-medium">Video Configuration</CardTitle>
+                  <CardTitle className="text-lg font-medium">{t('videoConfiguration')}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="p-6">
@@ -299,10 +299,10 @@ export default function CreatorPage() {
                           <div className="flex items-center justify-between">
                             <span className="font-mono text-xs text-muted-foreground">{job.id.substring(0, 8)}</span>
                             <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${job.status === 'completed'
-                                ? 'bg-green-500/10 text-green-600'
-                                : job.status === 'error' || job.status === 'cancelled'
-                                  ? 'bg-red-500/10 text-red-600'
-                                  : 'bg-blue-500/10 text-blue-600'
+                              ? 'bg-green-500/10 text-green-600'
+                              : job.status === 'error' || job.status === 'cancelled'
+                                ? 'bg-red-500/10 text-red-600'
+                                : 'bg-blue-500/10 text-blue-600'
                               }`}>
                               {job.status}
                             </span>

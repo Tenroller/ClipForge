@@ -16,6 +16,7 @@ import { Languages } from 'lucide-react';
 export function LanguageSwitcher() {
   const { locale, changeLanguage } = useLanguage();
   const t = useTranslations('sidebar.footer');
+  const tCommon = useTranslations('common');
   const [mounted, setMounted] = useState(false);
 
   // Prevent hydration mismatch by only rendering after mount
@@ -36,7 +37,7 @@ export function LanguageSwitcher() {
         >
           <Languages className="size-3.5" />
           <span>🌐</span>
-          <span>Loading...</span>
+          <span>{tCommon('loading')}</span>
         </Button>
       </div>
     );

@@ -27,7 +27,7 @@ logger = loguru_logger.bind(name="PodcastClips.person_detector_yolo")
 # - yolov8m.pt: Medium (~52MB) - better accuracy (RECOMMENDED for GPU)
 # - yolov8l.pt: Large (~87MB) - high accuracy
 # - yolov8x.pt: Extra Large (~137MB) - highest accuracy
-DEFAULT_MODEL = "yolov8x.pt"  # Extra Large model for highest accuracy with GPU
+DEFAULT_MODEL = "yolov8s.pt"  # Small model for CPU balance
 
 # COCO class ID for person
 PERSON_CLASS_ID = 0
@@ -104,7 +104,7 @@ class YOLOPersonDetector:
         self,
         model_name: str = DEFAULT_MODEL,
         confidence_threshold: float = 0.5,
-        use_gpu: bool = True,
+        use_gpu: bool = False,
         enable_tracking: bool = True
     ):
         """
@@ -113,7 +113,7 @@ class YOLOPersonDetector:
         Args:
             model_name: YOLO model to use (e.g., 'yolov8m.pt')
             confidence_threshold: Minimum confidence for detections
-            use_gpu: Whether to use GPU acceleration (CUDA)
+            use_gpu: Whether to use GPU acceleration (CUDA) - IGNORED IN CPU MODE
             enable_tracking: Enable object tracking across frames
         """
         if not HAS_YOLO:
@@ -123,7 +123,7 @@ class YOLOPersonDetector:
             )
         
         self.confidence_threshold = confidence_threshold
-        self.use_gpu = use_gpu
+        self.use_gpu = False # Force CPU
         self.enable_tracking = enable_tracking
         self.model_name = model_name
         
@@ -132,22 +132,8 @@ class YOLOPersonDetector:
         self.model = YOLO(model_name)
         
         # Set device
-        if use_gpu:
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    self.device = "cuda"
-                    gpu_name = torch.cuda.get_device_name(0)
-                    logger.info(f"YOLO using GPU: {gpu_name}")
-                else:
-                    self.device = "cpu"
-                    logger.warning("CUDA not available, falling back to CPU")
-            except Exception as e:
-                self.device = "cpu"
-                logger.warning(f"GPU check failed: {e}, using CPU")
-        else:
-            self.device = "cpu"
-            logger.info("YOLO using CPU (GPU disabled)")
+        self.device = "cpu"
+        logger.info(f"YOLO initialized on CPU (GPU disabled)")
         
         # Track IDs for persistent tracking
         self._track_history: Dict[int, List[PersonBox]] = {}

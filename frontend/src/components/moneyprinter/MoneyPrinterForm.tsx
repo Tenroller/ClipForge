@@ -70,7 +70,6 @@ export default function MoneyPrinterForm({
 }: MoneyPrinterFormProps) {
   const t = useTranslations('creator.form')
   const [useMusic, setUseMusic] = useState(false)
-  const [useLocalGpu, setUseLocalGpu] = useState(true)
   const [gpuInfoText, setGpuInfoText] = useState<string>("")
   const [voiceLoading, setVoiceLoading] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -91,16 +90,16 @@ export default function MoneyPrinterForm({
 
   // 3D Blue Shadow Colors - use external state if provided (for preview sync), otherwise internal
   const shadowLayersCount = externalShadowLayersCount ?? 4
-  const setShadowLayersCount = onChangeShadowLayersCount ?? (() => {})
+  const setShadowLayersCount = onChangeShadowLayersCount ?? (() => { })
   const shadowLayer1Color = externalShadowLayer1Color ?? "#4A90E2"
-  const setShadowLayer1Color = onChangeShadowLayer1Color ?? (() => {})
+  const setShadowLayer1Color = onChangeShadowLayer1Color ?? (() => { })
   const shadowLayer2Color = externalShadowLayer2Color ?? "#357ABD"
-  const setShadowLayer2Color = onChangeShadowLayer2Color ?? (() => {})
+  const setShadowLayer2Color = onChangeShadowLayer2Color ?? (() => { })
   const shadowLayer3Color = externalShadowLayer3Color ?? "#2E5F8A"
-  const setShadowLayer3Color = onChangeShadowLayer3Color ?? (() => {})
+  const setShadowLayer3Color = onChangeShadowLayer3Color ?? (() => { })
   const shadowLayer4Color = externalShadowLayer4Color ?? "#1E3F5A"
-  const setShadowLayer4Color = onChangeShadowLayer4Color ?? (() => {})
-  
+  const setShadowLayer4Color = onChangeShadowLayer4Color ?? (() => { })
+
   // Whisper-enhanced subtitle options
   const [useWhisperEnhanced, setUseWhisperEnhanced] = useState(false)
   const [whisperModel, setWhisperModel] = useState("base")
@@ -125,8 +124,7 @@ export default function MoneyPrinterForm({
               <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
                 <Star className="size-4 text-white" />
               </div>
-              Video Configuration
-            </CardTitle>
+              {t('videoConfiguration')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Hidden fields to ensure form has values expected by backend */}
@@ -152,15 +150,14 @@ export default function MoneyPrinterForm({
             <input type="hidden" name="useWhisperEnhanced" value={useWhisperEnhanced.toString()} />
             <input type="hidden" name="whisperModel" value={whisperModel} />
             <input type="hidden" name="useMusic" value={useMusic ? "1" : ""} />
-            <input type="hidden" name="useGPU" value={useLocalGpu ? "1" : ""} />
 
             {/* Basic Settings */}
             <div className="space-y-4">
               <div className="text-sm font-semibold text-foreground/90 flex items-center gap-2">
                 <Star className="size-4 text-blue-500" />
-                Basic Settings
+                {t('basicSettings')}
               </div>
-              
+
               <div className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -226,15 +223,15 @@ export default function MoneyPrinterForm({
                       <SelectContent>
                         {models.length > 0
                           ? models.map((m) => (
-                              <SelectItem key={m} value={m}>
-                                {m}
-                              </SelectItem>
-                            ))
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          ))
                           : [
-                              <SelectItem key="gemini-2.0-flash" value="gemini-2.0-flash">
-                                gemini-2.0-flash
-                              </SelectItem>,
-                            ]}
+                            <SelectItem key="gemini-2.0-flash" value="gemini-2.0-flash">
+                              gemini-2.0-flash
+                            </SelectItem>,
+                          ]}
                       </SelectContent>
                     </Select>
                   </div>
@@ -253,7 +250,7 @@ export default function MoneyPrinterForm({
                           if (!voice) return
                           try {
                             setVoiceLoading(true)
-                            try { audioRef.current?.pause() } catch {}
+                            try { audioRef.current?.pause() } catch { }
                             const base = apiBase || ''
                             const sampleUrl = `${base}/api/voice-sample?voice=${encodeURIComponent(voice)}&t=${Date.now()}`
                             const audio = new Audio(sampleUrl)
@@ -277,15 +274,15 @@ export default function MoneyPrinterForm({
                       <SelectContent>
                         {voices.length > 0
                           ? voices.map((v) => (
-                              <SelectItem key={v} value={v}>
-                                {v}
-                              </SelectItem>
-                            ))
+                            <SelectItem key={v} value={v}>
+                              {v}
+                            </SelectItem>
+                          ))
                           : [
-                              <SelectItem key="af_bella" value="af_bella">
-                                af_bella
-                              </SelectItem>,
-                            ]}
+                            <SelectItem key="af_bella" value="af_bella">
+                              af_bella
+                            </SelectItem>,
+                          ]}
                       </SelectContent>
                     </Select>
                   </div>
@@ -344,9 +341,9 @@ export default function MoneyPrinterForm({
               >
                 <Type className="size-4 text-green-500" />
                 {t('advancedSubtitleOptions')}
-                                  {showSubtitleSettings ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                {showSubtitleSettings ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
               </button>
-              
+
               {showSubtitleSettings && (
                 <div className="space-y-4 pl-4 border-l-2 border-green-200 dark:border-green-800">
                   <div className="flex items-center gap-3">
@@ -443,40 +440,37 @@ export default function MoneyPrinterForm({
                           />
                         </div>
                       </div>
-                      
+
                       <div className="space-y-3">
                         <Label>{t('shadowLayers')}</Label>
                         <div className="grid grid-cols-3 gap-2">
                           <button
                             type="button"
                             onClick={() => setShadowLayersCount(2)}
-                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${
-                              shadowLayersCount === 2 
-                                ? 'bg-primary text-primary-foreground border-primary' 
-                                : 'bg-background border-border hover:bg-muted/60'
-                            }`}
+                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${shadowLayersCount === 2
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background border-border hover:bg-muted/60'
+                              }`}
                           >
                             {t('soft')} (2)
                           </button>
                           <button
                             type="button"
                             onClick={() => setShadowLayersCount(3)}
-                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${
-                              shadowLayersCount === 3 
-                                ? 'bg-primary text-primary-foreground border-primary' 
-                                : 'bg-background border-border hover:bg-muted/60'
-                            }`}
+                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${shadowLayersCount === 3
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background border-border hover:bg-muted/60'
+                              }`}
                           >
                             {t('standard')} (3)
                           </button>
                           <button
                             type="button"
                             onClick={() => setShadowLayersCount(4)}
-                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${
-                              shadowLayersCount === 4 
-                                ? 'bg-primary text-primary-foreground border-primary' 
-                                : 'bg-background border-border hover:bg-muted/60'
-                            }`}
+                            className={`h-10 rounded-md border text-xs font-medium transition-colors ${shadowLayersCount === 4
+                              ? 'bg-primary text-primary-foreground border-primary'
+                              : 'bg-background border-border hover:bg-muted/60'
+                              }`}
                           >
                             {t('professional')} (4)
                           </button>
@@ -485,7 +479,7 @@ export default function MoneyPrinterForm({
                           {t('moreLayers')}
                         </p>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
                         <div className="space-y-2">
                           <Label>{t('textColor')}</Label>
@@ -537,7 +531,7 @@ export default function MoneyPrinterForm({
                           </div>
                         )}
                       </div>
-                      
+
                       <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
                         <div className="space-y-2">
                           <Label>Shadow Layer 4</Label>
@@ -583,10 +577,10 @@ export default function MoneyPrinterForm({
                 className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
               >
                 <Cpu className="size-4 text-purple-500" />
-                Advanced Options
-                                  {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                {t('advancedOptions')}
+                {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
               </button>
-              
+
               {showAdvanced && (
                 <div className="space-y-4 pl-4 border-l-2 border-purple-200 dark:border-purple-800">
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -616,28 +610,14 @@ export default function MoneyPrinterForm({
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label htmlFor="use-local-gpu">Use Local GPU</Label>
-                        <p className="text-xs text-muted-foreground">Hardware acceleration</p>
-                      </div>
-                      <Switch
-                        id="use-local-gpu"
-                        checked={useLocalGpu}
-                        onCheckedChange={(v) => {
-                          setUseLocalGpu(!!v)
-                        }}
-                      />
-                    </div>
-                  </div>
+
 
                   <div className="space-y-2">
-                    <Label htmlFor={promptId}>Custom Prompt (optional)</Label>
-                    <Textarea 
-                      id={promptId} 
-                      name="customPrompt" 
-                      placeholder="Provide additional guidance for the script..."
+                    <Label htmlFor={promptId}>{t('customPrompt')}</Label>
+                    <Textarea
+                      id={promptId}
+                      name="customPrompt"
+                      placeholder={t('customPromptPlaceholder')}
                       rows={3}
                     />
                   </div>
@@ -653,12 +633,12 @@ export default function MoneyPrinterForm({
             >
               {busy ? (
                 <>
-                                      <Loader2 className="size-4 animate-spin mr-2" />
+                  <Loader2 className="size-4 animate-spin mr-2" />
                   {t('generating')}
                 </>
               ) : (
                 <>
-                                      <Star className="size-4 mr-2" />
+                  <Star className="size-4 mr-2" />
                   {t('generateVideo')}
                 </>
               )}
@@ -695,7 +675,7 @@ export default function MoneyPrinterForm({
                 onReset?.()
               }}
             >
-                                <RefreshCw className="size-4 mr-2" /> {t('reset')}
+              <RefreshCw className="size-4 mr-2" /> {t('reset')}
             </Button>
           </CardFooter>
         </form>

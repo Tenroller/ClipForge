@@ -153,7 +153,7 @@ class PodcastClipsRequest(BaseModel):
     """Request model for podcast clips workflow - generates viral short-form videos from podcasts."""
     youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
     # AI/Transcription models are hardcoded in processor - these fields kept for compatibility but ignored
-    aiModel: str = Field(default="gemini-3-flash-preview", description="AI model (hardcoded, ignored)")
+    aiModel: str = Field(default="openrouter/free", description="AI model (hardcoded, ignored)")
     whisperModel: str = Field(default="turbo", description="Whisper model (hardcoded to turbo)")
     # maxClipCount removed - AI decides optimal clip count based on content quality
     minDuration: int = Field(default=30, ge=15, le=60, description="Minimum clip duration in seconds")

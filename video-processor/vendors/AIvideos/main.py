@@ -132,7 +132,7 @@ def generate():
         use_music = data.get('useMusic', False)
 
         # Get 'useGPU' from the request data and default to True if not provided  
-        use_gpu = data.get('useGPU', True)
+        use_gpu = data.get('useGPU', False)
 
         # Get the ZIP Url of the songs
         songs_zip_url = data.get('zipUrl')

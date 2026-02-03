@@ -560,10 +560,11 @@ def create_system_resources() -> SystemResources:
     disk = psutil.disk_usage('/')
     
     # Check GPU availability
-    gpu_available = torch.cuda.is_available()
+    # Check GPU availability - FORCED OFF
+    gpu_available = False
     gpu_memory_gb = 0.0
-    if gpu_available:
-        gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+    # if gpu_available:
+    #     gpu_memory_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
     
     return SystemResources(
         cpu_percent=cpu_percent,
