@@ -209,6 +209,10 @@ export default function PodcastClipsPage() {
     }
   };
 
+  const viewCountLabel = videoMetadata?.view_count != null
+    ? `${(videoMetadata.view_count / 1000000).toFixed(1)}M`
+    : '—';
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
 
@@ -281,7 +285,7 @@ export default function PodcastClipsPage() {
                       <Clock className="w-3.5 h-3.5" /> {videoMetadata.duration_formatted}
                     </div>
                     <div className="flex items-center gap-1.5 bg-muted/50 px-2 py-1 rounded">
-                      <Eye className="w-3.5 h-3.5" /> {(videoMetadata.view_count / 1000000).toFixed(1)}M
+                      <Eye className="w-3.5 h-3.5" /> {viewCountLabel}
                     </div>
                   </div>
                 </div>
