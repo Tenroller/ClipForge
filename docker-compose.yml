@@ -4,7 +4,6 @@ services:
   # PostgreSQL Database (Mandatory)
   postgres:
     image: postgres:15-alpine
-    container_name: videohelper_postgres
     environment:
       POSTGRES_DB: videohelper
       POSTGRES_USER: videohelper_user
@@ -23,7 +22,6 @@ services:
   # Redis (Optional - for caching)
   redis:
     image: redis:7-alpine
-    container_name: videohelper_redis
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -41,7 +39,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: videohelper_backend
     environment:
       # Database Configuration
       DATABASE_URL: postgresql://videohelper_user:${POSTGRES_PASSWORD:-videohelper_password}@postgres:5432/videohelper
@@ -51,8 +48,7 @@ services:
 
       # API Keys (REQUIRED - set in Coolify environment)
       PEXELS_API_KEY: ${PEXELS_API_KEY}
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
 
       # Authentication (REQUIRED - set in Coolify environment)
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
@@ -60,7 +56,7 @@ services:
       AUTH_USERNAME: ${AUTH_USERNAME:-admin}
       AUTH_PASSWORD: ${AUTH_PASSWORD:-tenroller}
 
-      # CORS Configuration (Cloudflare Tunnel)
+      # CORS Configuration (Set this to your frontend domain in Coolify)
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-*}
 
       # Video Processing Configuration
@@ -85,6 +81,10 @@ services:
       - video_cache:/app/cache
       - video_logs:/app/logs
 
+    # Expose port 9000 for Coolify/Traefik to route traffic
+    expose:
+      - "9000"
+
     networks:
       - videohelper_network
 
@@ -108,7 +108,6 @@ services:
     build:
       context: ./video-processor
       dockerfile: Dockerfile
-    container_name: videohelper_video_processor
     environment:
       # Backend callback URL
       BACKEND_URL: http://backend:9000
@@ -119,6 +118,10 @@ services:
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+
+      # AI API Keys
+      PEXELS_API_KEY: ${PEXELS_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
 
     volumes:
       # Shared volumes with backend
@@ -142,20 +145,19 @@ services:
 
     restart: unless-stopped
 
-  # Frontend - React Application with Vite Preview
+  # Frontend - Next.js Application
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Backend API URL - internal Docker network
-        VITE_API_URL: ${VITE_API_URL:-http://backend:9000}
-    container_name: videohelper_frontend
+        # Backend API URL - This must be the PUBLIC URL if accessed from client-side
+        # In Coolify, set NEXT_PUBLIC_API_BASE to your backend's public URL
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://localhost:9000}
 
-    # Note: No ports exposed - Coolify's proxy (Traefik/Caddy) handles routing
-    # The container internally listens on port 4173, Coolify will proxy to it
+    # Expose port 3000 (Next.js default) for Coolify/Traefik
     expose:
-      - "4173"
+      - "3000"
 
     networks:
       - videohelper_network
@@ -165,7 +167,7 @@ services:
         condition: service_healthy
 
     healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4173" ]
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000" ]
       interval: 30s
       timeout: 10s
       retries: 3
