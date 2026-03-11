@@ -151,7 +151,7 @@ export default function ActivityPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <Activity className="h-8 w-8 text-primary" />
+            <Activity className="h-8 w-8 text-muted-foreground" />
             {t('title')}
           </h1>
           <p className="text-muted-foreground text-lg">
@@ -172,75 +172,35 @@ export default function ActivityPage() {
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t('stats.completed')}
-            </CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {jobs.filter(j => j.status === 'completed' || j.status === 'done').length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Total successful jobs
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t('stats.inProgress')}
-            </CardTitle>
-            <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {jobs.filter(j => ['processing', 'running', 'queued'].includes(j.status)).length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Jobs currently running
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t('stats.failed')}
-            </CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {jobs.filter(j => j.status === 'error').length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Jobs with errors
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              {t('stats.cancelled')}
-            </CardTitle>
-            <XCircle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {jobs.filter(j => j.status === 'cancelled').length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Manually cancelled jobs
-            </p>
-          </CardContent>
-        </Card>
+        <div className="text-center">
+          <div className="text-2xl font-bold">
+            {jobs.filter(j => j.status === 'completed' || j.status === 'done').length}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{t('stats.completed')}</p>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold">
+            {jobs.filter(j => ['processing', 'running', 'queued'].includes(j.status)).length}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{t('stats.inProgress')}</p>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold">
+            {jobs.filter(j => j.status === 'error').length}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{t('stats.failed')}</p>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold">
+            {jobs.filter(j => j.status === 'cancelled').length}
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{t('stats.cancelled')}</p>
+        </div>
       </div>
 
       {/* Jobs Table */}
-      <Card className="overflow-hidden border-border/50">
-        <CardHeader className="bg-muted/10 border-b border-border/50">
+      <Card className="overflow-hidden">
+        <CardHeader className="border-b">
           <CardTitle className="text-lg">{t('recentJobs')}</CardTitle>
           <CardDescription>
             A list of your recent video generation jobs.
@@ -253,17 +213,17 @@ export default function ActivityPage() {
               <p>{t('loadingJobs')}</p>
             </div>
           ) : jobs.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground bg-muted/5">
+            <div className="text-center py-16 text-muted-foreground">
               <Activity className="size-12 mx-auto mb-4 text-muted-foreground/50" />
               <h3 className="text-lg font-medium text-foreground mb-1">{t('noJobs')}</h3>
               <p className="mb-6 max-w-sm mx-auto">You haven&apos;t generated any videos yet. Start your first creation now.</p>
-              <Button asChild variant="default" className="shadow-lg shadow-primary/20">
+              <Button asChild variant="default">
                 <a href="/creator">{t('createFirstVideo')}</a>
               </Button>
             </div>
           ) : (
             <Table>
-              <TableHeader className="bg-muted/20">
+              <TableHeader>
                 <TableRow>
                   <TableHead className="w-[100px]">ID</TableHead>
                   <TableHead>Workflow</TableHead>

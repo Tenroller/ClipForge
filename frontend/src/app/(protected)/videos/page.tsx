@@ -559,7 +559,7 @@ export default function VideosPage() {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-8">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <PlaySquare className="h-8 w-8 text-primary" />
+            <PlaySquare className="h-8 w-8 text-muted-foreground" />
             {t('title')}
           </h1>
           <p className="text-muted-foreground text-lg">
@@ -582,7 +582,7 @@ export default function VideosPage() {
             size="icon"
             onClick={refreshVideos}
             disabled={loading}
-            className="h-10 w-10 rounded-full"
+            className="h-10 w-10"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </Button>
@@ -725,7 +725,7 @@ export default function VideosPage() {
                   size="lg"
                   onClick={loadMoreVideos}
                   disabled={loadingMore}
-                  className="rounded-full px-8"
+                  className="rounded-md px-8"
                 >
                   {loadingMore ? (
                     <>

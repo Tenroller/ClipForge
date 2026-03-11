@@ -85,7 +85,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-3">
-              <div className="size-8 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 flex items-center justify-center">
+              <div className="size-8 rounded-lg bg-green-500 flex items-center justify-center">
                 <CheckCircle className="size-4 text-white" />
               </div>
               <div>
@@ -117,7 +117,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               <video
                 src={job.output_url}
                 controls
-                className="w-full max-h-[400px] rounded-lg shadow-lg border bg-black"
+                className="w-full max-h-[400px] rounded-lg border bg-black"
                 poster="/api/placeholder/640/360"
                 preload="metadata"
               />
@@ -145,7 +145,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                       <CardContent className="p-3">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0 flex-1">
-                            <div className="size-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shrink-0">
+                            <div className="size-10 rounded-lg bg-purple-500 flex items-center justify-center shrink-0">
                               <Video className="size-4 text-white" />
                             </div>
                             <div className="min-w-0 flex-1">
@@ -181,7 +181,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
           {/* Job Details */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-muted/30 border">
+              <div className="p-3 rounded-lg bg-muted border">
                 <div className="text-xs text-muted-foreground mb-1">Job ID</div>
                 <div className="flex items-center gap-2">
                   <code className="text-sm font-mono">{job.id.substring(0, 16)}...</code>
@@ -196,7 +196,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                 </div>
               </div>
               
-              <div className="p-3 rounded-lg bg-muted/30 border">
+              <div className="p-3 rounded-lg bg-muted border">
                 <div className="text-xs text-muted-foreground mb-1">Workflow</div>
                 <Badge variant="outline" className="text-xs">
                   {getWorkflowLabel(job.workflow)}
@@ -205,7 +205,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
             </div>
 
             <div className="space-y-3">
-              <div className="p-3 rounded-lg bg-muted/30 border">
+              <div className="p-3 rounded-lg bg-muted border">
                 <div className="text-xs text-muted-foreground mb-1">Processing Time</div>
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="size-3" />
@@ -213,7 +213,7 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
                 </div>
               </div>
               
-              <div className="p-3 rounded-lg bg-muted/30 border">
+              <div className="p-3 rounded-lg bg-muted border">
                 <div className="text-xs text-muted-foreground mb-1">Steps Completed</div>
                 <div className="text-sm font-medium">
                   {completedSteps} of {totalSteps} steps
@@ -221,19 +221,19 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
               </div>
               
               {job.duration_seconds && (
-                <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                <div className="p-3 rounded-lg bg-muted border">
                   <div className="text-xs text-muted-foreground mb-1">Generation Time</div>
-                  <div className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  <div className="text-sm font-medium">
                     {formatDurationLib(job.duration_seconds)}
                   </div>
                   {job.duration_seconds > 300 && (
-                    <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    <div className="text-xs text-muted-foreground mt-1">
                       Complex videos take longer to process
                     </div>
                   )}
                   {job.duration_seconds < 60 && (
-                    <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                      Fast generation! ⚡
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Fast generation!
                     </div>
                   )}
                 </div>
@@ -242,16 +242,16 @@ export default function ResultPanel({ job, onClose }: ResultPanelProps) {
           </div>
 
           {/* Processing Steps Summary */}
-          <div className="p-4 rounded-lg bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 border border-green-200 dark:border-green-800">
+          <div className="p-4 rounded-lg bg-muted border">
             <div className="flex items-center gap-3 mb-3">
               <div className="size-6 rounded-full bg-green-500 flex items-center justify-center">
                 <CheckCircle className="size-3 text-white" />
               </div>
               <div>
-                <div className="font-medium text-green-800 dark:text-green-200 text-sm">
+                <div className="font-medium text-sm">
                   All steps completed successfully
                 </div>
-                <div className="text-xs text-green-600 dark:text-green-400">
+                <div className="text-xs text-muted-foreground">
                   {job.workflow === 'podcastclips' && clipsData.clips_count > 0
                     ? `Your ${clipsData.clips_count} clips are ready for download`
                     : 'Your video is ready for download'}

@@ -216,12 +216,9 @@ export default function PodcastClipsPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
 
-      {/* Background Gradient Effect */}
-      <div className="absolute top-0 left-0 w-full h-[500px] bg-gradient-to-b from-primary/5 to-transparent pointer-events-none -z-10" />
-
-      {/* Page Header - Cleaned up */}
+      {/* Page Header */}
       <div className="text-center mb-10 space-y-4 pt-4">
-        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+        <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight">
           {t('title')}
         </h1>
         <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
@@ -234,8 +231,7 @@ export default function PodcastClipsPage() {
         {/* ROW 1: YouTube Search Bar */}
         <div className="relative z-10 w-full max-w-5xl mx-auto">
           <div className="relative group">
-            <div className="absolute -inset-0.5 bg-gradient-to-r from-pink-500 to-violet-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
-            <div className="relative bg-background rounded-xl p-2 shadow-lg ring-1 ring-border flex items-center gap-3">
+            <div className="relative bg-background rounded-lg border p-2 flex items-center gap-3">
               <div className="pl-3 text-muted-foreground">
                 <Youtube className="w-6 h-6" />
               </div>
@@ -297,24 +293,22 @@ export default function PodcastClipsPage() {
           {!videoMetadata && !currentJob && !completedJob && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full opacity-60 hover:opacity-100 transition-opacity mb-6">
               <FeatureCard
-                icon={<Sparkles className="h-6 w-6 text-indigo-500" />}
+                icon={<Sparkles className="h-6 w-6 text-muted-foreground" />}
                 title={t('aiDetection')}
                 desc={t('viralMoments')}
-                gradient="bg-indigo-500/10"
               />
               <FeatureCard
-                icon={<Target className="h-6 w-6 text-rose-500" />}
+                icon={<Target className="h-6 w-6 text-muted-foreground" />}
                 title={t('faceTracking')}
                 desc={t('smartCropping')}
-                gradient="bg-rose-500/10"
               />
             </div>
           )}
         </div>
 
         {/* ROW 3: Horizontal Configuration Panel */}
-        <Card className="border-border/60 shadow-lg backdrop-blur-sm bg-background/95 ring-1 ring-border/50 overflow-hidden max-w-5xl mx-auto">
-          <CardHeader className="bg-muted/40 px-6 py-4 border-b border-border/50">
+        <Card className="overflow-hidden max-w-5xl mx-auto">
+          <CardHeader className="px-6 py-4 border-b">
             <div className="flex items-center gap-2">
               <Settings2 className="w-5 h-5 text-primary" />
               <CardTitle className="text-base font-semibold">{t('clipSettings')}</CardTitle>
@@ -446,7 +440,7 @@ export default function PodcastClipsPage() {
                 {/* Main Action Button */}
                 <Button
                   type="submit"
-                  className="w-full font-bold shadow-xl shadow-primary/20 text-base py-6 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="w-full font-bold text-base py-6"
                   size="lg"
                   disabled={isSubmitting || !!currentJobId || !youtubeUrl}
                 >
@@ -497,10 +491,10 @@ export default function PodcastClipsPage() {
 }
 
 // Sub-components for cleaner render
-function FeatureCard({ icon, title, desc, gradient }: { icon: React.ReactNode, title: string, desc: string, gradient: string }) {
+function FeatureCard({ icon, title, desc }: { icon: React.ReactNode, title: string, desc: string }) {
   return (
-    <div className="flex items-center gap-4 p-4 rounded-xl border border-dashed bg-card/30 hover:bg-card hover:border-solid transition-all duration-300 group">
-      <div className={cn("p-3 rounded-xl transition-colors group-hover:scale-110 duration-300", gradient)}>
+    <div className="flex items-center gap-4 p-4 rounded-lg border">
+      <div className="p-3 rounded-lg bg-muted">
         {icon}
       </div>
       <div>

@@ -310,7 +310,7 @@ export default function JobMonitoringPage() {
                           {step.label}
                         </div>
                         {isCurrent && (
-                          <div className="text-xs text-muted-foreground animate-pulse">
+                          <div className="text-xs text-muted-foreground">
                             {t('processing')}
                           </div>
                         )}

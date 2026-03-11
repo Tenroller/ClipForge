@@ -167,7 +167,7 @@ export default function CompilationsPage() {
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
       <div className="mb-8 space-y-2">
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-          <Brain className="h-8 w-8 text-primary" />
+          <Brain className="h-8 w-8 text-muted-foreground" />
           {t('title')}
         </h1>
         <p className="text-muted-foreground text-lg max-w-2xl">
@@ -200,12 +200,10 @@ export default function CompilationsPage() {
           {!currentJobId && !completedJob && (
             <form onSubmit={startBrainrot} className="space-y-6">
               {/* Source Selection Card */}
-              <Card className="border-border/50 shadow-sm overflow-hidden bg-card/50 backdrop-blur-sm">
-                <CardHeader className="bg-muted/30 pb-6 border-b border-border/50">
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-6 border-b">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg text-white">
-                      <Layers className="w-5 h-5" />
-                    </div>
+                    <Layers className="w-5 h-5 text-muted-foreground" />
                     <CardTitle className="text-lg font-medium">{t('videoSource')}</CardTitle>
                   </div>
                 </CardHeader>
@@ -274,12 +272,10 @@ export default function CompilationsPage() {
               </Card>
 
               {/* Configuration Card */}
-              <Card className="border-border/50 shadow-sm overflow-hidden bg-card/50 backdrop-blur-sm">
-                <CardHeader className="bg-muted/30 pb-6 border-b border-border/50">
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-6 border-b">
                   <div className="flex items-center gap-2">
-                    <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg text-white">
-                      <Settings2 className="w-5 h-5" />
-                    </div>
+                    <Settings2 className="w-5 h-5 text-muted-foreground" />
                     <CardTitle className="text-lg font-medium">{t('configuration')}</CardTitle>
                   </div>
                 </CardHeader>
@@ -361,9 +357,8 @@ export default function CompilationsPage() {
 
 
 
-                  <Button type="submit" size="lg" disabled={busy} className="w-full relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-gradient-to-r from-primary to-purple-600 opacity-80 group-hover:opacity-100 transition-opacity" />
-                    <span className="relative flex items-center justify-center gap-2">
+                  <Button type="submit" size="lg" disabled={busy} className="w-full">
+                    <span className="flex items-center justify-center gap-2">
                       {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <Brain className="w-5 h-5" />}
                       {t('generateCompilation')}
                     </span>
@@ -376,33 +371,31 @@ export default function CompilationsPage() {
 
         {/* Right Column: Info & Help */}
         <div className="lg:col-span-4 space-y-6">
-          <Card className="border-border/50 shadow-sm bg-gradient-to-b from-card to-background">
+          <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
-                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg text-purple-600 dark:text-purple-400">
-                  <HelpCircle className="w-4 h-4" />
-                </div>
+                <HelpCircle className="w-4 h-4 text-muted-foreground" />
                 <CardTitle className="text-base">{t('howItWorks')}</CardTitle>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="relative pl-4 space-y-6 border-l-2 border-muted">
+              <div className="relative pl-4 space-y-6 border-l-2 border-border">
                 {[
-                  { title: t('extractContent'), desc: t('extractContentDesc'), color: "bg-blue-500" },
-                  { title: t('createClips'), desc: t('createClipsDesc'), color: "bg-green-500" },
-                  { title: t('generateVariations'), desc: t('generateVariationsDesc'), color: "bg-purple-500" }
+                  { title: t('extractContent'), desc: t('extractContentDesc') },
+                  { title: t('createClips'), desc: t('createClipsDesc') },
+                  { title: t('generateVariations'), desc: t('generateVariationsDesc') }
                 ].map((step, i) => (
                   <div key={i} className="relative">
-                    <div className={`absolute -left-[21px] top-1 w-3 h-3 rounded-full ${step.color} border-2 border-background`} />
+                    <div className="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-muted-foreground border-2 border-background" />
                     <h4 className="font-medium text-sm">{step.title}</h4>
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{step.desc}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="p-4 rounded-lg bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/30 text-xs">
-                <span className="font-semibold text-orange-700 dark:text-orange-400 block mb-1">{t('proTip')}</span>
-                <span className="text-orange-600/80 dark:text-orange-300/80">
+              <div className="p-4 rounded-lg bg-muted border text-xs">
+                <span className="font-semibold block mb-1">{t('proTip')}</span>
+                <span className="text-muted-foreground">
                   {t('proTipContent')}
                 </span>
               </div>

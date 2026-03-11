@@ -397,44 +397,6 @@ async def podcastclips_generate(
         raise HTTPException(status_code=500, detail=f"Failed to generate podcast clips: {e}")
 
 
-@router.get("/AIvideos/models", summary="List AI Models")
-async def list_models() -> Dict[str, list]:
-    """
-    List available AI models.
-
-    This endpoint queries the video-processor service for available models.
-    Falls back to a static list if the processor is unavailable.
-    """
-    # Default fallback models
-    fallback_models = [
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-exp",
-        "gemini-2.0-pro",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
-    ]
-
-    try:
-        # Try to get models from video processor
-        from ...services.video_orchestrator import get_video_orchestrator
-        orchestrator = get_video_orchestrator()
-
-        # Query processor for available models
-        models = await orchestrator.processor_manager.get_available_models()
-
-        if models and len(models) > 0:
-            logger.info(f"Retrieved {len(models)} models from video-processor")
-            return {"models": models}
-        else:
-            logger.warning("No models returned from video-processor, using fallback list")
-            return {"models": fallback_models}
-
-    except Exception as e:
-        logger.error(f"Failed to list models from video-processor: {e}")
-        # Fallback to default models
-        return {"models": fallback_models}
-
-
 @router.get("/voices", summary="List TTS Voices")
 async def list_voices() -> Dict[str, list]:
     """

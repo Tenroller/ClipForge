@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
-import { useGenerateMoneyPrinterVideo, useJobs, useAvailableModels, useAvailableVoices } from '@/hooks/use-jobs';
+import { useGenerateMoneyPrinterVideo, useJobs, useAvailableVoices } from '@/hooks/use-jobs';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import MoneyPrinterForm from '@/components/moneyprinter/MoneyPrinterForm';
@@ -31,7 +31,6 @@ export default function CreatorPage() {
   const t = useTranslations('creator');
   const generateVideo = useGenerateMoneyPrinterVideo();
   const { data: recentJobs = [] } = useJobs({ limit: 10, refetchInterval: 5000 });
-  const { data: models = [] } = useAvailableModels();
   const { data: voices = [] } = useAvailableVoices();
 
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
@@ -183,7 +182,7 @@ export default function CreatorPage() {
       {/* Header */}
       <div className="mb-8 space-y-2">
         <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-          <Wand2 className="h-8 w-8 text-primary" />
+          <Wand2 className="h-8 w-8 text-muted-foreground" />
           {t('title')}
         </h1>
         <p className="text-muted-foreground text-lg max-w-2xl">
@@ -195,20 +194,16 @@ export default function CreatorPage() {
         {/* Left Column: Form Configuration */}
         <div className="lg:col-span-8 space-y-6">
           {!currentJobId && !completedJob && (
-            <Card className="border-border/50 shadow-sm overflow-hidden bg-card/50 backdrop-blur-sm">
-              <CardHeader className="bg-muted/30 pb-6 border-b border-border/50">
+            <Card className="overflow-hidden">
+              <CardHeader className="pb-6 border-b">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600 dark:text-blue-400">
-                    <Sparkles className="w-5 h-5" />
-                  </div>
+                  <Sparkles className="w-5 h-5 text-muted-foreground" />
                   <CardTitle className="text-lg font-medium">{t('videoConfiguration')}</CardTitle>
                 </div>
               </CardHeader>
               <CardContent className="p-6">
                 <MoneyPrinterForm
-                  models={models}
                   aiModel={aiModel}
-                  onChangeAiModel={setAiModel}
                   voices={voices}
                   voice={voice}
                   onChangeVoice={setVoice}
@@ -274,7 +269,7 @@ export default function CreatorPage() {
                 shadowLayer4Color={shadowLayer4Color}
               />
 
-              <Card className="border-border/50 shadow-sm">
+              <Card>
                 <CardHeader className="py-4">
                   <CardTitle className="text-base font-medium flex items-center gap-2">
                     <span className="relative flex h-2 w-2">

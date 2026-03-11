@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Badge } from '@/components/ui/badge';
 import { useActiveJobs } from '@/hooks/use-jobs';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
@@ -137,9 +136,9 @@ export default function AppSidebar({ username, ...props }: AppSidebarProps) {
                     </SidebarMenuButton>
                     {item.badge && (
                       <SidebarMenuBadge>
-                        <Badge variant="secondary" className="h-5 px-1.5 min-w-5 flex items-center justify-center text-[10px]">
+                        <span className="h-5 px-1.5 min-w-5 flex items-center justify-center text-[10px] text-muted-foreground">
                           {item.badge}
-                        </Badge>
+                        </span>
                       </SidebarMenuBadge>
                     )}
                   </SidebarMenuItem>

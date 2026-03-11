@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Lock, User } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
 import { loginAction } from './actions';
 import { useTranslations } from 'next-intl';
@@ -41,7 +40,7 @@ export default function LoginPage() {
           description: t('success.loggedIn'),
         });
         router.push('/creator');
-        router.refresh(); // Refresh to update auth state
+        router.refresh();
       } else {
         toast({
           title: t('errors.invalidCredentials'),
@@ -61,28 +60,19 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden p-4">
-      {/* Animated Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-50/80 via-purple-50/80 to-emerald-50/80 dark:from-blue-950/20 dark:via-purple-950/20 dark:to-emerald-950/20" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-
-      {/* Floating Orbs */}
-      <div className="absolute top-20 left-20 size-32 bg-blue-500/10 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-20 right-20 size-40 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 size-48 bg-emerald-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '2s' }} />
-
-      <div className="w-full max-w-md relative z-10 fade-in">
-        <div className="bg-card/80 backdrop-blur-2xl rounded-3xl shadow-2xl p-10 border-2 border-border/50 hover:border-border/80 transition-all">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="bg-card rounded-lg border p-10">
           {/* Logo and Title */}
           <div className="flex flex-col items-center mb-8">
-            <div className="size-20 rounded-3xl bg-card flex items-center justify-center shadow-2xl mb-4 hover:scale-110 transition-transform overflow-hidden">
+            <div className="size-20 rounded-lg bg-muted flex items-center justify-center mb-4 overflow-hidden">
               <img
                 src="/logo.png"
                 alt="ClipForge"
                 className="size-16 object-contain"
               />
             </div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-500 via-purple-500 to-emerald-500 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold">
               {t('title')}
             </h1>
             <p className="text-sm text-muted-foreground mt-2">
@@ -92,73 +82,60 @@ export default function LoginPage() {
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-3">
-              <Label htmlFor="username" className="text-sm font-semibold">
+            <div className="space-y-2">
+              <Label htmlFor="username" className="text-sm font-medium">
                 {t('username')}
               </Label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-primary transition-colors">
-                  <User className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder={t('usernamePlaceholder')}
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="pl-12 h-12 border-2 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                  disabled={isLoading}
-                  autoFocus
-                />
-              </div>
+              <Input
+                id="username"
+                type="text"
+                placeholder={t('usernamePlaceholder')}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="h-10"
+                disabled={isLoading}
+                autoFocus
+              />
             </div>
 
-            <div className="space-y-3">
-              <Label htmlFor="password" className="text-sm font-semibold">
+            <div className="space-y-2">
+              <Label htmlFor="password" className="text-sm font-medium">
                 {t('password')}
               </Label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none group-focus-within:text-primary transition-colors">
-                  <Lock className="h-5 w-5 text-muted-foreground" />
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder={t('passwordPlaceholder')}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-12 h-12 border-2 focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                  disabled={isLoading}
-                />
-              </div>
+              <Input
+                id="password"
+                type="password"
+                placeholder={t('passwordPlaceholder')}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-10"
+                disabled={isLoading}
+              />
             </div>
 
             <Button
               type="submit"
-              className="w-full h-12 text-base font-semibold btn-primary shadow-xl"
+              className="w-full h-10 text-base font-medium"
               disabled={isLoading}
             >
               {isLoading ? (
                 <>
-                  <div className="size-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  <div className="size-4 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin mr-2" />
                   {t('signingIn')}
                 </>
               ) : (
-                <>
-                  {t('signIn')}
-                  <span className="ml-2">→</span>
-                </>
+                t('signIn')
               )}
             </Button>
           </form>
 
           {/* Info Footer */}
-          <div className="mt-8 pt-6 border-t-2 border-border/50">
-            <div className="bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-emerald-500/10 rounded-xl p-4 border border-primary/20">
+          <div className="mt-8 pt-6 border-t">
+            <div className="bg-muted rounded-lg p-4 border">
               <p className="text-xs text-center text-muted-foreground font-medium mb-2">
                 {t('defaultCredentials')}
               </p>
-              <p className="text-sm text-center font-mono bg-card/50 rounded-lg p-2 border">
+              <p className="text-sm text-center font-mono bg-background rounded-md p-2 border">
                 admin / tenroller
               </p>
               <p className="text-xs text-center text-muted-foreground mt-3 leading-relaxed">

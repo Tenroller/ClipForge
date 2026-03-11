@@ -323,7 +323,7 @@ export default function ProjectClipsView({
       {sortedClips.length === 0 ? (
         isJobRunning && jobProgress ? (
           // Show job progress when job is running and no clips yet
-          <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md">
+          <Card className="border rounded-xl bg-card">
             <CardContent className="p-8">
               <div className="space-y-6">
                 <div className="flex items-center justify-center gap-3">

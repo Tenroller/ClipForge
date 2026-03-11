@@ -32,62 +32,6 @@ class WorkflowType(str, Enum):
     PODCASTCLIPS = "podcastclips"
 
 
-# MoneyPrinter specific models
-class MoneyPrinterRequest(BaseModel):
-    """MoneyPrinter video generation request."""
-    videoSubject: str = Field(..., description="Subject for the video")
-    paragraphNumber: int = Field(3, description="Number of paragraphs in script")
-    voice: str = Field("en_male_jomboy", description="Voice to use for TTS")
-    aiModel: str = Field("gemini-2.0-flash", description="AI model for script generation")
-    useMusic: bool = Field(True, description="Whether to include background music")
-    zipUrl: Optional[str] = Field(None, description="URL for background music ZIP")
-    useTikTokSubtitles: bool = Field(True, description="Use TikTok-style subtitles")
-    subtitleFont: str = Field("Arial", description="Font for subtitles")
-    customPrompt: Optional[str] = Field(None, description="Custom prompt for script generation")
-
-
-class BrainrotRequest(BaseModel):
-    """Brainrot compilation video generation request."""
-    youtubeUrl: Optional[str] = Field(None, description="YouTube URL to process")
-    uploadedVideoPath: Optional[str] = Field(None, description="Path to uploaded video file (alternative to YouTube URL)")
-    numCompilations: int = Field(1, description="Number of compilations to generate")
-    minDuration: int = Field(30, description="Minimum duration in seconds")
-    maxDuration: int = Field(60, description="Maximum duration in seconds")
-    maxReuse: int = Field(3, description="Maximum reuse count")
-    unlimited: bool = Field(False, description="Generate unlimited compilations")
-    generateNoBackground: bool = Field(True, description="Generate third variation without white background")
-    blurredPillarboxThreshold: float = Field(0.1, description="Aspect ratio tolerance for 9:16 format")
-
-    def model_post_init(self, __context: Any) -> None:
-        """Ensure exactly one of youtubeUrl or uploadedVideoPath is provided"""
-        if not self.youtubeUrl and not self.uploadedVideoPath:
-            raise ValueError("Either youtubeUrl or uploadedVideoPath must be provided")
-        if self.youtubeUrl and self.uploadedVideoPath:
-            raise ValueError("Cannot provide both youtubeUrl and uploadedVideoPath - choose one input method")
-
-
-class PodcastClipsRequest(BaseModel):
-    """PodcastClips viral short-form video generation request."""
-    youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
-    aiModel: str = Field("gemini-2.0-flash", description="AI model for viral moment detection")
-    whisperModel: str = Field("base", description="Whisper model size: tiny, base, small, medium, large")
-    maxClipCount: int = Field(15, description="Maximum number of clips to generate (AI decides actual count based on viral potential)")
-    minDuration: int = Field(20, description="Minimum clip duration in seconds")
-    maxDuration: int = Field(70, description="Maximum clip duration in seconds")
-    useGPU: bool = Field(True, description="Use GPU acceleration for processing")
-    subtitleFontSize: int = Field(40, description="Subtitle font size")
-    subtitleColor: str = Field("#FFFFFF", description="Subtitle text color (hex format)")
-    subtitleStrokeColor: str = Field("#000000", description="Subtitle stroke/outline color")
-    subtitleStrokeWidth: int = Field(2, description="Subtitle stroke width")
-    subtitleStyle: str = Field("yellow_highlight", description="Subtitle style: yellow_highlight, multicolor_pop, clean_outline")
-    subtitleDisplayMode: str = Field("word", description="Display mode: word (word-by-word) or sentence (full sentence)")
-    subtitlePosition: str = Field("bottom", description="Subtitle position: top, center, bottom")
-    subtitleHighlightColor: str = Field("#FFD700", description="Highlight/accent color for subtitles (hex format)")
-    subtitleVerticalOffset: int = Field(500, description="Vertical offset from subtitle position in pixels")
-    subtitleMaxWordsVisible: int = Field(5, description="Maximum words visible at once in word-by-word mode")
-    viralFocusKeywords: List[str] = Field(default_factory=list, description="Optional keywords to prioritize when detecting viral moments")
-
-
 # Job models
 class ProcessingJobRequest(BaseModel):
     """Request to create a new processing job."""

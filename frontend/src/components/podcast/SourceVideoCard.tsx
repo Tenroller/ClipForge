@@ -53,7 +53,7 @@ export default function SourceVideoCard({
 
   return (
     <Card
-      className="group relative overflow-hidden rounded-2xl bg-card border-0 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
+      className="group relative overflow-hidden rounded-2xl bg-card border cursor-pointer"
       onClick={onClick}
     >
       {/* Thumbnail */}
@@ -67,7 +67,7 @@ export default function SourceVideoCard({
             unoptimized
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted-foreground/20">
+          <div className="w-full h-full flex items-center justify-center bg-muted">
             <span className="text-4xl text-muted-foreground/50">?</span>
           </div>
         )}
@@ -147,7 +147,7 @@ export default function SourceVideoCard({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-border/50">
+        <div className="flex items-center justify-between pt-2 border-t border-border">
           <div className="flex flex-col gap-0.5">
             <span className="text-xs font-medium text-muted-foreground">
               {project.channel || 'Canal'}
@@ -183,7 +183,7 @@ export default function SourceVideoCard({
 
         {/* Expired Notice */}
         {project.status === 'expired' && (
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg py-2">
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground bg-muted rounded-lg py-2">
             <Download className="h-3.5 w-3.5" />
             <span>Expirado</span>
           </div>

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from ..validation import (
     validate_youtube_url, validate_subject, validate_custom_prompt,
     validate_zip_url, validate_color, validate_subtitle_position,
-    validate_ai_model, validate_voice
+    validate_voice
 )
 
 
@@ -64,11 +64,6 @@ class MoneyPrinterRequest(BaseModel):
     @classmethod
     def validate_subject_field(cls, v):
         return validate_subject(v)
-
-    @field_validator('aiModel')
-    @classmethod
-    def validate_ai_model_field(cls, v):
-        return validate_ai_model(v)
 
     @field_validator('voice')
     @classmethod
@@ -201,11 +196,6 @@ class PodcastClipsRequest(BaseModel):
     @classmethod
     def validate_youtube_url_field(cls, v):
         return validate_youtube_url(v)
-
-    @field_validator('aiModel')
-    @classmethod
-    def validate_ai_model_field(cls, v):
-        return validate_ai_model(v)
 
     @field_validator('subtitleColor', 'subtitleStrokeColor', 'subtitleHighlightColor', 'thumbnailRedBoxColor', 'thumbnailTextColor')
     @classmethod

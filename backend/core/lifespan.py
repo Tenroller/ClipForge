@@ -158,17 +158,14 @@ async def lifespan(app: FastAPI):
         # Initialize utility systems
         try:
             from ..utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
-            from ..utils.fonts import init_font_manager
             from ..utils.paths import init_path_manager
         except ImportError:
             from utils.file_management import init_temp_manager, cleanup_temp_files_on_startup
-            from utils.fonts import init_font_manager
             from utils.paths import init_path_manager
 
         init_temp_manager()
         cleanup_temp_files_on_startup()
         # Note: streaming_processor is now handled by the video-processor service
-        init_font_manager()
         init_path_manager()
 
         # Initialize and start job queue worker (delayed import to avoid circular dependency)

@@ -338,17 +338,6 @@ export async function resumeJob(jobId: string): Promise<{ job_id: string }> {
 // Configuration & Metadata
 // ============================================================================
 
-export async function getAvailableModels(): Promise<string[]> {
-  try {
-    const res = await apiFetch(`${API_BASE}/api/AIvideos/models`);
-    if (!res.ok) return ['gemini-2.0-flash']; // Fallback
-    const data = await res.json();
-    return Array.isArray(data?.models) ? data.models : ['gemini-2.0-flash'];
-  } catch {
-    return ['gemini-2.0-flash']; // Fallback
-  }
-}
-
 export async function getAvailableVoices(): Promise<string[]> {
   try {
     const res = await apiFetch(`${API_BASE}/api/voices`);

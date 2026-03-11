@@ -115,7 +115,7 @@ export default function CleanupPage() {
 
         {/* Cleanup Status Card */}
         {cleanupResult && (
-          <Card className="border rounded-xl border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800/30 shadow-md backdrop-blur-sm">
+          <Card className="border border-green-200 dark:border-green-800/30">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="flex-shrink-0">
@@ -138,7 +138,7 @@ export default function CleanupPage() {
         )}
 
         {/* Stats Overview */}
-        <Card className="border rounded-xl bg-card/50 backdrop-blur-sm shadow-md hover:shadow-lg transition-all duration-300">
+        <Card>
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <Folder className="size-5" />
@@ -155,16 +155,16 @@ export default function CleanupPage() {
               <div className="space-y-5">
                 {/* Summary Stats */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                  <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
-                    <div className="text-2xl font-bold text-primary">{stats.total_files}</div>
+                  <div className="text-center p-5 rounded-lg border">
+                    <div className="text-2xl font-bold">{stats.total_files}</div>
                     <div className="text-sm text-muted-foreground mt-1">{t('overview.totalFiles')}</div>
                   </div>
-                  <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
-                    <div className="text-2xl font-bold text-primary">{formatFileSize(stats.total_size_mb)}</div>
+                  <div className="text-center p-5 rounded-lg border">
+                    <div className="text-2xl font-bold">{formatFileSize(stats.total_size_mb)}</div>
                     <div className="text-sm text-muted-foreground mt-1">{t('overview.totalSize')}</div>
                   </div>
-                  <div className="text-center p-5 rounded-xl bg-muted/30 border border-muted shadow-sm">
-                    <div className="text-2xl font-bold text-primary">{stats.directories.length}</div>
+                  <div className="text-center p-5 rounded-lg border">
+                    <div className="text-2xl font-bold">{stats.directories.length}</div>
                     <div className="text-sm text-muted-foreground mt-1">{t('overview.directories')}</div>
                   </div>
                 </div>
@@ -274,7 +274,7 @@ export default function CleanupPage() {
 
         {/* Cleanup Errors */}
         {cleanupResult && cleanupResult.errors.length > 0 && (
-          <Card className="border rounded-xl border-yellow-200 bg-yellow-50/50 dark:bg-yellow-950/20 dark:border-yellow-800/30 shadow-md backdrop-blur-sm">
+          <Card className="border border-yellow-200 dark:border-yellow-800/30">
             <CardHeader className="pb-4">
               <CardTitle className="text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
                 <AlertTriangle className="size-4" />

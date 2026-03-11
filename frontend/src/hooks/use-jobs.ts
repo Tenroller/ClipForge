@@ -8,7 +8,6 @@ import {
   remakeJob,
   generateMoneyPrinterVideo,
   generateBrainrotVideo,
-  getAvailableModels,
   getAvailableVoices,
   getJobLineage,
   getResumableJobs,
@@ -144,17 +143,6 @@ export function useActiveJobs(options?: { refetchInterval?: number }) {
 export function useHasActiveJobs() {
   const activeJobs = useActiveJobs();
   return activeJobs.length > 0;
-}
-
-/**
- * Hook to fetch available AI models
- */
-export function useAvailableModels() {
-  return useQuery({
-    queryKey: ['models'],
-    queryFn: getAvailableModels,
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
 }
 
 /**

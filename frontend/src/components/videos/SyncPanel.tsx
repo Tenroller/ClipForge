@@ -14,7 +14,7 @@ interface SyncPanelProps {
 export default function SyncPanel({ onSyncFromJobs, onSyncOrphaned, syncing }: SyncPanelProps) {
   const t = useTranslations('videos.sync');
   return (
-    <Card className="border rounded-xl border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-800/30 shadow-md backdrop-blur-sm">
+    <Card className="border rounded-xl">
       <CardHeader className="pb-4">
         <CardTitle className="flex items-center gap-2 text-base">
           <RefreshCw className="size-4" />

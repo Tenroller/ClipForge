@@ -247,19 +247,18 @@ export default function PreviewPanel({
     <Card>
       <CardHeader className="flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-3">
-          <div className="size-8 rounded-lg bg-gradient-to-br from-orange-500 to-pink-600 flex items-center justify-center">
-            <span className="text-white text-sm font-bold">📱</span>
+          <div className="size-8 rounded-lg bg-muted flex items-center justify-center">
+            <span className="text-sm font-bold">📱</span>
           </div>
           Preview
         </CardTitle>
-        <Badge variant="outline" className="font-normal bg-muted/50">
+        <Badge variant="outline" className="font-normal">
           9:16
         </Badge>
       </CardHeader>
       <CardContent className="grid gap-4">
-        <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[300px] overflow-hidden rounded-xl border bg-gradient-to-b from-neutral-900 to-neutral-800 shadow-2xl" aria-label="Video preview area">
+        <div ref={containerRef} className="relative mx-auto aspect-[9/16] w-full max-w-[300px] overflow-hidden rounded-xl border bg-neutral-900" aria-label="Video preview area">
           <div className="pointer-events-none absolute inset-0">
-            <div className="absolute inset-0 bg-[radial-gradient(transparent,rgba(0,0,0,0.35))]" />
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="text-center text-white/60 space-y-2">
                 <div className="size-12 mx-auto rounded-full bg-white/10 flex items-center justify-center">
@@ -288,7 +287,7 @@ export default function PreviewPanel({
 
           <div className="absolute inset-x-2 bottom-2">
             <div className="text-right">
-              <div className="inline-flex items-center px-2 py-1 rounded bg-black/60 backdrop-blur-sm border border-white/10">
+              <div className="inline-flex items-center px-2 py-1 rounded bg-black/60 border border-white/10">
                 <span className="text-[10px] text-white/80 font-medium">
                   {positionRaw || position.replace("-", ", ")}
                 </span>
@@ -342,7 +341,7 @@ function PosChip({
       className={cn(
         "h-10 sm:h-9 rounded-lg border text-xs font-medium transition-all duration-200",
         active
-          ? "bg-primary text-primary-foreground border-primary shadow-sm"
+          ? "bg-primary text-primary-foreground border-primary"
           : "bg-background border-border hover:bg-muted/60 hover:border-border/70"
       )}
       aria-pressed={active}

@@ -157,7 +157,7 @@ export default function PodcastProjectsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-            <FolderOpen className="h-8 w-8 text-primary" />
+            <FolderOpen className="h-8 w-8 text-muted-foreground" />
             {t('title')}
           </h1>
           <p className="text-muted-foreground text-lg">
@@ -171,7 +171,7 @@ export default function PodcastProjectsPage() {
             size="icon"
             onClick={() => loadProjects(true)}
             disabled={loading}
-            className="rounded-full"
+            className="rounded-md"
             title={t('refresh')}
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -179,7 +179,7 @@ export default function PodcastProjectsPage() {
           <Button
             size="lg"
             onClick={handleNewVideo}
-            className="rounded-full shadow-lg shadow-primary/20 hover:shadow-primary/30"
+            className=""
           >
             <Plus className="h-5 w-5 mr-2" />
             {t('newProject')}
@@ -188,7 +188,7 @@ export default function PodcastProjectsPage() {
       </div>
 
       {/* Controls Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-muted/20 p-4 rounded-xl border border-border/50 mb-8 backdrop-blur-sm">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-b pb-4 mb-8">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Filter className="w-4 h-4" />
           <span>{projects.length} Projects</span>
@@ -244,8 +244,8 @@ export default function PodcastProjectsPage() {
       ) : projects.length === 0 ? (
         <Card className="border-border/50 bg-muted/10 border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center mb-6 animate-pulse">
-              <Film className="size-10 text-primary" />
+            <div className="size-20 rounded-full bg-muted flex items-center justify-center mb-6">
+              <Film className="size-10 text-muted-foreground" />
             </div>
             <h3 className="text-xl font-semibold mb-2">{t('noProjects')}</h3>
             <p className="text-muted-foreground max-w-md mb-8">
@@ -254,7 +254,7 @@ export default function PodcastProjectsPage() {
             <Button
               size="lg"
               onClick={handleNewVideo}
-              className="rounded-full px-8"
+              className="px-8"
             >
               <Plus className="h-5 w-5 mr-2" />
               {t('createProject')}
@@ -283,7 +283,7 @@ export default function PodcastProjectsPage() {
                 size="lg"
                 onClick={() => loadProjects(false)}
                 disabled={loadingMore}
-                className="rounded-full px-8"
+                className="px-8"
               >
                 {loadingMore ? (
                   <>

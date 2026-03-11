@@ -14,9 +14,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 
 export type MoneyPrinterFormProps = {
-  models: string[]
   aiModel: string
-  onChangeAiModel: (value: string) => void
   voices: string[]
   voice: string
   onChangeVoice: (value: string) => void
@@ -42,9 +40,7 @@ export type MoneyPrinterFormProps = {
 }
 
 export default function MoneyPrinterForm({
-  models,
   aiModel,
-  onChangeAiModel,
   voices,
   voice,
   onChangeVoice,
@@ -107,7 +103,6 @@ export default function MoneyPrinterForm({
   const subjectId = useId()
   const [subject, setSubject] = useState("")
   const [suggesting, setSuggesting] = useState(false)
-  const modelId = useId()
   const parasId = useId()
   const threadsId = useId()
   const colorId = useId()
@@ -121,9 +116,7 @@ export default function MoneyPrinterForm({
         <form onSubmit={onSubmit} id={formId}>
           <CardHeader>
             <CardTitle className="flex items-center gap-3">
-              <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                <Star className="size-4 text-white" />
-              </div>
+              <Star className="size-4 text-muted-foreground" />
               {t('videoConfiguration')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -154,7 +147,7 @@ export default function MoneyPrinterForm({
             {/* Basic Settings */}
             <div className="space-y-4">
               <div className="text-sm font-semibold text-foreground/90 flex items-center gap-2">
-                <Star className="size-4 text-blue-500" />
+                <Star className="size-4 text-muted-foreground" />
                 {t('basicSettings')}
               </div>
 
@@ -203,89 +196,55 @@ export default function MoneyPrinterForm({
                   />
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                  <div className="flex flex-col">
-                    <div className="flex items-center justify-between min-h-[1.5rem] mb-2">
-                      <Label htmlFor={modelId} className="flex items-center gap-1">
-                        {t('aiModel')}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <HelpCircle className="size-3.5 text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent>{t('chooseCapableModel')}</TooltipContent>
-                        </Tooltip>
-                      </Label>
-                    </div>
-                    <Select value={aiModel} onValueChange={onChangeAiModel}>
-                      <SelectTrigger id={modelId}>
-                        <SelectValue placeholder={t('selectModel')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {models.length > 0
-                          ? models.map((m) => (
-                            <SelectItem key={m} value={m}>
-                              {m}
-                            </SelectItem>
-                          ))
-                          : [
-                            <SelectItem key="gemini-2.0-flash" value="gemini-2.0-flash">
-                              gemini-2.0-flash
-                            </SelectItem>,
-                          ]}
-                      </SelectContent>
-                    </Select>
+                <div className="flex flex-col">
+                  <div className="flex items-center justify-between min-h-[1.5rem] mb-2">
+                    <Label htmlFor={voiceId}>{t('voice')}</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 w-6 p-0 flex-shrink-0"
+                      title={voiceLoading ? t('loadingSample') : t('playSample')}
+                      disabled={!voice || voiceLoading}
+                      onClick={async () => {
+                        if (!voice) return
+                        try {
+                          setVoiceLoading(true)
+                          try { audioRef.current?.pause() } catch { }
+                          const base = apiBase || ''
+                          const sampleUrl = `${base}/api/voice-sample?voice=${encodeURIComponent(voice)}&t=${Date.now()}`
+                          const audio = new Audio(sampleUrl)
+                          audioRef.current = audio
+                          audio.onended = () => { setVoiceLoading(false) }
+                          audio.onerror = () => { setVoiceLoading(false) }
+                          await audio.play()
+                          setTimeout(() => setVoiceLoading(false), 300)
+                        } catch {
+                          setVoiceLoading(false)
+                        }
+                      }}
+                    >
+                      {voiceLoading ? '…' : '▶'}
+                    </Button>
                   </div>
-
-                  <div className="flex flex-col">
-                    <div className="flex items-center justify-between min-h-[1.5rem] mb-2">
-                      <Label htmlFor={voiceId}>{t('voice')}</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-6 w-6 p-0 flex-shrink-0"
-                        title={voiceLoading ? t('loadingSample') : t('playSample')}
-                        disabled={!voice || voiceLoading}
-                        onClick={async () => {
-                          if (!voice) return
-                          try {
-                            setVoiceLoading(true)
-                            try { audioRef.current?.pause() } catch { }
-                            const base = apiBase || ''
-                            const sampleUrl = `${base}/api/voice-sample?voice=${encodeURIComponent(voice)}&t=${Date.now()}`
-                            const audio = new Audio(sampleUrl)
-                            audioRef.current = audio
-                            audio.onended = () => { setVoiceLoading(false) }
-                            audio.onerror = () => { setVoiceLoading(false) }
-                            await audio.play()
-                            setTimeout(() => setVoiceLoading(false), 300)
-                          } catch {
-                            setVoiceLoading(false)
-                          }
-                        }}
-                      >
-                        {voiceLoading ? '…' : '▶'}
-                      </Button>
-                    </div>
-                    <Select value={voice} onValueChange={onChangeVoice}>
-                      <SelectTrigger id={voiceId}>
-                        <SelectValue placeholder={t('selectVoice')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {voices.length > 0
-                          ? voices.map((v) => (
-                            <SelectItem key={v} value={v}>
-                              {v}
-                            </SelectItem>
-                          ))
-                          : [
-                            <SelectItem key="af_bella" value="af_bella">
-                              af_bella
-                            </SelectItem>,
-                          ]}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <Select value={voice} onValueChange={onChangeVoice}>
+                    <SelectTrigger id={voiceId}>
+                      <SelectValue placeholder={t('selectVoice')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {voices.length > 0
+                        ? voices.map((v) => (
+                          <SelectItem key={v} value={v}>
+                            {v}
+                          </SelectItem>
+                        ))
+                        : [
+                          <SelectItem key="af_bella" value="af_bella">
+                            af_bella
+                          </SelectItem>,
+                        ]}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -339,13 +298,13 @@ export default function MoneyPrinterForm({
                 onClick={() => setShowSubtitleSettings(!showSubtitleSettings)}
                 className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
               >
-                <Type className="size-4 text-green-500" />
+                <Type className="size-4 text-muted-foreground" />
                 {t('advancedSubtitleOptions')}
                 {showSubtitleSettings ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
               </button>
 
               {showSubtitleSettings && (
-                <div className="space-y-4 pl-4 border-l-2 border-green-200 dark:border-green-800">
+                <div className="space-y-4 pl-4 border-l-2 border-border">
                   <div className="flex items-center gap-3">
                     <Switch
                       id="useTikTokSubtitles"
@@ -382,7 +341,7 @@ export default function MoneyPrinterForm({
                   </div>
 
                   {useWhisperEnhanced && (
-                    <div className="space-y-2 pl-4 border-l border-blue-200 dark:border-blue-800">
+                    <div className="space-y-2 pl-4 border-l border-border">
                       <Label>{t('whisperModel')}</Label>
                       <Select value={whisperModel} onValueChange={setWhisperModel}>
                         <SelectTrigger>
@@ -400,7 +359,7 @@ export default function MoneyPrinterForm({
                   )}
 
                   {useTikTokSubtitles && (
-                    <div className="grid gap-4 pl-4 border-l border-green-200 dark:border-green-800">
+                    <div className="grid gap-4 pl-4 border-l border-border">
                       <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                         <div className="space-y-2">
                           <Label>{t('font')}</Label>
@@ -576,13 +535,13 @@ export default function MoneyPrinterForm({
                 onClick={() => setShowAdvanced(!showAdvanced)}
                 className="flex items-center gap-2 text-sm font-medium text-foreground/90 hover:text-foreground transition-colors"
               >
-                <Cpu className="size-4 text-purple-500" />
+                <Cpu className="size-4 text-muted-foreground" />
                 {t('advancedOptions')}
                 {showAdvanced ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
               </button>
 
               {showAdvanced && (
-                <div className="space-y-4 pl-4 border-l-2 border-purple-200 dark:border-purple-800">
+                <div className="space-y-4 pl-4 border-l-2 border-border">
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-1">
@@ -669,7 +628,6 @@ export default function MoneyPrinterForm({
                 setShadowLayer4Color("#1E3F5A")  // Darkest blue
                 setUseWhisperEnhanced(false)
                 setWhisperModel("base")
-                onChangeAiModel(aiModel)
                 onChangeVoice(voice)
                 onChangeSubtitleColor("#FFFF00")
                 onReset?.()

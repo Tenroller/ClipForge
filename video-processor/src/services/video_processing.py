@@ -54,7 +54,7 @@ else:
     print(f"Warning: Could not find vendors directory at {vendors_path}")
     print("Video processing features may not work.")
 
-from ..models import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest, WorkflowType
+from ..models import WorkflowType
 from ..core.config import ProcessorConfig
 
 from loguru import logger
@@ -166,8 +166,14 @@ class VideoProcessingService:
         logger.info(f"Starting MoneyPrinter job {job_id}")
 
         try:
-            # Parse request
-            req = MoneyPrinterRequest(**request_data)
+            # Access fields from raw request_data dict (validated by backend's Pydantic models)
+            video_subject = request_data.get("videoSubject", "")
+            paragraph_number = request_data.get("paragraphNumber", 3)
+            voice = request_data.get("voice", "en_male_jomboy")
+            ai_model = request_data.get("aiModel", "gemini-2.0-flash")
+            use_music = request_data.get("useMusic", True)
+            zip_url = request_data.get("zipUrl")
+            custom_prompt = request_data.get("customPrompt", "")
 
             # Import video generation dependencies from local vendors
             vendor_imports_available = False
@@ -199,19 +205,19 @@ class VideoProcessingService:
             job_output_dir.mkdir(parents=True, exist_ok=True)
 
             # Music handling - run in thread pool to avoid blocking
-            if req.useMusic and req.zipUrl:
+            if use_music and zip_url:
                 logger.info(f"Job {job_id}: Fetching background music")
-                await asyncio.to_thread(fetch_songs, req.zipUrl)
+                await asyncio.to_thread(fetch_songs, zip_url)
 
             # Generate script - run in thread pool to avoid blocking the event loop
             logger.info(f"Job {job_id}: Generating script")
             script = await asyncio.to_thread(
                 generate_script,
-                req.videoSubject,
-                req.paragraphNumber,
-                req.aiModel,
-                req.voice,
-                req.customPrompt or ""
+                video_subject,
+                paragraph_number,
+                ai_model,
+                voice,
+                custom_prompt
             )
 
             if not script:
@@ -222,7 +228,7 @@ class VideoProcessingService:
             # Generate TTS - run in thread pool to avoid blocking
             logger.info(f"Job {job_id}: Generating text-to-speech")
             audio_file = str(job_output_dir / f"{job_id}_audio.wav")
-            await asyncio.to_thread(tts, script, req.voice, audio_file)
+            await asyncio.to_thread(tts, script, voice, audio_file)
             
             # Generate video with background footage or simple background
             logger.info(f"Job {job_id}: Generating video")
@@ -243,7 +249,7 @@ class VideoProcessingService:
                         
                         logger.info(f"Job {job_id}: Searching for background videos")
                         background_videos = search_for_stock_videos(
-                            query=req.videoSubject[:50],
+                            query=video_subject[:50],
                             api_key=pexels_key,
                             it=5,  # Get 5 videos
                             min_dur=10
@@ -388,8 +394,16 @@ class VideoProcessingService:
         logger.info(f"Starting Brainrot job {job_id}")
         
         try:
-            # Parse request
-            req = BrainrotRequest(**request_data)
+            # Access fields from raw request_data dict (validated by backend's Pydantic models)
+            youtube_url = request_data.get("youtubeUrl")
+            uploaded_video_path = request_data.get("uploadedVideoPath")
+            num_compilations = request_data.get("numCompilations", 1)
+            min_duration = request_data.get("minDuration", 30)
+            max_duration = request_data.get("maxDuration", 60)
+            unlimited = request_data.get("unlimited", False)
+
+            if not youtube_url and not uploaded_video_path:
+                raise RuntimeError("Either youtubeUrl or uploadedVideoPath must be provided")
             
             # Import brainrot dependencies from local vendors
             try:
@@ -404,17 +418,20 @@ class VideoProcessingService:
             job_output_dir.mkdir(parents=True, exist_ok=True)
             output_dir_str = str(job_output_dir.resolve())
             
-            # Create generator
-            generator = TikYouGenerator(output_dir=output_dir_str, tracker=None, request=req)
+            # Create generator — pass request_data as a namespace so the generator
+            # can access fields as attributes (e.g. request.numCompilations)
+            from types import SimpleNamespace
+            request_ns = SimpleNamespace(**request_data)
+            generator = TikYouGenerator(output_dir=output_dir_str, tracker=None, request=request_ns)
 
             # Process video - run in thread pool to avoid blocking
             logger.info(f"Job {job_id}: Processing source video")
-            if req.youtubeUrl:
+            if youtube_url:
                 # Process YouTube video (original functionality) - run in thread pool
-                video_clips = await asyncio.to_thread(generator.process_single_video, req.youtubeUrl)
-            elif req.uploadedVideoPath:
+                video_clips = await asyncio.to_thread(generator.process_single_video, youtube_url)
+            elif uploaded_video_path:
                 # Process uploaded video file - run in thread pool
-                video_clips = await asyncio.to_thread(self._process_uploaded_video, generator, req.uploadedVideoPath, job_id)
+                video_clips = await asyncio.to_thread(self._process_uploaded_video, generator, uploaded_video_path, job_id)
             else:
                 raise RuntimeError("No video source provided")
 
@@ -427,14 +444,14 @@ class VideoProcessingService:
             logger.info(f"Job {job_id}: Generating compilation videos")
 
             # Use appropriate video identifier for generate_tikyou_videos
-            video_identifier = req.youtubeUrl if req.youtubeUrl else req.uploadedVideoPath
+            video_identifier = youtube_url if youtube_url else uploaded_video_path
 
             generated_videos = await asyncio.to_thread(
                 generator.generate_tikyou_videos,
                 video_identifier,
-                num_compilations=None if req.unlimited else req.numCompilations,
-                min_duration=req.minDuration,
-                max_duration=req.maxDuration,
+                num_compilations=None if unlimited else num_compilations,
+                min_duration=min_duration,
+                max_duration=max_duration,
                 video_clips=video_clips
             )
             
@@ -494,8 +511,9 @@ class VideoProcessingService:
         logger.info(f"Starting PodcastClips job {job_id}")
 
         try:
-            # Parse request
-            req = PodcastClipsRequest(**request_data)
+            # request_data is used directly as a dict — the actual vendor code
+            # (process_podcast_clips) already reads from the raw dict via parameters.get()
+            youtube_url = request_data.get("youtubeUrl", "")
 
             # Import podcast clips processor from local vendors
             try:
@@ -510,7 +528,7 @@ class VideoProcessingService:
             job_output_dir.mkdir(parents=True, exist_ok=True)
             output_dir_str = str(job_output_dir.resolve())
 
-            logger.info(f"Job {job_id}: Processing podcast from {req.youtubeUrl}")
+            logger.info(f"Job {job_id}: Processing podcast from {youtube_url}")
 
             # Get the current event loop to pass to the processor
             loop = asyncio.get_event_loop()

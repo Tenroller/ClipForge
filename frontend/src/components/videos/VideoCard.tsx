@@ -93,7 +93,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
   };
 
   return (
-    <Card className={`hover:shadow-lg transition-shadow ${selected ? 'ring-2 ring-primary' : ''}`}>
+    <Card className={selected ? 'ring-2 ring-primary' : ''}>
       <CardContent className="p-4">
         <div className="flex items-start gap-4">
           {/* Thumbnail */}

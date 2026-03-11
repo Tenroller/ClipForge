@@ -127,7 +127,7 @@ export default function ClipCard({
   };
 
   return (
-    <Card className="group overflow-hidden rounded-xl bg-card border border-border/50 shadow-md hover:shadow-lg transition-all duration-300">
+    <Card className="group overflow-hidden rounded-xl bg-card border border-border">
       {/* Video Player Container */}
       <div className="relative aspect-[9/16] bg-black">
         {/* Score Badge */}

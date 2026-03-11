@@ -252,31 +252,6 @@ def sanitize_filename(filename: str) -> str:
     return filename
 
 
-def validate_ai_model(model: str) -> str:
-    """Validate AI model selection."""
-    if not model or not isinstance(model, str):
-        return "gemini-2.0-flash"
-    
-    model = model.strip()
-    
-    # List of allowed models (should match what's returned by /api/models)
-    allowed_models = [
-        "gemini-2.0-flash",
-        "gemini-2.0-pro-exp", 
-        "gemini-2.0-pro",
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash-lite",
-        "openrouter/free",
-    ]
-    
-    if model in allowed_models or model.startswith("openrouter/"):
-        return model
-    
-    # Default fallback
-    return "gemini-2.0-flash"
-
-
 def validate_voice(voice: str) -> str:
     """Validate voice selection."""
     if not voice or not isinstance(voice, str):

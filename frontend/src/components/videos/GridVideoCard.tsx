@@ -77,10 +77,10 @@ export default function GridVideoCard({
   };
 
   return (
-    <Card className={`group overflow-hidden transition-all duration-300 rounded-2xl border-2 shadow-lg hover:shadow-2xl hover:border-primary/60 hover:-translate-y-1 bg-gradient-to-br from-card/90 to-card/50 backdrop-blur-md ${selected ? 'ring-4 ring-primary ring-offset-2 ring-offset-background' : ''}`}>
+    <Card className={`group overflow-hidden rounded-lg border ${selected ? 'ring-2 ring-foreground' : ''}`}>
       <CardContent className="p-0">
         {/* Thumbnail Section - 9:16 Portrait */}
-        <div className="relative w-full aspect-[9/16] bg-gradient-to-br from-muted/80 to-muted overflow-hidden rounded-t-2xl">
+        <div className="relative w-full aspect-[9/16] bg-muted overflow-hidden">
           {/* Selection Checkbox */}
           {onSelect && (
             <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -96,7 +96,7 @@ export default function GridVideoCard({
           {video.thumbnail_url ? (
             <>
               {!imageLoaded && (
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-muted/80 to-muted animate-pulse">
+                <div className="absolute inset-0 flex items-center justify-center bg-muted animate-pulse">
                   <VideoIcon className="size-16 text-muted-foreground/40" />
                 </div>
               )}
@@ -105,13 +105,12 @@ export default function GridVideoCard({
                 alt={video.filename}
                 fill
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                className={`object-cover transition-all duration-500 group-hover:scale-110 group-hover:brightness-110 ${imageLoaded ? 'opacity-100' : 'opacity-0'
-                  }`}
+                className={`object-cover transition-opacity duration-300 ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
                 onLoad={() => setImageLoaded(true)}
               />
             </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted/60 to-muted/80">
+            <div className="w-full h-full flex items-center justify-center bg-muted">
               <VideoIcon className="size-16 text-muted-foreground/50" />
             </div>
           )}
@@ -119,10 +118,10 @@ export default function GridVideoCard({
           {/* Play Button Overlay */}
           {onPlay && (
             <div
-              className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/70 via-black/40 to-black/20 opacity-0 group-hover:opacity-100 transition-all duration-300 cursor-pointer backdrop-blur-[2px]"
+              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
               onClick={() => onPlay(video)}
             >
-              <div className="w-16 h-16 rounded-full bg-white/95 flex items-center justify-center transform transition-all duration-300 hover:scale-125 hover:bg-white shadow-2xl ring-4 ring-white/20">
+              <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
                 <Play className="size-6 text-gray-900 ml-1" fill="currentColor" />
               </div>
             </div>
@@ -130,7 +129,7 @@ export default function GridVideoCard({
 
           {/* Duration Badge */}
           {video.duration_seconds && (
-            <div className="absolute bottom-2 right-2 bg-black/95 backdrop-blur-md text-white text-xs px-2.5 py-1.5 rounded-lg font-semibold shadow-lg border border-white/10">
+            <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2.5 py-1.5 rounded-lg font-semibold">
               {formatDuration(video.duration_seconds)}
             </div>
           )}
@@ -138,7 +137,7 @@ export default function GridVideoCard({
           {/* Posted Badge */}
           {video.posted && (
             <div className="absolute top-2 right-2">
-              <Badge variant="default" className="text-xs bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 shadow-lg border border-green-500/30">
+              <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700">
                 <Check className="size-3 mr-1" />
                 {t('posted')}
               </Badge>
@@ -151,33 +150,25 @@ export default function GridVideoCard({
           {/* Title and Workflow Badge */}
           <div className="space-y-2.5">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="font-bold text-sm line-clamp-2 leading-snug flex-1 group-hover:text-primary transition-colors" title={video.metadata?.title || video.filename}>
+              <h3 className="font-bold text-sm line-clamp-2 leading-snug flex-1" title={video.metadata?.title || video.filename}>
                 {video.metadata?.title || video.filename}
               </h3>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className={`text-xs w-fit font-semibold shadow-sm ${getWorkflowColor()}`}>
+              <Badge variant="outline" className={`text-xs w-fit font-semibold ${getWorkflowColor()}`}>
                 {getWorkflowIcon()}
                 <span className="ml-1.5 capitalize">{video.workflow}</span>
               </Badge>
               {/* Viral Score Badge */}
               {video.metadata?.viral_score !== undefined && video.metadata.viral_score > 0 && (
-                <Badge
-                  variant={video.metadata.viral_score >= 90 ? "default" : video.metadata.viral_score >= 80 ? "secondary" : "outline"}
-                  className={`text-xs font-semibold shadow-sm ${video.metadata.viral_score >= 90
-                      ? 'bg-gradient-to-r from-orange-500 to-red-500 text-white border-orange-400/30'
-                      : video.metadata.viral_score >= 80
-                        ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white border-yellow-400/30'
-                        : ''
-                    }`}
-                >
+                <Badge variant="outline" className="text-xs font-semibold">
                   <TrendingUp className="size-3 mr-1" />
                   {video.metadata.viral_score}
                 </Badge>
               )}
               {/* Confidence Badge */}
               {video.metadata?.confidence !== undefined && video.metadata.confidence > 0 && (
-                <Badge variant="outline" className="text-xs font-semibold shadow-sm bg-amber-500/10 text-amber-600 border-amber-500/20">
+                <Badge variant="outline" className="text-xs font-semibold">
                   <Star className="size-3 mr-1" />
                   {Math.round(video.metadata.confidence * 100)}%
                 </Badge>
@@ -189,7 +180,7 @@ export default function GridVideoCard({
           {video.metadata?.tags && video.metadata.tags.length > 0 && (
             <div className="flex items-center gap-1.5 flex-wrap">
               {video.metadata.tags.slice(0, 2).map((tag, idx) => (
-                <Badge key={idx} variant="secondary" className="text-xs font-medium shadow-sm bg-secondary/60 hover:bg-secondary/80 transition-colors">
+                <Badge key={idx} variant="secondary" className="text-xs font-medium">
                   <Tag className="size-2.5 mr-1" />
                   {tag}
                 </Badge>
@@ -217,7 +208,7 @@ export default function GridVideoCard({
               variant="outline"
               size="sm"
               onClick={() => onDownload(video)}
-              className="flex-1 h-11 sm:h-10 font-semibold shadow-sm hover:shadow-md hover:border-primary/50 hover:bg-primary/5 transition-all"
+              className="flex-1 h-11 sm:h-10 font-semibold"
             >
               <Download className="size-4 mr-2" />
               {t('download')}
@@ -227,7 +218,7 @@ export default function GridVideoCard({
                 variant="outline"
                 size="sm"
                 onClick={() => onMarkPosted(video)}
-                className="h-11 sm:h-10 px-3.5 shadow-sm hover:shadow-md hover:border-green-500/50 hover:bg-green-500/5 transition-all"
+                className="h-11 sm:h-10 px-3.5"
                 title={t('markAsPosted')}
               >
                 <Check className="size-4" />
@@ -238,7 +229,7 @@ export default function GridVideoCard({
                 variant="outline"
                 size="sm"
                 onClick={() => onDelete(video)}
-                className="h-11 sm:h-10 px-3.5 text-destructive hover:text-destructive shadow-sm hover:shadow-md hover:border-destructive/50 hover:bg-destructive/5 transition-all"
+                className="h-11 sm:h-10 px-3.5 text-destructive hover:text-destructive"
                 title={t('deleteVideo')}
               >
                 <Trash2 className="size-4" />

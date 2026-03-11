@@ -6,8 +6,8 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi.responses import JSONResponse, Response
 
 from ..models import (
     ProcessingJobRequest, ProcessingJobResponse, JobStatusResponse,
@@ -228,43 +228,6 @@ async def start_processor():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/models")
-async def get_available_models():
-    """Get available AI models dynamically from Google GenAI API."""
-    try:
-        # Import the adapter to access backend Gemini client
-        import sys
-        from pathlib import Path
-        
-        # Add utils directory to path
-        utils_dir = Path(__file__).resolve().parent.parent.parent / "utils"
-        if str(utils_dir) not in sys.path:
-            sys.path.insert(0, str(utils_dir))
-        
-        from gemini_adapter import get_available_gemini_models
-        
-        # Fetch models from Google GenAI API
-        models = get_available_gemini_models()
-        
-        logger.info(f"Returning {len(models)} available AI models from Gemini API")
-        return {"models": models}
-        
-    except Exception as e:
-        logger.error(f"Failed to fetch models from Gemini API, using fallback: {e}")
-        
-        # Fallback to hardcoded list if API call fails
-        fallback_models = [
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-exp", 
-            "gemini-2.0-pro",
-            "gemini-1.5-pro",
-            "gemini-1.5-flash",
-        ]
-        
-        logger.info(f"Returning {len(fallback_models)} fallback AI models")
-        return {"models": fallback_models}
-
-
 @router.get("/voices")
 async def get_available_voices():
     """Get available TTS voices."""
@@ -286,3 +249,56 @@ async def get_available_voices():
     
     logger.info(f"Returning {len(voices)} available TTS voices")
     return {"voices": voices}
+
+
+@router.post("/thumbnail")
+async def generate_thumbnail(
+    video_path: str = Query(..., description="Path to the video file"),
+    timestamp: float = Query(5.0, description="Time in seconds to extract thumbnail from"),
+):
+    """Generate a thumbnail from a video file and return it as JPEG bytes."""
+    import os
+    from pathlib import Path
+
+    if not os.path.isfile(video_path):
+        raise HTTPException(status_code=404, detail="Video file not found")
+
+    try:
+        from moviepy import VideoFileClip
+        from PIL import Image
+        import numpy as np
+        import io
+
+        with VideoFileClip(video_path) as clip:
+            thumbnail_time = min(timestamp, clip.duration * 0.1) if clip.duration else timestamp
+            frame = clip.get_frame(thumbnail_time)
+
+        if frame.dtype != np.uint8:
+            frame = (frame * 255).astype(np.uint8)
+
+        image = Image.fromarray(frame)
+
+        # Resize preserving aspect ratio (max 320px)
+        original_width, original_height = image.size
+        aspect_ratio = original_width / original_height
+        max_dim = 320
+        if aspect_ratio > 1:
+            new_width = max_dim
+            new_height = int(max_dim / aspect_ratio)
+        else:
+            new_height = max_dim
+            new_width = int(max_dim * aspect_ratio)
+
+        image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        buf = io.BytesIO()
+        image.save(buf, "JPEG", quality=85, optimize=True)
+        buf.seek(0)
+
+        return Response(content=buf.getvalue(), media_type="image/jpeg")
+
+    except ImportError:
+        raise HTTPException(status_code=500, detail="moviepy or Pillow not available on this processor")
+    except Exception as e:
+        logger.error(f"Thumbnail generation failed for {video_path}: {e}")
+        raise HTTPException(status_code=500, detail=f"Thumbnail generation failed: {e}")
