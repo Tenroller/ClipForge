@@ -49,8 +49,9 @@ RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 # Create necessary directories and set ownership for writable dirs
 RUN mkdir -p output temp logs && chown -R appuser:appgroup output temp logs
 
-# Switch to non-root user
-USER appuser
+# Copy entrypoint script (runs as root to fix volume permissions, then drops to appuser)
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -65,5 +66,6 @@ EXPOSE 8090
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:8090/health || exit 1
 
-# Run the application
+# Entrypoint fixes volume permissions then drops to non-root user
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "main.py"]

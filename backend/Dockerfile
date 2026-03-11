@@ -47,8 +47,9 @@ RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 # Create necessary directories and set ownership for writable dirs
 RUN mkdir -p output temp logs cache && chown -R appuser:appgroup output temp logs cache
 
-# Switch to non-root user
-USER appuser
+# Copy entrypoint script (runs as root to fix volume permissions, then drops to appuser)
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Set environment variables
 ENV PYTHONPATH=/app
@@ -61,5 +62,6 @@ EXPOSE 9000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:9000/api/health || exit 1
 
-# Run the application using uvicorn directly, pointing to backend module
+# Entrypoint fixes volume permissions then drops to non-root user
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "9000"]
