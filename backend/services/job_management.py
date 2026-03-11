@@ -164,12 +164,6 @@ class JobManagementService:
         if fields:
             self.job_store.update_job(job_id, **fields)
 
-        self._enqueue_job_update(job_id)
-    
-    def _enqueue_job_update(self, job_id: str) -> None:
-        """No-op: WebSocket broadcasting has been removed, using REST API polling instead."""
-        pass
-    
     def _get_next_step_for_workflow(self, workflow: str, last_step: str) -> str:
         """Determine the next step for a workflow based on the last completed step."""
         if workflow == "moneyprinter":
