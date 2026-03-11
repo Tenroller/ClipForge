@@ -113,9 +113,14 @@ class SimpleUserStore:
     """
 
     def __init__(self):
-        # Default user credentials (change via environment variables)
+        # User credentials from environment variables (required)
         self.username = os.getenv("AUTH_USERNAME", "admin")
-        self._password_plain = os.getenv("AUTH_PASSWORD", "tenroller")
+        self._password_plain = os.getenv("AUTH_PASSWORD")
+        if not self._password_plain:
+            raise ValueError(
+                "AUTH_PASSWORD environment variable is required. "
+                "Set it to a strong password before starting the application."
+            )
         self._password_hash = None  # Lazy initialization
 
     @property

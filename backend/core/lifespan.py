@@ -151,6 +151,26 @@ async def lifespan(app: FastAPI):
     # Initialize logging system (only once per process)
     logger = initialize_logging()
 
+    # Validate critical configuration before proceeding
+    try:
+        try:
+            from ..core.config import AppConfig
+        except ImportError:
+            from core.config import AppConfig
+        config = AppConfig.from_env()
+        validation = config.validate_environment()
+        if not validation['environment_valid']:
+            for issue in validation['issues']:
+                logger.error(f"Configuration error: {issue}")
+            raise SystemExit("Startup aborted: fix configuration errors above")
+        for warning in validation.get('warnings', []):
+            logger.warning(f"Configuration warning: {warning}")
+    except SystemExit:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to validate configuration: {e}")
+        raise SystemExit(f"Startup aborted: {e}")
+
     # Initialize enhanced systems
     try:
         init_metrics_system()

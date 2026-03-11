@@ -72,7 +72,7 @@ class AppConfig:
     openrouter_api_key: str = ""
     
     # Authentication
-    jwt_secret_key: str = 'your-secret-key-change-this-in-production'
+    jwt_secret_key: str = ''
     jwt_access_token_expire_minutes: int = 30
     
     # Development
@@ -203,7 +203,7 @@ class AppConfig:
             openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
             
             # Authentication
-            jwt_secret_key=os.getenv("JWT_SECRET_KEY", "your-secret-key-change-this-in-production"),
+            jwt_secret_key=os.getenv("JWT_SECRET_KEY", ""),
             jwt_access_token_expire_minutes=get_int("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 30),
             
             # Development
@@ -217,7 +217,16 @@ class AppConfig:
         
         env_issues = []
         env_warnings = []
-        
+
+        # Check critical security settings
+        jwt_key = os.getenv('JWT_SECRET_KEY', '')
+        insecure_defaults = {'', 'your-secret-key-change-this-in-production'}
+        if jwt_key in insecure_defaults:
+            env_issues.append("JWT_SECRET_KEY must be set to a strong, unique secret")
+
+        if not os.getenv('AUTH_PASSWORD'):
+            env_issues.append("AUTH_PASSWORD is required for authentication")
+
         # Check required environment variables
         required_env = [
             ('PEXELS_API_KEY', 'Required for stock video search'),

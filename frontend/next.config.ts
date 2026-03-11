@@ -6,6 +6,15 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 const nextConfig: NextConfig = {
   // Enable standalone output for Docker deployment
   output: 'standalone',
+  async redirects() {
+    return [
+      {
+        source: '/dashboard',
+        destination: '/creator',
+        permanent: true,
+      },
+    ];
+  },
   images: {
     // Use remotePatterns instead of deprecated domains
     remotePatterns: [
