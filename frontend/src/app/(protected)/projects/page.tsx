@@ -223,7 +223,7 @@ export default function PodcastProjectsPage() {
       </div>
 
       {/* Projects Grid */}
-      {loading ? (
+      {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {Array.from({ length: 8 }).map((_, i) => (
             <Card key={i} className="overflow-hidden rounded-xl border-border/50">
@@ -241,7 +241,8 @@ export default function PodcastProjectsPage() {
             </Card>
           ))}
         </div>
-      ) : projects.length === 0 ? (
+      )}
+      {!loading && projects.length === 0 && (
         <Card className="border-border/50 bg-muted/10 border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <div className="size-20 rounded-full bg-muted flex items-center justify-center mb-6">
@@ -261,7 +262,8 @@ export default function PodcastProjectsPage() {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      )}
+      {!loading && projects.length > 0 && (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-in fade-in duration-500">
             {projects.map((project) => (

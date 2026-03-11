@@ -207,12 +207,13 @@ export default function ActivityPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          {isLoading && jobs.length === 0 ? (
+          {isLoading && jobs.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
               <Loader2 className="size-8 mb-4 animate-spin" />
               <p>{t('loadingJobs')}</p>
             </div>
-          ) : jobs.length === 0 ? (
+          )}
+          {!(isLoading && jobs.length === 0) && jobs.length === 0 && (
             <div className="text-center py-16 text-muted-foreground">
               <Activity className="size-12 mx-auto mb-4 text-muted-foreground/50" />
               <h3 className="text-lg font-medium text-foreground mb-1">{t('noJobs')}</h3>
@@ -221,7 +222,8 @@ export default function ActivityPage() {
                 <a href="/creator">{t('createFirstVideo')}</a>
               </Button>
             </div>
-          ) : (
+          )}
+          {!(isLoading && jobs.length === 0) && jobs.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>

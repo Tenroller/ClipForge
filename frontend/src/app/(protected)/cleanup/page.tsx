@@ -146,12 +146,13 @@ export default function CleanupPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            {loading ? (
+            {loading && (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="size-6 animate-spin text-muted-foreground" />
                 <span className="ml-2 text-muted-foreground">{t('loading')}</span>
               </div>
-            ) : stats ? (
+            )}
+            {!loading && stats && (
               <div className="space-y-5">
                 {/* Summary Stats */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
@@ -199,7 +200,8 @@ export default function CleanupPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            )}
+            {!loading && !stats && (
               <div className="text-center py-8 text-muted-foreground">
                 {t('overview.failed')}
               </div>

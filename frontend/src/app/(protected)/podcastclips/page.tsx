@@ -376,8 +376,7 @@ export default function PodcastClipsPage() {
                       <div className="w-20 h-6 bg-black/80 rounded flex items-center justify-center overflow-hidden">
                         <div className={cn(
                           "text-[8px] font-bold whitespace-nowrap px-1",
-                          style.id === 'yellow_highlight' ? "text-white" :
-                            style.id === 'multicolor_pop' ? "text-white" : "text-white italic"
+                          style.id === 'yellow_highlight' || style.id === 'multicolor_pop' ? "text-white" : "text-white italic"
                         )}>
                           {style.id === 'yellow_highlight' && <span className="bg-yellow-400 text-black px-0.5 rounded-[1px]">ABC</span>}
                           {style.id === 'multicolor_pop' && <span className="text-pink-400">ABC</span>}
