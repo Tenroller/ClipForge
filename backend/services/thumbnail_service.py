@@ -16,12 +16,16 @@ from ..utils.paths import get_project_root
 
 logger = get_logger("thumbnail_service")
 
+# Cache directory: use VIDEOHELPER_CACHE_DIR env var (set to /app/cache in Docker),
+# falling back to <project_root>/cache for local development.
+_CACHE_ROOT = Path(os.environ.get("VIDEOHELPER_CACHE_DIR", str(get_project_root() / "cache")))
+
 
 class ThumbnailService:
     """Service for generating and managing video thumbnails."""
 
     def __init__(self):
-        self.cache_dir = get_project_root() / "backend" / "cache" / "thumbnails"
+        self.cache_dir = _CACHE_ROOT / "thumbnails"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_cache_key(self, video_path: str) -> str:

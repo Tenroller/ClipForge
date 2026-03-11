@@ -67,6 +67,9 @@ services:
       VIDEO_PROCESSOR_URLS: http://video-processor:8090
       BACKEND_CALLBACK_URL: http://backend:9000
 
+      # Cache directory (writable by non-root user)
+      VIDEOHELPER_CACHE_DIR: /app/cache
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DEBUG_MODE: ${DEBUG_MODE:-false}
