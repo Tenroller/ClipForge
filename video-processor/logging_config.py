@@ -62,7 +62,7 @@ def setup_logging() -> logger:
         Configured loguru logger instance
     """
     # Determine log directory (project root / logs)
-    root_dir = Path(__file__).resolve().parents[1]
+    root_dir = Path(__file__).resolve().parent
     log_dir = root_dir / "logs"
     log_dir.mkdir(exist_ok=True)
 
