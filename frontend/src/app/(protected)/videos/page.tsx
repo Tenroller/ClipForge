@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,55 +14,40 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
-import VideoCard, { type Video } from '@/components/videos/VideoCard';
-import GridVideoCard from '@/components/videos/GridVideoCard';
-import VideoCardSkeleton from '@/components/videos/VideoCardSkeleton';
+import { useVideoFilters } from '@/hooks/useVideoFilters';
+import { useVideoSelection } from '@/hooks/useVideoSelection';
+import { useVideoPagination } from '@/hooks/useVideoPagination';
+import { type Video } from '@/components/videos/VideoCard';
 import VideoPreviewModal from '@/components/videos/VideoPreviewModal';
-import BulkActionsBar from '@/components/videos/BulkActionsBar';
-import VideoStats, { type VideoStatsData } from '@/components/videos/VideoStats';
+import VideoStats from '@/components/videos/VideoStats';
 import VideoFilters from '@/components/videos/VideoFilters';
+import VideoGrid from '@/components/videos/VideoGrid';
+import VideoBulkActions from '@/components/videos/VideoBulkActions';
 import SyncPanel from '@/components/videos/SyncPanel';
-import { ChevronDown, LayoutGrid, List, Loader2, RefreshCw, Film, PlaySquare, Settings2, Download } from "lucide-react";
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { LayoutGrid, List, PlaySquare, RefreshCw, Settings2 } from 'lucide-react';
 import { api, API_BASE } from '@/lib/api';
-
-interface VideosResponse {
-  videos: Video[];
-  total: number;
-  offset: number;
-  limit: number;
-  has_more: boolean;
-}
 
 export default function VideosPage() {
   const { toast } = useToast();
   const t = useTranslations('videos');
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [stats, setStats] = useState<VideoStatsData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [workflowFilter, setWorkflowFilter] = useState('all');
-  const [postedFilter, setPostedFilter] = useState('all');
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState('desc');
-  const [offset, setOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
+
+  // Custom hooks
+  const filters = useVideoFilters();
+  const selection = useVideoSelection();
+  const pagination = useVideoPagination(t);
+
+  // Local UI state
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [syncing, setSyncing] = useState(false);
   const [showSyncPanel, setShowSyncPanel] = useState(false);
-
-  // View mode and bulk selection
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [previewVideo, setPreviewVideo] = useState<Video | null>(null);
 
-  // Delete confirmation dialog
+  // Delete confirmation dialogs
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [videoToDelete, setVideoToDelete] = useState<Video | null>(null);
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
-
-  const limit = 20;
 
   // Load view mode from localStorage
   useEffect(() => {
@@ -73,124 +57,12 @@ export default function VideosPage() {
     }
   }, []);
 
-  // Save view mode to localStorage
   const handleViewModeChange = (mode: 'grid' | 'list') => {
     setViewMode(mode);
     localStorage.setItem('videosViewMode', mode);
   };
 
-  // Load more videos (for pagination)
-  const loadMoreVideos = useCallback(async () => {
-    try {
-      setLoadingMore(true);
-
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-        offset: offset.toString(),
-        sort_by: sortBy,
-        sort_order: sortOrder,
-      });
-
-      if (workflowFilter !== 'all') {
-        params.append('workflow', workflowFilter);
-      }
-
-      if (postedFilter !== 'all') {
-        params.append('posted', postedFilter === 'posted' ? 'true' : 'false');
-      }
-
-      const response = await api.get(`/api/videos/managed?${params}`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to load videos: ${response.statusText}`);
-      }
-
-      const data: VideosResponse = await response.json();
-      setVideos((prev) => [...prev, ...data.videos]);
-      setOffset((prev) => prev + data.limit);
-      setHasMore(data.has_more);
-    } catch (error) {
-      console.error('Failed to load more videos:', error);
-      toast({
-        title: t('error'),
-        description: t('failedToLoadMore'),
-        variant: 'destructive',
-      });
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, offset, toast, t]);
-
-  // Refresh function for manual refresh
-  const refreshVideos = useCallback(async () => {
-    try {
-      setLoading(true);
-      setOffset(0);
-
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-        offset: '0',
-        sort_by: sortBy,
-        sort_order: sortOrder,
-      });
-
-      if (workflowFilter !== 'all') {
-        params.append('workflow', workflowFilter);
-      }
-
-      if (postedFilter !== 'all') {
-        params.append('posted', postedFilter === 'posted' ? 'true' : 'false');
-      }
-
-      const response = await api.get(`/api/videos/managed?${params}`);
-
-      if (!response.ok) {
-        throw new Error(`Failed to load videos: ${response.statusText}`);
-      }
-
-      const data: VideosResponse = await response.json();
-      setVideos(data.videos);
-      setOffset(data.limit);
-      setHasMore(data.has_more);
-    } catch (error) {
-      console.error('Failed to refresh videos:', error);
-      toast({
-        title: t('error'),
-        description: t('failedToLoad'),
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast, t]);
-
-  // Load stats
-  const loadStats = useCallback(async () => {
-    try {
-      const response = await api.get(`/api/videos/stats/managed`);
-      if (!response.ok) {
-        throw new Error(`Failed to load stats: ${response.statusText}`);
-      }
-      const data: VideoStatsData = await response.json();
-      setStats(data);
-    } catch (error) {
-      console.error('Failed to load stats:', error);
-      setStats({
-        total_videos: 0,
-        total_size_mb: 0,
-        workflows: {
-          moneyprinter: { count: 0, size_mb: 0 },
-          brainrot: { count: 0, size_mb: 0 },
-        },
-        video_types: {
-          ai_generated: { count: 0, size_mb: 0 },
-          compilation: { count: 0, size_mb: 0 },
-        },
-      });
-    }
-  }, []);
-
-  // Sync videos from jobs
+  // Sync operations
   const syncVideosFromJobs = async () => {
     try {
       setSyncing(true);
@@ -206,12 +78,12 @@ export default function VideosPage() {
         title: t('sync.videosSynced'),
         description: t('sync.syncedFromJobs', {
           count: result.registered_videos,
-          jobs: result.processed_jobs
+          jobs: result.processed_jobs,
         }),
       });
 
-      refreshVideos();
-      loadStats();
+      pagination.refreshVideos(filters.buildSearchParams());
+      pagination.loadStats();
     } catch (error) {
       console.error('Failed to sync videos:', error);
       toast({
@@ -224,7 +96,6 @@ export default function VideosPage() {
     }
   };
 
-  // Sync orphaned videos
   const syncOrphanedVideos = async () => {
     try {
       setSyncing(true);
@@ -240,12 +111,12 @@ export default function VideosPage() {
         title: t('sync.orphanedSynced'),
         description: t('sync.registeredOrphaned', {
           count: result.registered_videos,
-          files: result.scanned_files
+          files: result.scanned_files,
         }),
       });
 
-      refreshVideos();
-      loadStats();
+      pagination.refreshVideos(filters.buildSearchParams());
+      pagination.loadStats();
     } catch (error) {
       console.error('Failed to sync orphaned videos:', error);
       toast({
@@ -258,57 +129,62 @@ export default function VideosPage() {
     }
   };
 
-  // Handle video download
-  const handleDownload = (video: Video) => {
-    const link = document.createElement('a');
-    const downloadUrl = video.download_url || `/api/download?path=${encodeURIComponent(video.file_path || '')}`;
-    link.href = `${API_BASE}${downloadUrl}`;
-    link.download = video.filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Video actions
+  const handleDownload = useCallback(
+    (video: Video) => {
+      const link = document.createElement('a');
+      const downloadUrl =
+        video.download_url || `/api/download?path=${encodeURIComponent(video.file_path || '')}`;
+      link.href = `${API_BASE}${downloadUrl}`;
+      link.download = video.filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-    toast({
-      title: t('downloadStarted'),
-      description: t('downloading', { filename: video.filename }),
-    });
-  };
+      toast({
+        title: t('downloadStarted'),
+        description: t('downloading', { filename: video.filename }),
+      });
+    },
+    [toast, t]
+  );
 
-  // Handle mark as posted
-  const handleMarkPosted = async (video: Video) => {
-    try {
-      const response = await api.post(`/api/videos/managed/${video.id}/mark-posted`);
+  const handleMarkPosted = useCallback(
+    async (video: Video) => {
+      try {
+        const response = await api.post(`/api/videos/managed/${video.id}/mark-posted`);
 
-      if (!response.ok) {
-        throw new Error('Failed to mark video as posted');
+        if (!response.ok) {
+          throw new Error('Failed to mark video as posted');
+        }
+
+        toast({
+          title: t('videoMarkedPosted'),
+          description: t('markedAsPosted', { filename: video.filename }),
+        });
+
+        pagination.setVideos((prev) =>
+          prev.map((v) =>
+            v.id === video.id ? { ...v, posted: true, posted_at: new Date().toISOString() } : v
+          )
+        );
+        pagination.loadStats();
+      } catch {
+        toast({
+          title: t('error'),
+          description: t('failedToMark'),
+          variant: 'destructive',
+        });
       }
+    },
+    [toast, t, pagination]
+  );
 
-      toast({
-        title: t('videoMarkedPosted'),
-        description: t('markedAsPosted', { filename: video.filename }),
-      });
-
-      // Update local state
-      setVideos((prev) =>
-        prev.map((v) =>
-          v.id === video.id ? { ...v, posted: true, posted_at: new Date().toISOString() } : v
-        )
-      );
-      loadStats();
-    } catch {
-      toast({
-        title: t('error'),
-        description: t('failedToMark'),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  // Handle delete video
-  const handleDeleteClick = (video: Video) => {
+  // Delete handlers
+  const handleDeleteClick = useCallback((video: Video) => {
     setVideoToDelete(video);
     setDeleteDialogOpen(true);
-  };
+  }, []);
 
   const handleDeleteConfirm = async () => {
     if (!videoToDelete) return;
@@ -327,17 +203,9 @@ export default function VideosPage() {
         description: t('permanentlyDeleted', { filename: videoToDelete.filename }),
       });
 
-      // Remove from local state
-      setVideos((prev) => prev.filter((v) => v.id !== videoToDelete.id));
-
-      // Remove from selection if selected
-      setSelectedVideos((prev) => {
-        const newSet = new Set(prev);
-        newSet.delete(videoToDelete.id);
-        return newSet;
-      });
-
-      loadStats();
+      pagination.setVideos((prev) => prev.filter((v) => v.id !== videoToDelete.id));
+      selection.removeFromSelection(videoToDelete.id);
+      pagination.loadStats();
     } catch {
       toast({
         title: t('error'),
@@ -350,89 +218,34 @@ export default function VideosPage() {
     }
   };
 
-  // Handle bulk selection
-  const handleVideoSelect = (video: Video, selected: boolean) => {
-    setSelectedVideos((prev) => {
-      const newSet = new Set(prev);
-      if (selected) {
-        newSet.add(video.id);
-      } else {
-        newSet.delete(video.id);
-      }
-      return newSet;
-    });
-  };
-
-  const handleClearSelection = () => {
-    setSelectedVideos(new Set());
-  };
-
-  // Bulk operations
-  const handleBulkDownload = () => {
-    const selected = filteredVideos.filter((v) => selectedVideos.has(v.id));
-    selected.forEach((video) => handleDownload(video));
-    toast({
-      title: t('bulkDownloadStarted'),
-      description: t('downloadingMultiple', { count: selected.length }),
-    });
-  };
-
-  const handleBulkMarkPosted = async () => {
-    const selected = filteredVideos.filter((v) => selectedVideos.has(v.id) && !v.posted);
-
-    try {
-      await Promise.all(selected.map((video) => handleMarkPosted(video)));
-      setSelectedVideos(new Set());
-      toast({
-        title: t('bulkOperationComplete'),
-        description: t('markedMultiple', { count: selected.length }),
-      });
-    } catch {
-      toast({
-        title: t('error'),
-        description: t('failedToMarkSome'),
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleBulkDeleteClick = () => {
-    setBulkDeleteDialogOpen(true);
-  };
-
   const handleBulkDeleteConfirm = async () => {
-    const selected = filteredVideos.filter((v) => selectedVideos.has(v.id));
+    const selected = filteredVideos.filter((v) => selection.selectedVideos.has(v.id));
     const selectedCount = selected.length;
 
     try {
-      // Delete videos in parallel
       await Promise.all(
         selected.map(async (video) => {
           const response = await api.delete(
             `/api/videos/managed/${video.id}?delete_file=true`
           );
-
           if (!response.ok) {
             throw new Error(`Failed to delete ${video.filename}`);
           }
         })
       );
 
-      // Remove from local state
-      setVideos((prev) => prev.filter((v) => !selectedVideos.has(v.id)));
-
-      // Clear selection
-      setSelectedVideos(new Set());
+      pagination.setVideos((prev) => prev.filter((v) => !selection.selectedVideos.has(v.id)));
+      selection.clearSelection();
 
       toast({
         title: t('videosDeleted'),
         description: t('successfullyDeleted', {
           count: selectedCount,
-          plural: selectedCount !== 1 ? 's' : ''
+          plural: selectedCount !== 1 ? 's' : '',
         }),
       });
 
-      loadStats();
+      pagination.loadStats();
     } catch {
       toast({
         title: t('error'),
@@ -444,90 +257,26 @@ export default function VideosPage() {
     }
   };
 
-  // Initial load effect
+  // Initial load effect — re-fetch when any filter changes (including search)
   useEffect(() => {
     const initialLoad = async () => {
-      try {
-        setLoading(true);
-        setOffset(0);
-
-        const params = new URLSearchParams({
-          limit: limit.toString(),
-          offset: '0',
-          sort_by: sortBy,
-          sort_order: sortOrder,
-        });
-
-        if (workflowFilter !== 'all') {
-          params.append('workflow', workflowFilter);
-        }
-
-        if (postedFilter !== 'all') {
-          params.append('posted', postedFilter === 'posted' ? 'true' : 'false');
-        }
-
-        // Load videos and stats in parallel
-        const [videosResponse, statsResponse] = await Promise.all([
-          api.get(`/api/videos/managed?${params}`),
-          api.get(`/api/videos/stats/managed`),
-        ]);
-
-        if (!videosResponse.ok) {
-          throw new Error(`Failed to load videos: ${videosResponse.statusText}`);
-        }
-
-        const videosData: VideosResponse = await videosResponse.json();
-        setVideos(videosData.videos);
-        setOffset(videosData.limit);
-        setHasMore(videosData.has_more);
-
-        if (statsResponse.ok) {
-          const statsData: VideoStatsData = await statsResponse.json();
-          setStats(statsData);
-        } else {
-          console.error('Failed to load stats:', statsResponse.statusText);
-          setStats({
-            total_videos: 0,
-            total_size_mb: 0,
-            workflows: {
-              moneyprinter: { count: 0, size_mb: 0 },
-              brainrot: { count: 0, size_mb: 0 },
-            },
-            video_types: {
-              ai_generated: { count: 0, size_mb: 0 },
-              compilation: { count: 0, size_mb: 0 },
-            },
-          });
-        }
-      } catch (error) {
-        console.error('Failed to load initial data:', error);
-        toast({
-          title: t('error'),
-          description: t('failedToLoad'),
-          variant: 'destructive',
-        });
-      } finally {
-        setLoading(false);
-      }
+      const params = filters.buildSearchParams(0);
+      await Promise.all([
+        pagination.refreshVideos(params),
+        pagination.loadStats(),
+      ]);
     };
 
     initialLoad();
-  }, [workflowFilter, postedFilter, sortBy, sortOrder, toast, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.workflowFilter, filters.postedFilter, filters.sortBy, filters.sortOrder, filters.debouncedSearchTerm]);
 
-  // Filter videos by search term
-  const filteredVideos = videos.filter(
-    (video) =>
-      video.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      video.job_id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Count selected unposted videos
-  const selectedUnpostedCount = filteredVideos.filter(
-    (v) => selectedVideos.has(v.id) && !v.posted
-  ).length;
+  // Videos are now filtered server-side; use them directly
+  const filteredVideos = pagination.videos;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-8">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
@@ -552,11 +301,11 @@ export default function VideosPage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={refreshVideos}
-            disabled={loading}
+            onClick={() => pagination.refreshVideos(filters.buildSearchParams())}
+            disabled={pagination.loading}
             className="h-10 w-10"
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${pagination.loading ? 'animate-spin' : ''}`} />
           </Button>
           {/* View Toggle */}
           <div className="flex bg-muted rounded-lg p-1">
@@ -582,7 +331,7 @@ export default function VideosPage() {
 
       <div className="space-y-8">
         {/* Stats */}
-        <VideoStats stats={stats} loading={loading && !stats} />
+        <VideoStats stats={pagination.stats} loading={pagination.loading && !pagination.stats} />
 
         {/* Sync Panel */}
         {showSyncPanel && (
@@ -599,139 +348,54 @@ export default function VideosPage() {
 
         {/* Filters */}
         <VideoFilters
-          searchTerm={searchTerm}
-          onSearchChange={setSearchTerm}
-          workflowFilter={workflowFilter}
-          onWorkflowFilterChange={setWorkflowFilter}
-          postedFilter={postedFilter}
-          onPostedFilterChange={setPostedFilter}
-          sortBy={sortBy}
-          onSortByChange={setSortBy}
-          sortOrder={sortOrder}
-          onSortOrderChange={setSortOrder}
+          searchTerm={filters.searchTerm}
+          onSearchChange={filters.setSearchTerm}
+          workflowFilter={filters.workflowFilter}
+          onWorkflowFilterChange={filters.setWorkflowFilter}
+          postedFilter={filters.postedFilter}
+          onPostedFilterChange={filters.setPostedFilter}
+          sortBy={filters.sortBy}
+          onSortByChange={filters.setSortBy}
+          sortOrder={filters.sortOrder}
+          onSortOrderChange={filters.setSortOrder}
         />
 
         {/* Selection Info */}
-        {selectedVideos.size > 0 && (
+        {selection.selectedVideos.size > 0 && (
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-center justify-between animate-in fade-in duration-300">
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="bg-primary/20 text-primary hover:bg-primary/30">
-                {selectedVideos.size} Selected
+                {selection.selectedVideos.size} Selected
               </Badge>
               <span className="text-sm text-muted-foreground">{t('selected')}</span>
             </div>
-            <Button variant="ghost" size="sm" onClick={handleClearSelection} className="h-8 text-xs">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={selection.handleClearSelection}
+              className="h-8 text-xs"
+            >
               Clear Selection
             </Button>
           </div>
         )}
 
-        {/* Videos List */}
-        {loading ? (
-          viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <VideoCardSkeleton key={i} variant="grid" />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <VideoCardSkeleton key={i} variant="list" />
-              ))}
-            </div>
-          )
-        ) : filteredVideos.length === 0 ? (
-          <Card className="border-border/50 bg-muted/10 border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="size-20 rounded-full bg-muted flex items-center justify-center mb-6">
-                <Film className="size-10 text-muted-foreground" />
-              </div>
-              <p className="text-lg font-medium text-foreground">{t('noVideos')}</p>
-              <p className="text-muted-foreground mt-2 max-w-sm">
-                {searchTerm
-                  ? t('tryAdjusting')
-                  : t('generateToSee')}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {viewMode === 'grid' ? (
-              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
-                {filteredVideos.map((video) => (
-                  <GridVideoCard
-                    key={video.id}
-                    video={video}
-                    onDownload={handleDownload}
-                    onPlay={setPreviewVideo}
-                    onMarkPosted={handleMarkPosted}
-                    onDelete={handleDeleteClick}
-                    selected={selectedVideos.has(video.id)}
-                    onSelect={handleVideoSelect}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {filteredVideos.map((video) => (
-                  <VideoCard
-                    key={video.id}
-                    video={video}
-                    onDownload={handleDownload}
-                    onPlay={setPreviewVideo}
-                    onMarkPosted={handleMarkPosted}
-                    onDelete={handleDeleteClick}
-                    selected={selectedVideos.has(video.id)}
-                    onSelect={handleVideoSelect}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* Load More Button */}
-            {hasMore && !searchTerm && (
-              <div className="flex justify-center pt-8 pb-4">
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={loadMoreVideos}
-                  disabled={loadingMore}
-                  className="rounded-md px-8"
-                >
-                  {loadingMore ? (
-                    <>
-                      <Loader2 className="size-4 mr-2 animate-spin" />
-                      {t('loading')}
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="size-4 mr-2" />
-                      {t('loadMore')}
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-
-            {/* Loading More Skeletons */}
-            {loadingMore && (
-              viewMode === 'grid' ? (
-                <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 mt-6">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <VideoCardSkeleton key={i} variant="grid" />
-                  ))}
-                </div>
-              ) : (
-                <div className="space-y-4 mt-4">
-                  {Array.from({ length: 3 }).map((_, i) => (
-                    <VideoCardSkeleton key={i} variant="list" />
-                  ))}
-                </div>
-              )
-            )}
-          </>
-        )}
+        {/* Videos Grid/List */}
+        <VideoGrid
+          videos={filteredVideos}
+          loading={pagination.loading}
+          loadingMore={pagination.loadingMore}
+          hasMore={pagination.hasMore}
+          searchTerm={filters.searchTerm}
+          viewMode={viewMode}
+          selectedVideos={selection.selectedVideos}
+          onDownload={handleDownload}
+          onPlay={setPreviewVideo}
+          onMarkPosted={handleMarkPosted}
+          onDelete={handleDeleteClick}
+          onSelect={selection.handleVideoSelect}
+          onLoadMore={() => pagination.loadMoreVideos(filters.buildSearchParams())}
+        />
       </div>
 
       {/* Video Preview Modal */}
@@ -744,13 +408,13 @@ export default function VideosPage() {
       />
 
       {/* Bulk Actions Bar */}
-      <BulkActionsBar
-        selectedCount={selectedVideos.size}
-        onDownloadAll={handleBulkDownload}
-        onMarkAllPosted={handleBulkMarkPosted}
-        onDeleteAll={handleBulkDeleteClick}
-        onClearSelection={handleClearSelection}
-        totalUnposted={selectedUnpostedCount}
+      <VideoBulkActions
+        filteredVideos={filteredVideos}
+        selectedVideos={selection.selectedVideos}
+        onClearSelection={selection.handleClearSelection}
+        onSetVideos={pagination.setVideos}
+        onLoadStats={pagination.loadStats}
+        onOpenBulkDeleteDialog={() => setBulkDeleteDialogOpen(true)}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -761,7 +425,7 @@ export default function VideosPage() {
             <AlertDialogDescription>
               {t.rich('dialog.deleteDescription', {
                 filename: videoToDelete?.filename || '',
-                strong: (chunks) => <strong>{chunks}</strong>
+                strong: (chunks) => <strong>{chunks}</strong>,
               })}
               <br />
               <br />
@@ -770,7 +434,10 @@ export default function VideosPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('dialog.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               {t('dialog.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -784,9 +451,9 @@ export default function VideosPage() {
             <AlertDialogTitle>{t('dialog.deleteMultipleTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
               {t.rich('dialog.deleteMultipleDescription', {
-                count: selectedVideos.size,
-                plural: selectedVideos.size !== 1 ? 's' : '',
-                strong: (chunks) => <strong>{chunks}</strong>
+                count: selection.selectedVideos.size,
+                plural: selection.selectedVideos.size !== 1 ? 's' : '',
+                strong: (chunks) => <strong>{chunks}</strong>,
               })}
               <br />
               <br />
@@ -795,7 +462,10 @@ export default function VideosPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t('dialog.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={handleBulkDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={handleBulkDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               {t('dialog.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>

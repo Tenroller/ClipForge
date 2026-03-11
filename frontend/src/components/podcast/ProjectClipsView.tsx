@@ -22,7 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, ArrowUpDown, CheckSquare, Filter, Plus, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowUpDown, CheckSquare, Filter, Plus, X, Loader2, Scissors } from 'lucide-react';
+import { EmptyState } from '@/components/ui/empty-state';
 import ClipCard from './ClipCard';
 import type { PodcastClip, PodcastProjectDetail } from '@/lib/api';
 import {
@@ -358,14 +359,16 @@ export default function ProjectClipsView({
           </Card>
         ) : (
           // Show "no clips found" message when job is not running
-          <div className="flex flex-col items-center justify-center min-h-[300px] gap-4 text-center">
-            <p className="text-lg text-muted-foreground">Nenhum clip encontrado</p>
-            <p className="text-sm text-muted-foreground/70">
-              {filterBy !== 'all'
+          <EmptyState
+            icon={Scissors}
+            title="Nenhum clip encontrado"
+            description={
+              filterBy !== 'all'
                 ? 'Tente ajustar os filtros'
-                : 'Este projeto ainda nao tem clips gerados'}
-            </p>
-          </div>
+                : 'Este projeto ainda nao tem clips gerados'
+            }
+            className="min-h-[300px]"
+          />
         )
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">

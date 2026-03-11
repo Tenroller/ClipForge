@@ -18,6 +18,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import ResultPanel from '@/components/job/ResultPanel';
 import { Download, Eye, Loader2, RefreshCw, TrendingUp, MoreHorizontal, Activity, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { EmptyState } from '@/components/ui/empty-state';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -214,14 +215,16 @@ export default function ActivityPage() {
             </div>
           )}
           {!(isLoading && jobs.length === 0) && jobs.length === 0 && (
-            <div className="text-center py-16 text-muted-foreground">
-              <Activity className="size-12 mx-auto mb-4 text-muted-foreground/50" />
-              <h3 className="text-lg font-medium text-foreground mb-1">{t('noJobs')}</h3>
-              <p className="mb-6 max-w-sm mx-auto">You haven&apos;t generated any videos yet. Start your first creation now.</p>
-              <Button asChild variant="default">
-                <a href="/creator">{t('createFirstVideo')}</a>
-              </Button>
-            </div>
+            <EmptyState
+              icon={Activity}
+              title={t('noJobs')}
+              description="You haven't generated any videos yet. Start your first creation now."
+              action={
+                <Button asChild variant="default">
+                  <a href="/creator">{t('createFirstVideo')}</a>
+                </Button>
+              }
+            />
           )}
           {!(isLoading && jobs.length === 0) && jobs.length > 0 && (
             <Table>

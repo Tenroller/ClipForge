@@ -12,6 +12,7 @@ import { HelpCircle, RefreshCw, Star, Cpu, Loader2, Type, ChevronDown, ChevronUp
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { api, API_BASE } from '@/lib/api'
 
 export type MoneyPrinterFormProps = {
   aiModel: string
@@ -21,7 +22,6 @@ export type MoneyPrinterFormProps = {
   subtitleColor: string
   onChangeSubtitleColor: (value: string) => void
   subtitlesPosition: string
-  apiBase?: string
   busy?: boolean
   onSubmit: (e: React.FormEvent<HTMLFormElement>) => void
   onReset?: () => void
@@ -47,7 +47,6 @@ export default function MoneyPrinterForm({
   subtitleColor,
   onChangeSubtitleColor,
   subtitlesPosition,
-  apiBase,
   busy,
   onSubmit,
   onReset,
@@ -164,12 +163,7 @@ export default function MoneyPrinterForm({
                       onClick={async () => {
                         try {
                           setSuggesting(true)
-                          const base = apiBase || ''
-                          const res = await fetch(`${base}/api/AIvideos/suggest-subject`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ aiModel })
-                          })
+                          const res = await api.post(`/api/AIvideos/suggest-subject`, { aiModel })
                           const data = await res.json()
                           if (!res.ok) throw new Error(data?.detail || 'Failed to generate subject')
                           const s = String(data?.subject || '').trim()
@@ -211,8 +205,7 @@ export default function MoneyPrinterForm({
                         try {
                           setVoiceLoading(true)
                           try { audioRef.current?.pause() } catch { }
-                          const base = apiBase || ''
-                          const sampleUrl = `${base}/api/voice-sample?voice=${encodeURIComponent(voice)}&t=${Date.now()}`
+                          const sampleUrl = `${API_BASE}/api/voice-sample?voice=${encodeURIComponent(voice)}&t=${Date.now()}`
                           const audio = new Audio(sampleUrl)
                           audioRef.current = audio
                           audio.onended = () => { setVoiceLoading(false) }

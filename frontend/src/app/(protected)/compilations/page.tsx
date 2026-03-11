@@ -13,12 +13,11 @@ import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import { Brain, Cpu, HelpCircle, Loader2, Video as VideoIcon, Youtube, Upload, Layers, Settings2, Clock, Smartphone } from "lucide-react";
 import type { JobRecord } from '@/lib/api';
+import { API_BASE } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-
-const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
 export default function CompilationsPage() {
   const { toast } = useToast();
@@ -75,7 +74,7 @@ export default function CompilationsPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch(`${API}/api/upload-video`, {
+      const response = await fetch(`${API_BASE}/api/upload-video`, {
         method: 'POST',
         body: formData,
         credentials: 'include',

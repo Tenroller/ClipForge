@@ -239,6 +239,13 @@ class LoginRequest(BaseModel):
     password: str = Field(..., min_length=1)
 
 
+class RegisterRequest(BaseModel):
+    """Register request for creating a new user (admin only)."""
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=8)
+    role: str = Field(default="user", pattern="^(admin|user)$")
+
+
 class LoginResponse(BaseModel):
     """Login response with access token."""
     access_token: str

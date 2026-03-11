@@ -20,6 +20,7 @@ import {
   Copy,
 } from "lucide-react";
 import { useJobLineage } from '@/hooks/use-jobs';
+import { EmptyState } from '@/components/ui/empty-state';
 import type { LineageRecord } from '@/lib/api';
 
 interface JobLineagePanelProps {
@@ -202,7 +203,12 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
               <Loader2 className="size-4 animate-spin" /> {t('loadingDescendants')}
             </div>
           ) : descendants.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No descendant (resumed) jobs yet.</div>
+            <EmptyState
+              icon={Network}
+              title="No descendant jobs yet"
+              description="Resumed jobs will appear here."
+              className="py-8"
+            />
           ) : (
             <div className="border rounded-md divide-y bg-muted/20 dark:divide-border/40">
               {descendants.map((d) => (

@@ -160,6 +160,25 @@ class YouTubeVideo(Base):
     )
 
 
+class User(Base):
+    """User model for multi-user authentication."""
+    __tablename__ = "users"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    username = Column(String(50), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default="user")
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index('ix_users_username', 'username', unique=True),
+        Index('ix_users_role', 'role'),
+        Index('ix_users_is_active', 'is_active'),
+    )
+
+
 class JobTombstone(Base):
     """Tracks purged/expired jobs so we can return 410 (Gone)."""
     __tablename__ = "job_tombstones"
@@ -569,6 +588,89 @@ class JobStore:
                 })
 
             return video_list
+
+    def search_videos(
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        workflow: Optional[str] = None,
+        posted: Optional[bool] = None,
+        job_id: Optional[str] = None,
+        search: Optional[str] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+    ) -> Dict[str, Any]:
+        """Search videos with filtering, sorting, and pagination.
+
+        Returns a dict with ``videos`` list, ``total`` count, ``offset`` and ``limit``.
+        """
+        with self._get_session() as session:
+            query = session.query(Video)
+
+            # --- Filters -------------------------------------------------------
+            if workflow:
+                query = query.filter(Video.workflow == workflow)
+            if posted is not None:
+                query = query.filter(Video.posted == posted)
+            if job_id:
+                query = query.filter(Video.job_id == job_id)
+
+            if search:
+                search_pattern = f"%{search}%"
+                query = query.filter(
+                    Video.filename.ilike(search_pattern)
+                )
+
+            # --- Total count (before limit/offset) ----------------------------
+            total = query.count()
+
+            # --- Sorting -------------------------------------------------------
+            sort_column_map = {
+                "created_at": Video.created_at,
+                "updated_at": Video.updated_at,
+                "filename": Video.filename,
+                "file_size": Video.size_bytes,
+                "size_bytes": Video.size_bytes,
+                "duration": Video.duration_seconds,
+                "duration_seconds": Video.duration_seconds,
+                "posted": Video.posted,
+                "workflow": Video.workflow,
+            }
+            sort_col = sort_column_map.get(sort_by, Video.created_at)
+            if sort_order.lower() == "asc":
+                query = query.order_by(sort_col.asc())
+            else:
+                query = query.order_by(sort_col.desc())
+
+            # --- Pagination ----------------------------------------------------
+            videos = query.offset(offset).limit(limit).all()
+
+            video_list = []
+            for video in videos:
+                video_list.append({
+                    "id": video.id,
+                    "filename": video.filename,
+                    "file_path": video.file_path,
+                    "job_id": video.job_id,
+                    "workflow": video.workflow,
+                    "video_type": video.video_type,
+                    "size_bytes": video.size_bytes,
+                    "duration_seconds": video.duration_seconds,
+                    "compilation_type": video.compilation_type,
+                    "compilation_num": video.compilation_num,
+                    "posted": video.posted,
+                    "posted_at": video.posted_at.isoformat() if getattr(video, 'posted_at', None) is not None else None,
+                    "metadata": video.video_metadata or {},
+                    "created_at": video.created_at.isoformat() if getattr(video, 'created_at', None) is not None else None,
+                    "updated_at": video.updated_at.isoformat() if getattr(video, 'updated_at', None) is not None else None,
+                })
+
+            return {
+                "videos": video_list,
+                "total": total,
+                "offset": offset,
+                "limit": limit,
+            }
 
     def delete_video(self, video_id: Union[str, uuid.UUID]) -> bool:
         """Delete a video record by ID."""

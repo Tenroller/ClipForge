@@ -12,6 +12,7 @@ from .job_callbacks import router as job_callbacks_router
 from .system import router as system_router
 from .videos import router as videos_router
 from .video_management import router as video_management_router
+from .sse import router as sse_router
 
 
 def register_routes(app: FastAPI) -> None:
@@ -26,6 +27,10 @@ def register_routes(app: FastAPI) -> None:
     # Video generation workflows
     app.include_router(video_generation_router, prefix="/api", tags=["Video Generation"])
     
+    # Server-Sent Events for real-time job progress (must be before job_management
+    # so /jobs/stream is matched before /jobs/{job_id})
+    app.include_router(sse_router, prefix="/api", tags=["SSE"])
+
     # Job management and monitoring
     app.include_router(job_management_router, prefix="/api", tags=["Job Management"])
     

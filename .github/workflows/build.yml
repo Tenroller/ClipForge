@@ -77,6 +77,11 @@ jobs:
         run: python -m pytest tests/ -v --tb=short
         env:
           PYTHONDONTWRITEBYTECODE: 1
+          JWT_SECRET_KEY: ci-test-secret-key
+          AUTH_PASSWORD: ci-test-password
+          PEXELS_API_KEY: ci-test-key
+          OPENROUTER_API_KEY: ci-test-key
+          RATE_LIMIT_PER_MINUTE: "0"
 
   # ── Docker build verification ──────────────────────────────────────
   docker-build:

@@ -38,64 +38,63 @@ class SyncVideosResponse(BaseModel):
 
 @router.get("/videos/managed", summary="List Tracked Videos")
 def list_managed_videos(
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(20, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     workflow: Optional[str] = Query(None),
     posted: Optional[bool] = Query(None),
     job_id: Optional[str] = Query(None),
-    # New filtering params for AI metadata
+    search: Optional[str] = Query(None, description="Search in filename/title"),
+    # Sorting params
+    sort_by: Optional[str] = Query("created_at", description="Sort by: created_at, file_size, duration, filename, workflow, posted"),
+    sort_order: Optional[str] = Query("desc", description="Sort order: asc or desc"),
+    # Legacy AI metadata filters (applied post-query)
     tags: Optional[str] = Query(None, description="Comma-separated list of tags to filter by"),
     min_viral_score: Optional[int] = Query(None, ge=0, le=100, description="Minimum viral score"),
     min_confidence: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence"),
-    search: Optional[str] = Query(None, description="Search in title, hook, caption, and tags"),
-    # Sorting params
-    sort_by: Optional[str] = Query("created_at", description="Sort by: created_at, viral_score, confidence, duration"),
-    sort_order: Optional[str] = Query("desc", description="Sort order: asc or desc")
 ) -> Dict[str, Any]:
     """
-    List videos tracked in the database with filtering and sorting options.
+    List videos tracked in the database with server-side filtering, sorting, and pagination.
 
-    This endpoint returns videos that are properly tracked in the database,
-    with support for filtering by AI metadata (tags, viral_score, confidence)
-    and sorting by various fields.
+    Filtering by workflow, posted status, and filename search are handled in the database query.
+    The response includes an accurate ``total`` count for pagination.
     """
     try:
-        # Build kwargs and avoid passing None for parameters that expect a str
-        _list_kwargs = {
-            "limit": limit * 2,  # Get more to account for filtering
-            "offset": offset,
-            "workflow": workflow,
-            "posted": posted,
-            "job_id": job_id,
-        }
-        # Filter out None values so we don't pass Optional[str] where str is required
-        _list_kwargs = {k: v for k, v in _list_kwargs.items() if v is not None}
+        # Use server-side search_videos for filtering, sorting, and pagination
+        result = job_store.search_videos(
+            limit=limit,
+            offset=offset,
+            workflow=workflow,
+            posted=posted,
+            job_id=job_id,
+            search=search,
+            sort_by=sort_by or "created_at",
+            sort_order=sort_order or "desc",
+        )
 
-        videos = video_service.list_videos(**_list_kwargs)
+        videos = result["videos"]
+        total = result["total"]
 
         # Safety filter: exclude source/raw files incorrectly registered in the past
-        # Keep only final MoneyPrinter outputs and Brainrot compilations
         def is_final_output(v: Dict[str, Any]) -> bool:
-            workflow = v.get("workflow")
+            wf = v.get("workflow")
             video_type = v.get("video_type")
             filename = str(v.get("filename", "")).lower()
-            # Never show obvious sources
             banned_markers = ["source", "download", "cropped", "raw"]
             if any(marker in filename for marker in banned_markers):
                 return False
-            if workflow == "moneyprinter" and video_type == "ai_generated":
+            if wf == "moneyprinter" and video_type == "ai_generated":
                 return True
-            if workflow == "brainrot" and video_type == "compilation":
+            if wf == "brainrot" and video_type == "compilation":
                 return True
-            if workflow == "podcastclips" and video_type == "podcast_clip":
+            if wf == "podcastclips" and video_type == "podcast_clip":
                 return True
             return False
 
         videos = [v for v in videos if is_final_output(v)]
 
-        # Apply AI metadata filters
+        # Apply legacy AI metadata filters (post-query, kept for backward compatibility)
         if tags:
-            tag_list = [t.strip() for t in tags.split(",")]
+            tag_list = [t_val.strip() for t_val in tags.split(",")]
             videos = [
                 v for v in videos
                 if v.get("metadata", {}).get("tags") and
@@ -114,64 +113,21 @@ def list_managed_videos(
                 if v.get("metadata", {}).get("confidence", 0.0) >= min_confidence
             ]
 
-        if search:
-            search_lower = search.lower()
-            videos = [
-                v for v in videos
-                if search_lower in str(v.get("metadata", {}).get("title", "")).lower()
-                or search_lower in str(v.get("metadata", {}).get("hook", "")).lower()
-                or search_lower in str(v.get("metadata", {}).get("caption", "")).lower()
-                or any(search_lower in str(tag).lower() for tag in v.get("metadata", {}).get("tags", []))
-            ]
-
-        # Apply sorting
-        def get_sort_value(video: Dict[str, Any]) -> Any:
-            if sort_by == "viral_score":
-                return video.get("metadata", {}).get("viral_score", 0)
-            elif sort_by == "confidence":
-                return video.get("metadata", {}).get("confidence", 0.0)
-            elif sort_by == "duration":
-                return video.get("duration_seconds", 0) or 0
-            else:  # created_at (default)
-                return video.get("created_at", "")
-
-        reverse_sort = (sort_order.lower() == "desc")
-        videos = sorted(videos, key=get_sort_value, reverse=reverse_sort)
-
-        # Apply limit after filtering
-        videos = videos[:limit]
-
         # Add download URLs and enhance the response
         for video in videos:
             video["download_url"] = f"/api/download?path={video['file_path']}"
-
-            # Check if file still exists
             video["file_exists"] = Path(video["file_path"]).exists()
-
-            # Add thumbnail URL
             video["thumbnail_url"] = thumbnail_service.get_thumbnail_url(video["file_path"])
 
-            # Calculate size in MB for display
             if video.get("size_bytes"):
                 video["size_mb"] = round(video["size_bytes"] / (1024 * 1024), 2)
 
-        # Get total count for pagination (approximate)
-        total_count = len(videos) if len(videos) < limit else limit + offset + 1
-
         return {
             "videos": videos,
-            "total": total_count,
+            "total": total,
             "offset": offset,
             "limit": limit,
-            "has_more": len(videos) == limit,
-            "filters_applied": {
-                "tags": tags,
-                "min_viral_score": min_viral_score,
-                "min_confidence": min_confidence,
-                "search": search,
-                "sort_by": sort_by,
-                "sort_order": sort_order
-            }
+            "has_more": (offset + limit) < total,
         }
 
     except Exception as e:

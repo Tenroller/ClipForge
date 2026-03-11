@@ -1,19 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useGenerateMoneyPrinterVideo, useJobs, useAvailableVoices } from '@/hooks/use-jobs';
 import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import MoneyPrinterForm from '@/components/moneyprinter/MoneyPrinterForm';
 import PreviewPanel from '@/components/moneyprinter/PreviewPanel';
+import PresetManager from '@/components/presets/PresetManager';
 import { useToast } from '@/hooks/use-toast';
+import { usePresets } from '@/hooks/usePresets';
+import type { PresetConfig } from '@/hooks/usePresets';
 import type { JobRecord } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Sparkles, Wand2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
 type Position =
   | "left-top"
@@ -50,6 +51,37 @@ export default function CreatorPage() {
   const [shadowLayer2Color, setShadowLayer2Color] = useState('#357ABD');
   const [shadowLayer3Color, setShadowLayer3Color] = useState('#2E5F8A');
   const [shadowLayer4Color, setShadowLayer4Color] = useState('#1E3F5A');
+
+  // Presets
+  const { presets, savePreset, loadPreset, deletePreset, renamePreset } = usePresets();
+
+  const getCurrentConfig = useCallback((): PresetConfig => ({
+    aiModel,
+    voice,
+    subtitleColor,
+    subtitlesPosition,
+    position,
+    positionRaw,
+    shadowLayersCount,
+    shadowLayer1Color,
+    shadowLayer2Color,
+    shadowLayer3Color,
+    shadowLayer4Color,
+  }), [aiModel, voice, subtitleColor, subtitlesPosition, position, positionRaw, shadowLayersCount, shadowLayer1Color, shadowLayer2Color, shadowLayer3Color, shadowLayer4Color]);
+
+  const handleLoadPreset = useCallback((config: PresetConfig) => {
+    setAiModel(config.aiModel);
+    setVoice(config.voice);
+    setSubtitleColor(config.subtitleColor);
+    setSubtitlesPosition(config.subtitlesPosition);
+    setPosition(config.position as Position);
+    setPositionRaw(config.positionRaw);
+    setShadowLayersCount(config.shadowLayersCount);
+    setShadowLayer1Color(config.shadowLayer1Color);
+    setShadowLayer2Color(config.shadowLayer2Color);
+    setShadowLayer3Color(config.shadowLayer3Color);
+    setShadowLayer4Color(config.shadowLayer4Color);
+  }, []);
 
   // Find the current job in the recent jobs list
   const currentJob = currentJobId
@@ -196,9 +228,19 @@ export default function CreatorPage() {
           {!currentJobId && !completedJob && (
             <Card className="overflow-hidden">
               <CardHeader className="pb-6 border-b">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-muted-foreground" />
-                  <CardTitle className="text-lg font-medium">{t('videoConfiguration')}</CardTitle>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-muted-foreground" />
+                    <CardTitle className="text-lg font-medium">{t('videoConfiguration')}</CardTitle>
+                  </div>
+                  <PresetManager
+                    presets={presets}
+                    onSave={savePreset}
+                    onLoad={handleLoadPreset}
+                    onDelete={deletePreset}
+                    onRename={renamePreset}
+                    getCurrentConfig={getCurrentConfig}
+                  />
                 </div>
               </CardHeader>
               <CardContent className="p-6">
@@ -210,7 +252,6 @@ export default function CreatorPage() {
                   subtitleColor={subtitleColor}
                   onChangeSubtitleColor={setSubtitleColor}
                   subtitlesPosition={subtitlesPosition}
-                  apiBase={API_BASE}
                   busy={generateVideo.isPending}
                   onSubmit={handleSubmit}
                   onReset={handleReset}

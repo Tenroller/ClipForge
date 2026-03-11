@@ -5,6 +5,16 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
+/**
+ * Read a cookie value by name from document.cookie.
+ * Returns undefined when running server-side or when the cookie is absent.
+ */
+function getCookie(name: string): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
 export type JobRecord = {
   id: string;
   workflow: 'moneyprinter' | 'brainrot' | string;
@@ -68,10 +78,20 @@ export type CleanupResult = {
  * Uses credentials: 'include' to send cookies automatically
  */
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
+  const method = (options.method || 'GET').toUpperCase();
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(options.headers || {}) as Record<string, string>,
   };
+
+  // Attach CSRF token header for mutating requests
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    const csrfToken = getCookie('csrf_token');
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+  }
 
   const response = await fetch(url, {
     ...options,
@@ -137,6 +157,44 @@ export async function cancelJob(jobId: string): Promise<{ status: string; jobId:
 // ============================================================================
 // Video Management
 // ============================================================================
+
+export interface ListManagedVideosParams {
+  limit?: number;
+  offset?: number;
+  workflow?: string;
+  posted?: boolean;
+  search?: string;
+  sort_by?: string;
+  sort_order?: string;
+}
+
+export interface ListManagedVideosResponse {
+  videos: ManagedVideoRecord[];
+  total: number;
+  offset: number;
+  limit: number;
+  has_more: boolean;
+}
+
+export async function listManagedVideos(
+  params?: ListManagedVideosParams
+): Promise<ListManagedVideosResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit != null) searchParams.set('limit', String(params.limit));
+  if (params?.offset != null) searchParams.set('offset', String(params.offset));
+  if (params?.workflow) searchParams.set('workflow', params.workflow);
+  if (params?.posted != null) searchParams.set('posted', String(params.posted));
+  if (params?.search) searchParams.set('search', params.search);
+  if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
+  if (params?.sort_order) searchParams.set('sort_order', params.sort_order);
+
+  const res = await apiFetch(`${API_BASE}/api/videos/managed?${searchParams}`);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || 'Failed to list videos');
+  }
+  return await res.json();
+}
 
 export async function listManagedVideosByJob(
   jobId: string,
@@ -595,4 +653,4 @@ export async function deletePodcastProject(
   return await res.json();
 }
 
-export { API_BASE };
+export { API_BASE, apiFetch };

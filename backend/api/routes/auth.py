@@ -1,5 +1,5 @@
 """
-Authentication routes for login, logout, and token management.
+Authentication routes for login, logout, token management, and user management.
 """
 
 from datetime import timedelta
@@ -7,12 +7,13 @@ from fastapi import APIRouter, HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 
-from backend.models.requests import LoginRequest, LoginResponse, TokenVerifyResponse
+from backend.models.requests import LoginRequest, RegisterRequest, LoginResponse, TokenVerifyResponse
 from backend.utils.auth import (
     user_store,
     create_access_token,
     verify_token,
 )
+from backend.middleware.auth import require_role
 from backend.core.config import AppConfig
 from backend.logging_config import get_logger
 
@@ -50,9 +51,13 @@ async def login(request: LoginRequest):
     # Get user info
     user_info = user_store.get_user_info(request.username)
 
-    # Create access token
+    # Create access token with user id in the claims
     access_token = create_access_token(
-        data={"sub": request.username, "role": user_info.get("role", "user")}
+        data={
+            "sub": request.username,
+            "role": user_info.get("role", "user"),
+            "user_id": user_info.get("id"),
+        }
     )
 
     logger.info(
@@ -151,3 +156,54 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         )
 
     return user_info
+
+
+@router.post("/auth/register", status_code=201)
+async def register_user(
+    request: RegisterRequest,
+    admin: dict = Depends(require_role("admin")),
+):
+    """
+    Register a new user (admin only).
+
+    Args:
+        request: Registration data (username, password, role)
+        admin: Current admin user (injected by require_role)
+
+    Returns:
+        Created user information
+
+    Raises:
+        HTTPException: 409 if username already exists
+        HTTPException: 403 if caller is not admin
+    """
+    try:
+        new_user = user_store.create_user(
+            username=request.username,
+            password=request.password,
+            role=request.role,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    logger.info(
+        f"Admin '{admin.get('username')}' created user '{request.username}' with role '{request.role}'"
+    )
+
+    return new_user
+
+
+@router.get("/auth/users")
+async def list_users(
+    admin: dict = Depends(require_role("admin")),
+):
+    """
+    List all users (admin only).
+
+    Args:
+        admin: Current admin user (injected by require_role)
+
+    Returns:
+        List of user information dictionaries
+    """
+    return user_store.list_users()

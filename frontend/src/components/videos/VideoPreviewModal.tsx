@@ -10,8 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Download, Check, Film, Brain, Video as VideoIcon, Clock, Database } from "lucide-react";
 import type { Video } from './VideoCard';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+import { API_BASE } from '@/lib/api';
 
 interface VideoPreviewModalProps {
   video: Video | null;

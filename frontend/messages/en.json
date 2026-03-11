@@ -30,6 +30,38 @@
     "section": "Application",
     "page": "Overview"
   },
+  "analyticsDashboard": {
+    "title": "Dashboard",
+    "description": "Overview of your video generation activity and performance",
+    "refresh": "Refresh",
+    "loading": "Loading dashboard data...",
+    "totalJobs": "Total Jobs",
+    "allTime": "All time",
+    "successRate": "Success Rate",
+    "completed": "completed",
+    "failed": "failed",
+    "videosGenerated": "Videos Generated",
+    "totalCompleted": "Total completed",
+    "avgGenerationTime": "Avg Generation Time",
+    "perJob": "Per job",
+    "jobsOverTime": "Jobs Over Time",
+    "last7Days": "Last 7 days",
+    "jobsByWorkflow": "Jobs by Workflow",
+    "allTimeDistribution": "All-time distribution",
+    "statusDistribution": "Status Distribution",
+    "jobStatusBreakdown": "Job status breakdown",
+    "recentActivity": "Recent Activity",
+    "last10Jobs": "Last 10 jobs",
+    "noRecentJobs": "No recent jobs found",
+    "noData": "No data available",
+    "statusDone": "Done",
+    "statusCompleted": "Completed",
+    "statusError": "Error",
+    "statusCancelled": "Cancelled",
+    "statusProcessing": "Processing",
+    "statusRunning": "Running",
+    "statusQueued": "Queued"
+  },
   "landing": {
     "hero": {
       "badge": "⚡ Powered by AI",
@@ -231,6 +263,10 @@
         "label": "Podcast Clips",
         "description": "Generate clips from podcasts"
       },
+      "dashboard": {
+        "label": "Dashboard",
+        "description": "Analytics overview"
+      },
       "projects": {
         "label": "Projects",
         "description": "Manage podcast clip projects"
@@ -246,6 +282,10 @@
       "cleanup": {
         "label": "Cleanup",
         "description": "Clean temp files"
+      },
+      "settings": {
+        "label": "Settings",
+        "description": "Preferences & config"
       }
     },
     "footer": {
@@ -796,6 +836,25 @@
       "done": "Complete"
     }
   },
+  "presets": {
+    "presets": "Presets",
+    "saveCurrentSettings": "Save current settings",
+    "savedPresets": "Saved Presets",
+    "noPresets": "No saved presets yet. Save your current settings to reuse them later.",
+    "savePreset": "Save Preset",
+    "savePresetDescription": "Give this preset a name so you can quickly load these settings later.",
+    "presetNamePlaceholder": "e.g., My TikTok Style",
+    "renamePreset": "Rename Preset",
+    "renamePresetDescription": "Enter a new name for this preset.",
+    "deletePreset": "Delete Preset",
+    "deletePresetDescription": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "rename": "Rename",
+    "presetLoaded": "Preset loaded",
+    "presetSaved": "Preset saved"
+  },
   "projects": {
     "title": "Recent Projects",
     "description": "Manage your podcast clip projects. Click on a project to view and edit generated clips.",
@@ -823,5 +882,62 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "deleting": "Deleting..."
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Manage your account and preferences",
+    "account": {
+      "title": "Account",
+      "description": "Your login credentials and session",
+      "username": "Username",
+      "role": "Role",
+      "session": "Session",
+      "expiresIn": "Token expires in {minutes} minutes",
+      "logout": "Log Out"
+    },
+    "appearance": {
+      "title": "Appearance",
+      "description": "Theme and language preferences",
+      "theme": "Theme",
+      "themeDescription": "Choose your preferred color scheme",
+      "language": "Language",
+      "languageDescription": "Choose your preferred language",
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
+    },
+    "api": {
+      "title": "API Status",
+      "description": "Backend connectivity and service health",
+      "backendUrl": "Backend URL",
+      "status": "Status",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "checking": "Checking...",
+      "latency": "Latency",
+      "version": "Version"
+    },
+    "defaults": {
+      "title": "Defaults",
+      "description": "Default values for video generation",
+      "aiModel": "AI Model",
+      "aiModelDescription": "Default AI model for script generation",
+      "voice": "TTS Voice",
+      "voiceDescription": "Default voice for text-to-speech",
+      "subtitlePosition": "Subtitle Position",
+      "subtitlePositionDescription": "Default subtitle placement"
+    }
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "clearAll": "Clear all",
+    "empty": "No notifications yet",
+    "timeAgo": {
+      "justNow": "Just now",
+      "minutesAgo": "{count, plural, one {1 minute ago} other {# minutes ago}}",
+      "hoursAgo": "{count, plural, one {1 hour ago} other {# hours ago}}",
+      "daysAgo": "{count, plural, one {1 day ago} other {# days ago}}"
+    }
   }
 }

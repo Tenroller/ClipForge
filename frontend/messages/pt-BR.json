@@ -30,6 +30,38 @@
     "section": "Aplicação",
     "page": "Visão Geral"
   },
+  "analyticsDashboard": {
+    "title": "Painel",
+    "description": "Visão geral da sua atividade e desempenho de geração de vídeos",
+    "refresh": "Atualizar",
+    "loading": "Carregando dados do painel...",
+    "totalJobs": "Total de Trabalhos",
+    "allTime": "Todo o período",
+    "successRate": "Taxa de Sucesso",
+    "completed": "concluídos",
+    "failed": "com falha",
+    "videosGenerated": "Vídeos Gerados",
+    "totalCompleted": "Total concluído",
+    "avgGenerationTime": "Tempo Médio de Geração",
+    "perJob": "Por trabalho",
+    "jobsOverTime": "Trabalhos ao Longo do Tempo",
+    "last7Days": "Últimos 7 dias",
+    "jobsByWorkflow": "Trabalhos por Fluxo",
+    "allTimeDistribution": "Distribuição geral",
+    "statusDistribution": "Distribuição de Status",
+    "jobStatusBreakdown": "Detalhamento por status",
+    "recentActivity": "Atividade Recente",
+    "last10Jobs": "Últimos 10 trabalhos",
+    "noRecentJobs": "Nenhum trabalho recente encontrado",
+    "noData": "Nenhum dado disponível",
+    "statusDone": "Concluído",
+    "statusCompleted": "Completo",
+    "statusError": "Erro",
+    "statusCancelled": "Cancelado",
+    "statusProcessing": "Processando",
+    "statusRunning": "Executando",
+    "statusQueued": "Na Fila"
+  },
   "landing": {
     "hero": {
       "badge": "⚡ Impulsionado por IA",
@@ -231,6 +263,10 @@
         "label": "Clipes de Podcast",
         "description": "Gerar clipes de podcasts"
       },
+      "dashboard": {
+        "label": "Painel",
+        "description": "Visao geral de analytics"
+      },
       "projects": {
         "label": "Projetos",
         "description": "Gerenciar projetos de clips"
@@ -246,6 +282,10 @@
       "cleanup": {
         "label": "Limpeza",
         "description": "Limpar arquivos temporários"
+      },
+      "settings": {
+        "label": "Configurações",
+        "description": "Preferências e configuração"
       }
     },
     "footer": {
@@ -795,6 +835,25 @@
       "done": "Concluído"
     }
   },
+  "presets": {
+    "presets": "Presets",
+    "saveCurrentSettings": "Salvar configurações atuais",
+    "savedPresets": "Presets Salvos",
+    "noPresets": "Nenhum preset salvo ainda. Salve suas configurações atuais para reutilizá-las depois.",
+    "savePreset": "Salvar Preset",
+    "savePresetDescription": "Dê um nome a este preset para carregar essas configurações rapidamente depois.",
+    "presetNamePlaceholder": "ex: Meu Estilo TikTok",
+    "renamePreset": "Renomear Preset",
+    "renamePresetDescription": "Digite um novo nome para este preset.",
+    "deletePreset": "Excluir Preset",
+    "deletePresetDescription": "Tem certeza que deseja excluir \"{name}\"? Esta ação não pode ser desfeita.",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "delete": "Excluir",
+    "rename": "Renomear",
+    "presetLoaded": "Preset carregado",
+    "presetSaved": "Preset salvo"
+  },
   "projects": {
     "title": "Projetos Recentes",
     "description": "Gerencie seus projetos de clips de podcast. Clique em um projeto para ver e editar os clips gerados.",
@@ -822,5 +881,62 @@
     "cancel": "Cancelar",
     "delete": "Excluir",
     "deleting": "Excluindo..."
+  },
+  "settings": {
+    "title": "Configurações",
+    "description": "Gerencie sua conta e preferências",
+    "account": {
+      "title": "Conta",
+      "description": "Credenciais e sessão",
+      "username": "Usuário",
+      "role": "Função",
+      "session": "Sessão",
+      "expiresIn": "Token expira em {minutes} minutos",
+      "logout": "Sair"
+    },
+    "appearance": {
+      "title": "Aparência",
+      "description": "Preferências de tema e idioma",
+      "theme": "Tema",
+      "themeDescription": "Escolha seu esquema de cores preferido",
+      "language": "Idioma",
+      "languageDescription": "Escolha seu idioma preferido",
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    },
+    "api": {
+      "title": "Status da API",
+      "description": "Conectividade e saúde dos serviços",
+      "backendUrl": "URL do Backend",
+      "status": "Status",
+      "connected": "Conectado",
+      "disconnected": "Desconectado",
+      "checking": "Verificando...",
+      "latency": "Latência",
+      "version": "Versão"
+    },
+    "defaults": {
+      "title": "Padrões",
+      "description": "Valores padrão para geração de vídeo",
+      "aiModel": "Modelo de IA",
+      "aiModelDescription": "Modelo de IA padrão para geração de roteiro",
+      "voice": "Voz TTS",
+      "voiceDescription": "Voz padrão para texto-para-fala",
+      "subtitlePosition": "Posição das Legendas",
+      "subtitlePositionDescription": "Posição padrão das legendas"
+    }
+  },
+  "notifications": {
+    "title": "Notificações",
+    "markAllRead": "Marcar todas como lidas",
+    "clearAll": "Limpar todas",
+    "empty": "Nenhuma notificação ainda",
+    "timeAgo": {
+      "justNow": "Agora mesmo",
+      "minutesAgo": "{count, plural, one {1 minuto atrás} other {# minutos atrás}}",
+      "hoursAgo": "{count, plural, one {1 hora atrás} other {# horas atrás}}",
+      "daysAgo": "{count, plural, one {1 dia atrás} other {# dias atrás}}"
+    }
   }
 }

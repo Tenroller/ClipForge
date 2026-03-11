@@ -14,9 +14,12 @@ import {
   LogOut,
   Radio,
   FolderKanban,
+  Settings,
+  LayoutDashboard,
 } from "lucide-react";
 import { logoutAction } from '@/app/login/actions';
 import { useTranslations } from 'next-intl';
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown';
 import {
   Sidebar,
   SidebarContent,
@@ -75,6 +78,12 @@ export default function AppSidebar({ username, ...props }: AppSidebarProps) {
 
   const utilityItems = [
     {
+      id: 'dashboard',
+      href: '/dashboard',
+      label: t('navigation.dashboard.label'),
+      icon: LayoutDashboard,
+    },
+    {
       id: 'projects',
       href: '/projects',
       label: t('navigation.projects.label'),
@@ -98,19 +107,28 @@ export default function AppSidebar({ username, ...props }: AppSidebarProps) {
       label: t('navigation.cleanup.label'),
       icon: Trash2,
     },
+    {
+      id: 'settings',
+      href: '/settings',
+      label: t('navigation.settings.label'),
+      icon: Settings,
+    },
   ];
 
   return (
     <Sidebar collapsible="icon" {...props}>
       {/* Header */}
       <SidebarHeader>
-        <div className="flex items-center gap-3 px-2 py-2 font-semibold text-lg tracking-tight">
-          <img
-            src="/logo.png"
-            alt="ClipForge"
-            className="size-10 rounded-lg object-contain"
-          />
-          <span className="group-data-[collapsible=icon]:hidden text-xl">{t('appName')}</span>
+        <div className="flex items-center justify-between px-2 py-2">
+          <div className="flex items-center gap-3 font-semibold text-lg tracking-tight">
+            <img
+              src="/logo.png"
+              alt="ClipForge"
+              className="size-10 rounded-lg object-contain"
+            />
+            <span className="group-data-[collapsible=icon]:hidden text-xl">{t('appName')}</span>
+          </div>
+          <NotificationDropdown />
         </div>
       </SidebarHeader>
 
