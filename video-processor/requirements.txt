@@ -48,6 +48,7 @@ espeakng_loader
 prometheus-client
 SQLAlchemy
 psycopg2-binary
+redis  # Job persistence and queue storage
 
 # =============================================================================
 # AI/ML DEPENDENCIES (For AI-powered video generation)
@@ -57,6 +58,7 @@ openrouter
 ultralytics
 mediapipe  # For face detection in podcast clips workflow
 toon-format @ git+https://github.com/toon-format/toon-python.git  # Token-efficient serialization for AI contexts
+assemblyai  # Speech-to-text for subtitle generation in PodcastClips workflow
 
 # Enhanced ASR for better word-level timestamps
 stable-ts
@@ -116,7 +118,7 @@ sentry-sdk
 # - g4f, curl_cffi, undetected_chromedriver (web scraping - not used)
 # - transformers (~2GB - not used, saves significant space)
 # - spacy, en_core_web_sm (NLP models - not used)
-# - redis, rq (queue system - we use in-memory queue)
+# - rq (queue system - we use in-memory queue with redis persistence)
 # - flask, flask-cors (legacy MoneyPrinter - not used in current FastAPI app)
 # - rich, proglog, colorama, anyio (indirect deps or not directly used)
 # - playwright (replaced with Pillow for text rendering)

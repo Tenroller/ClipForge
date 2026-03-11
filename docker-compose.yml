@@ -112,6 +112,10 @@ services:
       # Backend callback URL
       BACKEND_URL: http://backend:9000
 
+      # Database & Redis for job persistence
+      DATABASE_URL: postgresql://videohelper_user:${POSTGRES_PASSWORD:-videohelper_password}@postgres:5432/videohelper
+      REDIS_URL: redis://redis:6379
+
       # Shared configuration
       OUTPUT_DIR: /app/output
       TEMP_DIR: /app/temp
@@ -134,6 +138,10 @@ services:
 
     depends_on:
       backend:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
     healthcheck:
