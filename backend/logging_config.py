@@ -44,11 +44,6 @@ def json_serializer(record):
 
 def setup_logging() -> None:
     """Setup unified application logging with Loguru."""
-    # Always use the root logs directory
-    root_dir = Path(__file__).resolve().parents[1]
-    log_dir = root_dir / "logs"
-    log_dir.mkdir(exist_ok=True)
-
     # Remove default handler
     logger.remove()
 
@@ -59,7 +54,7 @@ def setup_logging() -> None:
         "<cyan>{name}</cyan> - "
         "<level>{message}</level>"
     )
-    
+
     # Add console handler (INFO level and above)
     logger.add(
         sys.stdout,
@@ -70,36 +65,42 @@ def setup_logging() -> None:
         diagnose=True
     )
 
-    # Unified file handler - captures ALL logs (DEBUG and above)
-    file_format = (
-        "{time:YYYY-MM-DD HH:mm:ss} [{level: <8}] {name} - "
-        "{module}:{function}:{line} - {message}"
-    )
-    
-    logger.add(
-        str(log_dir / "video_generator.log"),  # Convert Path to string
-        format=file_format,
-        level="DEBUG",
-        rotation="50 MB",
-        retention=10,
-        compression="zip",
-        backtrace=True,
-        diagnose=True,
-        encoding="utf-8"
-    )
+    # File logging (disabled in production via LOG_TO_FILE=false)
+    if os.getenv("LOG_TO_FILE", "true").lower() != "false":
+        root_dir = Path(__file__).resolve().parents[1]
+        log_dir = root_dir / "logs"
+        log_dir.mkdir(exist_ok=True)
 
-    # JSON handler for structured logging (if enabled)
-    if os.getenv("ENABLE_JSON_LOGGING", "").lower() == "true":
+        # Unified file handler - captures ALL logs (DEBUG and above)
+        file_format = (
+            "{time:YYYY-MM-DD HH:mm:ss} [{level: <8}] {name} - "
+            "{module}:{function}:{line} - {message}"
+        )
+
         logger.add(
-            str(log_dir / "video_generator.json.log"),  # Convert Path to string
-            format=json_serializer,
+            str(log_dir / "video_generator.log"),
+            format=file_format,
             level="DEBUG",
-            rotation="25 MB",
-            retention=5,
+            rotation="50 MB",
+            retention=10,
             compression="zip",
-            serialize=False,  # We handle serialization ourselves
+            backtrace=True,
+            diagnose=True,
             encoding="utf-8"
         )
+
+        # JSON handler for structured logging (if enabled)
+        if os.getenv("ENABLE_JSON_LOGGING", "").lower() == "true":
+            logger.add(
+                str(log_dir / "video_generator.json.log"),
+                format=json_serializer,
+                level="DEBUG",
+                rotation="25 MB",
+                retention=5,
+                compression="zip",
+                serialize=False,
+                encoding="utf-8"
+            )
 
 
 def get_logger(name: str = "video_generator"):

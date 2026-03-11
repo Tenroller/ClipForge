@@ -72,6 +72,7 @@ services:
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_TO_FILE: "false"
       DEBUG_MODE: ${DEBUG_MODE:-false}
 
       # Rate Limiting
