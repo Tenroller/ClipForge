@@ -175,7 +175,7 @@ def parse_color_string(color_str: str) -> Tuple[int, int, int]:
         return hex_to_rgb(color_str)
 
     # Handle rgb() format
-    rgb_match = re.match(r'rgb\s*\(\s*(\d+)\s*[,\s]\s*(\d+)\s*[,\s]\s*(\d+)\s*\)', color_str)
+    rgb_match = re.match(r'rgb\s*\(\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*[,\s]\s*(\d{1,3})\s*\)', color_str[:50])
     if rgb_match:
         try:
             r = int(rgb_match.group(1))

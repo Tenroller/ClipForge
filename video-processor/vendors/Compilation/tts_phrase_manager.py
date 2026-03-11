@@ -164,7 +164,7 @@ class TTSPhraseManager:
             words = line.split()
             if 2 <= len(words) <= 10:  # Reasonable phrase length
                 # Clean up any trailing quotes or punctuation, then add exclamation
-                line = re.sub(r'["\'"!.?]+$', '', line) + '!'
+                line = line.rstrip("\"'!.?") + '!'
                 candidate_phrases.append((line, len(words)))
         
         # Return the shortest reasonable phrase (usually the best)
