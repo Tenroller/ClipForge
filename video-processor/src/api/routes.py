@@ -4,7 +4,7 @@ REST API endpoints for video processing
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Annotated, Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from fastapi.responses import JSONResponse, Response
@@ -253,8 +253,8 @@ async def get_available_voices():
 
 @router.post("/thumbnail")
 async def generate_thumbnail(
-    video_path: str = Query(..., description="Path to the video file"),
-    timestamp: float = Query(5.0, description="Time in seconds to extract thumbnail from"),
+    video_path: Annotated[str, Query(..., description="Path to the video file")],
+    timestamp: Annotated[float, Query(description="Time in seconds to extract thumbnail from")] = 5.0,
 ):
     """Generate a thumbnail from a video file and return it as JPEG bytes."""
     import os
