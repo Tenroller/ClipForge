@@ -17,7 +17,6 @@ import threading
 import numpy as np
 
 from .face_tracker import FaceTracker, CropBox
-from .subtitle_generator import SubtitleGenerator
 from .content_detector import ContentModeDetector, ContentSegment, ContentMode
 
 # Import codec detection from AIvideos
@@ -98,7 +97,6 @@ class ClipGenerator:
     def __init__(
         self,
         face_tracker: FaceTracker,
-        subtitle_generator: SubtitleGenerator,
         output_dir: Path,
         use_gpu: bool = True,
         content_mode_detector: Optional[ContentModeDetector] = None,
@@ -106,14 +104,15 @@ class ClipGenerator:
         ocr_height: int = 720,
         subtitle_style: str = "yellow_highlight",
         subtitle_display_mode: str = "word",
-        subtitle_position: str = "bottom"
+        subtitle_position: str = "bottom",
+        text_color: Optional[str] = None,
+        highlight_color: Optional[str] = None
     ):
         """
         Initialize clip generator.
 
         Args:
             face_tracker: FaceTracker instance for crop box calculation
-            subtitle_generator: SubtitleGenerator instance for subtitles
             output_dir: Directory to save generated clips
             use_gpu: Whether to use GPU acceleration for encoding
             content_mode_detector: Optional ContentModeDetector for mixed-mode support
@@ -122,15 +121,18 @@ class ClipGenerator:
             subtitle_style: Subtitle style (yellow_highlight, multicolor_pop, clean_outline)
             subtitle_display_mode: Display mode (word, sentence)
             subtitle_position: Position (top, center, bottom)
+            text_color: Text color in hex format (e.g. "#FFFFFF")
+            highlight_color: Highlight color in hex format (e.g. "#6366f1")
         """
         self.face_tracker = face_tracker
-        self.subtitle_generator = subtitle_generator
         self.output_dir = Path(output_dir)
         self.use_gpu = use_gpu
         self.content_mode_detector = content_mode_detector
         self.enable_mixed_mode = enable_mixed_mode
         self.ocr_height = ocr_height
-        
+        self.text_color = text_color
+        self.highlight_color = highlight_color
+
         # Subtitle customization options
         self.subtitle_style = subtitle_style
         self.subtitle_display_mode = subtitle_display_mode
@@ -973,11 +975,10 @@ class ClipGenerator:
 
             # Extract relevant word timings for this clip
             logger.debug("Extracting word timings for subtitle generation")
-            clip_word_timings = self.subtitle_generator.extract_words_for_timerange(
-                word_timings,
-                viral_moment.start_time,
-                viral_moment.end_time
-            )
+            clip_word_timings = [
+                w for w in word_timings
+                if viral_moment.start_time <= w.get('start_time', 0) <= viral_moment.end_time
+            ]
 
             # Add subtitles using FFmpeg ASS burning (new approach)
             # Export video without subtitles first, then burn subtitles with FFmpeg
@@ -1100,8 +1101,8 @@ class ClipGenerator:
                             style=style,
                             display_mode=display_mode,
                             position=position,
-                            text_color=self.subtitle_generator.color if hasattr(self.subtitle_generator, 'color') else None,
-                            highlight_color=self.subtitle_generator.highlight_color if hasattr(self.subtitle_generator, 'highlight_color') else None
+                            text_color=self.text_color,
+                            highlight_color=self.highlight_color
                         )
                         
                         # Generate ASS file

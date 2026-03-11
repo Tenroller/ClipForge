@@ -6,18 +6,13 @@ and creates ASS subtitle files for smooth word-by-word highlighting.
 """
 
 import os
-import re
 import uuid
 import json
-import argparse
-import ffmpeg
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple, Any, Union
 from dataclasses import dataclass, asdict
-import pysubs2
 import whisper_timestamped as whisper
-from moviepy import VideoFileClip
 
 # Add path to access video-processor utilities
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -27,25 +22,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 class SubtitleConfig:
     """Configuration for ASS subtitle styling."""
 
-    # Font settings - optimized for modern short-form video (TikTok/Reels style)
-    font_family: str = "EpundaSlab-VariableFont_wght.ttf"  # Use centralized font
-    font_size: int = 65  # Increased from 28 to 65 for better readability on mobile
+    # Font settings - Impact for bold, readable subtitles (matching podcast clips style)
+    font_family: str = "Impact"
+    font_size: int = 60
 
     # Colors (ASS format &HAABBGGRR)
     primary_color: str = "&H00FFFFFF"      # White text
     border_color: str = "&H00000000"       # Black border
-    highlight_color: str = "&H0000FFFF"    # Yellow highlight
+    highlight_color: str = "&H0000D7FF"    # Yellow highlight box color (BGR)
 
     # Additional color fields for compatibility
     default_color: str = "&H00FFFFFF"      # Default text color (alias for primary_color)
     stroke_color: str = "&H00000000"       # Stroke/outline color (alias for border_color)
     background_color: str = "&H00000000"   # Background color
 
-    # Styling - improved contrast for mobile viewing
-    stroke_width: int = 4                  # Increased from 2 to 4 for better contrast
+    # Styling - bold outline with shadow (matching podcast clips style)
+    stroke_width: int = 3                  # Outline width
     background_opacity: float = 0.0        # Background opacity (0.0 to 1.0)
-    padding_x: int = 20                    # Increased horizontal padding
-    padding_y: int = 16                    # Increased vertical padding
+    padding_x: int = 20                    # Horizontal padding
+    padding_y: int = 16                    # Vertical padding
 
     # Position - safer positioning to prevent cropping
     position: str = "center,bottom"
@@ -59,35 +54,6 @@ class SubtitleConfig:
 
     # Whisper model settings
     whisper_model: str = "base"  # tiny, base, small, medium, large
-
-
-def extract_audio(video_path: str) -> str | None:
-    """
-    Extracts audio from a video file and saves it as a temporary WAV file.
-
-    Args:
-        video_path: The path to the input video file.
-
-    Returns:
-        The path to the extracted audio file, or None if an error occurred.
-    """
-    print("Extracting audio from video...")
-    try:
-        # Create a temporary path for the audio file
-        temp_audio_path = "temp_audio.wav"
-
-        # Load the video clip using moviepy
-        video_clip = VideoFileClip(video_path)
-
-        # Write the audio from the video clip to the temporary file
-        video_clip.audio.write_audiofile(temp_audio_path, codec='pcm_s16le') # type: ignore
-        video_clip.close()
-
-        print(f"Successfully extracted audio to {temp_audio_path}")
-        return temp_audio_path
-    except Exception as e:
-        print(f"Error during audio extraction: {e}")
-        return None
 
 
 def transcribe_audio_with_word_timestamps(audio_path: str, model_size: str) -> dict:
@@ -137,6 +103,8 @@ def create_ass_file(word_level_data: dict, ass_path: str, config: SubtitleConfig
     """
     Generates an Advanced SubStation Alpha (.ass) subtitle file with a karaoke effect.
 
+    Delegates to the centralized SubtitleGenerator in utils/subtitle_generator.py.
+
     Args:
         word_level_data: The transcription result from whisper-timestamped.
         ass_path: The path to save the output .ass file.
@@ -145,206 +113,20 @@ def create_ass_file(word_level_data: dict, ass_path: str, config: SubtitleConfig
     print("Creating .ass subtitle file with karaoke effect...")
 
     try:
-        subs = pysubs2.SSAFile()
-
-        # Import centralized color utilities
-        try:
-            from utils.colors import hex_to_rgb as centralized_hex_to_rgb
-        except ImportError:
-            # Fallback to local implementation if centralized utils not available
-            def centralized_hex_to_rgb(hex_color: str) -> tuple:
-                """Convert hex color format #RRGGBB to RGB tuple."""
-                if not hex_color.startswith('#'):
-                    return (255, 255, 255)  # Default to white
-                try:
-                    # Extract RR, GG, BB from #RRGGBB
-                    color_part = hex_color[1:]  # Remove #
-                    if len(color_part) >= 6:
-                        rr = int(color_part[0:2], 16)  # First 2 chars
-                        gg = int(color_part[2:4], 16)  # Next 2 chars
-                        bb = int(color_part[4:6], 16)  # Last 2 chars
-                        return (rr, gg, bb)
-                except (ValueError, IndexError):
-                    pass
-                return (255, 255, 255)  # Default to white
-
-        # Text wrapping function
-        def wrap_text(text: str, max_chars_per_line: int = 25) -> List[str]:
-            """Wrap text into multiple lines based on character count."""
-            words = text.split()
-            lines = []
-            current_line = ""
-            
-            for word in words:
-                # Check if adding this word would exceed the limit
-                if len(current_line) + len(word) + 1 <= max_chars_per_line:
-                    if current_line:
-                        current_line += " " + word
-                    else:
-                        current_line = word
-                else:
-                    if current_line:
-                        lines.append(current_line)
-                    current_line = word
-            
-            # Add the last line if it has content
-            if current_line:
-                lines.append(current_line)
-            
-            return lines
-
-        # Dynamic font sizing based on text length
-        def get_optimal_font_size(base_font_size: int, text_length: int) -> int:
-            """Reduce font size for very long text to keep it readable."""
-            if text_length > 100:
-                return max(base_font_size - 8, 20)  # Reduce by 8, minimum 20
-            elif text_length > 80:
-                return max(base_font_size - 6, 22)  # Reduce by 6, minimum 22
-            elif text_length > 60:
-                return max(base_font_size - 4, 24)  # Reduce by 4, minimum 24
-            elif text_length > 40:
-                return max(base_font_size - 2, 26)  # Reduce by 2, minimum 26
-            else:
-                return base_font_size
-
-        # Get colors from config, converting hex to RGB
-        primary_rgb = centralized_hex_to_rgb(config.primary_color if hasattr(config.primary_color, 'startswith') and config.primary_color.startswith('#') else config.primary_color)
-        highlight_rgb = centralized_hex_to_rgb(config.highlight_color if hasattr(config.highlight_color, 'startswith') and config.highlight_color.startswith('#') else config.highlight_color)
-        border_rgb = centralized_hex_to_rgb(config.stroke_color if hasattr(config.stroke_color, 'startswith') and config.stroke_color.startswith('#') else config.stroke_color)
-        background_rgb = centralized_hex_to_rgb(config.background_color if hasattr(config.background_color, 'startswith') and config.background_color.startswith('#') else config.background_color)
-
-        # Parse position from config
-        position = config.position.lower() if config.position else "center,bottom"
-        horizontal_pos, vertical_pos = "center", "bottom"
-        if "," in position:
-            parts = position.split(",")
-            horizontal_pos = parts[0].strip() if len(parts) > 0 else "center"
-            vertical_pos = parts[1].strip() if len(parts) > 1 else "bottom"
-
-        # Convert position to pysubs2 alignment
-        alignment_map = {
-            ("left", "top"): pysubs2.Alignment.TOP_LEFT,
-            ("center", "top"): pysubs2.Alignment.TOP_CENTER,
-            ("right", "top"): pysubs2.Alignment.TOP_RIGHT,
-            ("left", "center"): pysubs2.Alignment.MIDDLE_LEFT,
-            ("center", "center"): pysubs2.Alignment.MIDDLE_CENTER,
-            ("right", "center"): pysubs2.Alignment.MIDDLE_RIGHT,
-            ("left", "bottom"): pysubs2.Alignment.BOTTOM_LEFT,
-            ("center", "bottom"): pysubs2.Alignment.BOTTOM_CENTER,
-            ("right", "bottom"): pysubs2.Alignment.BOTTOM_RIGHT,
-        }
-        alignment = alignment_map.get((horizontal_pos, vertical_pos), pysubs2.Alignment.BOTTOM_CENTER)
-
-        # Calculate margin based on position
-        marginv = 30  # Default margin
-        if vertical_pos == "top":
-            marginv = 30 + config.padding_y
-        elif vertical_pos == "center":
-            marginv = 0  # Center positioning
-        elif vertical_pos == "bottom":
-            marginv = 30 + config.padding_y
-
-        # Define the main style for the subtitles
-        default_style = pysubs2.SSAStyle(
-            fontname=config.font_family,
-            fontsize=config.font_size,
-            primarycolor=pysubs2.Color(r=primary_rgb[0], g=primary_rgb[1], b=primary_rgb[2], a=0),
-            secondarycolor=pysubs2.Color(r=highlight_rgb[0], g=highlight_rgb[1], b=highlight_rgb[2], a=0),
-            outlinecolor=pysubs2.Color(r=border_rgb[0], g=border_rgb[1], b=border_rgb[2], a=0),
-            backcolor=pysubs2.Color(r=background_rgb[0], g=background_rgb[1], b=background_rgb[2], a=int(255 * config.background_opacity)),
-            borderstyle=1,
-            outline=config.stroke_width,
-            shadow=1 if config.shadow_layers_count > 0 else 0,
-            alignment=alignment,
-            marginv=marginv
+        from utils.subtitle_generator import (
+            SubtitleGenerator as ASSGenerator,
+            whisper_data_to_segments,
         )
-        subs.styles["Default"] = default_style
 
-        # Iterate through each segment (line) of the transcription
-        segments = word_level_data.get("segments", [])
-        print(f"Processing {len(segments)} segments for ASS file creation")
-        
-        for segment_idx, segment in enumerate(segments):
-            words = segment.get("words", [])
-            if not words:
-                print(f"Warning: Segment {segment_idx} has no words, skipping")
-                continue
-                
-            print(f"Processing segment {segment_idx}: {len(words)} words, duration: {segment.get('end', 0) - segment.get('start', 0):.2f}s")
+        segments = whisper_data_to_segments(word_level_data)
+        if not segments:
+            print("Warning: No segments found in word-level data")
+            return False
 
-            # Create individual subtitle events for each word timing
-            for i, word in enumerate(segment["words"]):
-                word_start_ms = int(word["start"] * 1000)
-                word_end_ms = int(word["end"] * 1000)
-                
-                print(f"    Word {i}: '{word.get('text', '')}' at {word_start_ms}ms - {word_end_ms}ms")
+        generator = ASSGenerator.from_config(config)
+        generator.generate(segments, ass_path)
 
-                # Build sentence with only current word highlighted
-                sentence_text = ""
-                for j, word_info in enumerate(segment["words"]):
-                    if j == i:
-                        # Current word gets highlighted (highlight_color)
-                        # Convert highlight color to ASS format
-                        highlight_ass = f"&H00{highlight_rgb[2]:02X}{highlight_rgb[1]:02X}{highlight_rgb[0]:02X}"
-                        sentence_text += f"{{\\c{highlight_ass}}}{word_info['text']}{{\\c&H00FFFFFF}}"
-                    else:
-                        # Other words use default color (primary_color)
-                        sentence_text += word_info['text']
-
-                    # Add space if not the last word
-                    if j < len(segment["words"]) - 1:
-                        sentence_text += " "
-
-                # Get the original text length for font sizing (without ASS formatting)
-                original_text = " ".join([w["text"] for w in segment["words"]])
-                text_length = len(original_text)
-                
-                # Calculate optimal font size for this text
-                optimal_font_size = get_optimal_font_size(config.font_size, text_length)
-                
-                # Wrap the sentence text into multiple lines with aggressive wrapping
-                max_chars = 20 if text_length > 60 else 25  # More aggressive for long text
-                wrapped_lines = wrap_text(sentence_text, max_chars_per_line=max_chars)
-                
-                # Join lines with \N (ASS line break)
-                wrapped_text = "\\N".join(wrapped_lines)
-
-                # Create subtitle event for this word's duration with custom font size
-                event = pysubs2.SSAEvent(
-                    start=word_start_ms,
-                    end=word_end_ms,
-                    text=wrapped_text,
-                    style="Default"
-                )
-                
-                # Create a custom style for this event with the optimal font size
-                if optimal_font_size != config.font_size:
-                    style_name = f"Style_{optimal_font_size}"
-                    if style_name not in subs.styles:
-                        custom_style = pysubs2.SSAStyle(
-                            fontname=config.font_family,
-                            fontsize=optimal_font_size,
-                            primarycolor=pysubs2.Color(r=primary_rgb[0], g=primary_rgb[1], b=primary_rgb[2], a=0),
-                            secondarycolor=pysubs2.Color(r=highlight_rgb[0], g=highlight_rgb[1], b=highlight_rgb[2], a=0),
-                            outlinecolor=pysubs2.Color(r=border_rgb[0], g=border_rgb[1], b=border_rgb[2], a=0),
-                            backcolor=pysubs2.Color(r=background_rgb[0], g=background_rgb[1], b=background_rgb[2], a=int(255 * config.background_opacity)),
-                            borderstyle=1,
-                            outline=config.stroke_width,
-                            shadow=1 if config.shadow_layers_count > 0 else 0,
-                            alignment=alignment,
-                            marginv=marginv
-                        )
-                        subs.styles[style_name] = custom_style
-                    
-                    # Use the custom style for this event
-                    event.style = style_name
-                
-                subs.append(event)
-
-        # Save the complete .ass file
-        subs.save(ass_path, encoding="utf-8")
         print(f"Successfully created .ass file at: {ass_path}")
-        print(f"Total subtitle events created: {len(subs.events)}")
         return True
 
     except Exception as e:
@@ -356,6 +138,8 @@ def burn_subtitles_to_video(video_path: str, ass_path: str, output_path: str):
     """
     Burns the .ass subtitles into the video file using FFmpeg.
 
+    Delegates to the centralized burn_subtitles in utils/video_ffmpeg.py.
+
     Args:
         video_path: The path to the original input video.
         ass_path: The path to the generated .ass subtitle file.
@@ -363,93 +147,17 @@ def burn_subtitles_to_video(video_path: str, ass_path: str, output_path: str):
     """
     print("Burning subtitles into video... This may take some time.")
     try:
-        # Define the input video stream
-        input_video = ffmpeg.input(video_path)
-        # The audio is taken from the original video file directly
-        input_audio = input_video.audio
-
-        # Apply the 'subtitles' video filter
-        stream = ffmpeg.filter(input_video, 'subtitles', ass_path)
-
-        # Combine the video stream (with subtitles) and the original audio stream
-        stream = ffmpeg.output(stream, input_audio, output_path, vcodec='libx264', acodec='copy', preset='medium', crf=23)
-
-        # Run the FFmpeg command, overwriting the output file if it exists
-        ffmpeg.run(stream, overwrite_output=True, quiet=False)
-
-        print(f"Successfully burned subtitles into video at: {output_path}")
-        return True
-    except ffmpeg.Error as e:
-        if e.stderr:
-            print("FFmpeg Error:", e.stderr.decode())
-        else:
-            print("FFmpeg Error occurred but no stderr output available")
-        return False
+        from utils.video_ffmpeg import burn_subtitles
+        success = burn_subtitles(video_path, ass_path, output_path)
+        if success:
+            print(f"Successfully burned subtitles into video at: {output_path}")
+        return success
     except Exception as e:
         print(f"An error occurred during video composition: {e}")
         return False
 
 
 # Color utilities are now centralized in backend/utils/colors.py
-
-
-def process_video_with_enhanced_subtitles(
-    video_path: str,
-    output_path: str,
-    config: Optional[SubtitleConfig] = None
-) -> bool:
-    """
-    Process a video to add enhanced word-highlighting subtitles.
-
-    Args:
-        video_path: Path to the input video
-        output_path: Path for the output video with subtitles
-        config: Subtitle configuration
-
-    Returns:
-        True if successful, False otherwise
-    """
-    if config is None:
-        config = SubtitleConfig()
-
-    # Step 1: Extract audio
-    audio_path = extract_audio(video_path)
-    if not audio_path:
-        return False
-
-    try:
-        # Step 2: Transcribe with word timestamps
-        transcription_data = transcribe_audio_with_word_timestamps(audio_path, config.whisper_model)
-        if not transcription_data:
-            return False
-
-        # Step 3: Create ASS subtitle file
-        ass_path = "temp_subtitles.ass"
-        if not create_ass_file(transcription_data, ass_path, config):
-            return False
-
-        # Step 4: Burn subtitles into video
-        success = burn_subtitles_to_video(video_path, ass_path, output_path)
-
-        # Cleanup
-        try:
-            os.remove(audio_path)
-            if os.path.exists(ass_path):
-                os.remove(ass_path)
-        except OSError as e:
-            print(f"Warning: Could not cleanup temporary files: {e}")
-
-        return success
-
-    except Exception as e:
-        print(f"Error processing video with enhanced subtitles: {e}")
-        # Cleanup on error
-        try:
-            if audio_path and os.path.exists(audio_path):
-                os.remove(audio_path)
-        except:
-            pass
-        return False
 
 
 def generate_enhanced_subtitles(
@@ -789,10 +497,10 @@ def is_enhanced_subtitle_file(subtitle_path: str) -> bool:
 
 
 def create_tiktok_style_config(
-    font_family: str = "EpundaSlab-VariableFont_wght.ttf",  # Use centralized font
-    font_size: int = 28,
+    font_family: str = "Impact",
+    font_size: int = 60,
     primary_color: str = "&H00FFFFFF",
-    highlight_color: str = "&H0000FFFF",
+    highlight_color: str = "&H0000D7FF",
     position: str = "center,bottom",
     **kwargs
 ) -> SubtitleConfig:
@@ -830,13 +538,13 @@ def create_subtitle_config_from_legacy(config: Dict[str, Any]) -> SubtitleConfig
         primary_color = '&H00FFFFFF'
 
     return SubtitleConfig(
-        font_family=config.get('font_family', 'EpundaSlab-VariableFont_wght.ttf'),
+        font_family=config.get('font_family', 'Impact'),
         font_size=config.get('font_size', 28),
         primary_color=primary_color,
         default_color=primary_color,  # Set default_color to match primary_color
         border_color=config.get('border_color', config.get('stroke_color', '&H00000000')),
         stroke_color=config.get('stroke_color', config.get('border_color', '&H00000000')),
-        highlight_color=config.get('highlight_color', '&H0000FFFF'),
+        highlight_color=config.get('highlight_color', '&H0000D7FF'),
         background_color=config.get('background_color', '&H00000000'),
         stroke_width=config.get('stroke_width', 2),
         background_opacity=config.get('background_opacity', 0.0),

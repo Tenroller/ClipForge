@@ -41,7 +41,6 @@ if platform.system() == "Windows":
 
 from .processor import PodcastClipsProcessor
 from .face_tracker import FaceTracker
-from .subtitle_generator import SubtitleGenerator
 from .clip_generator import ClipGenerator, ViralMoment, GeneratedClip
 from .content_detector import ContentModeDetector, ContentSegment, ContentMode
 from .thumbnail_generator import ThumbnailGenerator
@@ -52,7 +51,6 @@ from .hook_optimizer import HookOptimizer
 __all__ = [
     'PodcastClipsProcessor',
     'FaceTracker',
-    'SubtitleGenerator',
     'ClipGenerator',
     'ViralMoment',
     'GeneratedClip',

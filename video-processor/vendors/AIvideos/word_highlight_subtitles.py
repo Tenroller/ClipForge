@@ -28,10 +28,10 @@ except ImportError:
 @dataclass
 class WordHighlightConfig:
     """Configuration for word-by-word highlighting subtitles."""
-    font_family: str = "EpundaSlab-VariableFont_wght.ttf"  # Use centralized font
+    font_family: str = "Impact"
     font_size: int = 28
     default_color: str = "#FFFFFF"      # Color for unspoken words
-    highlight_color: str = "#FFFF00"    # Color for currently spoken word
+    highlight_color: str = "#FFD700"    # Box color behind currently spoken word
     stroke_color: str = "#000000"       # Text outline color
     background_color: str = "#000000"   # Background color
     stroke_width: int = 2
@@ -61,7 +61,7 @@ def create_word_highlight_subtitle_clip(
     # Extract configuration
     config_data = subtitle_data.get('config', {})
     config = WordHighlightConfig(
-        font_family=config_data.get('font_family', 'EpundaSlab-VariableFont_wght.ttf'),
+        font_family=config_data.get('font_family', 'Impact'),
         font_size=config_data.get('font_size', 28),
         default_color=config_data.get('default_color', '#FFFFFF'),
         highlight_color=config_data.get('highlight_color', '#7AC6FF'),  # Use user's highlight color
@@ -264,7 +264,7 @@ def create_3_word_window_clip(
     max_text_height = 0
     
     for idx, word_data in enumerate(window_words):
-        word = word_data['word']
+        word = word_data['word'].upper()
 
         # Skip empty or whitespace words BEFORE creating TextClip
         if not word or word.strip() == '':
@@ -280,16 +280,18 @@ def create_3_word_window_clip(
             continue
 
         # Skip problematic single characters that cause dimension issues
-        if len(word) == 1 and word not in ['I', 'a', 'A']:
+        if len(word) == 1 and word not in ['I', 'A']:
             print(f"VALIDATION: Skipping problematic single character word at index {idx}: '{word}'")
             continue
         
         is_highlighted = (idx == highlighted_word_idx)
-        word_color = config.highlight_color if is_highlighted else config.default_color
-        
+        # Highlighted word: black text (will have colored box behind it)
+        # Non-highlighted: white text with outline
+        word_color = "#000000" if is_highlighted else config.default_color
+
         print(f"DEBUG: Creating TextClip for word {idx}: '{word}' (highlighted: {is_highlighted})")
         print(f"DEBUG: Word color: {word_color} (highlighted: {is_highlighted})")
-        print(f"DEBUG: Config colors - default: {config.default_color}, highlight: {config.highlight_color}")
+        print(f"DEBUG: Config colors - default: {config.default_color}, highlight box: {config.highlight_color}")
         
         # Create word clip with robust font fallback
         word_clip = None
@@ -441,38 +443,60 @@ def create_3_word_window_clip(
     if config.background_opacity > 0:
         bg_width = total_text_width + 2 * config.padding_x
         bg_height = max_text_height + 2 * config.padding_y
-        
+
         background = ColorClip(
             size=(bg_width, bg_height),
             color=hex_to_rgb(config.background_color)
         ).with_opacity(config.background_opacity).with_duration(duration)
-        
-        # Position individual word clips horizontally
+
+        # Position individual word clips horizontally with highlight boxes
         current_x = config.padding_x
         positioned_word_clips = []
-        
-        for word_clip in individual_word_clips:
-            # Center vertically within the background
+
+        for clip_idx, word_clip in enumerate(individual_word_clips):
             word_y = config.padding_y + (max_text_height - word_clip.h) // 2
+
+            # Add highlight box behind highlighted word
+            if clip_idx == highlighted_word_idx:
+                box_pad_x, box_pad_y = 6, 3
+                box_w = word_clip.w + 2 * box_pad_x
+                box_h = word_clip.h + 2 * box_pad_y
+                highlight_box = ColorClip(
+                    size=(box_w, box_h),
+                    color=hex_to_rgb(config.highlight_color)
+                ).with_duration(duration).with_position((current_x - box_pad_x, word_y - box_pad_y))
+                positioned_word_clips.append(highlight_box)
+
             positioned_word_clip = word_clip.with_position((current_x, word_y)).with_duration(duration)
             positioned_word_clips.append(positioned_word_clip)
             current_x += word_clip.w + word_spacing
-        
+
         # Combine background and words
         all_elements = [background] + positioned_word_clips
     else:
-        # No background - just position text clips without padding
+        # No background - just position text clips without padding, but add highlight box
         current_x = 0
         positioned_word_clips = []
-        
-        for word_clip in individual_word_clips:
-            # Center vertically without background padding
+
+        for clip_idx, word_clip in enumerate(individual_word_clips):
             word_y = (max_text_height - word_clip.h) // 2
+
+            # Add highlight box behind highlighted word
+            if clip_idx == highlighted_word_idx:
+                box_pad_x, box_pad_y = 6, 3
+                box_w = word_clip.w + 2 * box_pad_x
+                box_h = word_clip.h + 2 * box_pad_y
+                highlight_box = ColorClip(
+                    size=(box_w, box_h),
+                    color=hex_to_rgb(config.highlight_color)
+                ).with_duration(duration).with_position((current_x - box_pad_x, word_y - box_pad_y))
+                positioned_word_clips.append(highlight_box)
+
             positioned_word_clip = word_clip.with_position((current_x, word_y)).with_duration(duration)
             positioned_word_clips.append(positioned_word_clip)
             current_x += word_clip.w + word_spacing
-        
-        # Only text clips, no background
+
+        # Text clips with highlight boxes
         all_elements = positioned_word_clips
     
     # Final validation: check all clips have valid dimensions before creating composite

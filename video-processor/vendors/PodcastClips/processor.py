@@ -88,7 +88,6 @@ def get_job_store(job_queue=None, loop=None):
     return JobQueueWrapper(job_queue, loop)
 
 from .face_tracker import FaceTracker, FaceBox
-from .subtitle_generator import SubtitleGenerator
 from .clip_generator import ClipGenerator, ViralMoment
 from .content_detector import ContentModeDetector
 from .thumbnail_generator import ThumbnailGenerator
@@ -141,7 +140,8 @@ class PodcastClipsProcessor:
 
         # Component instances (initialized during processing)
         self.face_tracker: Optional[FaceTracker] = None
-        self.subtitle_generator: Optional[SubtitleGenerator] = None
+        self.text_color: Optional[str] = None
+        self.highlight_color: Optional[str] = None
         self.clip_generator: Optional[ClipGenerator] = None
 
         logger.info(f"Initialized PodcastClipsProcessor for job {job_id}")
@@ -387,13 +387,9 @@ class PodcastClipsProcessor:
             else:
                 logger.info(f"Font size {subtitle_font_size}px is optimal for {video_height}px height video")
 
-            # Step 7: Initialize subtitle generator
-            self._initialize_subtitle_generator(
-                subtitle_font_size, subtitle_color,
-                subtitle_stroke_color, subtitle_stroke_width,
-                subtitle_vertical_offset, subtitle_highlight_color,
-                subtitle_max_words_visible
-            )
+            # Step 7: Store subtitle colors for clip generation
+            self.text_color = subtitle_color
+            self.highlight_color = subtitle_highlight_color
 
             # Step 8: Generate clips (parallel) with optimized face detection
             generated_clips = self._generate_clips(
@@ -1238,30 +1234,6 @@ class PodcastClipsProcessor:
                 enable_speaker_detection=False  # Disable speaker detection on fallback
             )
 
-    def _initialize_subtitle_generator(
-        self,
-        font_size: int,
-        color: str,
-        stroke_color: str,
-        stroke_width: int,
-        vertical_offset: int = 500,
-        highlight_color: str = "#6366f1",
-        max_words_visible: int = 5
-    ):
-        """Initialize subtitle generator with karaoke-style highlighting."""
-        logger.info("Initializing subtitle generator with karaoke-style highlighting")
-
-        self.subtitle_generator = SubtitleGenerator(
-            font_size=font_size,
-            color=color,
-            stroke_color=stroke_color,
-            stroke_width=stroke_width,
-            position="bottom",
-            vertical_offset=vertical_offset,
-            highlight_color=highlight_color,
-            max_words_visible=max_words_visible
-        )
-
     def _generate_clips(
         self,
         video_path: str,
@@ -1403,11 +1375,6 @@ class PodcastClipsProcessor:
 
             self.update_progress("clip_generation", 75, f"Generating {len(viral_moments)} clips")
 
-            # Ensure subtitle generator is available (fallback to basic instance if needed)
-            if self.subtitle_generator is None:
-                logger.warning("Subtitle generator not available, initializing fallback instance")
-                self.subtitle_generator = SubtitleGenerator()
-
             # Initialize content mode detector if mixed mode is enabled
             content_mode_detector = None
             if enable_mixed_mode:
@@ -1426,7 +1393,6 @@ class PodcastClipsProcessor:
             # Initialize clip generator with mixed-mode support
             self.clip_generator = ClipGenerator(
                 face_tracker=self.face_tracker,
-                subtitle_generator=self.subtitle_generator,
                 output_dir=self.output_dir,
                 use_gpu=True,
                 content_mode_detector=content_mode_detector,
@@ -1434,7 +1400,9 @@ class PodcastClipsProcessor:
                 ocr_height=ocr_height,
                 subtitle_style=subtitle_style,
                 subtitle_display_mode=subtitle_display_mode,
-                subtitle_position=subtitle_position
+                subtitle_position=subtitle_position,
+                text_color=self.text_color,
+                highlight_color=self.highlight_color
             )
 
             # Set transition duration if mixed mode enabled
@@ -2010,9 +1978,9 @@ class PodcastClipsProcessor:
                 self.clip_generator.cleanup()
                 self.clip_generator = None
 
-            # Clean up subtitle generator
-            if self.subtitle_generator:
-                self.subtitle_generator = None
+            # Clean up subtitle colors
+            self.text_color = None
+            self.highlight_color = None
 
             # Clear speaker segments
             if hasattr(self, 'speaker_segments') and self.speaker_segments:

@@ -152,23 +152,43 @@ def hex_to_ass_color(hex_color: str) -> Optional[str]:
     """
     if not hex_color:
         return None
-    
+
     # Remove # prefix
     hex_color = hex_color.lstrip('#')
-    
+
     # Expand shorthand (#RGB -> #RRGGBB)
     if len(hex_color) == 3:
         hex_color = ''.join([c*2 for c in hex_color])
-    
+
     if len(hex_color) != 6:
         return None
-    
+
     try:
         r = int(hex_color[0:2], 16)
         g = int(hex_color[2:4], 16)
         b = int(hex_color[4:6], 16)
         # ASS format is &HAABBGGRR (with alpha=00 for opaque)
         return f"&H00{b:02X}{g:02X}{r:02X}"
+    except ValueError:
+        return None
+
+
+def ass_color_to_hex(ass_color: str) -> Optional[str]:
+    """
+    Convert ASS color format (&HAABBGGRR) to hex color (#RRGGBB).
+    """
+    if not ass_color or not ass_color.startswith("&H"):
+        return None
+    clean_str = ass_color.replace("&H", "")
+    if len(clean_str) < 6:
+        return None
+    try:
+        # Pad to 8 chars (AABBGGRR)
+        clean_str = clean_str.zfill(8)
+        b = int(clean_str[2:4], 16)
+        g = int(clean_str[4:6], 16)
+        r = int(clean_str[6:8], 16)
+        return f"#{r:02X}{g:02X}{b:02X}"
     except ValueError:
         return None
 
@@ -232,9 +252,91 @@ def word_timings_to_segments(word_timings: List[dict]) -> List[Segment]:
     return segments
 
 
+def whisper_data_to_segments(word_level_data: dict) -> List[Segment]:
+    """
+    Convert Whisper transcription dict format to List[Segment].
+
+    This bridges the data format used by enhanced_subtitles.py (Whisper's native
+    dict with {"segments": [{"words": [{"start", "end", "text"}]}]}) into the
+    Segment/Word dataclasses used by SubtitleGenerator.
+
+    Args:
+        word_level_data: Whisper transcription result dict
+
+    Returns:
+        List of Segment objects with Word lists
+    """
+    segments = []
+    for seg in word_level_data.get("segments", []):
+        words = []
+        for w in seg.get("words", []):
+            words.append(Word(
+                text=w.get("text", ""),
+                start=w.get("start", 0.0),
+                end=w.get("end", 0.0),
+            ))
+        if not words:
+            continue
+        segments.append(Segment(
+            text=seg.get("text", " ".join(w.text for w in words)),
+            start=seg.get("start", words[0].start),
+            end=seg.get("end", words[-1].end),
+            words=words,
+        ))
+    return segments
+
+
 class SubtitleGenerator:
     """Generate styled ASS subtitles from transcription"""
-    
+
+    @classmethod
+    def from_config(cls, config) -> "SubtitleGenerator":
+        """
+        Create a SubtitleGenerator from a SubtitleConfig (enhanced_subtitles).
+
+        Maps SubtitleConfig fields to SubtitleGenerator parameters, defaulting
+        to YELLOW_HIGHLIGHT style and SENTENCE display mode (matching the
+        enhanced_subtitles behavior of showing full sentences with one word
+        highlighted at a time).
+
+        Args:
+            config: A SubtitleConfig instance from enhanced_subtitles
+
+        Returns:
+            Configured SubtitleGenerator instance
+        """
+        # Map position string "center,bottom" -> Position enum
+        pos = Position.BOTTOM
+        if hasattr(config, "position") and config.position:
+            pos_str = config.position.lower()
+            if "top" in pos_str:
+                pos = Position.TOP
+            elif "center" in pos_str and "bottom" not in pos_str:
+                pos = Position.CENTER
+
+        # Convert colors to hex format (SubtitleConfig may use hex or ASS format)
+        text_color = None
+        if hasattr(config, "primary_color") and config.primary_color:
+            if config.primary_color.startswith("#"):
+                text_color = config.primary_color
+            elif config.primary_color.startswith("&H"):
+                text_color = ass_color_to_hex(config.primary_color)
+
+        highlight_color = None
+        if hasattr(config, "highlight_color") and config.highlight_color:
+            if config.highlight_color.startswith("#"):
+                highlight_color = config.highlight_color
+            elif config.highlight_color.startswith("&H"):
+                highlight_color = ass_color_to_hex(config.highlight_color)
+
+        return cls(
+            style=SubtitleStyle.YELLOW_HIGHLIGHT,
+            display_mode=DisplayMode.SENTENCE,
+            position=pos,
+            text_color=text_color,
+            highlight_color=highlight_color,
+        )
+
     def __init__(
         self,
         style: SubtitleStyle = SubtitleStyle.YELLOW_HIGHLIGHT,
