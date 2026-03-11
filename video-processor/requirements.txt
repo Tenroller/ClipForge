@@ -79,7 +79,7 @@ kokoro
 # BRAINROT DEPENDENCIES (For TikTok-style compilations)
 # =============================================================================
 # Video downloading and processing
-yt-dlp @ git+https://github.com/yt-dlp/yt-dlp.git@master
+yt-dlp
 scenedetect
 
 # ML dependencies for brainrot
