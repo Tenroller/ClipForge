@@ -5,4 +5,4 @@ set -e
 chown -R appuser:appgroup /app/output /app/temp /app/cache 2>/dev/null || true
 
 # Drop privileges and exec the main process
-exec su -s /bin/sh appuser -c "exec $*"
+exec su -s /bin/sh appuser -c "PYTHONPATH=/app exec $*"
