@@ -27,7 +27,7 @@ from starlette.responses import JSONResponse, Response
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 # Paths that are exempt from CSRF validation.
-_EXEMPT_PATHS = frozenset({"/api/auth/login", "/api/auth/csrf-token"})
+_EXEMPT_PATHS = frozenset({"/api/auth/login", "/api/auth/csrf-token", "/api/jobs/callback"})
 
 # Length in bytes for the random token (32 bytes → 64 hex chars).
 _TOKEN_BYTES = 32
