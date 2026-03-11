@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: videohelper
       POSTGRES_USER: videohelper_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-videohelper_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD env var is required}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -41,7 +41,7 @@ services:
       dockerfile: Dockerfile
     environment:
       # Database Configuration
-      DATABASE_URL: postgresql://videohelper_user:${POSTGRES_PASSWORD:-videohelper_password}@postgres:5432/videohelper
+      DATABASE_URL: postgresql://videohelper_user:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD env var is required}@postgres:5432/videohelper
 
       # Redis Configuration (optional)
       REDIS_URL: redis://redis:6379/0
@@ -54,7 +54,7 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
       AUTH_USERNAME: ${AUTH_USERNAME:-admin}
-      AUTH_PASSWORD: ${AUTH_PASSWORD:-tenroller}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:?AUTH_PASSWORD env var is required}
 
       # CORS Configuration (Set this to your frontend domain in Coolify)
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-*}
@@ -113,7 +113,7 @@ services:
       BACKEND_URL: http://backend:9000
 
       # Database & Redis for job persistence
-      DATABASE_URL: postgresql://videohelper_user:${POSTGRES_PASSWORD:-videohelper_password}@postgres:5432/videohelper
+      DATABASE_URL: postgresql://videohelper_user:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD env var is required}@postgres:5432/videohelper
       REDIS_URL: redis://redis:6379
 
       # Shared configuration
