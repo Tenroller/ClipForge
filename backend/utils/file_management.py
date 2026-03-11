@@ -282,7 +282,6 @@ def init_temp_manager():
         ("video_temp", Path("temp") / "videos", 6, 1000),  # 6 hours, 1GB max
         ("audio_temp", Path("temp") / "audio", 12, 200),  # 12 hours, 200MB max
         ("subtitles_temp", Path("temp") / "subtitles", 48, 100),  # 48 hours, 100MB max
-        ("debug_frames", Path("debug_frames"), 168, 200),  # 1 week, 200MB max
     ]
 
     for name, path, retention, max_size in temp_dirs:

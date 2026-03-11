@@ -370,7 +370,6 @@ def is_safe_path(path: Union[str, Path]) -> bool:
     allowed_dirs = [
         manager.output_root,
         manager.temp_root,
-        manager.backend_root / "debug_frames"
     ]
 
     return manager.is_path_allowed(path, allowed_dirs)
