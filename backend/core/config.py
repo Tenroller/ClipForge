@@ -23,7 +23,7 @@ class AppConfig:
     cors_allow_credentials: bool = True
     
     # Rate limiting
-    rate_limit_per_minute: int = 0
+    rate_limit_per_minute: int = 30
     
     # Job processing
     max_concurrent_jobs: int = 2
