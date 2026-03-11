@@ -13,10 +13,14 @@ from .config import AppConfig
 from .lifespan import lifespan
 try:
     from ..middleware.logging import LoggingMiddleware
+    from ..middleware.rate_limit import RateLimitMiddleware
+    from ..middleware.csrf import CSRFMiddleware
     from ..api.routes import register_routes
 except ImportError:
     # Fallback for when running from backend directory
     from middleware.logging import LoggingMiddleware
+    from middleware.rate_limit import RateLimitMiddleware
+    from middleware.csrf import CSRFMiddleware
     from api.routes import register_routes
 
 
@@ -47,16 +51,27 @@ def setup_middleware(app: FastAPI, config: AppConfig) -> None:
     if config.trusted_hosts and config.trusted_hosts != ["*"]:
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.trusted_hosts)
 
+    # Add rate limiting middleware
+    if config.rate_limit_per_minute > 0:
+        app.add_middleware(RateLimitMiddleware, requests_per_minute=config.rate_limit_per_minute)
+
     # Add logging middleware
     app.add_middleware(LoggingMiddleware)
 
+    # Add CSRF protection middleware (Double Submit Cookie pattern)
+    app.add_middleware(CSRFMiddleware)
+
     # Add CORS middleware
+    cors_origins = config.cors_origins or [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=config.cors_origins or ["*"],
+        allow_origins=cors_origins,
         allow_credentials=config.cors_allow_credentials,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-API-Key", "X-CSRF-Token"],
     )
 
 

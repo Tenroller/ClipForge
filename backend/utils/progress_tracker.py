@@ -477,29 +477,14 @@ def cleanup_old_trackers(max_age_seconds: int = 3600):
 
 
 # Convenience functions for common progress tracking patterns
-def track_video_generation_progress(job_id: str, websocket_manager=None):
+def track_video_generation_progress(job_id: str):
     """
-    Set up progress tracking for video generation with WebSocket updates.
+    Set up progress tracking for video generation.
 
     Args:
         job_id: Job ID
-        websocket_manager: Optional WebSocket manager for real-time updates
     """
-    tracker = get_progress_tracker(job_id)
-
-    def progress_callback(progress_info):
-        """Callback to send progress updates via WebSocket."""
-        if websocket_manager:
-            try:
-                # This would be called to update WebSocket clients
-                logger.debug(f"Progress update for job {job_id}: {progress_info['overall_progress']:.1f}%")
-            except Exception as e:
-                logger.warning(f"Failed to send progress update: {e}")
-
-    if websocket_manager:
-        tracker.add_callback(progress_callback)
-
-    return tracker
+    return get_progress_tracker(job_id)
 
 
 def create_step_progress_updater(tracker: ProgressTracker, step_name: str):

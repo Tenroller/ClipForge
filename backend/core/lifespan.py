@@ -137,11 +137,6 @@ async def _job_expiration_loop():
         await asyncio.sleep(interval_seconds)
 
 
-def _enqueue_job_update(job_id: str) -> None:
-    """No-op: WebSocket broadcasting has been removed, using REST API polling instead."""
-    pass
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context to manage background broadcaster task."""
@@ -266,6 +261,5 @@ async def lifespan(app: FastAPI):
 # Module-level exports for use in other parts of the application
 __all__ = [
     "lifespan",
-    "_enqueue_job_update",
     "MAIN_LOOP",
 ]

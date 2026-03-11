@@ -154,7 +154,7 @@ class AppConfig:
             cors_allow_credentials=True,
             
             # Rate limiting
-            rate_limit_per_minute=get_int("RATE_LIMIT_PER_MINUTE", 0),
+            rate_limit_per_minute=get_int("RATE_LIMIT_PER_MINUTE", 30),
             
             # Job processing
             max_concurrent_jobs=get_int("VIDEOHELPER_MAX_CONCURRENT_JOBS", 2),
@@ -243,6 +243,14 @@ class AppConfig:
         # Check for conflicting configurations
         if os.getenv('DATABASE_URL') and os.getenv('DATABASE_PATH'):
             env_warnings.append("Both DATABASE_URL and DATABASE_PATH set - DATABASE_URL takes precedence")
+
+        # CORS warning
+        cors_env = os.getenv("CORS_ALLOW_ORIGINS", "*").strip()
+        if cors_env == "*" and not self.debug_mode:
+            env_warnings.append(
+                "CORS_ALLOW_ORIGINS is not set — defaulting to localhost origins. "
+                "Set it to your production domain for deployment."
+            )
         
         return {
             'environment_valid': len(env_issues) == 0,

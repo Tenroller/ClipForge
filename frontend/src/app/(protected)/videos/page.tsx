@@ -26,8 +26,7 @@ import SyncPanel from '@/components/videos/SyncPanel';
 import { ChevronDown, LayoutGrid, List, Loader2, RefreshCw, Film, PlaySquare, Settings2, Download } from "lucide-react";
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+import { api, API_BASE } from '@/lib/api';
 
 interface VideosResponse {
   videos: Video[];
@@ -100,9 +99,7 @@ export default function VideosPage() {
         params.append('posted', postedFilter === 'posted' ? 'true' : 'false');
       }
 
-      const response = await fetch(`${API_BASE}/api/videos/managed?${params}`, {
-        credentials: 'include',
-      });
+      const response = await api.get(`/api/videos/managed?${params}`);
 
       if (!response.ok) {
         throw new Error(`Failed to load videos: ${response.statusText}`);
@@ -145,9 +142,7 @@ export default function VideosPage() {
         params.append('posted', postedFilter === 'posted' ? 'true' : 'false');
       }
 
-      const response = await fetch(`${API_BASE}/api/videos/managed?${params}`, {
-        credentials: 'include',
-      });
+      const response = await api.get(`/api/videos/managed?${params}`);
 
       if (!response.ok) {
         throw new Error(`Failed to load videos: ${response.statusText}`);
@@ -172,9 +167,7 @@ export default function VideosPage() {
   // Load stats
   const loadStats = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/videos/stats/managed`, {
-        credentials: 'include',
-      });
+      const response = await api.get(`/api/videos/stats/managed`);
       if (!response.ok) {
         throw new Error(`Failed to load stats: ${response.statusText}`);
       }
@@ -201,10 +194,7 @@ export default function VideosPage() {
   const syncVideosFromJobs = async () => {
     try {
       setSyncing(true);
-      const response = await fetch(`${API_BASE}/api/videos/sync/from-jobs`, {
-        method: 'POST',
-        credentials: 'include',
-      });
+      const response = await api.post(`/api/videos/sync/from-jobs`);
 
       if (!response.ok) {
         throw new Error(`Failed to sync videos: ${response.statusText}`);
@@ -238,10 +228,7 @@ export default function VideosPage() {
   const syncOrphanedVideos = async () => {
     try {
       setSyncing(true);
-      const response = await fetch(`${API_BASE}/api/videos/sync/orphaned`, {
-        method: 'POST',
-        credentials: 'include',
-      });
+      const response = await api.post(`/api/videos/sync/orphaned`);
 
       if (!response.ok) {
         throw new Error(`Failed to sync orphaned videos: ${response.statusText}`);
@@ -290,10 +277,7 @@ export default function VideosPage() {
   // Handle mark as posted
   const handleMarkPosted = async (video: Video) => {
     try {
-      const response = await fetch(`${API_BASE}/api/videos/managed/${video.id}/mark-posted`, {
-        method: 'POST',
-        credentials: 'include',
-      });
+      const response = await api.post(`/api/videos/managed/${video.id}/mark-posted`);
 
       if (!response.ok) {
         throw new Error('Failed to mark video as posted');
@@ -330,12 +314,8 @@ export default function VideosPage() {
     if (!videoToDelete) return;
 
     try {
-      const response = await fetch(
-        `${API_BASE}/api/videos/managed/${videoToDelete.id}?delete_file=true`,
-        {
-          method: 'DELETE',
-          credentials: 'include',
-        }
+      const response = await api.delete(
+        `/api/videos/managed/${videoToDelete.id}?delete_file=true`
       );
 
       if (!response.ok) {
@@ -428,12 +408,8 @@ export default function VideosPage() {
       // Delete videos in parallel
       await Promise.all(
         selected.map(async (video) => {
-          const response = await fetch(
-            `${API_BASE}/api/videos/managed/${video.id}?delete_file=true`,
-            {
-              method: 'DELETE',
-              credentials: 'include',
-            }
+          const response = await api.delete(
+            `/api/videos/managed/${video.id}?delete_file=true`
           );
 
           if (!response.ok) {
@@ -492,12 +468,8 @@ export default function VideosPage() {
 
         // Load videos and stats in parallel
         const [videosResponse, statsResponse] = await Promise.all([
-          fetch(`${API_BASE}/api/videos/managed?${params}`, {
-            credentials: 'include',
-          }),
-          fetch(`${API_BASE}/api/videos/stats/managed`, {
-            credentials: 'include',
-          }),
+          api.get(`/api/videos/managed?${params}`),
+          api.get(`/api/videos/stats/managed`),
         ]);
 
         if (!videosResponse.ok) {

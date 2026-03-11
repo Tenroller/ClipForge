@@ -10,7 +10,7 @@ Features:
 - ThreadPoolExecutor for job execution
 - Job cancellation support
 - Integration with database persistence
-- WebSocket real-time updates
+- REST API polling for progress updates
 - Comprehensive error handling and logging
 - No external dependencies (Redis-free)
 
@@ -82,7 +82,7 @@ class UnifiedJobQueue:
     - Sequential job processing (one job at a time by default)
     - Background thread execution
     - Job cancellation support
-    - WebSocket real-time updates
+    - REST API polling for progress updates
     - Comprehensive monitoring
     - No external dependencies
 
