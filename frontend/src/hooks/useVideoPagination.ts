@@ -38,8 +38,9 @@ const DEFAULT_STATS: VideoStatsData = {
   },
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useVideoPagination(
-  t: (key: string, values?: Record<string, unknown>) => string
+  t: any
 ): UseVideoPaginationReturn {
   const { toast } = useToast();
   const [videos, setVideos] = useState<Video[]>([]);
