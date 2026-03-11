@@ -43,8 +43,14 @@ WORKDIR /app
 # Copy the application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p output temp logs
+# Create non-root user for security
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+# Create necessary directories and set ownership for writable dirs
+RUN mkdir -p output temp logs && chown -R appuser:appgroup output temp logs
+
+# Switch to non-root user
+USER appuser
 
 # Set environment variables
 ENV PYTHONPATH=/app

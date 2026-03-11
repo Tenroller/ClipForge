@@ -41,8 +41,14 @@ WORKDIR /app
 # Copy the backend code into a backend subdirectory to preserve import structure
 COPY . ./backend
 
-# Create necessary directories
-RUN mkdir -p output temp logs cache
+# Create non-root user for security
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+# Create necessary directories and set ownership for writable dirs
+RUN mkdir -p output temp logs cache && chown -R appuser:appgroup output temp logs cache
+
+# Switch to non-root user
+USER appuser
 
 # Set environment variables
 ENV PYTHONPATH=/app
