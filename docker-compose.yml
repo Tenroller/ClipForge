@@ -83,7 +83,6 @@ services:
       - video_output:/app/output
       - video_temp:/app/temp
       - video_cache:/app/cache
-      - video_logs:/app/logs
 
     # Expose port 9000 for Coolify/Traefik to route traffic
     expose:
