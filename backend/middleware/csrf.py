@@ -27,7 +27,7 @@ from starlette.responses import JSONResponse, Response
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 # Paths that are exempt from CSRF validation.
-_EXEMPT_PATHS = frozenset({"/api/auth/login"})
+_EXEMPT_PATHS = frozenset({"/api/auth/login", "/api/auth/csrf-token"})
 
 # Length in bytes for the random token (32 bytes → 64 hex chars).
 _TOKEN_BYTES = 32
@@ -63,12 +63,13 @@ class CSRFMiddleware(BaseHTTPMiddleware):
 
         # --- 3. Ensure the csrf_token cookie exists on the response --------
         if "csrf_token" not in request.cookies:
+            is_debug = os.getenv("DEBUG_MODE", "").lower() in ("true", "1")
             response.set_cookie(
                 key="csrf_token",
                 value=secrets.token_hex(_TOKEN_BYTES),
                 httponly=False,       # Frontend JS must be able to read it
-                secure=os.getenv("DEBUG_MODE", "").lower() not in ("true", "1"),
-                samesite="lax",
+                secure=not is_debug,
+                samesite="none" if not is_debug else "lax",
                 path="/",
             )
 

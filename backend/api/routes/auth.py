@@ -3,9 +3,11 @@ Authentication routes for login, logout, token management, and user management.
 """
 
 from datetime import timedelta
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends, Header, Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
+import os
+import secrets
 
 from backend.models.requests import LoginRequest, RegisterRequest, LoginResponse, TokenVerifyResponse
 from backend.utils.auth import (
@@ -21,6 +23,28 @@ router = APIRouter()
 security = HTTPBearer()
 logger = get_logger("auth")
 config = AppConfig.from_env()
+
+
+_TOKEN_BYTES = 32
+
+
+@router.get("/auth/csrf-token", summary="Get CSRF token")
+async def get_csrf_token(request: Request, response: Response):
+    """
+    Return the CSRF token so cross-origin frontends can read it from the JSON body
+    (the cookie is not accessible via JS when the backend is on a different origin).
+    """
+    is_debug = os.getenv("DEBUG_MODE", "").lower() in ("true", "1")
+    token = request.cookies.get("csrf_token") or secrets.token_hex(_TOKEN_BYTES)
+    response.set_cookie(
+        key="csrf_token",
+        value=token,
+        httponly=False,
+        secure=not is_debug,
+        samesite="none" if not is_debug else "lax",
+        path="/",
+    )
+    return {"csrf_token": token}
 
 
 @router.post("/auth/login", response_model=LoginResponse)

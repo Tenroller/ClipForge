@@ -15,6 +15,24 @@ function getCookie(name: string): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
+// Cached CSRF token for cross-origin environments where the cookie is unreadable
+let _csrfTokenCache: string | null = null;
+
+async function fetchCsrfToken(): Promise<string | undefined> {
+  if (_csrfTokenCache) return _csrfTokenCache;
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
+    if (res.ok) {
+      const data = await res.json();
+      _csrfTokenCache = data.csrf_token;
+      return _csrfTokenCache ?? undefined;
+    }
+  } catch {
+    // Ignore — CSRF token is best-effort
+  }
+  return undefined;
+}
+
 export type JobRecord = {
   id: string;
   workflow: 'moneyprinter' | 'brainrot' | string;
@@ -87,7 +105,7 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<Respons
 
   // Attach CSRF token header for mutating requests
   if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-    const csrfToken = getCookie('csrf_token');
+    const csrfToken = getCookie('csrf_token') ?? await fetchCsrfToken();
     if (csrfToken) {
       headers['X-CSRF-Token'] = csrfToken;
     }
