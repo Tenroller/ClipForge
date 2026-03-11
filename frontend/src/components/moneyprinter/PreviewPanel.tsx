@@ -276,13 +276,34 @@ export default function PreviewPanel({
             style={{
               left: leftPx,
               top: topPx,
-              color,
-              textShadow: textShadowStyle,
-              letterSpacing: '1.5px',
-              fontWeight: 'bold'
             }}
           >
-            <div className="text-center font-black leading-snug">Example subtitle text</div>
+            <div
+              className="text-center font-black leading-snug uppercase"
+              style={{
+                fontFamily: 'Impact, Arial Black, sans-serif',
+                fontSize: '14px',
+                color: '#FFFFFF',
+                WebkitTextStroke: '1px #000000',
+                textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                letterSpacing: '0.5px',
+              }}
+            >
+              Example{' '}
+              <span
+                style={{
+                  backgroundColor: color,
+                  color: '#000000',
+                  WebkitTextStroke: '0px',
+                  padding: '1px 4px',
+                  borderRadius: '2px',
+                  textShadow: 'none',
+                }}
+              >
+                subtitle
+              </span>{' '}
+              text
+            </div>
           </div>
 
           <div className="absolute inset-x-2 bottom-2">

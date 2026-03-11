@@ -33,7 +33,7 @@ export default function ActivityPage() {
   const t = useTranslations('activity');
   const tCommon = useTranslations('common');
   const { toast } = useToast();
-  const { data: jobs = [], isLoading, refetch } = useJobs({ limit: 50, refetchInterval: 5000 });
+  const { data: jobs = [], isLoading, refetch } = useJobs({ limit: 20, refetchInterval: 10000 });
   const remakeJobMutation = useRemakeJob();
 
   const [selectedResult, setSelectedResult] = useState<JobRecord | null>(null);

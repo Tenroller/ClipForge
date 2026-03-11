@@ -15,17 +15,23 @@ import {
   type JobRecord,
 } from '@/lib/api';
 
+const JOBS_QUERY_KEY = ['jobs'];
+const JOBS_FETCH_LIMIT = 50;
+
 /**
- * Hook to fetch all jobs with optional polling
+ * Hook to fetch all jobs with optional polling.
+ * All consumers share a single query to avoid duplicate network requests.
  */
 export function useJobs(options?: {
   limit?: number;
   refetchInterval?: number | false;
 }) {
+  const limit = options?.limit;
   return useQuery<JobRecord[]>({
-    queryKey: ['jobs', options?.limit],
-    queryFn: () => listJobs(options?.limit),
+    queryKey: JOBS_QUERY_KEY,
+    queryFn: () => listJobs(JOBS_FETCH_LIMIT),
     refetchInterval: options?.refetchInterval,
+    select: limit ? (data) => data.slice(0, limit) : undefined,
   });
 }
 
