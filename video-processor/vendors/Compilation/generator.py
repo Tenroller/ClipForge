@@ -21,6 +21,7 @@ from tqdm import tqdm
 import torch
 import time
 import uuid
+import tempfile
 import concurrent.futures
 import hashlib
 import subprocess
@@ -1786,7 +1787,7 @@ class TikYouGenerator:
             # locked or partially removed, causing MoviePy/FFmpeg to crash with
             # errors like "'NoneType' object has no attribute 'stdout'". A UUID
             # guarantees uniqueness for every call.
-            unique_audio_temp = f"temp-audio-{uuid.uuid4().hex}.m4a"
+            unique_audio_temp = os.path.join(tempfile.gettempdir(), f"temp-audio-{uuid.uuid4().hex}.m4a")
 
             # Get adaptive parameters for encoding
             print(f"      🔧 Getting adaptive encoding parameters...")
@@ -2073,7 +2074,7 @@ class TikYouGenerator:
                 print(f"         ⚠️ Low disk space detected!")
             
             # Encoding parameters
-            unique_audio_temp = f"temp-audio-{uuid.uuid4().hex}.m4a"
+            unique_audio_temp = os.path.join(tempfile.gettempdir(), f"temp-audio-{uuid.uuid4().hex}.m4a")
             adaptive_params = self._adapt_processing_parameters(len(final_clips), final_compilation.duration)
             
             # Use the same codec determination as normal compilation

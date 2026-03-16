@@ -444,7 +444,7 @@ Generate ONE phrase now:"""
                 output_path,
                 codec=codec,
                 audio_codec='aac',
-                temp_audiofile=f'temp-audio-{uuid.uuid4().hex}.m4a',
+                temp_audiofile=os.path.join(tempfile.gettempdir(), f'temp-audio-{uuid.uuid4().hex}.m4a'),
                 remove_temp=True,
                 fps=30,
                 preset=preset,

@@ -2,6 +2,7 @@ import argparse
 import os
 import re
 import uuid
+import tempfile
 from moviepy import VideoFileClip, ImageClip, CompositeVideoClip, ColorClip
 from PIL import Image, ImageDraw, ImageFont
 from .processor import clean_text_for_filename
@@ -253,7 +254,7 @@ def create_video(video_path, text, output_path=None, title=None, target_resoluti
         output_path,
         codec=codec,
         audio_codec='aac',
-        temp_audiofile=f'temp-audio-{uuid.uuid4().hex}.m4a',
+        temp_audiofile=os.path.join(tempfile.gettempdir(), f'temp-audio-{uuid.uuid4().hex}.m4a'),
         remove_temp=True,
         fps=30,
         preset=preset,  # IMPROVED: Use quality preset instead of veryfast

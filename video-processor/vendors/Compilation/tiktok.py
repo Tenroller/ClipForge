@@ -12,6 +12,8 @@ This script:
 import os
 import random
 import sys
+import uuid
+import tempfile
 from pathlib import Path
 from moviepy import VideoFileClip, CompositeVideoClip, ColorClip, concatenate_videoclips
 from PIL import Image
@@ -328,6 +330,7 @@ class TikTokVideoCreator:
                 output_path,
                 codec=codec,
                 audio_codec='aac',
+                temp_audiofile=os.path.join(tempfile.gettempdir(), f'temp-audio-{uuid.uuid4().hex}.m4a'),
                 remove_temp=True,
                 fps=30,
                 preset=preset,  # IMPROVED: Use quality preset instead of veryfast
@@ -491,6 +494,7 @@ class TikTokVideoCreator:
                 output_path,
                 codec=codec,
                 audio_codec='aac',
+                temp_audiofile=os.path.join(tempfile.gettempdir(), f'temp-audio-{uuid.uuid4().hex}.m4a'),
                 preset=preset,  # IMPROVED: Use quality preset instead of ultrafast
                 threads=8,
                 logger=None,
