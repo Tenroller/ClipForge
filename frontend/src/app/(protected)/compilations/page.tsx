@@ -74,12 +74,21 @@ export default function CompilationsPage() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
+      // Same-origin: read from cookie. Cross-origin (prod): fetch from API endpoint.
+      let csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
+      if (csrfToken) {
+        csrfToken = decodeURIComponent(csrfToken);
+      } else {
+        try {
+          const csrfRes = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
+          if (csrfRes.ok) csrfToken = (await csrfRes.json()).csrf_token;
+        } catch { /* best-effort */ }
+      }
       const response = await fetch(`${API_BASE}/api/upload-video`, {
         method: 'POST',
         body: formData,
         credentials: 'include',
-        headers: csrfToken ? { 'X-CSRF-Token': decodeURIComponent(csrfToken) } : undefined,
+        headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
       });
 
       if (!response.ok) {
