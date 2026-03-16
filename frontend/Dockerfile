@@ -64,7 +64,7 @@ ENV PORT=3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
-  CMD wget --quiet --tries=1 --spider --timeout=5 http://localhost:3000 || exit 1
+  CMD wget --quiet --tries=1 --spider --timeout=5 http://localhost:3000/api/health || exit 1
 
 # Run the application
 CMD ["node", "server.js"]
