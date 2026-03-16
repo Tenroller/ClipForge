@@ -31,6 +31,9 @@ RUN python -m spacy download en_core_web_sm
 # Kokoro TTS model (hexgrad/Kokoro-82M) - downloads ~170MB to HF cache
 RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='a', repo_id='hexgrad/Kokoro-82M')"
 
+# YOLOv8 nano model - used by Compilation crop detection at runtime
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+
 # Runtime stage
 FROM python:3.11-slim
 
@@ -58,12 +61,15 @@ COPY . .
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup --home /home/appuser appuser
 
 # Create necessary directories and set ownership for writable dirs
-RUN mkdir -p output temp logs /home/appuser/.config/matplotlib /home/appuser/.cache/fontconfig \
+RUN mkdir -p output temp logs /home/appuser/.config/matplotlib /home/appuser/.cache/fontconfig /home/appuser/.config/Ultralytics \
     && chown -R appuser:appgroup output temp logs /home/appuser
 
 # Copy pre-downloaded HuggingFace model cache directly into appuser home (single layer, no duplication)
 COPY --from=builder /root/.cache/huggingface /home/appuser/.cache/huggingface
 RUN chown -R appuser:appgroup /home/appuser/.cache/huggingface
+
+# Copy pre-downloaded YOLOv8n model into the app directory (appuser can read /app)
+COPY --from=builder /app/yolov8n.pt /app/yolov8n.pt
 
 # Copy entrypoint script (runs as root to fix volume permissions, then drops to appuser)
 COPY entrypoint.sh /entrypoint.sh
@@ -77,6 +83,7 @@ ENV DATA_PATH=/usr/share/espeak-ng-data
 ENV MPLCONFIGDIR=/home/appuser/.config/matplotlib
 ENV FONTCONFIG_PATH=/home/appuser/.cache/fontconfig
 ENV HF_HOME=/home/appuser/.cache/huggingface
+ENV YOLO_CONFIG_DIR=/home/appuser/.config/Ultralytics
 
 # Expose port
 EXPOSE 8090
