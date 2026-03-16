@@ -81,7 +81,7 @@ class TitleGenerator:
             
             response = generate_content(
                 prompt=prompt,
-                model=\"openrouter/auto\",
+                model="openrouter/auto",
                 temperature=0.9,
                 max_tokens=45
             )
@@ -159,7 +159,7 @@ class TitleGenerator:
             
             response = generate_content(
                 prompt=prompt,
-                model=\"openrouter/auto\",
+                model="openrouter/auto",
                 temperature=0.8,
             )
             
