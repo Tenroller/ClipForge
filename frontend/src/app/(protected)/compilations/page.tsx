@@ -74,10 +74,12 @@ export default function CompilationsPage() {
       const formData = new FormData();
       formData.append('file', file);
 
+      const csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
       const response = await fetch(`${API_BASE}/api/upload-video`, {
         method: 'POST',
         body: formData,
         credentials: 'include',
+        headers: csrfToken ? { 'X-CSRF-Token': decodeURIComponent(csrfToken) } : undefined,
       });
 
       if (!response.ok) {
