@@ -32,7 +32,8 @@ RUN python -m spacy download en_core_web_sm
 RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='a', repo_id='hexgrad/Kokoro-82M')"
 
 # YOLOv8 nano model - used by Compilation crop detection at runtime
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt')"
+# Download directly; importing ultralytics in the builder fails due to missing libGL.
+RUN python -c "import urllib.request; urllib.request.urlretrieve('https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n.pt', 'yolov8n.pt')"
 
 # Runtime stage
 FROM python:3.11-slim
