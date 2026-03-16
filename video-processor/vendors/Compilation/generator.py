@@ -511,10 +511,6 @@ class TikYouGenerator:
     def _create_compilation_worker(self, selected_clips, video_id, compilation_num, clip_usage):
         """Worker function for parallel compilation creation"""
         try:
-            # Periodic cleanup
-            if self.compilation_counter % self.cleanup_interval == 0:
-                self._cleanup_temp_files()
-            
             self.compilation_counter += 1
             
             # Create compilation
@@ -541,39 +537,7 @@ class TikYouGenerator:
                 'error': str(e),
                 'compilation_num': compilation_num
             }
-        """Worker function for parallel compilation creation"""
-        try:
-            # Periodic cleanup
-            if self.compilation_counter % self.cleanup_interval == 0:
-                self._cleanup_temp_files()
-            
-            self.compilation_counter += 1
-            
-            # Create compilation
-            base_output_path = os.path.join(self.output_dir, f"{video_id}_compilation_{compilation_num}")
-            variations_result = self.create_all_compilation_variations(
-                selected_clips, base_output_path, video_id, compilation_num
-            )
-            
-            # Update clip usage (thread-safe)
-            if variations_result['successful_count'] > 0:
-                for clip in selected_clips:
-                    clip_usage[clip['path']] += 1
-            
-            return {
-                'success': variations_result['successful_count'] > 0,
-                'variations_result': variations_result,
-                'compilation_num': compilation_num
-            }
-            
-        except Exception as e:
-            logger.error(f"Compilation worker {compilation_num} failed: {e}")
-            return {
-                'success': False,
-                'error': str(e),
-                'compilation_num': compilation_num
-            }
-    
+
     def _optimize_audio_processing(self, clip):
         """Optimize audio processing for better performance"""
         try:
@@ -2585,10 +2549,8 @@ class TikYouGenerator:
                 
                 compilation_num += 1
                 
-                # Periodic cleanup every 10 compilations
+                # Periodic memory cleanup every 10 compilations (temp files cleaned after generation)
                 if compilation_num % 10 == 0:
-                    print(f"🧹 Performing periodic cleanup...")
-                    self._cleanup_temp_files()
                     gc.collect()
                     if self.has_gpu:
                         torch.cuda.empty_cache()
