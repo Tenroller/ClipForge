@@ -43,11 +43,12 @@ WORKDIR /app
 # Copy the application code
 COPY . .
 
-# Create non-root user for security
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+# Create non-root user for security (with a real home dir)
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup --home /home/appuser appuser
 
 # Create necessary directories and set ownership for writable dirs
-RUN mkdir -p output temp logs && chown -R appuser:appgroup output temp logs
+RUN mkdir -p output temp logs /home/appuser/.config/matplotlib /home/appuser/.cache/fontconfig \
+    && chown -R appuser:appgroup output temp logs /home/appuser
 
 # Copy entrypoint script (runs as root to fix volume permissions, then drops to appuser)
 COPY entrypoint.sh /entrypoint.sh
@@ -58,6 +59,8 @@ ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV ESPEAK_PATH=/usr/bin/espeak-ng
 ENV DATA_PATH=/usr/share/espeak-ng-data
+ENV MPLCONFIGDIR=/home/appuser/.config/matplotlib
+ENV FONTCONFIG_PATH=/home/appuser/.cache/fontconfig
 
 # Expose port
 EXPOSE 8090
