@@ -27,7 +27,7 @@ services:
       POSTGRES_USER: videohelper_user
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-videohelper_password}
     ports:
-      - "5432:5432" # Expose for local debugging
+      - "5433:5432" # Expose for local debugging (5432 may be used by another project)
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
@@ -80,6 +80,7 @@ services:
       PEXELS_API_KEY: ${PEXELS_API_KEY}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
 
       # Authentication
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-local-dev-secret-key-change-in-production}
