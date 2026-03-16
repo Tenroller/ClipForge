@@ -28,8 +28,10 @@ logger = get_logger()
 class CacheManager:
     """Main cache manager for video processing operations"""
     
-    def __init__(self, cache_dir: str = "cache", max_size_mb: int = 1000,
+    def __init__(self, cache_dir: str = None, max_size_mb: int = 1000,
                  default_ttl_hours: int = 24):
+        if cache_dir is None:
+            cache_dir = os.path.join(os.getenv("TEMP_DIR", "/app/temp"), "cache")
         self.cache_dir = Path(cache_dir)
         self.max_size_mb = max_size_mb
         self.default_ttl_hours = default_ttl_hours

@@ -257,8 +257,7 @@ class TikTokVideoCreator:
         try:
             # Use absolute path to avoid working directory issues
             # Get the backend directory (parent of vendors)
-            backend_dir = Path(__file__).resolve().parent.parent.parent.parent
-            temp_vertical_dir = backend_dir / "temp_vertical"
+            temp_vertical_dir = Path(os.getenv("TEMP_DIR", "/app/temp")) / "temp_vertical"
             os.makedirs(temp_vertical_dir, exist_ok=True)
             
             video_name = os.path.splitext(os.path.basename(video_path))[0]
