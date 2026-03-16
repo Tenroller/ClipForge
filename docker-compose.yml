@@ -39,6 +39,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    labels:
+      caddy_0.request_body.max_size: 2G
     environment:
       # Database Configuration
       DATABASE_URL: postgresql://videohelper_user:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD env var is required}@postgres:5432/videohelper
