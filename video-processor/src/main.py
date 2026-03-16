@@ -56,9 +56,11 @@ if sys.platform == "win32":
 # Import the proper logging configuration
 sys.path.append(str(Path(__file__).parent.parent))
 from logging_config import setup_logging
+from loguru import logger as loguru_logger
 
 # Setup logging with Unicode support
-logger = setup_logging()
+setup_logging()
+logger = loguru_logger
 
 # Import our modules
 from .core.config import ProcessorConfig
