@@ -20,8 +20,16 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download spaCy model so it's baked into the image (avoids runtime pip install as non-root)
+# Pre-download models so they are baked into the image.
+# Running as root in the builder stage, so /root/.cache is writable.
+# These will be copied to the runtime stage via the venv copy, but HF hub
+# caches to /root/.cache/huggingface which we explicitly copy below.
+
+# spaCy model - misaki/Kokoro tries to pip-install this at runtime otherwise
 RUN python -m spacy download en_core_web_sm
+
+# Kokoro TTS model (hexgrad/Kokoro-82M) - downloads ~170MB to HF cache
+RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='a', repo_id='hexgrad/Kokoro-82M')"
 
 # Runtime stage
 FROM python:3.11-slim
@@ -40,6 +48,9 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
+# Copy pre-downloaded HuggingFace model cache from builder stage
+COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
+
 # Set working directory
 WORKDIR /app
 
@@ -50,8 +61,10 @@ COPY . .
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup --home /home/appuser appuser
 
 # Create necessary directories and set ownership for writable dirs
-RUN mkdir -p output temp logs /home/appuser/.config/matplotlib /home/appuser/.cache/fontconfig \
-    && chown -R appuser:appgroup output temp logs /home/appuser
+RUN mkdir -p output temp logs /home/appuser/.config/matplotlib /home/appuser/.cache/fontconfig /home/appuser/.cache/huggingface \
+    && chown -R appuser:appgroup output temp logs /home/appuser \
+    && cp -r /root/.cache/huggingface /home/appuser/.cache/huggingface \
+    && chown -R appuser:appgroup /home/appuser/.cache/huggingface
 
 # Copy entrypoint script (runs as root to fix volume permissions, then drops to appuser)
 COPY entrypoint.sh /entrypoint.sh
@@ -64,6 +77,7 @@ ENV ESPEAK_PATH=/usr/bin/espeak-ng
 ENV DATA_PATH=/usr/share/espeak-ng-data
 ENV MPLCONFIGDIR=/home/appuser/.config/matplotlib
 ENV FONTCONFIG_PATH=/home/appuser/.cache/fontconfig
+ENV HF_HOME=/home/appuser/.cache/huggingface
 
 # Expose port
 EXPOSE 8090
