@@ -3,12 +3,15 @@ FastAPI application lifespan management.
 """
 
 import asyncio
+import json
+import shutil
 import signal
 import sys
 import threading
 import time
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Dict, Any
 from collections import defaultdict
 
@@ -137,6 +140,43 @@ async def _job_expiration_loop():
         await asyncio.sleep(interval_seconds)
 
 
+def _cleanup_stale_chunk_dirs():
+    """Remove chunked-upload directories older than 24 hours."""
+    try:
+        try:
+            from ..utils.paths import get_temp_path
+        except ImportError:
+            from utils.paths import get_temp_path
+
+        chunks_root = get_temp_path("uploads") / "chunks"
+        if not chunks_root.exists():
+            return
+
+        cutoff = datetime.now(timezone.utc)
+        removed = 0
+        for entry in chunks_root.iterdir():
+            if not entry.is_dir():
+                continue
+            meta_path = entry / "_meta.json"
+            try:
+                if meta_path.exists():
+                    meta = json.loads(meta_path.read_text())
+                    created = datetime.fromisoformat(meta["created_at"])
+                    age_hours = (cutoff - created).total_seconds() / 3600
+                else:
+                    # No meta file — treat as stale
+                    age_hours = 25
+                if age_hours > 24:
+                    shutil.rmtree(entry, ignore_errors=True)
+                    removed += 1
+            except Exception as e:
+                logger.warning(f"Error checking chunk dir {entry.name}: {e}")
+        if removed:
+            logger.info(f"Cleaned up {removed} stale chunk upload directories")
+    except Exception as e:
+        logger.warning(f"Stale chunk cleanup failed: {e}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI lifespan context to manage background broadcaster task."""
@@ -180,6 +220,7 @@ async def lifespan(app: FastAPI):
 
         init_temp_manager()
         cleanup_temp_files_on_startup()
+        _cleanup_stale_chunk_dirs()
         # Note: streaming_processor is now handled by the video-processor service
         init_path_manager()
 

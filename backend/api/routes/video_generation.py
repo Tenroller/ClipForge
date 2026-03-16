@@ -2,13 +2,17 @@
 Video generation endpoints.
 """
 
+import json
+import shutil
 import uuid
 import time
+from datetime import datetime, timezone
 from typing import Dict, Any
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, File, UploadFile, Depends
+from fastapi import APIRouter, Form, HTTPException, File, UploadFile, Depends
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 from ...models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest
 from ...middleware.auth import get_current_user
@@ -24,6 +28,20 @@ logger = get_logger("video_generation")
 # Get database and orchestrator instances
 job_store = get_job_store()
 video_orchestrator = get_video_orchestrator()
+
+# Chunked upload constants
+CHUNK_SIZE_LIMIT = 80 * 1024 * 1024  # 80MB per chunk
+MAX_TOTAL_SIZE = 10 * 1024 * 1024 * 1024  # 10GB
+ALLOWED_EXTENSIONS = {'.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ogv'}
+
+
+class ChunkedUploadInitRequest(BaseModel):
+    filename: str
+    total_size: int
+
+
+class ChunkedUploadFinalizeRequest(BaseModel):
+    upload_id: str
 
 
 @router.get(
@@ -224,6 +242,190 @@ async def upload_video_file(file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Unexpected error during file upload: {e}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@router.post("/upload-video/init", summary="Initialize Chunked Upload")
+async def upload_video_init(req: ChunkedUploadInitRequest):
+    """Initialize a chunked upload session for large files."""
+    # Validate extension
+    ext = Path(req.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type. Supported formats: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+        )
+
+    # Validate total size
+    if req.total_size <= 0:
+        raise HTTPException(status_code=400, detail="total_size must be positive")
+    if req.total_size > MAX_TOTAL_SIZE:
+        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10GB")
+
+    upload_id = str(uuid.uuid4())
+    total_chunks = -(-req.total_size // CHUNK_SIZE_LIMIT)  # ceiling division
+
+    chunk_dir = get_temp_path("uploads") / "chunks" / upload_id
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+
+    meta = {
+        "upload_id": upload_id,
+        "filename": req.filename,
+        "total_size": req.total_size,
+        "total_chunks": total_chunks,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "received_chunks": [],
+    }
+    (chunk_dir / "_meta.json").write_text(json.dumps(meta))
+
+    logger.info(f"Chunked upload initialized: {upload_id} ({req.filename}, {req.total_size} bytes, {total_chunks} chunks)")
+
+    return {"upload_id": upload_id, "total_chunks": total_chunks}
+
+
+@router.post("/upload-video/chunk", summary="Upload a Chunk")
+async def upload_video_chunk(
+    upload_id: str = Form(...),
+    chunk_index: int = Form(...),
+    chunk: UploadFile = File(...),
+):
+    """Upload a single chunk of a large file."""
+    # Validate upload_id is a UUID to prevent path traversal
+    try:
+        uuid.UUID(upload_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid upload_id")
+
+    chunk_dir = get_temp_path("uploads") / "chunks" / upload_id
+    meta_path = chunk_dir / "_meta.json"
+
+    if not meta_path.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    meta = json.loads(meta_path.read_text())
+
+    if chunk_index < 0 or chunk_index >= meta["total_chunks"]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"chunk_index must be between 0 and {meta['total_chunks'] - 1}",
+        )
+
+    # Stream chunk to disk
+    part_path = chunk_dir / f"{chunk_index:06d}.part"
+    buf_size = 1024 * 1024  # 1MB buffer
+    written = 0
+    try:
+        with open(part_path, "wb") as f:
+            while True:
+                data = await chunk.read(buf_size)
+                if not data:
+                    break
+                written += len(data)
+                if written > CHUNK_SIZE_LIMIT:
+                    f.close()
+                    part_path.unlink(missing_ok=True)
+                    raise HTTPException(status_code=400, detail="Chunk exceeds 80MB limit")
+                f.write(data)
+    except HTTPException:
+        raise
+    except Exception as e:
+        part_path.unlink(missing_ok=True)
+        logger.error(f"Failed to write chunk {chunk_index} for upload {upload_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to write chunk")
+
+    # Update metadata (idempotent: overwrite duplicate index)
+    received = set(meta["received_chunks"])
+    received.add(chunk_index)
+    meta["received_chunks"] = sorted(received)
+    meta_path.write_text(json.dumps(meta))
+
+    logger.debug(f"Chunk {chunk_index}/{meta['total_chunks']} received for upload {upload_id} ({written} bytes)")
+
+    return {
+        "received": chunk_index,
+        "chunks_so_far": len(meta["received_chunks"]),
+        "total_chunks": meta["total_chunks"],
+    }
+
+
+@router.post("/upload-video/finalize", summary="Finalize Chunked Upload")
+async def upload_video_finalize(req: ChunkedUploadFinalizeRequest):
+    """Concatenate all chunks and produce the final uploaded file."""
+    # Validate upload_id is a UUID to prevent path traversal
+    try:
+        uuid.UUID(req.upload_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid upload_id")
+
+    chunk_dir = get_temp_path("uploads") / "chunks" / req.upload_id
+    meta_path = chunk_dir / "_meta.json"
+
+    if not meta_path.exists():
+        raise HTTPException(status_code=404, detail="Upload session not found")
+
+    meta = json.loads(meta_path.read_text())
+
+    # Discover which .part files actually exist on disk (avoids _meta.json race condition)
+    expected = set(range(meta["total_chunks"]))
+    received = {
+        int(p.stem)
+        for p in chunk_dir.glob("*.part")
+        if p.stem.isdigit()
+    }
+    missing = expected - received
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing chunks: {sorted(missing)}",
+        )
+
+    # Build final file
+    uploads_dir = get_temp_path("uploads")
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    file_id = str(uuid.uuid4())
+    ext = Path(meta["filename"]).suffix.lower()
+    filename = f"{file_id}{ext}"
+    final_path = uploads_dir / filename
+
+    total_written = 0
+    buf_size = 1024 * 1024  # 1MB buffer
+    try:
+        with open(final_path, "wb") as out:
+            for idx in range(meta["total_chunks"]):
+                part_path = chunk_dir / f"{idx:06d}.part"
+                with open(part_path, "rb") as part:
+                    while True:
+                        data = part.read(buf_size)
+                        if not data:
+                            break
+                        out.write(data)
+                        total_written += len(data)
+    except Exception as e:
+        final_path.unlink(missing_ok=True)
+        logger.error(f"Failed to assemble chunks for upload {req.upload_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to assemble file from chunks")
+
+    # Validate assembled size
+    if total_written != meta["total_size"]:
+        final_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Size mismatch: expected {meta['total_size']} bytes, got {total_written}",
+        )
+
+    # Clean up chunk directory
+    shutil.rmtree(chunk_dir, ignore_errors=True)
+
+    logger.info(f"Chunked upload finalized: {filename} ({total_written} bytes)")
+
+    return {
+        "success": True,
+        "file_id": file_id,
+        "filename": filename,
+        "file_path": str(final_path),
+        "size_bytes": total_written,
+        "original_filename": meta["filename"],
+    }
 
 
 @router.post("/brainrot/generate", summary="Generate Brainrot Compilation")

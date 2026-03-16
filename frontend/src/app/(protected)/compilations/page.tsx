@@ -36,6 +36,7 @@ export default function CompilationsPage() {
   const [uploadedFileId, setUploadedFileId] = useState<string | null>(null);
   const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [completedJob, setCompletedJob] = useState<JobRecord | null>(null);
@@ -62,6 +63,19 @@ export default function CompilationsPage() {
     }
   }, [currentJob, toast, t]);
 
+  // Helper: get CSRF token
+  const getCsrfToken = async (): Promise<string | undefined> => {
+    let csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
+    if (csrfToken) return decodeURIComponent(csrfToken);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
+      if (res.ok) return (await res.json()).csrf_token;
+    } catch { /* best-effort */ }
+    return undefined;
+  };
+
+  const CHUNK_SIZE = 80 * 1024 * 1024; // 80MB
+
   // File upload function
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -69,33 +83,106 @@ export default function CompilationsPage() {
 
     setIsUploading(true);
     setUploadedFile(file);
+    setUploadProgress(0);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      const csrfToken = await getCsrfToken();
+      const headers: Record<string, string> = {};
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
 
-      // Same-origin: read from cookie. Cross-origin (prod): fetch from API endpoint.
-      let csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
-      if (csrfToken) {
-        csrfToken = decodeURIComponent(csrfToken);
+      let data: { file_id: string; file_path: string; [key: string]: unknown };
+
+      if (file.size <= CHUNK_SIZE) {
+        // --- Small file: single upload (unchanged) ---
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE}/api/upload-video`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+        });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => null);
+          throw new Error(errBody?.detail || `Upload failed: ${response.statusText}`);
+        }
+
+        setUploadProgress(100);
+        data = await response.json();
       } else {
-        try {
-          const csrfRes = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
-          if (csrfRes.ok) csrfToken = (await csrfRes.json()).csrf_token;
-        } catch { /* best-effort */ }
-      }
-      const response = await fetch(`${API_BASE}/api/upload-video`, {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-        headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
-      });
+        // --- Large file: chunked upload ---
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.statusText}`);
+        // 1. Init
+        const initRes = await fetch(`${API_BASE}/api/upload-video/init`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, total_size: file.size }),
+        });
+        if (!initRes.ok) {
+          const errBody = await initRes.json().catch(() => null);
+          throw new Error(errBody?.detail || `Init failed: ${initRes.statusText}`);
+        }
+        const { upload_id } = await initRes.json();
+
+        // 2. Upload chunks with retry
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const blob = file.slice(start, end);
+
+          let success = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const chunkForm = new FormData();
+              chunkForm.append('upload_id', upload_id);
+              chunkForm.append('chunk_index', String(i));
+              chunkForm.append('chunk', blob, file.name);
+
+              const chunkRes = await fetch(`${API_BASE}/api/upload-video/chunk`, {
+                method: 'POST',
+                body: chunkForm,
+                credentials: 'include',
+                headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+              });
+
+              if (!chunkRes.ok) {
+                const errBody = await chunkRes.json().catch(() => null);
+                throw new Error(errBody?.detail || `Chunk ${i} failed: ${chunkRes.statusText}`);
+              }
+
+              success = true;
+              break;
+            } catch (err) {
+              if (attempt === 2) throw err;
+              // Exponential backoff: 1s, 2s
+              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            }
+          }
+
+          if (!success) throw new Error(`Failed to upload chunk ${i} after 3 attempts`);
+          setUploadProgress(Math.round(((i + 1) / totalChunks) * 95)); // reserve 5% for finalize
+        }
+
+        // 3. Finalize
+        const finalRes = await fetch(`${API_BASE}/api/upload-video/finalize`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ upload_id }),
+        });
+        if (!finalRes.ok) {
+          const errBody = await finalRes.json().catch(() => null);
+          throw new Error(errBody?.detail || `Finalize failed: ${finalRes.statusText}`);
+        }
+
+        setUploadProgress(100);
+        data = await finalRes.json();
       }
 
-      const data = await response.json();
       setUploadedFileId(data.file_id);
       setUploadedFilePath(data.file_path);
       toast({
@@ -110,6 +197,7 @@ export default function CompilationsPage() {
       setUploadedFile(null);
       setUploadedFileId(null);
       setUploadedFilePath(null);
+      setUploadProgress(0);
     } finally {
       setIsUploading(false);
     }
@@ -272,7 +360,20 @@ export default function CompilationsPage() {
                             )}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            {isUploading ? t('uploading') : t('uploadVideoDescription')}
+                            {isUploading ? (
+                              <div className="space-y-2 w-full max-w-xs mx-auto">
+                                <div className="flex justify-between text-xs">
+                                  <span>{t('uploading')}</span>
+                                  <span className="font-mono">{uploadProgress}%</span>
+                                </div>
+                                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+                                    style={{ width: `${uploadProgress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : t('uploadVideoDescription')}
                           </div>
                         </Label>
                       </div>
