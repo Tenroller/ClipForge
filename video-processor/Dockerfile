@@ -20,6 +20,9 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download spaCy model so it's baked into the image (avoids runtime pip install as non-root)
+RUN python -m spacy download en_core_web_sm
+
 # Runtime stage
 FROM python:3.11-slim
 
