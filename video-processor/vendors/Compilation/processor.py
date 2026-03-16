@@ -589,11 +589,14 @@ class CatVideoProcessor:
             right_boundaries.append(width - right_boundary - 1)
         
         cap.release()
-        
+
+        if len(left_boundaries) == 0 or len(right_boundaries) == 0:
+            return 0, 0
+
         # Use median values for more robustness
         left_crop = int(np.median(left_boundaries))
         right_crop = int(np.median(right_boundaries))
-        
+
         return left_crop, right_crop
 
     def detect_symmetric_pillarboxes(self, video_path, sample_frames=10):

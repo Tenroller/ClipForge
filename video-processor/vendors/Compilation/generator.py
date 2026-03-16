@@ -1391,8 +1391,10 @@ class TikYouGenerator:
                 ])
                 print(f"🎬 Converting {video_name}: CPU x264, crf=20, bitrate={bitrate}")
 
+            unique_audio_temp = os.path.join(tempfile.gettempdir(), f"temp-audio-{uuid.uuid4().hex}.m4a")
+            encoding_params['temp_audiofile'] = unique_audio_temp
             final_clip.write_videofile(output_path, **encoding_params)
-            
+
             video_clip.close()
             final_clip.close()
 

@@ -25,7 +25,11 @@ except ImportError:
 # Face detection with MediaPipe
 try:
     import mediapipe as mp
-    HAS_MEDIAPIPE = True
+    if hasattr(mp, 'solutions'):
+        HAS_MEDIAPIPE = True
+    else:
+        HAS_MEDIAPIPE = False
+        print("⚠️  mediapipe installed but missing 'solutions' module - using OpenCV face detection fallback")
 except ImportError:
     HAS_MEDIAPIPE = False
     print("⚠️  mediapipe not available - using OpenCV face detection fallback")
