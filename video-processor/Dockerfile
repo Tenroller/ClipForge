@@ -48,9 +48,6 @@ RUN apt-get update && apt-get install -y \
 COPY --from=builder /opt/venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy pre-downloaded HuggingFace model cache from builder stage
-COPY --from=builder /root/.cache/huggingface /root/.cache/huggingface
-
 # Set working directory
 WORKDIR /app
 
@@ -61,10 +58,12 @@ COPY . .
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup --home /home/appuser appuser
 
 # Create necessary directories and set ownership for writable dirs
-RUN mkdir -p output temp logs /home/appuser/.config/matplotlib /home/appuser/.cache/fontconfig /home/appuser/.cache/huggingface \
-    && chown -R appuser:appgroup output temp logs /home/appuser \
-    && cp -r /root/.cache/huggingface /home/appuser/.cache/huggingface \
-    && chown -R appuser:appgroup /home/appuser/.cache/huggingface
+RUN mkdir -p output temp logs /home/appuser/.config/matplotlib /home/appuser/.cache/fontconfig \
+    && chown -R appuser:appgroup output temp logs /home/appuser
+
+# Copy pre-downloaded HuggingFace model cache directly into appuser home (single layer, no duplication)
+COPY --from=builder /root/.cache/huggingface /home/appuser/.cache/huggingface
+RUN chown -R appuser:appgroup /home/appuser/.cache/huggingface
 
 # Copy entrypoint script (runs as root to fix volume permissions, then drops to appuser)
 COPY entrypoint.sh /entrypoint.sh
