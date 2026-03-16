@@ -165,46 +165,57 @@ async def upload_video_file(file: UploadFile = File(...)):
         # Validate file type
         if not file.filename or not file.filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv', '.webm', '.m4v', '.3gp', '.ogv')):
             raise HTTPException(status_code=400, detail="Invalid file type. Supported formats: MP4, AVI, MOV, MKV, WMV, FLV, WebM, M4V, 3GP, OGV")
-        
-        # Validate file size (max 10GB)
-        max_size = 10 * 1024 * 1024 * 1024  # 10GB
-        content = await file.read()
-        if len(content) > max_size:
-            raise HTTPException(status_code=400, detail="File too large. Maximum size is 10GB")
-        
-        if len(content) == 0:
-            raise HTTPException(status_code=400, detail="Empty file uploaded")
-        
+
         # Create uploads directory in shared temp space
         uploads_dir = get_temp_path("uploads")
         uploads_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Generate unique filename
         file_id = str(uuid.uuid4())
         file_extension = Path(file.filename).suffix
         filename = f"{file_id}{file_extension}"
         file_path = uploads_dir / filename
-        
-        # Save file
+
+        # Stream file to disk in chunks to avoid loading entire file into memory
+        max_size = 10 * 1024 * 1024 * 1024  # 10GB
+        chunk_size = 1024 * 1024  # 1MB chunks
+        total_written = 0
+
         try:
             with open(file_path, "wb") as buffer:
-                buffer.write(content)
+                while True:
+                    chunk = await file.read(chunk_size)
+                    if not chunk:
+                        break
+                    total_written += len(chunk)
+                    if total_written > max_size:
+                        buffer.close()
+                        file_path.unlink(missing_ok=True)
+                        raise HTTPException(status_code=400, detail="File too large. Maximum size is 10GB")
+                    buffer.write(chunk)
+        except HTTPException:
+            raise
         except Exception as e:
+            file_path.unlink(missing_ok=True)
             logger.error(f"Failed to save uploaded file: {e}")
             raise HTTPException(status_code=500, detail="Failed to save uploaded file")
-        
+
+        if total_written == 0:
+            file_path.unlink(missing_ok=True)
+            raise HTTPException(status_code=400, detail="Empty file uploaded")
+
         # Verify file was saved correctly
-        if not file_path.exists() or file_path.stat().st_size != len(content):
+        if not file_path.exists() or file_path.stat().st_size != total_written:
             raise HTTPException(status_code=500, detail="File upload verification failed")
-        
-        logger.info(f"Video file uploaded successfully: {filename} ({len(content)} bytes)")
-        
+
+        logger.info(f"Video file uploaded successfully: {filename} ({total_written} bytes)")
+
         return {
             "success": True,
             "file_id": file_id,
             "filename": filename,
             "file_path": str(file_path),
-            "size_bytes": len(content),
+            "size_bytes": total_written,
             "original_filename": file.filename
         }
         
