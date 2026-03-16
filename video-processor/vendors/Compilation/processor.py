@@ -1160,7 +1160,8 @@ class CatVideoProcessor:
             return video_path
 
         debug_dir = "debug_frames"
-        Path(debug_dir).mkdir(exist_ok=True)
+        if self.crop_debug_frames:
+            Path(debug_dir).mkdir(exist_ok=True)
         video_id = Path(video_path).stem
         video_info = self.get_video_info(video_path)
         if not video_info:
