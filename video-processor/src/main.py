@@ -183,11 +183,6 @@ async def lifespan(app: FastAPI):
         # Start processing
         asyncio.create_task(job_queue.start_processing())
 
-        # Initialize temp file manager with protected files from active jobs
-        from utils.file_management import init_temp_manager, get_temp_manager
-        init_temp_manager()
-        get_temp_manager().set_protected_files_fn(job_queue.get_active_job_files)
-
         logger.info(f"Video Processing API started successfully on {config.host}:{config.port}")
         
         yield
