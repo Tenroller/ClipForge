@@ -129,27 +129,6 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Info Footer */}
-          <div className="mt-8 pt-6 border-t">
-            <div className="bg-muted rounded-lg p-4 border">
-              <p className="text-xs text-center text-muted-foreground font-medium mb-2">
-                {t('defaultCredentials')}
-              </p>
-              <p className="text-sm text-center font-mono bg-background rounded-md p-2 border">
-                admin / tenroller
-              </p>
-              <p className="text-xs text-center text-muted-foreground mt-3 leading-relaxed">
-                {t('credentialsInfo')}
-              </p>
-            </div>
-          </div>
-
-          {/* Additional Info */}
-          <div className="mt-6 text-center">
-            <p className="text-xs text-muted-foreground">
-              {t('termsAgreement')}
-            </p>
-          </div>
         </div>
       </div>
     </div>
