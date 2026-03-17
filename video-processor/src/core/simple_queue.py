@@ -662,6 +662,23 @@ class ProcessorJobQueue:
             logger.error(f"Failed to cleanup old jobs: {e}")
             return 0
     
+    def get_active_job_files(self) -> set:
+        """Return the set of file paths currently in use by active or queued jobs."""
+        protected = set()
+        # Check active (running) jobs
+        for job in self.active_jobs.values():
+            path = job.request_data.get("uploadedVideoPath")
+            if path:
+                protected.add(str(path))
+        # Check queued jobs
+        for job_id in self.queue:
+            job = self.jobs.get(job_id)
+            if job:
+                path = job.request_data.get("uploadedVideoPath")
+                if path:
+                    protected.add(str(path))
+        return protected
+
     def get_stats(self) -> Dict[str, Any]:
         """Get queue statistics."""
         status_counts = {}

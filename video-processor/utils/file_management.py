@@ -25,6 +25,7 @@ class TempFileManager:
         self.retention_policies: Dict[str, Dict] = {}
         self.cleanup_thread: Optional[threading.Thread] = None
         self.running = False
+        self._protected_files_fn: Optional[Callable[[], set]] = None
 
         # Register cleanup on exit
         atexit.register(self.cleanup_all)
@@ -46,6 +47,21 @@ class TempFileManager:
         # Ensure directory exists
         path.mkdir(parents=True, exist_ok=True)
         logger.info(f"Registered temp directory: {name} -> {path}")
+
+    def set_protected_files_fn(self, fn: Callable[[], set]):
+        """Register a callback that returns file paths currently in use by active jobs."""
+        self._protected_files_fn = fn
+
+    def _is_file_protected(self, file_path: Path) -> bool:
+        """Check if a file is protected by an active job."""
+        if not self._protected_files_fn:
+            return False
+        try:
+            protected = self._protected_files_fn()
+            return str(file_path.resolve()) in protected or str(file_path) in protected
+        except Exception as e:
+            logger.warning(f"Error checking file protection: {e}")
+            return False
 
     def create_temp_file(self, prefix: str = "tmp", suffix: str = "", dir_name: str = "default") -> Path:
         """Create a temporary file with automatic cleanup tracking."""
@@ -103,6 +119,9 @@ class TempFileManager:
 
                     # Remove if older than retention period
                     if file_age < cutoff_time:
+                        if self._is_file_protected(file_path):
+                            logger.debug(f"Skipping protected file: {file_path}")
+                            continue
                         space_freed += stat.st_size
                         file_path.unlink()
                         files_removed += 1
@@ -129,6 +148,9 @@ class TempFileManager:
 
                     try:
                         stat = file_path.stat()
+                        if self._is_file_protected(file_path):
+                            logger.debug(f"Skipping protected file (size cleanup): {file_path}")
+                            continue
                         space_freed += stat.st_size
                         dir_size_mb -= (stat.st_size / (1024 * 1024))
                         file_path.unlink()
