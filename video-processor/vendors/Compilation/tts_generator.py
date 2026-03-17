@@ -210,7 +210,19 @@ class TTSGenerator:
         """
         if openrouter_generate_content is None:
             print("⚠️ OpenRouter client not available, using fallback")
-            return self._get_fallback_intro()
+            fallback_messages = [
+                "Cat videos of the day!",
+                "Daily dose of cats!",
+                "Your feline fix is here!",
+                "Purrfect moments ahead!",
+                "Get ready for some cat magic!",
+                "Cute cats incoming!",
+                "Time for your cat therapy!",
+                "Cuteness overload alert!",
+            ]
+            message = random.choice(fallback_messages)
+            print(f"🎙️ Using fallback intro: '{message}'")
+            return message
             
         try:
             # Much more specific and clear prompt to get just ONE clean phrase
