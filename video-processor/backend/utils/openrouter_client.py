@@ -1,8 +1,8 @@
 """
 OpenRouter client wrapper for video-processor AI text generation.
 
-Provides get_client, generate_content, generate_structured_response, and
-generate_with_images using the openrouter Python SDK (v0.7+).
+Provides get_client, generate_content, and generate_structured_response
+using the openrouter Python SDK (v0.7+).
 """
 
 import os
@@ -145,73 +145,4 @@ def generate_structured_response(
 
     raise RuntimeError(
         f"generate_structured_response failed after {MAX_RETRIES} attempts: {last_error}"
-    )
-
-
-def generate_with_images(
-    prompt: str,
-    images: List[str],
-    model: str = DEFAULT_MODEL,
-    response_schema: Optional[Type[BaseModel]] = None,
-) -> str:
-    """Generate a response from prompt and images (vision).
-
-    Args:
-        prompt: The text prompt describing the task.
-        images: List of base64-encoded image data URIs
-                (e.g. 'data:image/jpeg;base64,...').
-        model: Vision-capable OpenRouter model identifier.
-        response_schema: Optional Pydantic model for structured JSON output.
-
-    Returns:
-        The response text (JSON string if response_schema is provided).
-
-    Raises:
-        RuntimeError: If all retry attempts fail.
-    """
-    client = get_client()
-
-    # Build multimodal content parts
-    content_parts: List[Dict[str, Any]] = []
-    for img in images:
-        content_parts.append({
-            "type": "image_url",
-            "image_url": {"url": img},
-        })
-    content_parts.append({"type": "text", "text": prompt})
-
-    kwargs: Dict[str, Any] = {
-        "model": model,
-        "messages": [{"role": "user", "content": content_parts}],
-        "stream": False,
-    }
-
-    if response_schema:
-        json_schema = response_schema.model_json_schema()
-        kwargs["response_format"] = components.ResponseFormatJSONSchema(
-            type="json_schema",
-            json_schema=components.JSONSchemaConfig(
-                name=response_schema.__name__,
-                schema=json_schema,
-            ),
-        )
-
-    last_error = None
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            response = client.chat.send(**kwargs)
-            content = response.choices[0].message.content
-            if not content:
-                raise RuntimeError("Empty response from OpenRouter Vision API")
-            return content
-        except Exception as e:
-            last_error = e
-            logger.warning(
-                f"generate_with_images attempt {attempt}/{MAX_RETRIES} failed: {e}"
-            )
-            if attempt < MAX_RETRIES:
-                time.sleep(RETRY_BACKOFF * attempt)
-
-    raise RuntimeError(
-        f"generate_with_images failed after {MAX_RETRIES} attempts: {last_error}"
     )

@@ -39,14 +39,12 @@ try:
         get_client as _get_openrouter_client,
         generate_content as openrouter_generate_content,
         generate_structured_response as openrouter_structured_response,
-        generate_with_images as openrouter_generate_with_images,
     )
 except ImportError as e:
     logger.warning(f"Could not import openrouter_client: {e}")
     _get_openrouter_client = None
     openrouter_generate_content = None
     openrouter_structured_response = None
-    openrouter_generate_with_images = None
 
 def _get_client():
     """Get or create the OpenRouter client."""
@@ -515,124 +513,4 @@ def generate_metadata(video_subject: str, script: str, ai_model: str) -> Tuple[s
     keywords = get_search_terms(video_subject, 6, script, ai_model)
 
     return title, description, keywords
-
-
-# Pydantic model for frame selection response
-class ThumbnailFrameSelection(BaseModel):
-    """Schema for AI-selected best thumbnail frame."""
-    selected_frame_index: int = Field(description="Index of the best frame for thumbnail (0-based)")
-    reasoning: str = Field(description="Brief explanation of why this frame was selected")
-    engagement_score: int = Field(description="Estimated engagement potential (0-100)")
-
-
-def select_best_thumbnail_frame(
-    frame_images: List[str],
-    viral_context: Dict[str, Any],
-    ai_model: str = "openrouter/free"
-) -> Dict[str, Any]:
-    """
-    Use OpenRouter Vision API to select the best frame for a viral thumbnail.
-
-    Analyzes multiple candidate frames and selects the one with highest viral potential.
-    Considers facial expressions, composition, clarity, and engagement factors.
-
-    Args:
-        frame_images: List of base64-encoded image data URIs (e.g., "data:image/jpeg;base64,...")
-        viral_context: Context about the clip (title, hook, tags, etc.)
-        ai_model: Vision-capable model to use
-
-    Returns:
-        Dictionary with selected_frame_index, reasoning, and engagement_score
-
-    Raises:
-        RuntimeError: If API call fails
-    """
-    # Convert old model names to OpenRouter format
-    model_name = ai_model
-    if '/' not in model_name:
-        model_name = 'openrouter/free'
-    
-    try:
-        logger.info("openrouter.select_best_thumbnail_frame: start", extra={
-            "ai_model": model_name,
-            "frame_count": len(frame_images)
-        })
-
-        if openrouter_generate_with_images is None:
-            raise RuntimeError("OpenRouter client not initialized. Check OPENROUTER_API_KEY.")
-
-        # Build prompt with viral context
-        title = viral_context.get('title', 'Viral Moment')
-        hook = viral_context.get('hook', '')
-        thumbnail_text = viral_context.get('thumbnail_text', '')
-
-        prompt = f"""You are an expert at viral social media content optimization.
-
-Analyze these {len(frame_images)} thumbnail candidate frames and select the ONE with the highest viral potential for a short-form video clip.
-
-**Clip Context:**
-- Title: {title}
-- Hook: {hook}
-- Thumbnail Text: {thumbnail_text}
-
-**Selection Criteria (in priority order):**
-1. **Facial Expression** - Look for expressive faces showing emotion (surprise, excitement, focus, intensity)
-2. **Visual Clarity** - Sharp, well-lit, high-contrast frames
-3. **Composition** - Centered subject, clear focal point, engaging framing
-4. **Authenticity** - Natural moment that looks genuine (not mid-blink or awkward)
-5. **Stop-Scroll Factor** - Would this make someone stop scrolling?
-
-**Instructions:**
-- Analyze all {len(frame_images)} frames carefully
-- Consider which frame pairs best with the thumbnail text overlay
-- Prefer frames with dynamic facial expressions or gestures
-- Avoid frames where the person is mid-word (open mouth, weird expression)
-- Select the frame with maximum viral/engagement potential
-
-Return your selection as JSON with these fields:
-- selected_frame_index (int): Index of the best frame (0-based)
-- reasoning (str): Brief explanation of why this frame was selected
-- engagement_score (int): Estimated engagement potential (0-100)"""
-
-        # Save debug prompt if enabled (without base64 image data for readability)
-        _save_debug_prompt(prompt, "select_best_thumbnail_frame", {
-            "ai_model": model_name,
-            "frame_count": len(frame_images),
-            "viral_context": viral_context,
-            "note": "Image data excluded from debug save for readability"
-        })
-
-        # Use OpenRouter vision API with structured output
-        response_text = openrouter_generate_with_images(
-            prompt=prompt,
-            images=frame_images,
-            model=model_name,
-            response_schema=ThumbnailFrameSelection,
-        )
-
-        if not response_text:
-            raise RuntimeError("Empty response from OpenRouter Vision API")
-
-        # Parse and validate
-        selection_data = ThumbnailFrameSelection.model_validate_json(response_text)
-
-        logger.info("openrouter.select_best_thumbnail_frame: success", extra={
-            "ai_model": model_name,
-            "selected_index": selection_data.selected_frame_index,
-            "engagement_score": selection_data.engagement_score
-        })
-
-        return selection_data.model_dump()
-
-    except Exception as e:
-        logger.error("openrouter.select_best_thumbnail_frame: error", exc_info=True, extra={
-            "ai_model": model_name
-        })
-        print(colored(f"[-] OpenRouter Vision Error: {e}", "red"))
-        # Fallback: return first frame
-        return {
-            "selected_frame_index": 0,
-            "reasoning": "Fallback to first frame due to API error",
-            "engagement_score": 50
-        }
 
