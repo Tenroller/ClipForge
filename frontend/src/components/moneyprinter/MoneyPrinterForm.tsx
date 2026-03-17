@@ -205,7 +205,7 @@ export default function MoneyPrinterForm({
                         try {
                           setVoiceLoading(true)
                           try { audioRef.current?.pause() } catch { }
-                          const sampleUrl = `${API_BASE}/api/voice-sample?voice=${encodeURIComponent(voice)}&t=${Date.now()}`
+                          const sampleUrl = `/api/voice-sample?voice=${encodeURIComponent(voice)}&t=${Date.now()}`
                           const audio = new Audio(sampleUrl)
                           audioRef.current = audio
                           audio.onended = () => { setVoiceLoading(false) }

@@ -9,6 +9,10 @@ const protectedRoutes = [
   '/activity',
   '/cleanup',
   '/job',
+  '/podcastclips',
+  '/dashboard',
+  '/settings',
+  '/projects',
 ];
 
 // Public routes that don't require authentication

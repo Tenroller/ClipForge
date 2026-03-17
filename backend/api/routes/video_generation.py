@@ -6,15 +6,16 @@ import json
 import shutil
 import uuid
 import time
+import os
 from datetime import datetime, timezone
 from typing import Dict, Any
 from pathlib import Path
 
-from fastapi import APIRouter, Form, HTTPException, File, UploadFile, Depends
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Form, HTTPException, File, UploadFile, Depends, Query
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
-from ...models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest
+from ...models.requests import MoneyPrinterRequest, BrainrotRequest, PodcastClipsRequest, SuggestSubjectRequest
 from ...middleware.auth import get_current_user
 from ...logging_config import get_logger, log_job_event
 from ...database import get_job_store
@@ -653,3 +654,80 @@ async def list_voices() -> Dict[str, list]:
         logger.error(f"Failed to list voices from video-processor: {e}")
         # Fallback to default voices
         return {"voices": fallback_voices}
+
+
+@router.post("/AIvideos/suggest-subject", summary="Suggest a Video Subject")
+async def suggest_subject(
+    req: SuggestSubjectRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Use AI to suggest a creative video subject."""
+    try:
+        import httpx
+
+        api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="OpenRouter API key not configured")
+
+        prompt = (
+            "Generate ONE creative, trending short-form video topic idea. "
+            "It should be engaging, suitable for a 30-60 second vertical video, and appeal to a wide audience. "
+            "Return ONLY the topic as a single short sentence (max 10 words). No explanation, no quotes."
+        )
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": req.aiModel or "google/gemini-2.0-flash-001",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 50,
+                    "temperature": 1.0,
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+        subject = data["choices"][0]["message"]["content"].strip().strip('"\'')
+        return {"subject": subject}
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"OpenRouter API error: {e.response.status_code}")
+        raise HTTPException(status_code=502, detail="AI service returned an error")
+    except Exception as e:
+        logger.error(f"Failed to suggest subject: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate subject suggestion")
+
+
+@router.get("/voice-sample", summary="Preview TTS Voice Sample")
+async def get_voice_sample(
+    voice: str = Query(..., description="Voice name to preview"),
+):
+    """Proxy a voice sample request to the video-processor TTS engine."""
+    try:
+        import httpx
+
+        processor_url = os.environ.get("VIDEO_PROCESSOR_URLS", "http://localhost:8090").split(",")[0].rstrip("/")
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(
+                f"{processor_url}/api/v1/voice-sample",
+                params={"voice": voice},
+            )
+            resp.raise_for_status()
+
+        return Response(
+            content=resp.content,
+            media_type=resp.headers.get("content-type", "audio/wav"),
+        )
+
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Processor voice-sample error: {e.response.status_code}")
+        raise HTTPException(status_code=e.response.status_code, detail="Voice sample generation failed")
+    except Exception as e:
+        logger.error(f"Failed to get voice sample for '{voice}': {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate voice sample")

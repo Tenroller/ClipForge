@@ -251,6 +251,53 @@ async def get_available_voices():
     return {"voices": voices}
 
 
+@router.get("/voice-sample")
+async def get_voice_sample(
+    voice: Annotated[str, Query(..., description="Voice name to generate sample for")],
+):
+    """Generate a short TTS audio sample for a given voice and return WAV bytes."""
+    import tempfile
+    import os
+
+    # Validate voice name (alphanumeric, underscores, hyphens only)
+    if not voice or not all(c.isalnum() or c in ('_', '-') for c in voice):
+        raise HTTPException(status_code=400, detail="Invalid voice name")
+
+    try:
+        from vendors.Compilation.tts_generator import TTSGenerator
+
+        generator = TTSGenerator(api_key=os.environ.get("OPENROUTER_API_KEY", ""))
+        sample_text = "Hello! This is a voice sample preview for ClipForge."
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = tmp.name
+
+        try:
+            audio_path = generator.text_to_speech(
+                text=sample_text,
+                voice=voice,
+                output_path=tmp_path,
+            )
+            if not audio_path or not os.path.isfile(audio_path):
+                raise HTTPException(status_code=500, detail="TTS generation returned no audio")
+
+            audio_bytes = open(audio_path, "rb").read()
+            return Response(content=audio_bytes, media_type="audio/wav")
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    except ImportError:
+        raise HTTPException(status_code=501, detail="TTS engine not available")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Voice sample generation failed for '{voice}': {e}")
+        raise HTTPException(status_code=500, detail=f"Voice sample generation failed: {e}")
+
+
 @router.post("/thumbnail")
 async def generate_thumbnail(
     video_path: Annotated[str, Query(..., description="Path to the video file")],

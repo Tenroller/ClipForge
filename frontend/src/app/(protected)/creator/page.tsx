@@ -123,41 +123,40 @@ export default function CreatorPage() {
 
     // Build the payload with all form fields
     const payload: any = {
-      video_subject: videoSubject,
-      ai_model: String(form.get('aiModel') || aiModel),
+      videoSubject: videoSubject,
+      aiModel: String(form.get('aiModel') || aiModel),
       voice: String(form.get('voice') || voice),
-      paragraph_number: Number(form.get('paragraphNumber') || 1),
+      paragraphNumber: Number(form.get('paragraphNumber') || 1),
       threads: Number(form.get('threads') || 2),
-      subtitles_position: String(form.get('subtitlesPosition') || subtitlesPosition),
+      subtitlesPosition: String(form.get('subtitlesPosition') || subtitlesPosition),
       color: String(form.get('color') || subtitleColor),
-      use_music: form.get('useMusic') === '1',
-      use_gpu: false,
-      custom_prompt: String(form.get('customPrompt') || '') || null,
-      zip_url: String(form.get('zipUrl') || '') || null,
+      useMusic: form.get('useMusic') === '1',
+      customPrompt: String(form.get('customPrompt') || '') || null,
+      zipUrl: String(form.get('zipUrl') || '') || null,
 
       // TikTok subtitle settings
-      use_tiktok_subtitles: form.get('useTikTokSubtitles') === 'true',
-      subtitle_font: String(form.get('subtitleFont') || 'Arial'),
-      subtitle_font_size: Number(form.get('subtitleFontSize') || 48),
-      subtitle_default_color: String(form.get('subtitleDefaultColor') || '#FFFFFF'),
-      subtitle_highlight_color: String(form.get('subtitleHighlightColor') || '#FFFFFF'),
-      subtitle_stroke_color: String(form.get('subtitleStrokeColor') || '#000000'),
-      subtitle_background_color: String(form.get('subtitleBackgroundColor') || '#000000'),
-      subtitle_stroke_width: Number(form.get('subtitleStrokeWidth') || 0),
-      subtitle_background_opacity: Number(form.get('subtitleBackgroundOpacity') || 0.0),
-      subtitle_padding_x: Number(form.get('subtitlePaddingX') || 20),
-      subtitle_padding_y: Number(form.get('subtitlePaddingY') || 16),
+      useTikTokSubtitles: form.get('useTikTokSubtitles') === 'true',
+      subtitleFont: String(form.get('subtitleFont') || 'Arial'),
+      subtitleFontSize: Number(form.get('subtitleFontSize') || 48),
+      subtitleDefaultColor: String(form.get('subtitleDefaultColor') || '#FFFFFF'),
+      subtitleHighlightColor: String(form.get('subtitleHighlightColor') || '#FFFFFF'),
+      subtitleStrokeColor: String(form.get('subtitleStrokeColor') || '#000000'),
+      subtitleBackgroundColor: String(form.get('subtitleBackgroundColor') || '#000000'),
+      subtitleStrokeWidth: Number(form.get('subtitleStrokeWidth') || 0),
+      subtitleBackgroundOpacity: Number(form.get('subtitleBackgroundOpacity') || 0.0),
+      subtitlePaddingX: Number(form.get('subtitlePaddingX') || 20),
+      subtitlePaddingY: Number(form.get('subtitlePaddingY') || 16),
 
       // Shadow layers
-      shadow_layers_count: Number(form.get('shadowLayersCount') || 4),
-      shadow_layer1_color: String(form.get('shadowLayer1Color') || '#4A90E2'),
-      shadow_layer2_color: String(form.get('shadowLayer2Color') || '#357ABD'),
-      shadow_layer3_color: String(form.get('shadowLayer3Color') || '#2E5F8A'),
-      shadow_layer4_color: String(form.get('shadowLayer4Color') || '#1E3F5A'),
+      shadowLayersCount: Number(form.get('shadowLayersCount') || 4),
+      shadowLayer1Color: String(form.get('shadowLayer1Color') || '#4A90E2'),
+      shadowLayer2Color: String(form.get('shadowLayer2Color') || '#357ABD'),
+      shadowLayer3Color: String(form.get('shadowLayer3Color') || '#2E5F8A'),
+      shadowLayer4Color: String(form.get('shadowLayer4Color') || '#1E3F5A'),
 
       // Whisper enhanced
-      use_whisper_enhanced: form.get('useWhisperEnhanced') === 'true',
-      whisper_model: String(form.get('whisperModel') || 'base'),
+      useWhisperEnhanced: form.get('useWhisperEnhanced') === 'true',
+      whisperModel: String(form.get('whisperModel') || 'base'),
     };
 
     try {
