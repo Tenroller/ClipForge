@@ -701,7 +701,10 @@ async def suggest_subject(
             response.raise_for_status()
             data = response.json()
 
-        subject = data["choices"][0]["message"]["content"].strip().strip('"\'')
+        subject = data["choices"][0]["message"]["content"]
+        if not subject:
+            raise ValueError("AI returned empty response")
+        subject = subject.strip().strip('"\'')
         return {"subject": subject}
 
     except httpx.HTTPStatusError as e:
