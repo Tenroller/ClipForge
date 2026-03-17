@@ -24,6 +24,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if self.requests_per_minute <= 0:
             return await call_next(request)
 
+        # Skip rate limiting for internal proxy calls (e.g. Next.js middleware)
+        if request.headers.get("X-API-Key") == "internal-proxy":
+            return await call_next(request)
+
         client_ip = request.client.host if request.client else "unknown"
         now = time.monotonic()
         window = 60.0  # 1 minute
