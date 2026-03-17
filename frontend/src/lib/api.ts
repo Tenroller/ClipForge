@@ -92,8 +92,12 @@ export type CleanupResult = {
 };
 
 /**
- * Helper function to make API requests
- * Uses credentials: 'include' to send cookies automatically
+ * Helper function to make API requests.
+ *
+ * In the browser, requests are routed through the Next.js API proxy
+ * (/api/proxy/...) so that the auth_token cookie (first-party) can be
+ * forwarded as a Bearer token to the backend.  This eliminates all
+ * cross-origin CORS / CSRF issues.
  */
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
@@ -103,18 +107,20 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<Respons
     ...(options.headers || {}) as Record<string, string>,
   };
 
-  // Attach CSRF token header for mutating requests
-  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-    const csrfToken = getCookie('csrf_token') ?? await fetchCsrfToken();
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
+  // Route browser requests through same-origin proxy to avoid CORS/CSRF
+  let fetchUrl = url;
+  if (typeof window !== 'undefined' && url.startsWith('http')) {
+    try {
+      const parsed = new URL(url);
+      fetchUrl = `/api/proxy${parsed.pathname}${parsed.search}`;
+    } catch {
+      // If URL parsing fails, use the original URL
     }
   }
 
-  const response = await fetch(url, {
+  const response = await fetch(fetchUrl, {
     ...options,
     headers,
-    credentials: 'include', // Important: sends cookies with request
   });
 
   // If we get a 401, redirect to login
