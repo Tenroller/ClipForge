@@ -147,10 +147,9 @@ def generate_response(prompt: str, ai_model: str) -> str:
     """
 
     # Convert old Gemini model names to OpenRouter format if needed
-    model_name = ai_model or 'openrouter/auto'
-    if not '/' in model_name:
-        # Convert bare model name to OpenRouter format
-        model_name = f"google/{model_name}"
+    model_name = ai_model or 'openrouter/free'
+    if '/' not in model_name:
+        model_name = 'openrouter/free'
     
     # Save debug prompt if enabled
     debug_file = _save_debug_prompt(prompt, "generate_response", {
@@ -218,10 +217,10 @@ def generate_structured_response(
         ValidationError: If response doesn't match schema (unlikely with structured outputs)
     """
     # Convert old Gemini model names to OpenRouter format if needed
-    model_name = ai_model or 'openrouter/auto'
-    if not '/' in model_name:
-        model_name = f"google/{model_name}"
-    
+    model_name = ai_model or 'openrouter/free'
+    if '/' not in model_name:
+        model_name = 'openrouter/free'
+
     # Use the centralized OpenRouter client
     if openrouter_structured_response is None:
         raise RuntimeError("OpenRouter client not initialized. Check OPENROUTER_API_KEY.")
@@ -529,7 +528,7 @@ class ThumbnailFrameSelection(BaseModel):
 def select_best_thumbnail_frame(
     frame_images: List[str],
     viral_context: Dict[str, Any],
-    ai_model: str = "openrouter/auto"
+    ai_model: str = "openrouter/free"
 ) -> Dict[str, Any]:
     """
     Use OpenRouter Vision API to select the best frame for a viral thumbnail.
@@ -550,8 +549,8 @@ def select_best_thumbnail_frame(
     """
     # Convert old model names to OpenRouter format
     model_name = ai_model
-    if not '/' in model_name:
-        model_name = f"google/{model_name}"
+    if '/' not in model_name:
+        model_name = 'openrouter/free'
     
     try:
         logger.info("openrouter.select_best_thumbnail_frame: start", extra={

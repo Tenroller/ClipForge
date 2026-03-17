@@ -170,7 +170,7 @@ class VideoProcessingService:
             video_subject = request_data.get("videoSubject", "")
             paragraph_number = request_data.get("paragraphNumber", 3)
             voice = request_data.get("voice", "en_male_jomboy")
-            ai_model = request_data.get("aiModel", "gemini-2.0-flash")
+            ai_model = request_data.get("aiModel", "openrouter/free")
             use_music = request_data.get("useMusic", True)
             zip_url = request_data.get("zipUrl")
             custom_prompt = request_data.get("customPrompt", "")

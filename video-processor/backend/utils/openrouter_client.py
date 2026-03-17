@@ -18,7 +18,7 @@ logger = logger.bind(name="openrouter_client")
 
 _client: Optional[OpenRouter] = None
 
-DEFAULT_MODEL = "openrouter/auto"
+DEFAULT_MODEL = "openrouter/free"
 MAX_RETRIES = 3
 RETRY_BACKOFF = 2  # seconds
 
