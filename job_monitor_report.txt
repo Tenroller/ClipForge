@@ -1,0 +1,219 @@
+== Video Processor Job Monitor Report ==
+Started: 2026-03-17 00:46 UTC
+Jobs: 1fdafdec (BRAINROT, compilation), e1ec5e6f (BRAINROT, single 60min video)
+
+--- Log ---
+
+[01:42 UTC] Check #1 (post-context-restore)
+  Job 1 (1fdafdec): Phase 3 — Compilation generation started. 106 clips ready, now assembling compilations (20-40s each, Normal+TTS variations).
+  Job 2 (e1ec5e6f): Phase 3 — Compilation generation started. 1 clip (3616s / 60min), assembling compilations (20-50s each, Normal+TTS variations).
+  Resources: CPU 34% (load 6.26) | RAM 18.5GB/23.5GB (4.8GB free) | Container 387% CPU, 7.4GB RAM | Disk 69GB/193GB (36%)
+  Errors: None
+
+[01:51 UTC] Check #2
+  Job 1 (1fdafdec): Phase 3 — Compilation generation in progress. Converting scenes 100-115 for compilations (x264, crf=20, rounded corners). No compilations output yet.
+  Job 2 (e1ec5e6f): Phase 3 — Compilation generation in progress (single 60min clip, started 00:48). Still encoding/assembling. No compilations output yet.
+  Resources: CPU 59% (load 6.67) | RAM 18.5GB/23.5GB (4.9GB free) | Container 377% CPU, 7.4GB RAM (32%) | Disk 69GB/193GB (36%)
+  Errors: None (only FFmpeg err_detect flags in commands — false positives)
+
+[02:01 UTC] Check #3
+  Job 1 (1fdafdec): Phase 3 — AI clip scoring in progress. Scoring clips ~043-057 of 106 (face detection, motion, audio, clarity). Some clips scoring high (44.9 with 86.8% face). Memory dropped from 7.4GB to 5.3GB (released clip pre-processing buffers).
+  Job 2 (e1ec5e6f): Phase 3 — Compilation generation still running silently (no new job-level logs since 00:48). Processing a single 60min clip into compilations takes significant time.
+  Resources: CPU 33% (load 6.33) | RAM 16.1GB/23.5GB (7.3GB free) | Container 434% CPU, 5.3GB RAM (23%) | Disk 69GB/193GB (36%)
+  Errors: None (PySoundFile warnings are benign — librosa falls back to audioread successfully)
+
+[02:11 UTC] Check #4
+  Job 1 (1fdafdec): Phase 4 — ENCODING first compilation! compilation_1_normal.mp4 (43.5s, 7 clips, title: "Epic Cat Moments"). x264 slow preset, 4500k bitrate, crf=20. Conservative mode triggered (80.8% RAM). MoviePy writing video now.
+  Job 2 (e1ec5e6f): Phase 3 — Still in compilation generation (no output yet). Single 60min clip = long processing time expected.
+  Resources: CPU 23% (load 4.27) | RAM 19GB/23.5GB (4.4GB free) | Container 209% CPU, 8.2GB RAM (36% — peak so far) | Disk 69GB/193GB (36%)
+  Errors: None
+  Note: Container RAM hit new peak of 8.2GB during encoding. System zombie count rose to 8 (ffmpeg child processes being cleaned up).
+
+[02:21 UTC] Check #5
+  Job 1 (1fdafdec): Phase 4 — Still encoding compilation_1_normal.mp4 (43.5s, x264 slow). MoviePy writing video in progress (~10min so far for this compilation). Slow preset = high quality but longer encode time.
+  Job 2 (e1ec5e6f): Phase 3 — Still in compilation generation (no output, running since 00:48 = 1h33m). Expected for a 60min single clip.
+  Resources: CPU 25% (load 4.54) | RAM 18.2GB/23.5GB (5.1GB free) | Container 215% CPU, 7.4GB RAM (33%) | Disk 69GB/193GB (36%)
+  Errors: None
+  Note: Zombie count rose to 13. Container RAM stabilized back to 7.4GB from 8.2GB peak.
+
+[02:31 UTC] Check #6
+  Job 1 (1fdafdec): compilation_1_normal.mp4 DONE! Now encoding TTS variation (compilation_1_tts_temp.mp4, 43.5s, title: "Furry Friends"). x264 slow, 4500k, conservative mode (81.5% RAM). This is compilation 1 of many (106 clips available).
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 1h43m). Single 60min clip processing.
+  Resources: CPU 39% (load 4.64) | RAM 18.8GB/23.5GB (4.6GB free) | Container 222% CPU, 8.1GB RAM (35%) | Disk 69GB/193GB (36%)
+  Errors: None
+  Note: Zombie count at 24. Container RAM near peak again at 8.1GB during TTS encoding.
+
+[02:41 UTC] Check #7
+  Job 1 (1fdafdec): Compilation #1 COMPLETE (both normal + TTS). Now in BRAINROT phase — creating no-background clips with blurred pillarbox (clip 2/7 encoding Scene-100, ~2fps). This creates the final brainrot-style split-screen videos.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 1h53m). Single 60min clip processing continues.
+  Resources: CPU 29% (load 4.18) | RAM 17.7GB/23.5GB (5.7GB free) | Container 248% CPU, 7.5GB RAM (33%) | Disk 69GB/193GB (36%)
+  Errors: None
+  Note: Zombie count dropped to 3 (cleanup occurred). System memory improved to 5.7GB available.
+
+[02:51 UTC] Check #8
+  Job 1 (1fdafdec): BRAINROT phase — clip 7/7 encoding (Scene-073, 75% frame progress, ~2fps). Almost done with compilation #1 brainrot clips. Each clip gets blurred pillarbox + no-background effect at 1080x1920.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 2h03m). Single 60min clip.
+  Resources: CPU 44% (load 3.97) | RAM 19.3GB/23.5GB (4.1GB free) | Container 261% CPU, 8.8GB RAM (39% — NEW PEAK) | Disk 69GB/193GB (36%)
+  Errors: None
+  Note: Container RAM new peak at 8.8GB (was 8.2GB). System free RAM down to 1.6GB / 4.1GB available. Memory is getting tighter but still within bounds.
+
+[03:01 UTC] Check #9
+  Job 1 (1fdafdec): Compilation #2 encoding — compilation_2_normal.mp4 (43.5s, title: "Feline Frenzy"). Frame 202/1305 (~15%), ~1.4fps. Brainrot phase for comp #1 completed. This job has 106 clips so expect many compilations.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 2h13m). Single 60min clip processing.
+  Resources: CPU 35% (load 3.55) | RAM 18.7GB/23.5GB (4.6GB free) | Container 228% CPU, 8.6GB RAM (38%) | Disk 69GB/193GB (36%)
+  Errors: None
+
+[03:11 UTC] Check #10
+  Job 1 (1fdafdec): Compilation #1 FULLY COMPLETE (3 files: normal, TTS, no_bg). Now encoding compilation_2_normal.mp4. Each compilation produces 3 output videos. With 106 clips this job will run for hours.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 2h23m). Single 60min clip.
+  Resources: CPU 26% (load 5.03) | RAM 18GB/23.5GB (5.3GB free) | Container 214% CPU, 8.0GB RAM (35%) | Disk 69GB/193GB (36%)
+  Errors: None
+  Output files so far (Job 1): compilation_1_normal.mp4, compilation_1_tts.mp4, compilation_1_no_bg.mp4
+
+[03:21 UTC] Check #11
+  Job 1 (1fdafdec): compilation_2_normal.mp4 DONE! Now encoding compilation_2_tts_temp.mp4 (1305 frames, just started). Steady progress — 4 output files produced so far.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 2h33m). Single 60min clip.
+  Resources: CPU 47% (load 4.52) | RAM 18.9GB/23.5GB (4.4GB free) | Container 229% CPU, 8.9GB RAM (39% — tied peak) | Disk 69GB/193GB (36%)
+  Errors: None
+  Output files so far (Job 1): compilation_1_normal, compilation_1_tts, compilation_1_no_bg, compilation_2_normal
+
+[03:31 UTC] Check #12
+  Job 1 (1fdafdec): Compilation #2 almost done — normal + TTS complete, now encoding compilation_2_no_bg.mp4. 5 output files produced. Moving fast.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 2h43m). Single 60min clip.
+  Resources: CPU 40% (load 4.89) | RAM 19.8GB/23.5GB (3.6GB avail) | Container 259% CPU, 9.5GB RAM (41% — NEW PEAK!) | Disk 69GB/193GB (36%)
+  Errors: None
+  ⚠️ MEMORY WARNING: System free RAM at 912MB (3.6GB available with cache). Container at 9.5GB — new peak. Still operational but approaching limits.
+  Output files so far (Job 1): comp1 (normal+tts+no_bg), comp2 (normal+tts, no_bg encoding)
+
+[03:41 UTC] Check #13
+  Job 1 (1fdafdec): Compilation #2 FULLY COMPLETE. Now encoding compilation_3_normal.mp4. 6 output files produced (2 full compilations). Pace: ~1 full compilation per 30min.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 2h53m). Single 60min clip.
+  Resources: CPU 50% (load 4.41) | RAM 19.7GB/23.5GB (3.7GB avail, 901MB free) | Container 221% CPU, 9.7GB RAM (43% — NEW PEAK!) | Disk 69GB/193GB (36%)
+  Errors: None
+  ⚠️ Container RAM continues climbing: 7.4→8.2→8.8→9.5→9.7GB. Each compilation adds memory. Conservative mode active.
+
+--- CONTEXT RESTORE — Checks #14-26 reconstructed from logs and file timestamps ---
+
+[~03:58 UTC] Check #14 (reconstructed)
+  Job 1 (1fdafdec): compilation_3_normal.mp4 DONE (15.1MB, written 03:58). TTS variant encoding next.
+  Job 2 (e1ec5e6f): Still in compilation generation (no output, running since 00:48 = 3h10m). Single 60min clip.
+  Output files (Job 1): compilations 1-2 complete (6 files), compilation_3_normal done.
+
+[~04:18 UTC] Check #15 (reconstructed)
+  Job 1 (1fdafdec): compilation_3_tts done (11.7MB, 04:14). Starting compilation set 4 (04:18). Steady pace.
+  Job 2 (e1ec5e6f): Still in compilation generation. No output files yet.
+
+[~05:02 UTC] Check #16 (reconstructed)
+  Job 1 (1fdafdec): Compilation #4 complete (normal 04:33, tts 04:47, no_bg 05:02). Compilation set 5 starting.
+  Job 2 (e1ec5e6f): Still processing. Running for 4h14m.
+
+[~05:34 UTC] Check #17 (reconstructed)
+  Job 1 (1fdafdec): Compilation #5 complete (normal 05:17, tts 05:31, no_bg 05:34). 15 output files. Set 6 starting.
+  Job 2 (e1ec5e6f): Still processing. 4h46m elapsed.
+
+[~06:07 UTC] Check #18 (reconstructed)
+  Job 1 (1fdafdec): Compilation #6 complete (normal 05:50, tts 06:04, no_bg 06:07). 18 output files. Set 7 starting.
+  Job 2 (e1ec5e6f): Still processing. 5h19m elapsed.
+
+[~06:47 UTC] Check #19 (reconstructed)
+  Job 1 (1fdafdec): Compilation #7 complete (normal 06:21, tts 06:34, no_bg 06:47). 21 output files. Set 8 starting.
+  Job 2 (e1ec5e6f): Still processing. 5h59m elapsed.
+
+[~07:18 UTC] Check #20 (reconstructed)
+  Job 1 (1fdafdec): Compilation #8 complete (normal 07:01, tts 07:14, no_bg 07:18). 24 output files. Set 9 starting.
+  Job 2 (e1ec5e6f): Still processing. 6h30m elapsed.
+
+[~07:48 UTC] Check #21 (reconstructed)
+  Job 1 (1fdafdec): Compilation #9 complete (normal 07:32, tts 07:45, no_bg 07:48). 27 output files. Set 10 starting.
+  Job 2 (e1ec5e6f): Still processing. 7h elapsed.
+
+[~08:29 UTC] Check #22 (reconstructed) — JOB 2 COMPLETED WITH ERRORS
+  Job 1 (1fdafdec): Compilation #10 complete (normal 08:03, tts 08:19, no_bg 08:32). 30 output files. Set 11 starting (08:32).
+  Job 2 (e1ec5e6f): ❌ COMPLETED WITH ERRORS at 08:29 UTC (7h41m total runtime)
+    - Upload file was deleted during processing: '/app/temp/uploads/69184d1f-6b89-4387-a2ed-912d77b2787b.mp4' not found
+    - The FFmpeg decode process (PID 251) was still reading the file when it was removed
+    - Compilation sets 1-5 all failed with FileNotFoundError
+    - Result: 0 successful compilations, 0 output videos
+    - Root cause: Upload file cleanup happened while the job was still processing
+  Errors (Job 2): FileNotFoundError x10+ (repeated for normal, TTS, and no_bg attempts across 5 compilation sets)
+
+[~08:59 UTC] Check #23 (reconstructed)
+  Job 1 (1fdafdec): Compilation set 12 started (08:59). compilation_11 in progress.
+  Job 2: DONE (failed).
+
+[~09:26 UTC] Check #24 (reconstructed)
+  Job 1 (1fdafdec): Compilation set 13 started (09:26). compilation_12 in progress.
+
+[~10:02 UTC] Check #25 (reconstructed)
+  Job 1 (1fdafdec): Compilation set 13 completed (10:02, "3 variations, 44.2MB"). Set 14 starting.
+  41 output files produced (compilations 1-13 complete, comp 14 in progress).
+
+[10:23 UTC] Check #26 (LIVE)
+  Job 1 (1fdafdec): STILL RUNNING. Compilation set 14 in progress. Currently encoding compilation_14_tts_temp.mp4 (frame 1220/1296, ~94%). compilation_14_normal.mp4 already done. 41 output files so far (13 full compilations + comp_14_normal + comp_14_tts_temp).
+  Job 2 (e1ec5e6f): ❌ COMPLETED (FAILED) at 08:29 UTC. 0 output videos. See error details in Check #22.
+  Resources: CPU 11% (load 2.47) | RAM 17GB/22GB (5.1GB available, 3.0GB free) | Container 124% CPU, 7.0GB RAM (31%) | Disk 69GB/193GB (36%)
+  Errors: None for Job 1. Job 2 failed due to deleted upload file (see Check #22).
+  Note: Container RAM dropped significantly from peak 9.7GB to 7.0GB after Job 2 completed and released resources. System is much healthier now.
+
+[11:42 UTC] Check #27
+  Job 1 (1fdafdec): STILL RUNNING. Compilation set 17 in progress. Encoding compilation_17_tts_temp.mp4 — concatenation done (41s, 1231 frames, 5 clips, title "Feline Frenzy"). Now writing final video (x264 slow, 4500k, crf=20). Conservative mode active (81.5% RAM).
+  Job 2 (e1ec5e6f): ❌ COMPLETED (FAILED) at 08:29 UTC. 0 output videos.
+  Resources: CPU 14% (load 1.78) | RAM 19.3GB/23.5GB (4.0GB avail, 1.9GB free) | Container 121% CPU, 8.1GB RAM (36%) | Disk 69GB/193GB (36%)
+  Errors: Same as Check #22 — FileNotFoundError for job e1ec5e6f upload file (repeated in error grep: TypeError, FileNotFoundError x4, 3 failed compilation sets logged)
+
+[11:50 UTC] Check #28
+  Job 1 (1fdafdec): STILL RUNNING. Encoding compilation_17_tts_temp.mp4 — frame 631/1231 (~51%), ~1.9fps. Still on same compilation as Check #27, midway through encoding.
+  Job 2 (e1ec5e6f): ❌ COMPLETED (FAILED) at 08:29 UTC. 0 output videos.
+  Resources: CPU 18% (load 4.39) | RAM 19.4GB/23.5GB (3.9GB avail, 373MB free) | Container 111% CPU, 8.0GB RAM (35%) | Disk 77GB/193GB (40% — up from 36%, +8GB output files)
+  Errors: No new errors. Same Job 2 FileNotFoundError as before.
+  Note: System free RAM dropped to 373MB (available 3.9GB with cache). Disk usage climbing steadily with output files.
+
+[12:00 UTC] Check #29 — CONTAINER RESTARTED / FINAL CHECK
+  Container was redeployed at ~11:56 UTC (Coolify picked up git push). Crash-looped 3 times due to ImportError in our commit (0ecf8fd). Fix pushed (a02241a), new image deployed at 12:00:29 UTC. Container is now healthy and idle.
+  Job 1 (1fdafdec): ❌ KILLED BY RESTART. Was encoding compilation_17_tts_temp.mp4 at ~51% when container restarted. Job lost (in-memory state not recovered). Output files on disk from compilations 1-17 should still exist.
+  Job 2 (e1ec5e6f): ❌ COMPLETED (FAILED) at 08:29 UTC. 0 output videos. Failed due to deleted upload file.
+  Resources: CPU 3% (load 4.85, settling) | RAM 10GB/23.5GB (12.5GB avail) | Container 0.22% CPU, 71MB RAM (0.3%) | Disk 90GB/193GB (47%)
+  Errors: None (only benign log line containing "failed" in job recovery summary).
+
+=== FINAL SUMMARY ===
+
+Monitoring period: 2026-03-17 00:46 UTC → 12:00 UTC (~11h 14m)
+Total checks: 29 (13 live + 12 reconstructed + 4 post-restore)
+
+--- Job 1: 1fdafdec (BRAINROT, 106 clips) ---
+  Status: ❌ KILLED BY CONTAINER RESTART (was still running)
+  Runtime: ~11h (00:48 → 11:56 UTC)
+  Progress: 17 compilation sets (51 output files: normal + TTS + no_bg each)
+    - Compilations 1-16 fully complete (48 output files)
+    - Compilation 17: normal done, TTS encoding at ~51% when killed
+  Pace: ~1 full compilation set per 35-40 min
+  Estimated remaining: ~20+ more compilation sets (many hours)
+  Output: Partial — 48-50 output files preserved on disk at /app/output/1fdafdec-*/
+  Root cause of kill: Our git push triggered Coolify auto-deploy which restarted the container
+
+--- Job 2: e1ec5e6f (BRAINROT, single 60min uploaded video) ---
+  Status: ❌ FAILED at 08:29 UTC
+  Runtime: 7h 41m (00:48 → 08:29 UTC)
+  Progress: 0 successful compilations out of 5 attempted sets
+  Output: 0 output videos
+  Root cause: Upload file (/app/temp/uploads/69184d1f-...mp4) was deleted while still being processed
+  Error: FileNotFoundError repeated across all compilation attempts (normal, TTS, no_bg)
+  Note: TempFileManager (suspected culprit) was actually NEVER wired up in production — real deletion source still unknown
+
+--- Resource Peak Usage ---
+  Container RAM peak: 9.7 GiB (43% of 22.91 GiB) — Check #13
+  System RAM peak: 19.8 GiB used, 912MB free — Check #12
+  Disk peak: 90 GiB used (47%) — Check #29 (post-restart, includes build cache)
+  Container CPU peak: 434% — Check #4
+
+--- Errors Encountered ---
+  1. FileNotFoundError: Upload file deleted mid-processing (Job 2, 08:29 UTC)
+  2. ImportError: Our commit (0ecf8fd) broke container startup (11:56 UTC, fixed in a02241a)
+
+--- Lessons ---
+  1. Never push to main while jobs are running — Coolify auto-deploys and kills active jobs
+  2. TempFileManager was dead code — the real file deletion mechanism needs investigation
+  3. Need a proper graceful shutdown / job persistence that survives container restarts
+
+=== END OF MONITORING ===
+

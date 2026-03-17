@@ -44,7 +44,15 @@ export async function verifyToken(token: string): Promise<{ valid: boolean; user
       user: data.user,
     };
   } catch (error) {
-    console.error('Token verification failed:', error);
+    // Network error (backend unreachable, redeploying, etc.)
+    // Fall back to local JWT validation to avoid redirect loops
+    console.error('Token verification failed (backend unreachable), falling back to local JWT check:', error);
+    if (!isTokenExpired(token)) {
+      const user = decodeToken(token);
+      if (user) {
+        return { valid: true, user };
+      }
+    }
     return { valid: false };
   }
 }
