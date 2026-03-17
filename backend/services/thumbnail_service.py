@@ -76,7 +76,7 @@ class ThumbnailService:
             try:
                 import httpx
 
-                processor_url = os.environ.get("VIDEO_PROCESSOR_URL", "http://localhost:8001")
+                processor_url = os.environ.get("VIDEO_PROCESSOR_URLS", "http://localhost:8090").split(",")[0]
                 with httpx.Client(timeout=30) as client:
                     response = client.post(
                         f"{processor_url}/api/v1/thumbnail",
