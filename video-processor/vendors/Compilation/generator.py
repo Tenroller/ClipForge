@@ -794,6 +794,48 @@ class TikYouGenerator:
                 clip.close()
             return None
 
+    def _transcode_if_needed(self, video_path: str) -> str:
+        """
+        Check the video codec and transcode to H.264 if the codec is not
+        well-supported for frame-level decoding (e.g. AV1, VP9).
+        Returns the path to the transcoded file, or the original path if
+        no transcoding was necessary.
+        """
+        PROBLEMATIC_CODECS = {"av1", "vp9", "vp8"}
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=codec_name", "-of", "csv=p=0", video_path],
+                capture_output=True, text=True, timeout=10,
+            )
+            codec = result.stdout.strip().lower()
+            self._log(f"Detected video codec: {codec}", "info", "_transcode_if_needed")
+            if codec not in PROBLEMATIC_CODECS:
+                return video_path
+        except Exception as e:
+            self._log(f"Could not detect codec, skipping transcode: {e}", "warning", "_transcode_if_needed")
+            return video_path
+
+        transcoded_path = video_path.rsplit(".", 1)[0] + "_h264.mp4"
+        self._log(f"Transcoding {codec} -> H.264 for compatibility: {transcoded_path}", "info", "_transcode_if_needed")
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", video_path,
+                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                 "-c:a", "aac", "-pix_fmt", "yuv420p", "-movflags", "faststart",
+                 transcoded_path],
+                capture_output=True, text=True, timeout=14400,
+            )
+            if result.returncode == 0 and os.path.exists(transcoded_path):
+                self._log(f"Transcode complete: {transcoded_path}", "info", "_transcode_if_needed")
+                return transcoded_path
+            else:
+                self._log(f"Transcode failed: {result.stderr[:500]}", "error", "_transcode_if_needed")
+                return video_path
+        except Exception as e:
+            self._log(f"Transcode error: {e}", "error", "_transcode_if_needed")
+            return video_path
+
     def process_single_video(self, youtube_url, sensitivity: float = 15, method: str = 'scenedetect'):
         """
         Process a single video source:
@@ -890,6 +932,9 @@ class TikYouGenerator:
         if is_youtube_url:
             print(f"⏳ Waiting 2 seconds for downloaded file to be fully written...")
             time.sleep(2)
+
+        # 1.5 Transcode if codec is problematic (AV1, VP9) for scene detection
+        video_path = self._transcode_if_needed(video_path)
 
         # 2. ✅ Detect and crop pillarboxes on the main video
         self._log("Detecting and cropping pillarboxes from main video", "info", "process_single_video")

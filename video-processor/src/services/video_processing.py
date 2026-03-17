@@ -610,25 +610,70 @@ class VideoProcessingService:
             logger.error(f"Job {job_id} failed: {e}", exc_info=True)
             raise
 
+    @staticmethod
+    def _transcode_if_needed(video_path: str, job_id: str) -> str:
+        """
+        Check the video codec and transcode to H.264 if the codec is not
+        well-supported for frame-level decoding (e.g. AV1, VP9).
+        Returns the path to the transcoded file, or the original path if
+        no transcoding was necessary.
+        """
+        PROBLEMATIC_CODECS = {"av1", "vp9", "vp8"}
+        try:
+            result = subprocess.run(
+                ["ffprobe", "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=codec_name", "-of", "csv=p=0", video_path],
+                capture_output=True, text=True, timeout=10,
+            )
+            codec = result.stdout.strip().lower()
+            logger.info(f"Job {job_id}: Detected video codec: {codec}")
+            if codec not in PROBLEMATIC_CODECS:
+                return video_path
+        except Exception as e:
+            logger.warning(f"Job {job_id}: Could not detect codec, skipping transcode: {e}")
+            return video_path
+
+        # Transcode to H.264 for reliable decoding
+        transcoded_path = video_path.rsplit(".", 1)[0] + "_h264.mp4"
+        logger.info(f"Job {job_id}: Transcoding {codec} -> H.264 for compatibility: {transcoded_path}")
+        try:
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", video_path,
+                 "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                 "-c:a", "aac", "-pix_fmt", "yuv420p", "-movflags", "faststart",
+                 transcoded_path],
+                capture_output=True, text=True, timeout=14400,
+            )
+            if result.returncode == 0 and os.path.exists(transcoded_path):
+                logger.info(f"Job {job_id}: Transcode complete: {transcoded_path}")
+                return transcoded_path
+            else:
+                logger.error(f"Job {job_id}: Transcode failed: {result.stderr[:500]}")
+                return video_path
+        except Exception as e:
+            logger.error(f"Job {job_id}: Transcode error: {e}")
+            return video_path
+
     def _process_uploaded_video(self, generator, uploaded_video_path: str, job_id: str):
         """
         Process an uploaded video file (skip YouTube download step).
-        
+
         This method replicates the video processing logic from process_single_video
         but starts from an already downloaded video file.
         """
         import os
-        
+
         logger.info(f"Job {job_id}: Processing uploaded video file: {uploaded_video_path}")
-        
+
         if not os.path.exists(uploaded_video_path):
             raise RuntimeError(f"Uploaded video file not found: {uploaded_video_path}")
-        
-        video_path = uploaded_video_path
-        
+
+        # 0. Transcode if codec is not well-supported (AV1, VP9, etc.)
+        video_path = self._transcode_if_needed(uploaded_video_path, job_id)
+
         # Extract a video ID from the filename for consistency
         video_id = os.path.splitext(os.path.basename(uploaded_video_path))[0]
-        
+
         # 1. Detect and crop pillarboxes on the main video (same as process_single_video)
         logger.info(f"Job {job_id}: Detecting and cropping pillarboxes from uploaded video")
         cropped_video_path = generator.processor.crop_video_if_vertical_with_blur(video_path)
