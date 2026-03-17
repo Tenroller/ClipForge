@@ -31,14 +31,6 @@ from loguru import logger
 # Initialize logger for this module
 logger = logger.bind(name="Compilation.generator")
 
-# Define placeholder logging functions if they don't exist in logging_config
-def log_generation_step(logger, *args, **kwargs):
-    logger.info(f"Generation step: {args}, {kwargs}")
-
-def log_file_operation(logger, operation, path, **kwargs):
-    logger.info(f"File {operation}: {path}, {kwargs}")
-
-
 # Pipeline checkpointing for resume capability
 try:
     from utils.checkpointing import (
@@ -126,20 +118,6 @@ if FONT_PATH_STR:
 else:
     print(f"⚠️ Warning: Default font not found, will fall back to system fonts")
 
-
-def convert_clip_worker(args):
-    """Worker function for parallel video conversion"""
-    clip_info, converted_paths, temp_files = args
-    try:
-        if clip_info['orientation'] in ['horizontal', 'square']:
-            if clip_info['path'] not in converted_paths:
-                generator = TikYouGenerator()
-                vertical_path = generator.create_vertical_clip_from_horizontal(clip_info['path'])
-                if vertical_path:
-                    return (clip_info['path'], vertical_path)
-    except Exception as e:
-        print(f"Error converting clip {clip_info['path']}: {e}")
-    return None
 
 class TikYouGenerator:
     def __init__(self, output_dir="final_videos", ffmpeg_path=None, tracker=None, request=None):

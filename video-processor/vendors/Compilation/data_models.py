@@ -535,20 +535,6 @@ class ValidationResult:
         return len(self.warnings) > 0
 
 
-# Utility functions for data models
-def create_clip_info_from_dict(data: Dict[str, Any]) -> ClipInfo:
-    """Create ClipInfo from dictionary"""
-    return ClipInfo(
-        id=data.get('id', ''),
-        path=data.get('path', ''),
-        duration=data.get('duration', 0.0),
-        orientation=VideoOrientation(data.get('orientation', 'unknown')),
-        source_id=data.get('source_id', ''),
-        type=SceneType(data.get('type', 'single')),
-        scene_number=data.get('scene_number')
-    )
-
-
 def create_system_resources() -> SystemResources:
     """Create SystemResources with current system information"""
     import psutil

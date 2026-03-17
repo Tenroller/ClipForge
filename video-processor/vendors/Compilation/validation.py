@@ -536,7 +536,7 @@ def validate_system_resources(resources: SystemResources) -> ValidationResult:
     return validator.validate_system_resources(resources)
 
 
-def ensure_valid_or_raise(validation_result: ValidationResult, 
+def ensure_valid_or_raise(validation_result: ValidationResult,
                          exception_class: type = ValidationError) -> None:
     """Raise exception if validation result is not valid"""
     if not validation_result.is_valid:
@@ -546,60 +546,3 @@ def ensure_valid_or_raise(validation_result: ValidationResult,
             field_value=error_message,
             constraint="All validation checks must pass"
         )
-
-
-def log_validation_warnings(validation_result: ValidationResult, logger) -> None:
-    """Log validation warnings using the provided logger"""
-    if validation_result.has_warnings and logger:
-        for warning in validation_result.warnings:
-            logger.warning(f"Validation warning: {warning}")
-
-
-# Advanced validation functions
-def validate_batch_clips(clips: List[ClipInfo]) -> Dict[str, ValidationResult]:
-    """Validate a batch of clips and return results"""
-    validator = InputValidator()
-    results = {}
-    
-    for i, clip in enumerate(clips):
-        clip_id = clip.id if clip and hasattr(clip, 'id') else f"clip_{i}"
-        results[clip_id] = validator.validate_clip_info(clip)
-    
-    return results
-
-
-def validate_processing_environment() -> ValidationResult:
-    """Validate the entire processing environment"""
-    validator = InputValidator()
-    result = ValidationResult(is_valid=True)
-    
-    # Check system resources
-    from .data_models import create_system_resources
-    resources = create_system_resources()
-    resource_result = validator.validate_system_resources(resources)
-    
-    if not resource_result.is_valid:
-        result.errors.extend(resource_result.errors)
-    result.warnings.extend(resource_result.warnings)
-    
-    # Check directory structure
-    dir_result = validator.validate_directory_structure('.')
-    if not dir_result.is_valid:
-        result.errors.extend(dir_result.errors)
-    result.warnings.extend(dir_result.warnings)
-    
-    # Check required tools (ffmpeg, etc.)
-    try:
-        import subprocess
-        import os
-        
-        # Check for FFMPEG_PATH environment variable first
-        ffmpeg_cmd = os.getenv('FFMPEG_PATH', 'ffmpeg')
-        subprocess.run([ffmpeg_cmd, '-version'], 
-                      capture_output=True, check=True, timeout=5)
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
-        result.add_error("FFmpeg is not available or not working properly")
-    except Exception as e:
-        result.add_warning(f"Could not verify FFmpeg: {str(e)}")
-    
-    return result 

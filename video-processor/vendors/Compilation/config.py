@@ -440,10 +440,6 @@ class TikYouConfig:
     def get_temp_vertical_path(self, video_name: str) -> str:
         """Generate temporary vertical video path"""
         return os.path.join(
-            self.paths.temp_vertical_dir, 
+            self.paths.temp_vertical_dir,
             f"{video_name}{self.paths.vertical_suffix}.mp4"
         )
-
-
-# Global configuration instance
-config = TikYouConfig() 

@@ -14,7 +14,7 @@ import hashlib
 import time
 import threading
 from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List, Callable, Union
+from typing import Dict, Any, Optional, List, Union
 from pathlib import Path
 import weakref
 
@@ -521,26 +521,6 @@ class ConvertedClipCache:
         )
 
 
-def cached_operation(cache_manager: CacheManager, operation_name: str, 
-                    ttl_hours: int = 24):
-    """Decorator for caching expensive operations"""
-    def decorator(func: Callable) -> Callable:
-        def wrapper(*args, **kwargs):
-            # Try to get from cache first
-            cached_result = cache_manager.get(operation_name, *args, **kwargs)
-            if cached_result is not None:
-                return cached_result
-            
-            # Execute function and cache result
-            result = func(*args, **kwargs)
-            cache_manager.set(operation_name, result, ttl_hours, *args, **kwargs)
-            
-            return result
-        
-        return wrapper
-    return decorator
-
-
 class MemoryCache:
     """In-memory cache for frequently accessed data"""
     
@@ -588,9 +568,6 @@ class MemoryCache:
 # Global cache instances
 _global_cache_manager = None
 _global_video_analysis_cache = None
-_global_video_metadata_cache = None
-_global_converted_clip_cache = None
-_global_memory_cache = None
 
 
 def get_cache_manager() -> CacheManager:
@@ -607,56 +584,3 @@ def get_video_analysis_cache() -> VideoAnalysisCache:
     if _global_video_analysis_cache is None:
         _global_video_analysis_cache = VideoAnalysisCache(get_cache_manager())
     return _global_video_analysis_cache
-
-
-def get_video_metadata_cache() -> VideoMetadataCache:
-    """Get global video metadata cache instance"""
-    global _global_video_metadata_cache
-    if _global_video_metadata_cache is None:
-        _global_video_metadata_cache = VideoMetadataCache(get_cache_manager())
-    return _global_video_metadata_cache
-
-
-def get_converted_clip_cache() -> ConvertedClipCache:
-    """Get global converted clip cache instance"""
-    global _global_converted_clip_cache
-    if _global_converted_clip_cache is None:
-        _global_converted_clip_cache = ConvertedClipCache(get_cache_manager())
-    return _global_converted_clip_cache
-
-
-def get_memory_cache() -> MemoryCache:
-    """Get global memory cache instance"""
-    global _global_memory_cache
-    if _global_memory_cache is None:
-        _global_memory_cache = MemoryCache()
-    return _global_memory_cache
-
-
-def cleanup_all_caches():
-    """Cleanup all global caches"""
-    global _global_cache_manager, _global_memory_cache
-    
-    if _global_cache_manager:
-        _global_cache_manager.cleanup()
-    
-    if _global_memory_cache:
-        _global_memory_cache.clear()
-    
-    logger.info("All caches cleaned up")
-
-
-def get_cache_stats() -> Dict[str, Any]:
-    """Get statistics for all caches"""
-    stats = {}
-    
-    if _global_cache_manager:
-        stats['disk_cache'] = _global_cache_manager.get_stats()
-    
-    if _global_memory_cache:
-        stats['memory_cache'] = {
-            'size': _global_memory_cache.size(),
-            'max_size': _global_memory_cache.max_size
-        }
-    
-    return stats 

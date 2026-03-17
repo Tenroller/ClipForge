@@ -21,7 +21,6 @@ from moviepy import VideoFileClip
 from moviepy.video.tools.cuts import detect_scenes
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 import re
 import time
 import yt_dlp
@@ -41,17 +40,6 @@ except ImportError:
 
 # Initialize logger for this module
 logger = logger.bind(name="Compilation.processor")
-
-# Define placeholder logging functions that were imported but may not exist
-def log_generation_step(logger, *args, **kwargs):
-    logger.info(f"Generation step: {args}, {kwargs}")
-
-def log_file_operation(logger, operation, path, **kwargs):
-    logger.info(f"File {operation}: {path}, {kwargs}")
-
-def log_api_call(logger, *args, **kwargs):
-    logger.info(f"API call: {args}, {kwargs}")
-
 
 class SimpleScene:
     """Simple scene class to make moviepy output compatible with scenedetect format"""

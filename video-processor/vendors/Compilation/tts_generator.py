@@ -8,7 +8,6 @@ This module handles:
 3. Adding TTS audio to the beginning of compilations
 """
 
-from functools import lru_cache
 import os
 import sys
 import random
@@ -44,14 +43,6 @@ except ImportError:
 
 # Initialize logger for this module
 logger = logger.bind(name="Compilation.tts_generator")
-
-# Define placeholder logging functions that were imported but may not exist
-def log_generation_step(logger, *args, **kwargs):
-    logger.info(f"Generation step: {args}, {kwargs}")
-
-def log_file_operation(logger, operation, path, **kwargs):
-    logger.info(f"File {operation}: {path}, {kwargs}")
-
 
 class TTSGenerator:
     def _extract_clean_phrase(self, text):
