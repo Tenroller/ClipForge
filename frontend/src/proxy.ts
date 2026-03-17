@@ -55,12 +55,14 @@ export async function proxy(request: NextRequest) {
       const response = await fetch(`${API_BASE}/api/auth/verify`, {
         headers: {
           'Authorization': `Bearer ${token}`,
+          'X-API-Key': 'internal-proxy',
         },
         cache: 'no-store',
       });
 
-      // If token is invalid, redirect to login
-      if (!response.ok) {
+      // If token is invalid (401/403), redirect to login
+      // For other errors (429, 5xx), let the request through
+      if (response.status === 401 || response.status === 403) {
         const url = request.nextUrl.clone();
         url.pathname = '/login';
         url.searchParams.set('redirect', pathname);
@@ -71,17 +73,19 @@ export async function proxy(request: NextRequest) {
         return res;
       }
 
-      const data = await response.json();
+      if (response.ok) {
+        const data = await response.json();
 
-      if (!data.valid) {
-        const url = request.nextUrl.clone();
-        url.pathname = '/login';
-        url.searchParams.set('redirect', pathname);
+        if (!data.valid) {
+          const url = request.nextUrl.clone();
+          url.pathname = '/login';
+          url.searchParams.set('redirect', pathname);
 
-        // Delete invalid token
-        const res = NextResponse.redirect(url);
-        res.cookies.delete('auth_token');
-        return res;
+          // Delete invalid token
+          const res = NextResponse.redirect(url);
+          res.cookies.delete('auth_token');
+          return res;
+        }
       }
     } catch (error) {
       console.error('Token verification failed in middleware:', error);
