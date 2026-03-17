@@ -25,11 +25,17 @@ except ImportError:
 # Face detection with MediaPipe
 try:
     import mediapipe as mp
-    if hasattr(mp, 'solutions'):
+    if hasattr(mp, 'tasks') and hasattr(mp.tasks, 'vision'):
+        HAS_MEDIAPIPE = True
+        _MP_FACE_MODEL_URL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/latest/blaze_face_short_range.tflite"
+        _MP_FACE_MODEL_PATH = os.path.join(
+            os.environ.get("HOME", "/tmp"), ".cache", "mediapipe", "blaze_face_short_range.tflite"
+        )
+    elif hasattr(mp, 'solutions'):
         HAS_MEDIAPIPE = True
     else:
         HAS_MEDIAPIPE = False
-        print("⚠️  mediapipe installed but missing 'solutions' module - using OpenCV face detection fallback")
+        print("⚠️  mediapipe installed but missing tasks/solutions API - using OpenCV face detection fallback")
 except ImportError:
     HAS_MEDIAPIPE = False
     print("⚠️  mediapipe not available - using OpenCV face detection fallback")
@@ -127,19 +133,40 @@ class ClipScorer:
         """Lazy-load face detector"""
         if self._face_detector is None:
             if HAS_MEDIAPIPE:
-                self._mp_face_detection = mp.solutions.face_detection
-                self._face_detector = self._mp_face_detection.FaceDetection(
-                    model_selection=0,  # 0 for short-range (2m), 1 for full-range (5m)
-                    min_detection_confidence=self.config.min_face_confidence
-                )
+                if hasattr(mp.tasks, 'vision'):
+                    # Tasks API (mediapipe >= 0.10)
+                    self._ensure_face_model()
+                    options = mp.tasks.vision.FaceDetectorOptions(
+                        base_options=mp.tasks.BaseOptions(model_asset_path=_MP_FACE_MODEL_PATH),
+                        min_detection_confidence=self.config.min_face_confidence,
+                    )
+                    self._face_detector = mp.tasks.vision.FaceDetector.create_from_options(options)
+                else:
+                    # Legacy solutions API
+                    self._mp_face_detection = mp.solutions.face_detection
+                    self._face_detector = self._mp_face_detection.FaceDetection(
+                        model_selection=0,
+                        min_detection_confidence=self.config.min_face_confidence
+                    )
                 logger.info("Using MediaPipe face detection")
             else:
                 # Fallback to OpenCV Haar cascades
                 cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
                 self._face_detector = cv2.CascadeClassifier(cascade_path)
                 logger.info("Using OpenCV Haar cascade face detection")
-        
+
         return self._face_detector
+
+    @staticmethod
+    def _ensure_face_model():
+        """Download the MediaPipe face detection model if not cached."""
+        if os.path.exists(_MP_FACE_MODEL_PATH):
+            return
+        os.makedirs(os.path.dirname(_MP_FACE_MODEL_PATH), exist_ok=True)
+        import urllib.request
+        logger.info(f"Downloading MediaPipe face detection model to {_MP_FACE_MODEL_PATH}")
+        urllib.request.urlretrieve(_MP_FACE_MODEL_URL, _MP_FACE_MODEL_PATH)
+        logger.info(f"Downloaded ({os.path.getsize(_MP_FACE_MODEL_PATH)} bytes)")
     
     def score_clip(self, clip_path: str) -> ClipScore:
         """
@@ -225,14 +252,25 @@ class ClipScorer:
                 if HAS_MEDIAPIPE:
                     # MediaPipe expects RGB
                     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    results = face_detector.process(rgb_frame)
-                    
-                    if results.detections:
+
+                    if hasattr(mp.tasks, 'vision'):
+                        # Tasks API (mediapipe >= 0.10)
+                        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+                        results = face_detector.detect(mp_image)
                         for detection in results.detections:
-                            bbox = detection.location_data.relative_bounding_box
-                            face_area = bbox.width * bbox.height
+                            bbox = detection.bounding_box
+                            face_area = (bbox.width * bbox.height) / (w * h)
                             all_face_sizes.append(face_area)
                             total_faces += 1
+                    else:
+                        # Legacy solutions API
+                        results = face_detector.process(rgb_frame)
+                        if results.detections:
+                            for detection in results.detections:
+                                bbox = detection.location_data.relative_bounding_box
+                                face_area = bbox.width * bbox.height
+                                all_face_sizes.append(face_area)
+                                total_faces += 1
                 else:
                     # OpenCV Haar cascade
                     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
