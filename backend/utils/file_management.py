@@ -62,6 +62,39 @@ class TempFileManager:
 
         return temp_path
 
+    def _get_excluded_subdirs(self, dir_name: str) -> List[Path]:
+        """Get resolved paths of other registered directories that are children of the given one.
+
+        When cleaning a parent directory (e.g. ``temp/``) we must skip files
+        that live under a subdirectory that has its own cleanup policy
+        (e.g. ``temp/uploads/``, ``temp/videos/``).  Otherwise the parent's
+        more aggressive retention / size-cap would delete files that should
+        be governed by the child policy.
+        """
+        temp_dir = self.temp_dirs[dir_name].resolve()
+        excluded: List[Path] = []
+        for other_name, other_path in self.temp_dirs.items():
+            if other_name == dir_name:
+                continue
+            resolved = other_path.resolve()
+            try:
+                resolved.relative_to(temp_dir)
+                excluded.append(resolved)
+            except ValueError:
+                pass  # not a child
+        return excluded
+
+    def _is_under_excluded(self, file_path: Path, excluded: List[Path]) -> bool:
+        """Return True if *file_path* lives under any of the *excluded* directories."""
+        resolved = file_path.resolve()
+        for ex in excluded:
+            try:
+                resolved.relative_to(ex)
+                return True
+            except ValueError:
+                continue
+        return False
+
     def cleanup_temp_dir(self, dir_name: str, force: bool = False) -> Dict[str, Any]:
         """Clean up a specific temporary directory based on retention policy."""
         if dir_name not in self.temp_dirs:
@@ -79,15 +112,19 @@ class TempFileManager:
             if time_since_last.total_seconds() < policy['cleanup_interval_minutes'] * 60:
                 return {'files_removed': 0, 'space_freed_mb': 0, 'skipped': 'not_due'}
 
+        # Build list of subdirectories managed by their own policies so we
+        # never delete their files under this directory's policy.
+        excluded_subdirs = self._get_excluded_subdirs(dir_name)
+
         files_removed = 0
         space_freed = 0
         errors = []
 
         try:
-            # Get all files in directory
+            # Get all files in directory, skipping those owned by child policies
             all_files = []
             for file_path in temp_dir.rglob("*"):
-                if file_path.is_file():
+                if file_path.is_file() and not self._is_under_excluded(file_path, excluded_subdirs):
                     all_files.append(file_path)
 
             # Sort by modification time (oldest first)
@@ -118,7 +155,7 @@ class TempFileManager:
             if dir_size_mb > policy['max_size_mb']:
                 remaining_files = []
                 for file_path in temp_dir.rglob("*"):
-                    if file_path.is_file():
+                    if file_path.is_file() and not self._is_under_excluded(file_path, excluded_subdirs):
                         remaining_files.append(file_path)
 
                 remaining_files.sort(key=lambda x: x.stat().st_mtime)
@@ -276,9 +313,13 @@ def init_temp_manager():
     """Initialize the temp file manager with default directories."""
     manager = get_temp_manager()
 
-    # Define standard temp directories
+    # Define standard temp directories.
+    # IMPORTANT: child directories (uploads, videos, …) MUST be registered so
+    # the parent "default" policy skips their files during cleanup.
     temp_dirs = [
         ("default", Path("temp"), 24, 500),  # 24 hours, 500MB max
+        ("uploads", Path("temp") / "uploads", 168, 10000),  # 1 week, 10GB max — upload files must survive long jobs
+        ("temp_vertical", Path("temp") / "temp_vertical", 48, 5000),  # 48 hours, 5GB max — scene split working files
         ("video_temp", Path("temp") / "videos", 6, 1000),  # 6 hours, 1GB max
         ("audio_temp", Path("temp") / "audio", 12, 200),  # 12 hours, 200MB max
         ("subtitles_temp", Path("temp") / "subtitles", 48, 100),  # 48 hours, 100MB max
