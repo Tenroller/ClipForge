@@ -21,6 +21,16 @@ const publicRoutes = ['/', '/login'];
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Skip API routes, static files, and other non-page routes
+  // (matcher config may not be respected in all deployment modes)
+  if (
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/_next') ||
+    pathname.includes('.')
+  ) {
+    return NextResponse.next();
+  }
+
   // Check if route is protected
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
   const isPublicRoute = publicRoutes.includes(pathname);
