@@ -669,6 +669,15 @@ async def suggest_subject(
         if not api_key:
             raise HTTPException(status_code=500, detail="OpenRouter API key not configured")
 
+        # Map short model names to OpenRouter model IDs
+        model_map = {
+            "gemini-2.0-flash": "openrouter/free",
+            "gpt-4o-mini": "openai/gpt-4o-mini",
+            "gpt-4o": "openai/gpt-4o",
+            "claude-3.5-sonnet": "anthropic/claude-3.5-sonnet",
+        }
+        model = model_map.get(req.aiModel, req.aiModel) if req.aiModel else "openrouter/free"
+
         prompt = (
             "Generate ONE creative, trending short-form video topic idea. "
             "It should be engaging, suitable for a 30-60 second vertical video, and appeal to a wide audience. "
@@ -683,7 +692,7 @@ async def suggest_subject(
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": req.aiModel or "google/gemini-2.0-flash-001",
+                    "model": model,
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 50,
                     "temperature": 1.0,
