@@ -2567,15 +2567,14 @@ class TikYouGenerator:
         except Exception as e:
             print(f"⚠️ Warning: Could not clean up temp directory: {e}")
         
-        # Also cleanup the old temp_vertical directory if it exists
-        backend_dir = Path(__file__).resolve().parent.parent.parent.parent
-        temp_vertical_dir = backend_dir / "temp_vertical"
-        if os.path.isdir(temp_vertical_dir):
+        # Also cleanup the per-job temp_vertical directory
+        temp_vertical_job_dir = Path(os.getenv("TEMP_DIR", "/app/temp")) / "temp_vertical" / video_id
+        if os.path.isdir(temp_vertical_job_dir):
             try:
-                shutil.rmtree(temp_vertical_dir)
-                print("✅ Legacy temp directory cleaned up")
+                shutil.rmtree(temp_vertical_job_dir)
+                print(f"✅ Job temp_vertical directory cleaned up: {temp_vertical_job_dir}")
             except Exception as e:
-                print(f"⚠️ Warning: Could not clean up legacy temp directory: {e}")
+                print(f"⚠️ Warning: Could not clean up temp_vertical directory: {e}")
 
         # Performance Summary
         print(f"\n{'='*60}")

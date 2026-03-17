@@ -254,12 +254,14 @@ class TikTokVideoCreator:
         
         return corrupted_videos
     
-    def create_vertical_clip_from_horizontal(self, video_path):
+    def create_vertical_clip_from_horizontal(self, video_path, temp_dir=None):
         """Convert horizontal video to vertical format without title"""
         try:
-            # Use absolute path to avoid working directory issues
-            # Get the backend directory (parent of vendors)
-            temp_vertical_dir = Path(os.getenv("TEMP_DIR", "/app/temp")) / "temp_vertical"
+            # Use provided temp_dir or fall back to shared directory
+            if temp_dir:
+                temp_vertical_dir = Path(temp_dir)
+            else:
+                temp_vertical_dir = Path(os.getenv("TEMP_DIR", "/app/temp")) / "temp_vertical"
             os.makedirs(temp_vertical_dir, exist_ok=True)
             
             video_name = os.path.splitext(os.path.basename(video_path))[0]

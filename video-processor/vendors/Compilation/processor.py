@@ -1697,7 +1697,7 @@ class CatVideoProcessor:
         Env:
           SCENE_SPLIT_CONCURRENCY -> int workers (default 1, cap 6)
         """
-        temp_dir = Path(os.getenv("TEMP_DIR", "/app/temp")) / "temp_vertical"
+        temp_dir = Path(os.getenv("TEMP_DIR", "/app/temp")) / "temp_vertical" / source_video_id
         os.makedirs(temp_dir, exist_ok=True)
 
         if not os.path.exists(video_path):
