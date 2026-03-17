@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
 const BACKEND_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
@@ -21,8 +20,7 @@ async function handler(
   const backendUrl = `${BACKEND_BASE}${backendPath}${search}`;
 
   // Read auth token from first-party cookie
-  const cookieStore = await cookies();
-  const authToken = cookieStore.get('auth_token')?.value;
+  const authToken = request.cookies.get('auth_token')?.value;
 
   // Build headers for the backend request
   const headers: Record<string, string> = {
@@ -36,9 +34,9 @@ async function handler(
   }
 
   // Forward the request body for non-GET methods
-  let body: BodyInit | undefined;
+  let body: string | undefined;
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    body = await request.arrayBuffer();
+    body = await request.text();
   }
 
   try {
