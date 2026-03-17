@@ -27,6 +27,8 @@ async function handler(
   // Build headers for the backend request
   const headers: Record<string, string> = {
     'Content-Type': request.headers.get('content-type') || 'application/json',
+    // Server-to-server requests bypass CSRF (backend exempts X-API-Key)
+    'X-API-Key': 'internal-proxy',
   };
 
   if (authToken) {
