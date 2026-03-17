@@ -7,7 +7,7 @@ import JobStartedNotification from '@/components/job/JobStartedNotification';
 import ResultPanel from '@/components/job/ResultPanel';
 import { useToast } from '@/hooks/use-toast';
 import type { JobRecord, YouTubeMetadata } from '@/lib/api';
-import { generatePodcastClips, getYouTubeMetadata, getThumbnailUrl } from '@/lib/api';
+import { generatePodcastClips, getYouTubeMetadata, getThumbnailUrl, API_BASE } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,8 @@ import {
   Settings2,
   Wand2,
   Youtube,
+  Upload,
+  Layers,
   LayoutDashboard,
   ArrowDownToLine,
   AlignCenter,
@@ -34,6 +36,7 @@ import {
   Palette
 } from "lucide-react";
 import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from '@/lib/utils';
 
 export default function PodcastClipsPage() {
@@ -50,6 +53,13 @@ export default function PodcastClipsPage() {
   const [minDuration, setMinDuration] = useState(30);
   const [maxDuration, setMaxDuration] = useState(60);
   const [subtitleFontSize, setSubtitleFontSize] = useState(40);
+
+  // Video input method selection
+  const [inputMethod, setInputMethod] = useState<'youtube' | 'upload'>('youtube');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
   // Advanced subtitle settings
   const [subtitleVerticalOffset, setSubtitleVerticalOffset] = useState(500);
@@ -155,13 +165,151 @@ export default function PodcastClipsPage() {
     return () => clearTimeout(timeoutId);
   }, [youtubeUrl]);
 
+  // Helper: get CSRF token
+  const getCsrfToken = async (): Promise<string | undefined> => {
+    let csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
+    if (csrfToken) return decodeURIComponent(csrfToken);
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
+      if (res.ok) return (await res.json()).csrf_token;
+    } catch { /* best-effort */ }
+    return undefined;
+  };
+
+  const CHUNK_SIZE = 80 * 1024 * 1024; // 80MB
+
+  // File upload function
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadedFile(file);
+    setUploadProgress(0);
+
+    try {
+      const csrfToken = await getCsrfToken();
+      const headers: Record<string, string> = {};
+      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+      let data: { file_id: string; file_path: string; [key: string]: unknown };
+
+      if (file.size <= CHUNK_SIZE) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${API_BASE}/api/upload-video`, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+          headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+        });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => null);
+          throw new Error(errBody?.detail || `Upload failed: ${response.statusText}`);
+        }
+
+        setUploadProgress(100);
+        data = await response.json();
+      } else {
+        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+        const initRes = await fetch(`${API_BASE}/api/upload-video/init`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, total_size: file.size }),
+        });
+        if (!initRes.ok) {
+          const errBody = await initRes.json().catch(() => null);
+          throw new Error(errBody?.detail || `Init failed: ${initRes.statusText}`);
+        }
+        const { upload_id } = await initRes.json();
+
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const blob = file.slice(start, end);
+
+          let success = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              const chunkForm = new FormData();
+              chunkForm.append('upload_id', upload_id);
+              chunkForm.append('chunk_index', String(i));
+              chunkForm.append('chunk', blob, file.name);
+
+              const chunkRes = await fetch(`${API_BASE}/api/upload-video/chunk`, {
+                method: 'POST',
+                body: chunkForm,
+                credentials: 'include',
+                headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
+              });
+
+              if (!chunkRes.ok) {
+                const errBody = await chunkRes.json().catch(() => null);
+                throw new Error(errBody?.detail || `Chunk ${i} failed: ${chunkRes.statusText}`);
+              }
+
+              success = true;
+              break;
+            } catch (err) {
+              if (attempt === 2) throw err;
+              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+            }
+          }
+
+          if (!success) throw new Error(`Failed to upload chunk ${i} after 3 attempts`);
+          setUploadProgress(Math.round(((i + 1) / totalChunks) * 95));
+        }
+
+        const finalRes = await fetch(`${API_BASE}/api/upload-video/finalize`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ upload_id }),
+        });
+        if (!finalRes.ok) {
+          const errBody = await finalRes.json().catch(() => null);
+          throw new Error(errBody?.detail || `Finalize failed: ${finalRes.statusText}`);
+        }
+
+        setUploadProgress(100);
+        data = await finalRes.json();
+      }
+
+      setUploadedFilePath(data.file_path);
+      toast({ title: t('videoUploaded') });
+    } catch (error: unknown) {
+      toast({
+        title: t('uploadFailed'),
+        description: (error as Error).message,
+        variant: 'destructive',
+      });
+      setUploadedFile(null);
+      setUploadedFilePath(null);
+      setUploadProgress(0);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
-    if (!youtubeUrl.trim()) {
+    if (inputMethod === 'youtube' && !youtubeUrl.trim()) {
       toast({
         title: t('youtubeUrlRequired'),
         description: t('enterValidUrl'),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (inputMethod === 'upload' && !uploadedFilePath) {
+      toast({
+        title: t('uploadVideoFirst'),
         variant: 'destructive',
       });
       return;
@@ -171,7 +319,8 @@ export default function PodcastClipsPage() {
 
     try {
       const payload = {
-        youtubeUrl: youtubeUrl.trim(),
+        youtubeUrl: inputMethod === 'youtube' ? youtubeUrl.trim() : undefined,
+        uploadedVideoPath: inputMethod === 'upload' ? uploadedFilePath : undefined,
         minDuration,
         maxDuration,
         useGPU: false, // User requested CPU only
@@ -252,63 +401,122 @@ export default function PodcastClipsPage() {
               <Card className="overflow-hidden">
                 <CardHeader className="pb-6 border-b">
                   <div className="flex items-center gap-2">
-                    <Youtube className="w-5 h-5 text-muted-foreground" />
-                    <CardTitle className="text-lg font-medium">{t('youtubeUrlLabel')}</CardTitle>
+                    <Layers className="w-5 h-5 text-muted-foreground" />
+                    <CardTitle className="text-lg font-medium">{t('videoSource')}</CardTitle>
                   </div>
                 </CardHeader>
-                <CardContent className="p-6 space-y-4">
-                  <div className="space-y-2">
-                    <div className="relative">
-                      <Youtube className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="youtubeUrl"
-                        placeholder="https://youtube.com/watch?v=..."
-                        value={youtubeUrl}
-                        onChange={(e) => setYoutubeUrl(e.target.value)}
-                        disabled={isSubmitting || !!currentJobId}
-                        className="pl-9"
-                      />
-                    </div>
-                  </div>
+                <CardContent className="p-6">
+                  <Tabs defaultValue="youtube" value={inputMethod} onValueChange={(v) => setInputMethod(v as 'youtube' | 'upload')}>
+                    <TabsList className="grid w-full grid-cols-2 mb-6">
+                      <TabsTrigger value="youtube" className="flex items-center gap-2">
+                        <Youtube className="w-4 h-4" />
+                        {t('youtubeUrl')}
+                      </TabsTrigger>
+                      <TabsTrigger value="upload" className="flex items-center gap-2">
+                        <Upload className="w-4 h-4" />
+                        {t('uploadFile')}
+                      </TabsTrigger>
+                    </TabsList>
 
-                  {/* Video Metadata Preview */}
-                  {videoMetadata && (
-                    <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-                      <div className="rounded-lg border bg-muted/30 overflow-hidden flex flex-col md:flex-row">
-                        <div className="relative md:w-48 aspect-video md:aspect-auto bg-muted group overflow-hidden shrink-0">
-                          {videoMetadata.thumbnail_url ? (
-                            <Image
-                              src={getThumbnailUrl(videoMetadata.thumbnail_url)}
-                              alt={videoMetadata.title}
-                              fill
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="flex items-center justify-center h-full w-full bg-muted">
-                              <VideoIcon className="h-8 w-8 text-muted-foreground" />
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 flex items-center justify-center transition-colors">
-                            <Play className="w-8 h-8 text-white opacity-80" />
-                          </div>
-                        </div>
-                        <div className="p-4 flex flex-col justify-center gap-2">
-                          <h3 className="font-semibold text-sm line-clamp-1">{videoMetadata.title}</h3>
-                          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                            <div className="flex items-center gap-1.5">
-                              <User className="w-3 h-3" /> {videoMetadata.channel}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3 h-3" /> {videoMetadata.duration_formatted}
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                              <Eye className="w-3 h-3" /> {viewCountLabel}
-                            </div>
-                          </div>
+                    <TabsContent value="youtube" className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Youtube className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="youtubeUrl"
+                            placeholder="https://youtube.com/watch?v=..."
+                            value={youtubeUrl}
+                            onChange={(e) => setYoutubeUrl(e.target.value)}
+                            disabled={isSubmitting || !!currentJobId}
+                            className="pl-9"
+                          />
                         </div>
                       </div>
-                    </div>
-                  )}
+
+                      {/* Video Metadata Preview */}
+                      {videoMetadata && (
+                        <div className="animate-in fade-in slide-in-from-top-4 duration-500">
+                          <div className="rounded-lg border bg-muted/30 overflow-hidden flex flex-col md:flex-row">
+                            <div className="relative md:w-48 aspect-video md:aspect-auto bg-muted group overflow-hidden shrink-0">
+                              {videoMetadata.thumbnail_url ? (
+                                <Image
+                                  src={getThumbnailUrl(videoMetadata.thumbnail_url)}
+                                  alt={videoMetadata.title}
+                                  fill
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <div className="flex items-center justify-center h-full w-full bg-muted">
+                                  <VideoIcon className="h-8 w-8 text-muted-foreground" />
+                                </div>
+                              )}
+                              <div className="absolute inset-0 bg-black/10 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+                                <Play className="w-8 h-8 text-white opacity-80" />
+                              </div>
+                            </div>
+                            <div className="p-4 flex flex-col justify-center gap-2">
+                              <h3 className="font-semibold text-sm line-clamp-1">{videoMetadata.title}</h3>
+                              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                                <div className="flex items-center gap-1.5">
+                                  <User className="w-3 h-3" /> {videoMetadata.channel}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Clock className="w-3 h-3" /> {videoMetadata.duration_formatted}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <Eye className="w-3 h-3" /> {viewCountLabel}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="upload" className="space-y-4">
+                      <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:bg-muted/20 transition-colors">
+                        <Input
+                          id="videoFile"
+                          type="file"
+                          accept="video/*"
+                          onChange={handleFileUpload}
+                          disabled={isUploading}
+                          className="hidden"
+                        />
+                        <Label htmlFor="videoFile" className="cursor-pointer block space-y-4">
+                          <div className="mx-auto bg-muted rounded-full w-12 h-12 flex items-center justify-center">
+                            <Upload className="w-6 h-6 text-muted-foreground" />
+                          </div>
+                          <div>
+                            {uploadedFile ? (
+                              <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
+                                <span className="bg-green-100 dark:bg-green-900/30 p-1 rounded-full"><VideoIcon className="w-3 h-3" /></span>
+                                {uploadedFile.name}
+                              </div>
+                            ) : (
+                              <span className="font-medium">{t('uploadVideo')}</span>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {isUploading ? (
+                              <div className="space-y-2 w-full max-w-xs mx-auto">
+                                <div className="flex justify-between text-xs">
+                                  <span>{t('uploading')}</span>
+                                  <span className="font-mono">{uploadProgress}%</span>
+                                </div>
+                                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-primary transition-all duration-300 ease-out"
+                                    style={{ width: `${uploadProgress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : t('uploadVideoDescription')}
+                          </div>
+                        </Label>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </CardContent>
               </Card>
 
@@ -441,7 +649,7 @@ export default function PodcastClipsPage() {
                   <Button
                     type="submit"
                     size="lg"
-                    disabled={isSubmitting || !!currentJobId || !youtubeUrl}
+                    disabled={isSubmitting || !!currentJobId || (inputMethod === 'youtube' ? !youtubeUrl : !uploadedFilePath)}
                     className="w-full"
                   >
                     <span className="flex items-center justify-center gap-2">

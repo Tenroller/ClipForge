@@ -540,7 +540,7 @@ async def podcastclips_generate(
         job_id = str(uuid.uuid4())
 
         log_job_event(logger, job_id, "podcastclips", "created",
-                     url=req.youtubeUrl, ai_model=req.aiModel)
+                     url=req.youtubeUrl or req.uploadedVideoPath, ai_model=req.aiModel)
 
         # Create job in database
         try:
@@ -555,7 +555,10 @@ async def podcastclips_generate(
             from ...utils.progress_tracker import get_progress_tracker
             tracker = get_progress_tracker(job_id)
             tracker.add_log("Podcast clips job created and queued for processing", "info", "podcastclips")
-            tracker.add_log(f"Source: {req.youtubeUrl}", "info", "config")
+            if req.youtubeUrl:
+                tracker.add_log(f"Source: {req.youtubeUrl}", "info", "config")
+            elif req.uploadedVideoPath:
+                tracker.add_log(f"Source: Uploaded video - {req.uploadedVideoPath}", "info", "config")
             tracker.add_log(f"Duration: {req.minDuration}s-{req.maxDuration}s (AI decides clip count)", "info", "config")
             tracker.add_log(f"AI Model: {req.aiModel}, Whisper: {req.whisperModel}", "info", "config")
 

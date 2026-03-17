@@ -146,7 +146,8 @@ class BrainrotRequest(BaseModel):
 
 class PodcastClipsRequest(BaseModel):
     """Request model for podcast clips workflow - generates viral short-form videos from podcasts."""
-    youtubeUrl: str = Field(..., description="YouTube URL of the podcast to process")
+    youtubeUrl: Optional[str] = Field(default=None, description="YouTube URL of the podcast to process")
+    uploadedVideoPath: Optional[str] = Field(default=None, description="Path to uploaded video file (alternative to YouTube URL)")
     # AI/Transcription models are hardcoded in processor - these fields kept for compatibility but ignored
     aiModel: str = Field(default="openrouter/free", description="AI model (hardcoded, ignored)")
     whisperModel: str = Field(default="turbo", description="Whisper model (hardcoded to turbo)")
@@ -195,7 +196,24 @@ class PodcastClipsRequest(BaseModel):
     @field_validator('youtubeUrl')
     @classmethod
     def validate_youtube_url_field(cls, v):
-        return validate_youtube_url(v)
+        if v is not None:
+            return validate_youtube_url(v)
+        return v
+
+    @field_validator('uploadedVideoPath')
+    @classmethod
+    def validate_uploaded_video_path(cls, v):
+        if v is not None:
+            from ..validation import validate_video_file_path
+            return validate_video_file_path(v)
+        return v
+
+    def model_post_init(self, __context):
+        """Ensure exactly one of youtubeUrl or uploadedVideoPath is provided"""
+        if not self.youtubeUrl and not self.uploadedVideoPath:
+            raise ValueError("Either youtubeUrl or uploadedVideoPath must be provided")
+        if self.youtubeUrl and self.uploadedVideoPath:
+            raise ValueError("Cannot provide both youtubeUrl and uploadedVideoPath - choose one input method")
 
     @field_validator('subtitleColor', 'subtitleStrokeColor', 'subtitleHighlightColor', 'thumbnailRedBoxColor', 'thumbnailTextColor')
     @classmethod
