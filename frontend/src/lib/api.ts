@@ -258,8 +258,9 @@ export async function generateMoneyPrinterVideo(params: unknown): Promise<{
   status: string;
   jobId: string;
 }> {
-  const res = await apiFetch(`${API_BASE}/api/moneyprinter/generate`, {
+  const res = await fetch('/api/generate', {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params as unknown),
   });
 

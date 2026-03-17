@@ -163,7 +163,11 @@ export default function MoneyPrinterForm({
                       onClick={async () => {
                         try {
                           setSuggesting(true)
-                          const res = await api.post(`/api/AIvideos/suggest-subject`, { aiModel })
+                          const res = await fetch(`/api/suggest-subject`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ aiModel }),
+                          })
                           const data = await res.json()
                           if (!res.ok) throw new Error(data?.detail || 'Failed to generate subject')
                           const s = String(data?.subject || '').trim()
