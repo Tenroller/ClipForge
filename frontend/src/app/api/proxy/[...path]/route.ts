@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+// Prefer internal Docker network URL for server-to-server calls (avoids Cloudflare roundtrip)
+const BACKEND_BASE =
+  process.env.API_URL ||
+  (process.env.SERVICE_NAME_BACKEND ? `http://${process.env.SERVICE_NAME_BACKEND}:9000` : null) ||
+  process.env.NEXT_PUBLIC_API_BASE ||
+  'http://localhost:9000';
 
 /**
  * Catch-all proxy route that forwards requests to the backend API.

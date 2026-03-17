@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// For server-side routes, prefer the internal API_URL (for Docker networking)
-// Falls back to NEXT_PUBLIC_API_BASE for local development
-const BACKEND_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+// Prefer internal Docker network URL for server-to-server calls (avoids Cloudflare roundtrip)
+const BACKEND_BASE =
+  process.env.API_URL ||
+  (process.env.SERVICE_NAME_BACKEND ? `http://${process.env.SERVICE_NAME_BACKEND}:9000` : null) ||
+  process.env.NEXT_PUBLIC_API_BASE ||
+  'http://localhost:9000';
 
 export async function GET(
   request: NextRequest,

@@ -1,9 +1,12 @@
 import { cookies } from 'next/headers';
 import { jwtDecode } from 'jwt-decode';
 
-// For server-side routes, prefer the internal API_URL (for Docker networking)
-// Falls back to NEXT_PUBLIC_API_BASE for local development
-const API_BASE = process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
+// Prefer internal Docker network URL for server-to-server calls (avoids Cloudflare roundtrip)
+const API_BASE =
+  process.env.API_URL ||
+  (process.env.SERVICE_NAME_BACKEND ? `http://${process.env.SERVICE_NAME_BACKEND}:9000` : null) ||
+  process.env.NEXT_PUBLIC_API_BASE ||
+  'http://localhost:9000';
 
 export interface User {
   username: string;
