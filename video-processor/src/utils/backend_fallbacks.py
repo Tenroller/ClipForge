@@ -11,7 +11,7 @@ def check_env_vars():
     """Fallback implementation for environment variable checking."""
     import os
     
-    required_vars = ["PEXELS_API_KEY", "GEMINI_API_KEY"]
+    required_vars = ["PEXELS_API_KEY", "OPENROUTER_API_KEY"]
     missing = []
     
     for var in required_vars:

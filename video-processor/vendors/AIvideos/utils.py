@@ -110,7 +110,7 @@ def check_env_vars() -> None:
         # Required for stock video search
         required_always = ["PEXELS_API_KEY"]
         # At least one of these must be present for script generation
-        one_of = ["GEMINI_API_KEY"]
+        one_of = ["OPENROUTER_API_KEY"]
 
         missing: list[str] = []
         for var in required_always:
