@@ -571,38 +571,104 @@ class ClipScorer:
             logger.warning(f"Similarity computation failed: {e}")
             return 0.0
     
+    def _precompute_hashes(self, clips: List[Dict], sample_frames: int = 3, max_workers: int = 8) -> List[Optional[np.ndarray]]:
+        """
+        Pre-compute perceptual hashes for all clips in parallel.
+
+        Returns a list of hash matrices (sample_frames x 64) per clip, or None if hashing failed.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        def compute_clip_hashes(idx: int, clip_path: str) -> Tuple[int, Optional[np.ndarray]]:
+            try:
+                cap = cv2.VideoCapture(clip_path)
+                if not cap.isOpened():
+                    return (idx, None)
+                frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                cap.release()
+                if frame_count == 0:
+                    return (idx, None)
+
+                hashes = []
+                for i in range(sample_frames):
+                    frame_idx = int(frame_count * (i + 0.5) / sample_frames)
+                    h = self.compute_phash(clip_path, frame_idx)
+                    if h is not None:
+                        hashes.append(h)
+
+                if not hashes:
+                    return (idx, None)
+                return (idx, np.array(hashes, dtype=np.uint8))
+            except Exception as e:
+                logger.warning(f"Failed to hash clip {clip_path}: {e}")
+                return (idx, None)
+
+        results: List[Optional[np.ndarray]] = [None] * len(clips)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(compute_clip_hashes, i, clip['path']): i
+                for i, clip in enumerate(clips)
+            }
+            for future in as_completed(futures):
+                idx, hash_matrix = future.result()
+                results[idx] = hash_matrix
+
+        return results
+
     def detect_duplicates(self, clips: List[Dict], threshold: float = 0.85) -> List[Dict]:
         """
         Detect duplicate/similar clips in a list.
-        
+
+        Pre-computes all perceptual hashes in parallel, then compares them
+        using vectorized numpy operations for fast O(n^2) in-memory comparison
+        instead of opening video files per pair.
+
         Args:
             clips: List of clip dicts with 'path' key
             threshold: Similarity threshold for duplicate detection
-            
+
         Returns:
             Updated clips with 'is_duplicate' and 'duplicate_of' fields
         """
         logger.info(f"Checking {len(clips)} clips for duplicates (threshold={threshold})")
-        
-        for i, clip in enumerate(clips):
-            if clip.get('is_duplicate', False):
+
+        # Phase 1: Pre-compute all hashes in parallel
+        logger.info(f"Pre-computing perceptual hashes for {len(clips)} clips...")
+        all_hashes = self._precompute_hashes(clips)
+
+        valid_count = sum(1 for h in all_hashes if h is not None)
+        logger.info(f"Hashed {valid_count}/{len(clips)} clips successfully")
+
+        # Phase 2: Vectorized pairwise comparison
+        # For each valid pair, compute average hamming similarity across sample frames
+        hash_len = 64  # 8x8 DCT hash
+
+        for i in range(len(clips)):
+            if clips[i].get('is_duplicate', False) or all_hashes[i] is None:
                 continue
-            
+
+            hashes_i = all_hashes[i]  # shape: (sample_frames, 64)
+
             for j in range(i + 1, len(clips)):
-                if clips[j].get('is_duplicate', False):
+                if clips[j].get('is_duplicate', False) or all_hashes[j] is None:
                     continue
-                
-                similarity = self.compute_similarity(clip['path'], clips[j]['path'])
-                
+
+                hashes_j = all_hashes[j]
+
+                # Compare frame-by-frame using the minimum common sample count
+                n_compare = min(len(hashes_i), len(hashes_j))
+                hamming_dists = np.sum(hashes_i[:n_compare] != hashes_j[:n_compare], axis=1)
+                similarity = float(np.mean(1.0 - hamming_dists / hash_len))
+
                 if similarity >= threshold:
                     clips[j]['is_duplicate'] = True
-                    clips[j]['duplicate_of'] = clip['path']
+                    clips[j]['duplicate_of'] = clips[i]['path']
                     logger.info(f"Duplicate detected: {os.path.basename(clips[j]['path'])} "
-                               f"similar to {os.path.basename(clip['path'])} ({similarity:.2f})")
-        
+                               f"similar to {os.path.basename(clips[i]['path'])} ({similarity:.2f})")
+
         duplicates = sum(1 for c in clips if c.get('is_duplicate', False))
         logger.info(f"Found {duplicates} duplicate clips")
-        
+
         return clips
     
     def score_all_clips(self, clips: List[Dict], detect_duplicates: bool = True, 
