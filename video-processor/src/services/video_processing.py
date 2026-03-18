@@ -514,6 +514,7 @@ class VideoProcessingService:
             # request_data is used directly as a dict — the actual vendor code
             # (process_podcast_clips) already reads from the raw dict via parameters.get()
             youtube_url = request_data.get("youtubeUrl", "")
+            uploaded_video_path = request_data.get("uploadedVideoPath", "")
 
             # Import podcast clips processor from local vendors
             try:
@@ -528,7 +529,8 @@ class VideoProcessingService:
             job_output_dir.mkdir(parents=True, exist_ok=True)
             output_dir_str = str(job_output_dir.resolve())
 
-            logger.info(f"Job {job_id}: Processing podcast from {youtube_url}")
+            source = uploaded_video_path or youtube_url
+            logger.info(f"Job {job_id}: Processing podcast from {source}")
 
             # Get the current event loop to pass to the processor
             loop = asyncio.get_event_loop()

@@ -176,8 +176,9 @@ class PodcastClipsProcessor:
 
             # Extract parameters
             youtube_url = parameters.get('youtubeUrl')
-            if not youtube_url:
-                raise ValueError("YouTube URL is required")
+            uploaded_video_path = parameters.get('uploadedVideoPath')
+            if not youtube_url and not uploaded_video_path:
+                raise ValueError("Either YouTube URL or uploaded video file is required")
             
             # Hardcoded AI configuration (simplified - always use best settings)
             ai_model = 'openrouter/free'  # Always use latest flash model
@@ -262,8 +263,16 @@ class PodcastClipsProcessor:
             if debug_mode:
                 self._launch_debug_ui_thread()
 
-            # Step 1: Download video
-            video_path = self._download_video(youtube_url)
+            # Step 1: Download video or use uploaded file
+            if uploaded_video_path:
+                import os
+                if not os.path.exists(uploaded_video_path):
+                    raise RuntimeError(f"Uploaded video file not found: {uploaded_video_path}")
+                logger.info(f"Using uploaded video file: {uploaded_video_path}")
+                self.update_progress("download", 15, "Using uploaded video file")
+                video_path = uploaded_video_path
+            else:
+                video_path = self._download_video(youtube_url)
 
             # Get video dimensions for font size recommendations
             import moviepy
