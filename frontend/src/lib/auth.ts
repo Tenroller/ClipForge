@@ -110,7 +110,11 @@ export async function setAuthCookie(token: string): Promise<void> {
  */
 export async function removeAuthCookie(): Promise<void> {
   const cookieStore = await cookies();
-  cookieStore.delete('auth_token');
+  cookieStore.delete({
+    name: 'auth_token',
+    path: '/',
+    domain: process.env.NODE_ENV === 'production' ? '.tenroller.dev' : undefined,
+  });
 }
 
 /**

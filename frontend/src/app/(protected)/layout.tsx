@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, removeAuthCookie } from '@/lib/auth';
 import AppSidebar from '@/components/Sidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { JobNotificationWatcher } from '@/components/notifications/JobNotificationWatcher';
@@ -13,6 +13,7 @@ export default async function ProtectedLayout({
   const user = await getCurrentUser();
 
   if (!user) {
+    await removeAuthCookie();
     redirect('/login');
   }
 

@@ -1,5 +1,15 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtDecode } from 'jwt-decode';
+
+function isTokenExpiredCheck(token: string): boolean {
+  try {
+    const decoded = jwtDecode<{ exp: number }>(token);
+    return decoded.exp < Date.now() / 1000;
+  } catch {
+    return true;
+  }
+}
 
 // Protected routes that require authentication
 const protectedRoutes = [
@@ -17,6 +27,8 @@ const protectedRoutes = [
 
 // Public routes that don't require authentication
 const publicRoutes = ['/', '/login'];
+
+const COOKIE_DOMAIN = process.env.NODE_ENV === 'production' ? '.tenroller.dev' : undefined;
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -46,8 +58,16 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If accessing login page with valid token, redirect to creator
+  // If accessing login page with token, verify it first
   if (pathname === '/login' && token) {
+    // Check if token is actually valid before redirecting away from login
+    const isExpired = isTokenExpiredCheck(token);
+    if (isExpired) {
+      // Token is expired — clear it and let user stay on login
+      const res = NextResponse.next();
+      res.cookies.delete({ name: 'auth_token', path: '/', domain: COOKIE_DOMAIN });
+      return res;
+    }
     const url = request.nextUrl.clone();
     url.pathname = '/creator';
     return NextResponse.redirect(url);
@@ -79,7 +99,7 @@ export async function proxy(request: NextRequest) {
 
         // Delete invalid token
         const res = NextResponse.redirect(url);
-        res.cookies.delete('auth_token');
+        res.cookies.delete({ name: 'auth_token', path: '/', domain: COOKIE_DOMAIN });
         return res;
       }
 
@@ -93,7 +113,7 @@ export async function proxy(request: NextRequest) {
 
           // Delete invalid token
           const res = NextResponse.redirect(url);
-          res.cookies.delete('auth_token');
+          res.cookies.delete({ name: 'auth_token', path: '/', domain: COOKIE_DOMAIN });
           return res;
         }
       }
