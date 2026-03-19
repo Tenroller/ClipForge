@@ -5,34 +5,6 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 
-/**
- * Read a cookie value by name from document.cookie.
- * Returns undefined when running server-side or when the cookie is absent.
- */
-function getCookie(name: string): string | undefined {
-  if (typeof document === 'undefined') return undefined;
-  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
-  return match ? decodeURIComponent(match[1]) : undefined;
-}
-
-// Cached CSRF token for cross-origin environments where the cookie is unreadable
-let _csrfTokenCache: string | null = null;
-
-async function fetchCsrfToken(): Promise<string | undefined> {
-  if (_csrfTokenCache) return _csrfTokenCache;
-  try {
-    const res = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
-    if (res.ok) {
-      const data = await res.json();
-      _csrfTokenCache = data.csrf_token;
-      return _csrfTokenCache ?? undefined;
-    }
-  } catch {
-    // Ignore — CSRF token is best-effort
-  }
-  return undefined;
-}
-
 export type JobRecord = {
   id: string;
   workflow: 'moneyprinter' | 'brainrot' | string;
@@ -100,7 +72,6 @@ export type CleanupResult = {
  * cross-origin CORS / CSRF issues.
  */
 async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const method = (options.method || 'GET').toUpperCase();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -123,10 +94,12 @@ async function apiFetch(url: string, options: RequestInit = {}): Promise<Respons
     headers,
   });
 
-  // If we get a 401, redirect to login
+  // If we get a 401, redirect to login (debounced to avoid racing redirects)
   // Note: middleware should also catch this, but this is a fallback
   if (response.status === 401 && typeof window !== 'undefined') {
-    window.location.href = '/login';
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
   }
 
   return response;
@@ -388,7 +361,7 @@ export type JobLineageResponse = {
 };
 
 export async function getJobLineage(jobId: string): Promise<JobLineageResponse> {
-  const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/lineage`);
+  const res = await apiFetch(`${API_BASE}/api/jobs/${encodeURIComponent(jobId)}/lineage`);
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: 'Unknown error' }));
     throw new Error(error.detail || 'Failed to get job lineage');
@@ -407,7 +380,7 @@ export async function getResumableJobs(): Promise<JobRecord[]> {
 }
 
 export async function resumeJob(jobId: string): Promise<{ job_id: string }> {
-  const res = await apiFetch(`${API_BASE}/api/jobs/${jobId}/resume`, {
+  const res = await apiFetch(`${API_BASE}/api/jobs/${encodeURIComponent(jobId)}/resume`, {
     method: 'POST',
   });
   if (!res.ok) {
@@ -590,8 +563,8 @@ export async function listPodcastProjects(params?: {
   sort_order?: string;
 }): Promise<ListProjectsResponse> {
   const searchParams = new URLSearchParams();
-  if (params?.limit) searchParams.set('limit', String(params.limit));
-  if (params?.offset) searchParams.set('offset', String(params.offset));
+  if (params?.limit != null) searchParams.set('limit', String(params.limit));
+  if (params?.offset != null) searchParams.set('offset', String(params.offset));
   if (params?.status) searchParams.set('status', params.status);
   if (params?.sort_by) searchParams.set('sort_by', params.sort_by);
   if (params?.sort_order) searchParams.set('sort_order', params.sort_order);

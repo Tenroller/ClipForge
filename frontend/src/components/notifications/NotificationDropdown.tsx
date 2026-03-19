@@ -26,12 +26,12 @@ import { useState } from 'react';
 function getNotificationIcon(type: AppNotification['type']) {
   switch (type) {
     case 'success':
-      return <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />;
+      return <CheckCircle2 className="size-4 shrink-0 text-success" />;
     case 'error':
       return <XCircle className="size-4 shrink-0 text-destructive" />;
     case 'info':
     default:
-      return <Info className="size-4 shrink-0 text-blue-500" />;
+      return <Info className="size-4 shrink-0 text-info" />;
   }
 }
 

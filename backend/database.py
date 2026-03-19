@@ -400,54 +400,6 @@ class JobStore:
                 "recent_24h": recent
             }
 
-    def expire_stale_jobs(self, running_timeout_hours: int = 4, queued_timeout_hours: int = 12) -> Dict[str, Any]:
-        """Mark stale running/queued jobs as cancelled with explanatory error.
-
-        Returns counts of updated jobs.
-        """
-        from datetime import datetime, timedelta, timezone
-        now = datetime.now(timezone.utc)
-        running_cutoff = now - timedelta(hours=running_timeout_hours)
-        queued_cutoff = now - timedelta(hours=queued_timeout_hours)
-
-        with self._get_session() as session:
-            # Collect IDs first (so we can optionally purge later outside this method)
-            running_ids = [r.id for r in session.query(Job.id).filter(
-                Job.status == 'running',
-                Job.started_at != None,  # noqa: E711
-                Job.started_at < running_cutoff
-            ).all()]
-
-            queued_ids = [q.id for q in session.query(Job.id).filter(
-                Job.status == 'queued',
-                Job.created_at < queued_cutoff
-            ).all()]
-
-            updated_running = 0
-            updated_queued = 0
-
-            if running_ids:
-                updated_running = session.query(Job).filter(Job.id.in_(running_ids)).update({
-                    Job.status: 'cancelled',
-                    Job.error_message: f"Auto-cancelled: exceeded max runtime ({running_timeout_hours}h limit)"
-                }, synchronize_session=False)
-
-            if queued_ids:
-                updated_queued = session.query(Job).filter(Job.id.in_(queued_ids)).update({
-                    Job.status: 'cancelled',
-                    Job.error_message: f"Auto-cancelled: queued longer than {queued_timeout_hours}h"
-                }, synchronize_session=False)
-
-            if updated_running or updated_queued:
-                session.commit()
-
-            return {
-                "running_expired": updated_running,
-                "queued_expired": updated_queued,
-                "running_ids": running_ids,
-                "queued_ids": queued_ids
-            }
-
     # Tombstone / purge utilities
     def purge_job(self, job_id: str, reason: str = "Purged by user") -> bool:
         """Soft-delete job and record tombstone so future GET returns 410."""

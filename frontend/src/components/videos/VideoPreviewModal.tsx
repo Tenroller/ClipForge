@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Download, Check, Film, Brain, Video as VideoIcon, Clock, Database } from "lucide-react";
 import type { Video } from './VideoCard';
 import { API_BASE } from '@/lib/api';
+import { getWorkflowClasses } from '@/lib/status';
 
 interface VideoPreviewModalProps {
   video: Video | null;
@@ -60,19 +61,6 @@ export default function VideoPreviewModal({
     }
   };
 
-  const getWorkflowColor = () => {
-    switch (video.workflow) {
-      case 'moneyprinter':
-        return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'brainrot':
-        return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
-      case 'podcastclips':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
-      default:
-        return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-    }
-  };
-
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -81,12 +69,12 @@ export default function VideoPreviewModal({
             {video.filename}
           </DialogTitle>
           <div className="flex items-center gap-2 mt-2">
-            <Badge variant="outline" className={getWorkflowColor()}>
+            <Badge variant="outline" className={getWorkflowClasses(video.workflow)}>
               {getWorkflowIcon()}
               <span className="ml-1 capitalize">{video.workflow}</span>
             </Badge>
             {video.posted && (
-              <Badge variant="default" className="bg-green-600">
+              <Badge variant="default" className="bg-success">
                 <Check className="size-3 mr-1" />
                 Posted
               </Badge>

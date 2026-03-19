@@ -9,9 +9,6 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:9000';
 /** Statuses that indicate the job is finished and the SSE stream will close. */
 const TERMINAL_STATUSES = new Set(['done', 'error', 'cancelled', 'completed', 'failed']);
 
-/** Active (in-progress) statuses that warrant live-streaming. */
-const ACTIVE_STATUSES = new Set(['queued', 'processing', 'running']);
-
 type ConnectionState = 'connecting' | 'open' | 'closed' | 'fallback';
 
 interface UseJobSSEOptions {
@@ -194,7 +191,7 @@ export function useJobSSE(options: UseJobSSEOptions = {}): UseJobSSEReturn {
       // Heartbeat received -- connection is alive. Nothing to do.
     });
 
-    es.addEventListener('error', (_event: Event) => {
+    es.addEventListener('error', () => {
       // Close the broken connection
       es.close();
       eventSourceRef.current = null;
@@ -242,30 +239,4 @@ export function useJobSSE(options: UseJobSSEOptions = {}): UseJobSSEReturn {
   }, [enabled, jobId]);
 
   return { connectionState, latestJob };
-}
-
-/**
- * Convenience hook: stream a single job via SSE with REST fallback.
- *
- * Designed as a drop-in complement to `useJob` -- wire it up alongside the
- * existing polling hook. SSE pushes updates into the React Query cache so
- * `useJob` consumers get data from the cache without extra fetches.
- */
-export function useJobStream(jobId: string | undefined | null) {
-  const isActive = !!jobId;
-
-  return useJobSSE({
-    jobId: jobId ?? undefined,
-    enabled: isActive,
-  });
-}
-
-/**
- * Convenience hook: stream all job updates via SSE.
- *
- * Pushes every job_update into the React Query cache so `useJobs` consumers
- * get live data.
- */
-export function useAllJobsStream(enabled = true) {
-  return useJobSSE({ enabled });
 }

@@ -208,8 +208,8 @@ export default function HomePage() {
                 {t('footer.tagline')}
               </p>
               <div className="flex gap-2">
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Github className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-10 w-10" aria-label="GitHub">
+                  <Github className="h-5 w-5" />
                 </Button>
               </div>
             </div>

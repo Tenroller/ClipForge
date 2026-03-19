@@ -23,7 +23,6 @@ export default function LoginPage() {
     if (!username || !password) {
       toast({
         title: t('errors.required'),
-        description: t('errors.required'),
         variant: 'destructive',
       });
       return;
@@ -37,7 +36,6 @@ export default function LoginPage() {
       if (result.success) {
         toast({
           title: t('success.loggedIn'),
-          description: t('success.loggedIn'),
         });
         router.push('/creator');
         router.refresh();
@@ -48,10 +46,9 @@ export default function LoginPage() {
           variant: 'destructive',
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: t('errors.unexpectedError'),
-        description: t('errors.unexpectedError'),
         variant: 'destructive',
       });
     } finally {

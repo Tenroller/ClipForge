@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ArrowLeft, ArrowUpDown, CheckSquare, Filter, Plus, X, Loader2, Scissors } from 'lucide-react';
+import { ArrowLeft, ArrowUpDown, CheckSquare, Filter, Plus, Loader2, Scissors } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 import ClipCard from './ClipCard';
 import type { PodcastClip, PodcastProjectDetail } from '@/lib/api';
@@ -40,18 +40,34 @@ interface ProjectClipsViewProps {
   onNewVideo?: () => void;
 }
 
+const STEP_KEYS = [
+  'initialization',
+  'download',
+  'transcription',
+  'speaker_diarization',
+  'ai_analysis',
+  'scoring',
+  'hook_optimization',
+  'face_detection',
+  'speaker_detection',
+  'clip_generation',
+  'finalization',
+  'post_processing',
+  'completed',
+] as const;
+
 export default function ProjectClipsView({
   projectId,
   onBack,
   onNewVideo,
 }: ProjectClipsViewProps) {
   const { toast } = useToast();
+  const t = useTranslations('projectClipsView');
   const [project, setProject] = useState<PodcastProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState<'score' | 'time' | 'duration'>('score');
   const [filterBy, setFilterBy] = useState<'all' | 'liked' | 'disliked' | 'unrated'>('all');
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedClips, setSelectedClips] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clipToDelete, setClipToDelete] = useState<PodcastClip | null>(null);
 
@@ -69,14 +85,14 @@ export default function ProjectClipsView({
     } catch (error) {
       console.error('Failed to load project:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao carregar projeto',
+        title: t('error'),
+        description: t('failedLoadProject'),
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  }, [projectId, toast]);
+  }, [projectId, toast, t]);
 
   useEffect(() => {
     loadProject();
@@ -125,19 +141,18 @@ export default function ProjectClipsView({
       const newLikes = clip.likes > 0 ? 0 : 1;
       await updateClipMetadata(projectId, clip.id, {
         likes: newLikes,
-        dislikes: 0, // Remove dislike when liking
+        dislikes: 0,
       });
-      // Refresh project data
       loadProject();
       toast({
-        title: newLikes > 0 ? 'Clip curtido' : 'Curtida removida',
-        description: newLikes > 0 ? 'Clip marcado como bom' : 'Curtida removida do clip',
+        title: newLikes > 0 ? t('clipLiked') : t('likeRemoved'),
+        description: newLikes > 0 ? t('clipMarkedGood') : t('likeRemovedDesc'),
       });
     } catch (error) {
       console.error('Failed to like clip:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao curtir clip',
+        title: t('error'),
+        description: t('failedLikeClip'),
         variant: 'destructive',
       });
     }
@@ -149,18 +164,18 @@ export default function ProjectClipsView({
       const newDislikes = clip.dislikes > 0 ? 0 : 1;
       await updateClipMetadata(projectId, clip.id, {
         dislikes: newDislikes,
-        likes: 0, // Remove like when disliking
+        likes: 0,
       });
       loadProject();
       toast({
-        title: newDislikes > 0 ? 'Clip descurtido' : 'Descurtida removida',
-        description: newDislikes > 0 ? 'Clip marcado como ruim' : 'Descurtida removida do clip',
+        title: newDislikes > 0 ? t('clipDisliked') : t('dislikeRemoved'),
+        description: newDislikes > 0 ? t('clipMarkedBad') : t('dislikeRemovedDesc'),
       });
     } catch (error) {
       console.error('Failed to dislike clip:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao descurtir clip',
+        title: t('error'),
+        description: t('failedDislikeClip'),
         variant: 'destructive',
       });
     }
@@ -179,14 +194,14 @@ export default function ProjectClipsView({
       await deleteClip(projectId, clipToDelete.id, true);
       loadProject();
       toast({
-        title: 'Clip excluido',
-        description: 'Clip removido com sucesso',
+        title: t('clipDeleted'),
+        description: t('clipDeletedSuccess'),
       });
     } catch (error) {
       console.error('Failed to delete clip:', error);
       toast({
-        title: 'Erro',
-        description: 'Falha ao excluir clip',
+        title: t('error'),
+        description: t('failedDeleteClip'),
         variant: 'destructive',
       });
     } finally {
@@ -199,24 +214,13 @@ export default function ProjectClipsView({
   const getJobProgress = () => {
     if (!job) return null;
 
-    const steps = [
-      { key: 'initialization', label: 'Inicializacao' },
-      { key: 'download', label: 'Download do video' },
-      { key: 'transcription', label: 'Transcricao' },
-      { key: 'speaker_diarization', label: 'Identificacao de speakers' },
-      { key: 'ai_analysis', label: 'Analise de IA' },
-      { key: 'scoring', label: 'Pontuacao de clips' },
-      { key: 'hook_optimization', label: 'Otimizacao de hooks' },
-      { key: 'face_detection', label: 'Deteccao de rostos' },
-      { key: 'speaker_detection', label: 'Deteccao de speakers' },
-      { key: 'clip_generation', label: 'Geracao de clips' },
-      { key: 'finalization', label: 'Finalizacao' },
-      { key: 'post_processing', label: 'Pos-processamento' },
-      { key: 'completed', label: 'Concluido' },
-    ];
+    const steps = STEP_KEYS.map((key) => ({
+      key,
+      label: t(`steps.${key}`),
+    }));
 
     const currentStepIndex = steps.findIndex(s => s.key === job.current_step);
-    const currentStepLabel = currentStepIndex >= 0 ? steps[currentStepIndex].label : job.current_step;
+    const currentStepLabel = currentStepIndex >= 0 ? steps[currentStepIndex].label : (job.current_step || '');
     const progress = job.progress ?? (currentStepIndex >= 0 ? Math.round(((currentStepIndex + 1) / steps.length) * 100) : 0);
 
     return {
@@ -241,10 +245,10 @@ export default function ProjectClipsView({
   if (!project) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
-        <p className="text-muted-foreground">Projeto nao encontrado</p>
+        <p className="text-muted-foreground">{t('projectNotFound')}</p>
         <Button variant="outline" onClick={onBack}>
           <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar
+          {t('back')}
         </Button>
       </div>
     );
@@ -267,23 +271,19 @@ export default function ProjectClipsView({
 
         <div className="flex items-center gap-2 pl-12 sm:pl-0">
           {onNewVideo && (
-            <Button
-              className=""
-              onClick={onNewVideo}
-            >
+            <Button onClick={onNewVideo}>
               <Plus className="h-4 w-4 mr-2" />
-              Novo Video
+              {t('newVideo')}
             </Button>
           )}
           <Button
             variant={selectionMode ? 'default' : 'outline'}
             onClick={() => {
               setSelectionMode(!selectionMode);
-              setSelectedClips(new Set());
             }}
           >
             <CheckSquare className="h-4 w-4 mr-2" />
-            Selecionar
+            {t('select')}
           </Button>
         </div>
       </div>
@@ -294,13 +294,13 @@ export default function ProjectClipsView({
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={filterBy} onValueChange={(v) => setFilterBy(v as typeof filterBy)}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Filtrar" />
+              <SelectValue placeholder={t('filter')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="liked">Curtidos</SelectItem>
-              <SelectItem value="disliked">Descurtidos</SelectItem>
-              <SelectItem value="unrated">Sem avaliacao</SelectItem>
+              <SelectItem value="all">{t('filterAll')}</SelectItem>
+              <SelectItem value="liked">{t('filterLiked')}</SelectItem>
+              <SelectItem value="disliked">{t('filterDisliked')}</SelectItem>
+              <SelectItem value="unrated">{t('filterUnrated')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -309,12 +309,12 @@ export default function ProjectClipsView({
           <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
           <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="Ordenar" />
+              <SelectValue placeholder={t('sort')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="score">Por Score</SelectItem>
-              <SelectItem value="time">Por Tempo</SelectItem>
-              <SelectItem value="duration">Por Duracao</SelectItem>
+              <SelectItem value="score">{t('sortByScore')}</SelectItem>
+              <SelectItem value="time">{t('sortByTime')}</SelectItem>
+              <SelectItem value="duration">{t('sortByDuration')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -329,12 +329,12 @@ export default function ProjectClipsView({
               <div className="space-y-6">
                 <div className="flex items-center justify-center gap-3">
                   <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  <h3 className="text-xl font-semibold">Processando video</h3>
+                  <h3 className="text-xl font-semibold">{t('processingVideo')}</h3>
                 </div>
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Progresso</span>
+                    <span className="text-muted-foreground">{t('progress')}</span>
                     <span className="font-medium">{jobProgress.progress}%</span>
                   </div>
                   <Progress value={jobProgress.progress} className="h-2" />
@@ -342,16 +342,16 @@ export default function ProjectClipsView({
 
                 <div className="text-center space-y-2">
                   <p className="text-sm font-medium text-primary">
-                    Etapa atual: {jobProgress.currentStep}
+                    {t('currentStep', { step: jobProgress.currentStep })}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Os clips aparecerão aqui assim que o processamento for concluído
+                    {t('clipsAppearWhenDone')}
                   </p>
                 </div>
 
                 {job?.started_at && (
                   <div className="text-center text-xs text-muted-foreground">
-                    Iniciado em: {new Date(job.started_at).toLocaleString('pt-BR')}
+                    {t('startedAt', { time: new Date(job.started_at).toLocaleString() })}
                   </div>
                 )}
               </div>
@@ -361,23 +361,23 @@ export default function ProjectClipsView({
           // Show "no clips found" message when job is not running
           <EmptyState
             icon={Scissors}
-            title="Nenhum clip encontrado"
+            title={t('noClipsFound')}
             description={
               filterBy !== 'all'
-                ? 'Tente ajustar os filtros'
-                : 'Este projeto ainda nao tem clips gerados'
+                ? t('tryAdjustFilters')
+                : t('noClipsGenerated')
             }
             className="min-h-[300px]"
           />
         )
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {sortedClips.map((clip) => (
             <ClipCard
               key={clip.id}
               clip={clip}
               projectId={projectId}
-              onRender={() => { }} // Keeping for backwards compatibility
+              onRender={() => { }}
               onDelete={() => handleDelete(clip)}
               onLike={() => handleLike(clip)}
               onDislike={() => handleDislike(clip)}
@@ -390,21 +390,21 @@ export default function ProjectClipsView({
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Clip</AlertDialogTitle>
+            <AlertDialogTitle>{t('deleteClipTitle')}</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir este clip? Esta acao nao pode ser desfeita.
+              {t('deleteClipWarning')}
               <br />
               <br />
               <strong>{clipToDelete?.title || clipToDelete?.filename}</strong>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel>{t('cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Excluir
+              {t('deleteConfirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

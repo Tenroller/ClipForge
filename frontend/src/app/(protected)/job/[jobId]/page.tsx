@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useJob } from '@/hooks/use-jobs';
@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { formatDuration } from '@/lib/formatDuration';
 import { cn } from '@/lib/utils';
 import {
@@ -23,18 +22,20 @@ import {
   RotateCcw,
 } from "lucide-react";
 
+import { getStatusIconColor } from '@/lib/status';
+
 function getStatusIcon(status: string) {
   switch (status) {
     case 'queued':
-      return <Clock className="size-5 text-muted-foreground" />;
+      return <Clock className={`size-5 ${getStatusIconColor('queued')}`} />;
     case 'running':
     case 'processing':
-      return <Loader2 className="size-5 animate-spin text-blue-500" />;
+      return <Loader2 className={`size-5 animate-spin ${getStatusIconColor('running')}`} />;
     case 'done':
     case 'completed':
-      return <CheckCircle2 className="size-5 text-green-500" />;
+      return <CheckCircle2 className={`size-5 ${getStatusIconColor('done')}`} />;
     case 'error':
-      return <XCircle className="size-5 text-red-500" />;
+      return <XCircle className={`size-5 ${getStatusIconColor('error')}`} />;
     case 'cancelled':
       return <XCircle className="size-5 text-muted-foreground" />;
     default:
@@ -42,26 +43,7 @@ function getStatusIcon(status: string) {
   }
 }
 
-function getStatusColor(status: string): 'secondary' | 'default' | 'destructive' | 'outline' {
-  switch (status) {
-    case 'queued':
-      return 'secondary';
-    case 'running':
-    case 'processing':
-      return 'default';
-    case 'done':
-    case 'completed':
-      return 'default'; // Green is handled by class usually, but default is fine
-    case 'error':
-      return 'destructive';
-    case 'cancelled':
-      return 'secondary';
-    default:
-      return 'outline';
-  }
-}
-
-function getInitialSteps(workflow: string, t: any) {
+function getInitialSteps(workflow: string, t: (key: string) => string) {
   if (workflow === 'brainrot') {
     return [
       { key: 'download_video', label: t('steps.downloadVideo') },
@@ -101,12 +83,12 @@ function getInitialSteps(workflow: string, t: any) {
   }
 }
 
-function calculateProgress(currentStep?: string, status?: string, workflow?: string, t?: any) {
+function calculateProgress(currentStep?: string, status?: string, workflow?: string, t?: (key: string) => string) {
   if (status === 'done' || status === 'completed') return 100;
   if (status === 'error' || status === 'cancelled') return 0;
   if (!currentStep) return 0;
 
-  const steps = getInitialSteps(workflow || 'unknown', t);
+  const steps = getInitialSteps(workflow || 'unknown', t!);
   const currentIndex = steps.findIndex((s) => s.key === currentStep);
   return currentIndex >= 0 ? Math.round(((currentIndex + 1) / steps.length) * 100) : 0;
 }
@@ -117,6 +99,14 @@ export default function JobMonitoringPage() {
   const router = useRouter();
   const jobId = params?.jobId as string;
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Update current time for live duration display
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [autoRefresh]);
 
   const { data: job, isLoading, error } = useJob(jobId, {
     refetchInterval: autoRefresh ? 3000 : false  // 3 seconds when enabled, disabled when off
@@ -127,8 +117,7 @@ export default function JobMonitoringPage() {
       return formatDuration(job.duration_seconds);
     } else if (job?.started_at) {
       const startTime = new Date(job.started_at).getTime();
-      const currentTime = Date.now();
-      const durationSeconds = Math.floor((currentTime - startTime) / 1000);
+      const durationSeconds = Math.floor((now - startTime) / 1000);
       return formatDuration(durationSeconds);
     }
     return 'N/A';
@@ -155,8 +144,8 @@ export default function JobMonitoringPage() {
     return (
       <div className="container mx-auto py-8">
         <div className="max-w-md mx-auto text-center space-y-6">
-          <div className="size-16 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center mx-auto">
-            <XCircle className="size-8 text-red-600 dark:text-red-400" />
+          <div className="size-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto">
+            <XCircle className="size-8 text-destructive" />
           </div>
           <div>
             <h2 className="text-2xl font-bold">{t('jobNotFound')}</h2>
@@ -184,6 +173,7 @@ export default function JobMonitoringPage() {
             size="icon"
             onClick={() => router.push('/activity')}
             className="shrink-0"
+            aria-label={t('back') || 'Back'}
           >
             <ArrowLeft className="size-4" />
           </Button>
@@ -286,7 +276,6 @@ export default function JobMonitoringPage() {
                   const isCurrent =
                     step.key === job.current_step &&
                     (job.status === 'running' || job.status === 'processing');
-                  const isPending = !isCompleted && !isCurrent;
 
                   return (
                     <div key={step.key} className="relative">

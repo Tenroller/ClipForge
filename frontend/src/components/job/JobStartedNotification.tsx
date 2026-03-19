@@ -52,10 +52,10 @@ export default function JobStartedNotification({
   }, [autoRedirect, redirectDelay, jobId, router])
 
   return (
-    <Card className={`border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800/30 ${className}`}>
+    <Card className={`border-success/20 bg-success/5 ${className}`}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-3">
-          <CheckCircle className="size-5 text-green-600" />
+          <CheckCircle className="size-5 text-success" />
           {autoRedirect ? t('jobStartedSuccessfully') : t('jobInProgress')}
         </CardTitle>
       </CardHeader>
@@ -76,7 +76,7 @@ export default function JobStartedNotification({
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">Status:</span>
             <div className="flex items-center gap-2">
-              <Loader2 className="size-3 animate-spin text-blue-500" />
+              <Loader2 className="size-3 animate-spin text-info" />
               <span className="text-sm font-medium">{t('processing')}</span>
             </div>
           </div>
@@ -114,7 +114,7 @@ export default function JobStartedNotification({
         )}
 
         {autoRedirect ? (
-          <div className="text-xs text-center text-muted-foreground bg-blue-50 dark:bg-blue-950/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800/30">
+          <div className="text-xs text-center text-muted-foreground bg-info/5 p-3 rounded-lg border border-info/20">
             <p className="flex items-center justify-center gap-2">
               <Loader2 className="size-3 animate-spin" />
               {t('redirectingIn', { seconds: Math.ceil(redirectDelay / 1000) })}

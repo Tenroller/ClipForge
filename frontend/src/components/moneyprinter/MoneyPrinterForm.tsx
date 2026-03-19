@@ -11,8 +11,6 @@ import { Switch } from "@/components/ui/switch"
 import { HelpCircle, RefreshCw, Star, Cpu, Loader2, Type, ChevronDown, ChevronUp } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip"
 import { Button } from "@/components/ui/button"
-import { toast } from "sonner"
-import { api, API_BASE } from '@/lib/api'
 
 export type MoneyPrinterFormProps = {
   aiModel: string
@@ -65,7 +63,6 @@ export default function MoneyPrinterForm({
 }: MoneyPrinterFormProps) {
   const t = useTranslations('creator.form')
   const [useMusic, setUseMusic] = useState(false)
-  const [gpuInfoText, setGpuInfoText] = useState<string>("")
   const [voiceLoading, setVoiceLoading] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showSubtitleSettings, setShowSubtitleSettings] = useState(false)
@@ -172,7 +169,7 @@ export default function MoneyPrinterForm({
                           if (!res.ok) throw new Error(data?.detail || 'Failed to generate subject')
                           const s = String(data?.subject || '').trim()
                           if (s) setSubject(s)
-                        } catch (e) {
+                        } catch {
                           // Best-effort; keep errors silent in UI to avoid noise
                         } finally {
                           setSuggesting(false)
@@ -399,7 +396,7 @@ export default function MoneyPrinterForm({
 
                       <div className="space-y-3">
                         <Label>{t('shadowLayers')}</Label>
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <button
                             type="button"
                             onClick={() => setShadowLayersCount(2)}

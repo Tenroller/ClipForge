@@ -309,7 +309,7 @@ class FaceTracker:
         enable_scene_detection: bool = False,
         enable_caching: bool = True,
         enable_quality_metrics: bool = False,
-        cache_dir: str = ".face_detection_cache"
+        cache_dir: str = "/tmp/face_detection_cache"
     ):
         """
         Initialize face tracker with OpenCV.

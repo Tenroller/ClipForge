@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { type Video } from '@/components/videos/VideoCard';
 import { type VideoStatsData } from '@/components/videos/VideoStats';
@@ -38,8 +38,8 @@ const DEFAULT_STATS: VideoStatsData = {
   },
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function useVideoPagination(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   t: any
 ): UseVideoPaginationReturn {
   const { toast } = useToast();
@@ -50,15 +50,29 @@ export function useVideoPagination(
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(true);
 
+  // Use a ref to avoid stale closure on rapid "load more" clicks
+  const offsetRef = useRef(0);
+  // Abort controllers for in-flight requests
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
+  const refreshAbortRef = useRef<AbortController | null>(null);
+
   const loadMoreVideos = useCallback(
     async (params: URLSearchParams) => {
+      // Abort any in-flight load-more request
+      loadMoreAbortRef.current?.abort();
+      const controller = new AbortController();
+      loadMoreAbortRef.current = controller;
+
       try {
         setLoadingMore(true);
 
-        // Override the offset with the current offset
-        params.set('offset', offset.toString());
+        // Use the ref for the current offset to avoid stale closures
+        const newParams = new URLSearchParams(params);
+        newParams.set('offset', offsetRef.current.toString());
 
-        const response = await api.get(`/api/videos/managed?${params}`);
+        const response = await api.get(`/api/videos/managed?${newParams}`);
+
+        if (controller.signal.aborted) return;
 
         if (!response.ok) {
           throw new Error(`Failed to load videos: ${response.statusText}`);
@@ -66,9 +80,12 @@ export function useVideoPagination(
 
         const data: VideosResponse = await response.json();
         setVideos((prev) => [...prev, ...data.videos]);
-        setOffset((prev) => prev + data.limit);
+        const newOffset = offsetRef.current + data.limit;
+        offsetRef.current = newOffset;
+        setOffset(newOffset);
         setHasMore(data.has_more);
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error('Failed to load more videos:', error);
         toast({
           title: t('error'),
@@ -76,22 +93,33 @@ export function useVideoPagination(
           variant: 'destructive',
         });
       } finally {
-        setLoadingMore(false);
+        if (!controller.signal.aborted) {
+          setLoadingMore(false);
+        }
       }
     },
-    [offset, toast, t]
+    [toast, t]
   );
 
   const refreshVideos = useCallback(
     async (params: URLSearchParams) => {
+      // Abort any in-flight refresh request
+      refreshAbortRef.current?.abort();
+      const controller = new AbortController();
+      refreshAbortRef.current = controller;
+
       try {
         setLoading(true);
+        offsetRef.current = 0;
         setOffset(0);
 
         // Override the offset to 0 for refresh
-        params.set('offset', '0');
+        const newParams = new URLSearchParams(params);
+        newParams.set('offset', '0');
 
-        const response = await api.get(`/api/videos/managed?${params}`);
+        const response = await api.get(`/api/videos/managed?${newParams}`);
+
+        if (controller.signal.aborted) return;
 
         if (!response.ok) {
           throw new Error(`Failed to load videos: ${response.statusText}`);
@@ -99,9 +127,11 @@ export function useVideoPagination(
 
         const data: VideosResponse = await response.json();
         setVideos(data.videos);
+        offsetRef.current = data.limit;
         setOffset(data.limit);
         setHasMore(data.has_more);
       } catch (error) {
+        if (controller.signal.aborted) return;
         console.error('Failed to refresh videos:', error);
         toast({
           title: t('error'),
@@ -109,7 +139,9 @@ export function useVideoPagination(
           variant: 'destructive',
         });
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     },
     [toast, t]

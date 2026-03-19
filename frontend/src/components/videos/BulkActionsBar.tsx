@@ -27,24 +27,24 @@ export default function BulkActionsBar({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 duration-300">
-      <Card className="border rounded-xl bg-card">
-        <div className="flex items-center gap-5 px-7 py-5">
+    <div className="fixed bottom-4 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 duration-300 w-[calc(100%-2rem)] sm:w-auto max-w-2xl safe-area-bottom">
+      <Card className="border rounded-xl bg-card shadow-lg">
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-5 px-4 sm:px-7 py-3 sm:py-5">
           {/* Selection Count */}
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-base">
               {selectedCount}
             </div>
-            <span className="font-semibold text-base">
+            <span className="font-semibold text-sm sm:text-base">
               {selectedCount} {selectedCount !== 1 ? t('videos') : t('video')} {t('selected')}
             </span>
           </div>
 
-          {/* Divider */}
-          <div className="h-10 w-px bg-border" />
+          {/* Divider - hidden on mobile */}
+          <div className="hidden sm:block h-10 w-px bg-border" />
 
           {/* Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
             <Button
               variant="outline"
               size="sm"
@@ -52,7 +52,8 @@ export default function BulkActionsBar({
               className="h-11 font-semibold"
             >
               <Download className="size-4 mr-2" />
-              {t('bulkActions.downloadAll')}
+              <span className="hidden sm:inline">{t('bulkActions.downloadAll')}</span>
+              <span className="sm:hidden">{t('download')}</span>
             </Button>
 
             {totalUnposted > 0 && (
@@ -63,7 +64,8 @@ export default function BulkActionsBar({
                 className="h-11 font-semibold"
               >
                 <Check className="size-4 mr-2" />
-                {t('bulkActions.markAllPosted')} ({totalUnposted})
+                <span className="hidden sm:inline">{t('bulkActions.markAllPosted')} ({totalUnposted})</span>
+                <span className="sm:hidden">{t('markPosted')}</span>
               </Button>
             )}
 
@@ -75,7 +77,8 @@ export default function BulkActionsBar({
                 className="h-11 font-semibold text-destructive hover:text-destructive hover:bg-destructive/10 hover:border-destructive/50"
               >
                 <Trash2 className="size-4 mr-2" />
-                {t('bulkActions.deleteAll')}
+                <span className="hidden sm:inline">{t('bulkActions.deleteAll')}</span>
+                <span className="sm:hidden">{t('delete')}</span>
               </Button>
             )}
 
@@ -86,7 +89,8 @@ export default function BulkActionsBar({
               className="h-11 font-semibold"
             >
               <X className="size-4 mr-2" />
-              {t('bulkActions.clearSelection')}
+              <span className="hidden sm:inline">{t('bulkActions.clearSelection')}</span>
+              <span className="sm:hidden">{t('clear')}</span>
             </Button>
           </div>
         </div>

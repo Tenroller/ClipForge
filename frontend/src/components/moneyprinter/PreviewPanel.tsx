@@ -1,6 +1,6 @@
 import type React from "react"
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
@@ -51,18 +51,18 @@ export type PreviewPanelProps = {
 export default function PreviewPanel({
   position,
   onChangePosition,
-  previewUrl,
   color = "#FFFF00",
   positionRaw,
   onChangePositionRaw,
-  shadowLayersCount = 4,
-  shadowLayer1Color = '#4A90E2',
-  shadowLayer2Color = '#357ABD',
-  shadowLayer3Color = '#2E5F8A',
-  shadowLayer4Color = '#1E3F5A'
+  shadowLayersCount: _shadowLayersCount = 4,
+  shadowLayer1Color: _shadowLayer1Color = '#4A90E2',
+  shadowLayer2Color: _shadowLayer2Color = '#357ABD',
+  shadowLayer3Color: _shadowLayer3Color = '#2E5F8A',
+  shadowLayer4Color: _shadowLayer4Color = '#1E3F5A'
 }: PreviewPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const itemRef = useRef<HTMLDivElement | null>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
   const [{ dragging, startX, startY, originX, originY }, setDrag] = useState({
     dragging: false,
     startX: 0,
@@ -71,37 +71,17 @@ export default function PreviewPanel({
     originY: 0,
   })
 
-  const posClasses = useMemo(() => {
-    const base = "absolute px-2 py-1 rounded-md bg-amber-400/90 text-black text-xs font-medium"
-    switch (position) {
-      case "left-top":
-        return `${base} left-2 top-2`
-      case "center-top":
-        return `${base} left-1/2 -translate-x-1/2 top-2`
-      case "right-top":
-        return `${base} right-2 top-2`
-      case "left-middle":
-        return `${base} left-2 top-1/2 -translate-y-1/2`
-      case "center-middle":
-        return `${base} left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2`
-      case "right-middle":
-        return `${base} right-2 top-1/2 -translate-y-1/2`
-      case "left-bottom":
-        return `${base} left-2 bottom-2`
-      case "center-bottom":
-        return `${base} left-1/2 -translate-x-1/2 bottom-2`
-      case "right-bottom":
-        return `${base} right-2 bottom-2`
-    }
-  }, [position])
-
   // Compute absolute coordinates for draggable preview from raw value
-  const { leftPx, topPx } = useMemo(() => {
+  const [leftPx, setLeftPx] = useState(0)
+  const [topPx, setTopPx] = useState(0)
+
+  useEffect(() => {
     const container = containerRef.current
     const item = itemRef.current
-    if (!container || !item) return { leftPx: 0, topPx: 0 }
-    const cw = container.clientWidth
-    const ch = container.clientHeight
+    if (!container || !item) return
+    const cw = containerSize.width
+    const ch = containerSize.height
+    if (cw === 0 || ch === 0) return
     const iw = item.clientWidth
     const ih = item.clientHeight
 
@@ -111,9 +91,9 @@ export default function PreviewPanel({
       if (!isNaN(x) && !isNaN(y)) {
         const cx = (x / 100) * cw
         const cy = (y / 100) * ch
-        const left = Math.max(Math.min(cx - iw / 2, cw - iw), 0)
-        const top = Math.max(Math.min(cy - ih / 2, ch - ih), 0)
-        return { leftPx: left, topPx: top }
+        setLeftPx(Math.max(Math.min(cx - iw / 2, cw - iw), 0))
+        setTopPx(Math.max(Math.min(cy - ih / 2, ch - ih), 0))
+        return
       }
     }
 
@@ -154,10 +134,9 @@ export default function PreviewPanel({
 
     const cx = (cxPct / 100) * cw
     const cy = (cyPct / 100) * ch
-    const left = Math.max(Math.min(cx - iw / 2, cw - iw), 0)
-    const top = Math.max(Math.min(cy - ih / 2, ch - ih), 0)
-    return { leftPx: left, topPx: top }
-  }, [positionRaw, position, containerRef.current?.clientWidth, containerRef.current?.clientHeight])
+    setLeftPx(Math.max(Math.min(cx - iw / 2, cw - iw), 0))
+    setTopPx(Math.max(Math.min(cy - ih / 2, ch - ih), 0))
+  }, [positionRaw, position, containerSize.width, containerSize.height])
 
   // Drag handling to produce pct:x,y value
   useEffect(() => {
@@ -183,65 +162,36 @@ export default function PreviewPanel({
     return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp) }
   }, [dragging, startX, startY, originX, originY, onChangePositionRaw])
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!containerRef.current || !itemRef.current) return
-    const itemRect = itemRef.current.getBoundingClientRect()
-    const contRect = containerRef.current.getBoundingClientRect()
-    setDrag({
-      dragging: true,
-      startX: e.clientX,
-      startY: e.clientY,
-      originX: itemRect.left - contRect.left,
-      originY: itemRect.top - contRect.top,
-    })
-  }, [])
-
   // Effect to recalculate position when container resizes or position changes
   useEffect(() => {
-    const handleResize = () => {
-      // Force re-calculation of position
-      if (containerRef.current && itemRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        // Trigger re-render by updating a dummy state or just wait for next render
+    const updateSize = () => {
+      if (containerRef.current) {
+        setContainerSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
+        })
       }
     }
 
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    updateSize()
+    window.addEventListener('resize', updateSize)
+    return () => window.removeEventListener('resize', updateSize)
   }, [])
 
   // Effect to ensure initial position is set correctly
   useEffect(() => {
-    if (containerRef.current && itemRef.current && !positionRaw?.startsWith('pct:')) {
-      // Only update if we don't already have a custom position
+    if (containerRef.current && !positionRaw?.startsWith('pct:')) {
       const timer = setTimeout(() => {
-        if (containerRef.current && itemRef.current) {
-          // Trigger position recalculation
-          containerRef.current.dispatchEvent(new Event('resize'))
+        if (containerRef.current) {
+          setContainerSize({
+            width: containerRef.current.clientWidth,
+            height: containerRef.current.clientHeight,
+          })
         }
       }, 100)
       return () => clearTimeout(timer)
     }
   }, [position, positionRaw])
-
-  // Create 3D blue shadow effect based on selected layer count
-  const textShadowStyle = (() => {
-    const allLayers = [
-      `8px 8px 0px ${shadowLayer4Color}`,  // Furthest
-      `6px 6px 0px ${shadowLayer3Color}`,
-      `4px 4px 0px ${shadowLayer2Color}`,
-      `2px 2px 0px ${shadowLayer1Color}`   // Closest
-    ];
-
-    // Select layers based on count (same logic as backend)
-    if (shadowLayersCount === 2) {
-      return [allLayers[0], allLayers[3]].join(', '); // Layer 4 and 1
-    } else if (shadowLayersCount === 3) {
-      return [allLayers[0], allLayers[1], allLayers[3]].join(', '); // Layer 4, 3, and 1
-    } else { // 4 layers
-      return allLayers.join(', ');
-    }
-  })()
 
   return (
     <Card>
@@ -319,21 +269,21 @@ export default function PreviewPanel({
 
         <div className="space-y-3">
           <div className="text-xs font-medium text-muted-foreground mb-2">Subtitle Position</div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {positions.slice(0, 3).map((p) => (
               <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
                 {p.label}
               </PosChip>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {positions.slice(3, 6).map((p) => (
               <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
                 {p.label}
               </PosChip>
             ))}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {positions.slice(6, 9).map((p) => (
               <PosChip key={p.key} active={p.key === position} onClick={() => onChangePosition(p.key)}>
                 {p.label}

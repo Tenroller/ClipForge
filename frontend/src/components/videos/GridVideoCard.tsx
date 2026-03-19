@@ -9,8 +9,9 @@ import { Download, Play, Film, Brain, Video as VideoIcon, Check, Clock, Trash2, 
 import { useState } from 'react';
 import Image from 'next/image';
 import { getThumbnailUrl } from '@/lib/api';
-import { formatDuration } from '@/utils/formatDuration';
-import { Video, VideoMetadata } from './VideoCard';
+import { getWorkflowClasses } from '@/lib/status';
+import { formatDuration } from '@/lib/formatDuration';
+import { Video } from './VideoCard';
 
 interface GridVideoCardProps {
   video: Video;
@@ -63,19 +64,6 @@ export default function GridVideoCard({
     }
   };
 
-  const getWorkflowColor = () => {
-    switch (video.workflow) {
-      case 'moneyprinter':
-        return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'brainrot':
-        return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
-      case 'podcastclips':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
-      default:
-        return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-    }
-  };
-
   return (
     <Card className={`group overflow-hidden rounded-lg border ${selected ? 'ring-2 ring-foreground' : ''}`}>
       <CardContent className="p-0">
@@ -83,7 +71,7 @@ export default function GridVideoCard({
         <div className="relative w-full aspect-[9/16] bg-muted overflow-hidden">
           {/* Selection Checkbox */}
           {onSelect && (
-            <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-2 left-2 z-10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               <Checkbox
                 checked={selected}
                 onCheckedChange={(checked) => onSelect(video, checked as boolean)}
@@ -117,14 +105,16 @@ export default function GridVideoCard({
 
           {/* Play Button Overlay */}
           {onPlay && (
-            <div
-              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+            <button
+              type="button"
+              className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer"
               onClick={() => onPlay(video)}
+              aria-label="Play video"
             >
               <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center">
-                <Play className="size-6 text-gray-900 ml-1" fill="currentColor" />
+                <Play className="size-6 text-foreground ml-1" fill="currentColor" />
               </div>
-            </div>
+            </button>
           )}
 
           {/* Duration Badge */}
@@ -137,7 +127,7 @@ export default function GridVideoCard({
           {/* Posted Badge */}
           {video.posted && (
             <div className="absolute top-2 right-2">
-              <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700">
+              <Badge variant="default" className="text-xs bg-success hover:bg-success/80">
                 <Check className="size-3 mr-1" />
                 {t('posted')}
               </Badge>
@@ -155,7 +145,7 @@ export default function GridVideoCard({
               </h3>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className={`text-xs w-fit font-semibold ${getWorkflowColor()}`}>
+              <Badge variant="outline" className={`text-xs w-fit font-semibold ${getWorkflowClasses(video.workflow)}`}>
                 {getWorkflowIcon()}
                 <span className="ml-1.5 capitalize">{video.workflow}</span>
               </Badge>

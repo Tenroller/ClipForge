@@ -120,95 +120,36 @@ class UnifiedJobQueue:
             return
             
         try:
-            # Get running and queued jobs
+            # Get running jobs to check for orphans
             running_jobs = self.job_store.list_jobs(limit=1000, status="running")
-            queued_jobs = self.job_store.list_jobs(limit=1000, status="queued")
             orphaned_count = 0
-            hung_count = 0
-            
+
             from datetime import datetime, timezone
             current_time = datetime.now(timezone.utc)
-            
+
             for job_data in running_jobs:
                 job_id = job_data.get('id')
                 if not job_id:
                     continue
-                    
+
                 # Check if job is orphaned (not in current queue)
                 if job_id not in self.jobs:
                     orphaned_count += 1
-                    
-                    # Check if job has been running for too long (potential hung job)
-                    started_at = job_data.get('started_at')
-                    if started_at:
-                        try:
-                            # Parse ISO format datetime string
-                            if started_at.endswith('Z'):
-                                started_at = started_at[:-1] + '+00:00'
-                            start_time = datetime.fromisoformat(started_at)
-                            if start_time.tzinfo is None:
-                                start_time = start_time.replace(tzinfo=timezone.utc)
-                            
-                            running_duration = (current_time - start_time).total_seconds()
-                            max_duration = int(os.getenv("VIDEOHELPER_MAX_JOB_DURATION_HOURS", "4")) * 3600  # Default 4 hours
-                            
-                            if running_duration > max_duration:
-                                hung_count += 1
-                                error_msg = f"Job exceeded maximum duration ({running_duration/3600:.1f}h > 4h) - automatically cancelled"
-                                logger.warning(f"Job {job_id} was hung (running for {running_duration/3600:.1f}h)")
-                            else:
-                                error_msg = f"Server restarted while job was running (was running for {running_duration/60:.1f}m) - automatically cancelled"
-                        except Exception as e:
-                            logger.warning(f"Failed to parse start time for job {job_id}: {e}")
-                            error_msg = "Server restarted while job was running - automatically cancelled"
-                    else:
-                        error_msg = "Server restarted while job was running - automatically cancelled"
-                    
+                    error_msg = "Server restarted while job was running - automatically cancelled"
+
                     # Mark as cancelled with explanation
                     self.job_store.update_job(
                         job_id,
-                        status="cancelled", 
+                        status="cancelled",
                         error=error_msg,
                         ended_at=current_time.isoformat(),
                         duration_seconds=0
                     )
-                    
-                    logger.warning(f"Marked orphaned job {job_id} as cancelled")
-            
-            # Cancel stale queued jobs that never started (older than 2 hours)
-            stale_threshold_seconds = int(os.getenv("VIDEOHELPER_STALE_QUEUED_SECONDS", str(2 * 3600)))
-            stale_count = 0
-            for job_data in queued_jobs:
-                created_at = job_data.get('created_at')
-                job_id = job_data.get('id')
-                if not created_at or not job_id:
-                    continue
-                try:
-                    ts = created_at
-                    if ts.endswith('Z'):
-                        ts = ts[:-1] + '+00:00'
-                    ctime = datetime.fromisoformat(ts)
-                    if ctime.tzinfo is None:
-                        ctime = ctime.replace(tzinfo=timezone.utc)
-                    age = (current_time - ctime).total_seconds()
-                    if age > stale_threshold_seconds:
-                        self.job_store.update_job(
-                            job_id,
-                            status="cancelled",
-                            error="Server restart: queued job stale (auto-cancel)",
-                            ended_at=current_time.isoformat(),
-                            duration_seconds=0
-                        )
-                        stale_count += 1
-                except Exception as e:
-                    logger.warning(f"Failed to parse created_at for queued job {job_id}: {e}")
 
-            if orphaned_count > 0 or stale_count > 0:
-                logger.warning(f"Found and cancelled {orphaned_count} orphaned jobs on startup ({hung_count} were hung for >4h)")
-                if stale_count > 0:
-                    logger.warning(f"Also cancelled {stale_count} stale queued jobs (> {stale_threshold_seconds/3600:.1f}h old)")
-                if hung_count > 0:
-                    logger.warning(f"Consider investigating why {hung_count} jobs were running for over 4 hours")
+                    logger.warning(f"Marked orphaned job {job_id} as cancelled")
+
+            if orphaned_count > 0:
+                logger.warning(f"Found and cancelled {orphaned_count} orphaned jobs on startup")
             else:
                 logger.info("No orphaned jobs found on startup - all jobs are properly tracked")
                 
@@ -570,8 +511,8 @@ class UnifiedJobQueue:
             with self.lock:
                 self.futures[job_id] = future
 
-            # Wait for completion with timeout (for long-running jobs)
-            result = future.result(timeout=3600)  # 1 hour timeout
+            # Wait for completion (no timeout — CPU-only VPS, jobs can take hours)
+            result = future.result()
 
             # Update job status
             job.status = JobStatus.COMPLETED
@@ -588,33 +529,12 @@ class UnifiedJobQueue:
                     self.job_store.update_job(
                         job_id,
                         status="completed",
-                        result=result,  # Changed from result_data to result
+                        result=result,
                         duration_seconds=int(job.duration or 0),
                         ended_at=job.completed_at.isoformat() if job.completed_at else None
                     )
                 except Exception as e:
                     logger.error(f"Failed to update completed job {job_id} in database: {e}")
-
-        except asyncio.TimeoutError:
-            job.status = JobStatus.FAILED
-            job.error = "Job timed out"
-            job.completed_at = datetime.now(timezone.utc)
-            if job.started_at:
-                job.duration = (job.completed_at - job.started_at).total_seconds()
-            logger.error(f"Job {job_id} timed out")
-
-            # Update database
-            if self.job_store:
-                try:
-                    self.job_store.update_job(
-                        job_id,
-                        status="failed",
-                        error_message="Job timed out",
-                        duration_seconds=int(job.duration or 0),
-                        ended_at=job.completed_at.isoformat() if job.completed_at else None
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to update timed out job {job_id} in database: {e}")
 
         except Exception as e:
             job.status = JobStatus.FAILED

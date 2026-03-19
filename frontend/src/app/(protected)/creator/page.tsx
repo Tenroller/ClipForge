@@ -3,18 +3,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useGenerateMoneyPrinterVideo, useJobs, useAvailableVoices } from '@/hooks/use-jobs';
-import JobStartedNotification from '@/components/job/JobStartedNotification';
-import ResultPanel from '@/components/job/ResultPanel';
-import MoneyPrinterForm from '@/components/moneyprinter/MoneyPrinterForm';
-import PreviewPanel from '@/components/moneyprinter/PreviewPanel';
-import PresetManager from '@/components/presets/PresetManager';
+import dynamic from 'next/dynamic';
+
+const JobStartedNotification = dynamic(() => import('@/components/job/JobStartedNotification'));
+const ResultPanel = dynamic(() => import('@/components/job/ResultPanel'));
+const MoneyPrinterForm = dynamic(() => import('@/components/moneyprinter/MoneyPrinterForm'));
+const PreviewPanel = dynamic(() => import('@/components/moneyprinter/PreviewPanel'));
+const PresetManager = dynamic(() => import('@/components/presets/PresetManager'));
 import { useToast } from '@/hooks/use-toast';
 import { usePresets } from '@/hooks/usePresets';
 import type { PresetConfig } from '@/hooks/usePresets';
 import type { JobRecord } from '@/lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Sparkles, Wand2 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
 
 type Position =
   | "left-top"
@@ -53,7 +54,7 @@ export default function CreatorPage() {
   const [shadowLayer4Color, setShadowLayer4Color] = useState('#1E3F5A');
 
   // Presets
-  const { presets, savePreset, loadPreset, deletePreset, renamePreset } = usePresets();
+  const { presets, savePreset, deletePreset, renamePreset } = usePresets();
 
   const getCurrentConfig = useCallback((): PresetConfig => ({
     aiModel,
@@ -92,7 +93,7 @@ export default function CreatorPage() {
   useEffect(() => {
     if (currentJob) {
       if (currentJob.status === 'completed') {
-        setCompletedJob(currentJob);
+        setCompletedJob(currentJob); // eslint-disable-line react-hooks/set-state-in-effect -- intentional state sync on external data change
         setCurrentJobId(null);
       } else if (currentJob.status === 'error' || currentJob.status === 'cancelled') {
         toast({
@@ -122,7 +123,7 @@ export default function CreatorPage() {
     }
 
     // Build the payload with all form fields
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       videoSubject: videoSubject,
       aiModel: String(form.get('aiModel') || aiModel),
       voice: String(form.get('voice') || voice),
@@ -168,10 +169,10 @@ export default function CreatorPage() {
         title: t('videoGenerationStarted'),
         description: `Job ID: ${result.jobId.substring(0, 8)}...`,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: t('generationFailed'),
-        description: error.message || t('failedToStartGeneration'),
+        description: error instanceof Error ? error.message : t('failedToStartGeneration'),
         variant: 'destructive',
       });
     }
@@ -334,10 +335,10 @@ export default function CreatorPage() {
                           <div className="flex items-center justify-between">
                             <span className="font-mono text-xs text-muted-foreground">{job.id.substring(0, 8)}</span>
                             <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${job.status === 'completed'
-                              ? 'bg-green-500/10 text-green-600'
+                              ? 'bg-success/10 text-success'
                               : job.status === 'error' || job.status === 'cancelled'
-                                ? 'bg-red-500/10 text-red-600'
-                                : 'bg-blue-500/10 text-blue-600'
+                                ? 'bg-destructive/10 text-destructive'
+                                : 'bg-info/10 text-info'
                               }`}>
                               {job.status}
                             </span>

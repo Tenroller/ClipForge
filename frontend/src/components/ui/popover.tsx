@@ -41,7 +41,7 @@ const PopoverTrigger = React.forwardRef<
     <button
       ref={ref}
       type="button"
-      className={className}
+      className={cn("focus-ring rounded-md", className)}
       onClick={(e) => {
         setOpen(!open);
         onClick?.(e);

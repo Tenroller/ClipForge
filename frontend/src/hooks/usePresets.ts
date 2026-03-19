@@ -60,7 +60,7 @@ export function usePresets() {
 
   // Hydrate from localStorage on mount
   useEffect(() => {
-    setPresets(loadPresetsFromStorage());
+    setPresets(loadPresetsFromStorage()); // eslint-disable-line react-hooks/set-state-in-effect -- hydration from localStorage
   }, []);
 
   const savePreset = useCallback((name: string, config: PresetConfig): Preset => {

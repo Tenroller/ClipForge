@@ -17,13 +17,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useVideoFilters } from '@/hooks/useVideoFilters';
 import { useVideoSelection } from '@/hooks/useVideoSelection';
 import { useVideoPagination } from '@/hooks/useVideoPagination';
+import dynamic from 'next/dynamic';
 import { type Video } from '@/components/videos/VideoCard';
-import VideoPreviewModal from '@/components/videos/VideoPreviewModal';
 import VideoStats from '@/components/videos/VideoStats';
 import VideoFilters from '@/components/videos/VideoFilters';
 import VideoGrid from '@/components/videos/VideoGrid';
 import VideoBulkActions from '@/components/videos/VideoBulkActions';
-import SyncPanel from '@/components/videos/SyncPanel';
+
+const VideoPreviewModal = dynamic(() => import('@/components/videos/VideoPreviewModal'), { ssr: false });
+const SyncPanel = dynamic(() => import('@/components/videos/SyncPanel'));
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { LayoutGrid, List, PlaySquare, RefreshCw, Settings2 } from 'lucide-react';
@@ -284,7 +286,7 @@ export default function VideosPage() {
             {t('title')}
           </h1>
           <p className="text-muted-foreground text-lg">
-            Manage and organize your generated videos
+            {t('description')}
           </p>
         </div>
 
@@ -304,16 +306,19 @@ export default function VideosPage() {
             onClick={() => pagination.refreshVideos(filters.buildSearchParams())}
             disabled={pagination.loading}
             className="h-10 w-10"
+            aria-label={t('refresh')}
           >
             <RefreshCw className={`h-4 w-4 ${pagination.loading ? 'animate-spin' : ''}`} />
           </Button>
           {/* View Toggle */}
-          <div className="flex bg-muted rounded-lg p-1">
+          <div className="flex bg-muted rounded-lg p-1" role="radiogroup" aria-label="View mode">
             <Button
               variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
               size="sm"
               onClick={() => handleViewModeChange('grid')}
-              className="h-8 px-2 rounded-md transition-all"
+              className="h-9 px-3 rounded-md transition-all"
+              aria-label="Grid view"
+              aria-pressed={viewMode === 'grid'}
             >
               <LayoutGrid className="size-4" />
             </Button>
@@ -321,7 +326,9 @@ export default function VideosPage() {
               variant={viewMode === 'list' ? 'secondary' : 'ghost'}
               size="sm"
               onClick={() => handleViewModeChange('list')}
-              className="h-8 px-2 rounded-md transition-all"
+              className="h-9 px-3 rounded-md transition-all"
+              aria-label="List view"
+              aria-pressed={viewMode === 'list'}
             >
               <List className="size-4" />
             </Button>
@@ -365,7 +372,7 @@ export default function VideosPage() {
           <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 flex items-center justify-between animate-in fade-in duration-300">
             <div className="flex items-center gap-2">
               <Badge variant="secondary" className="bg-primary/20 text-primary hover:bg-primary/30">
-                {selection.selectedVideos.size} Selected
+                {selection.selectedVideos.size}
               </Badge>
               <span className="text-sm text-muted-foreground">{t('selected')}</span>
             </div>
@@ -375,7 +382,7 @@ export default function VideosPage() {
               onClick={selection.handleClearSelection}
               className="h-8 text-xs"
             >
-              Clear Selection
+              {t('bulkActions.clearSelection')}
             </Button>
           </div>
         )}

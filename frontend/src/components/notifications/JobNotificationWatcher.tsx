@@ -33,8 +33,12 @@ export function JobNotificationWatcher() {
   // Track jobs that were previously active (so we only notify on transitions)
   const previousActiveRef = useRef<Set<string>>(new Set());
   const isFirstRenderRef = useRef(true);
+  // Track active jobs count to adjust polling interval via ref (no re-render)
+  const hasActiveRef = useRef(false);
 
-  const { data: jobs } = useJobs({ refetchInterval: 5000 });
+  const { data: jobs } = useJobs({
+    refetchInterval: () => hasActiveRef.current ? 5000 : 30000,
+  });
 
   useEffect(() => {
     if (!jobs || jobs.length === 0) return;
@@ -51,6 +55,7 @@ export function JobNotificationWatcher() {
           previousActiveRef.current.add(job.id);
         }
       }
+      hasActiveRef.current = previousActiveRef.current.size > 0;
       return;
     }
 
@@ -99,6 +104,7 @@ export function JobNotificationWatcher() {
     }
 
     previousActiveRef.current = currentActive;
+    hasActiveRef.current = currentActive.size > 0;
   }, [jobs]);
 
   // This component renders nothing – it just watches

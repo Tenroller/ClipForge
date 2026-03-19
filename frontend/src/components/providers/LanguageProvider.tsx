@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { Locale, locales, defaultLocale } from '@/i18n/config';
+import { Locale, locales } from '@/i18n/config';
 
 type LanguageContextType = {
   locale: Locale;
@@ -26,7 +26,7 @@ export function LanguageProvider({
     if (typeof window !== 'undefined') {
       const savedLocale = localStorage.getItem('videohelper-ui-language');
       if (savedLocale && locales.includes(savedLocale as Locale)) {
-        setLocale(savedLocale as Locale);
+        setLocale(savedLocale as Locale); // eslint-disable-line react-hooks/set-state-in-effect -- hydration from localStorage
       }
     }
   }, []);

@@ -36,7 +36,7 @@ class OpenCVFaceDetector:
         conf_threshold: float = 0.6,
         nms_threshold: float = 0.3,
         top_k: int = 5000,
-        model_dir: str = ".face_detection_cache",
+        model_dir: str = "/tmp/face_detection_cache",
         use_gpu: bool = False
     ):
         """
@@ -216,7 +216,7 @@ class OpenCVFaceDetector:
 def create_opencv_detector(
     conf_threshold: float = 0.6,
     nms_threshold: float = 0.3,
-    model_dir: str = ".face_detection_cache"
+    model_dir: str = "/tmp/face_detection_cache"
 ) -> OpenCVFaceDetector:
     """
     Create an OpenCV YuNet face detector.

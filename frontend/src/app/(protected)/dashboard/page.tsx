@@ -17,60 +17,38 @@ import {
   BarChart3,
 } from 'lucide-react';
 import type { JobRecord } from '@/lib/api';
+import { formatDuration } from '@/lib/formatDuration';
+import { getStatusClasses, getStatusIconColor } from '@/lib/status';
 import Link from 'next/link';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
-  return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-}
-
-function relativeTime(dateString: string | undefined): string {
+function relativeTime(dateString: string | undefined, t: (key: string, params?: Record<string, number>) => string): string {
   if (!dateString) return '';
   try {
     const diff = Date.now() - new Date(dateString).getTime();
     const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes}m ago`;
+    if (minutes < 1) return t('relativeTime.justNow');
+    if (minutes < 60) return t('relativeTime.minutesAgo', { count: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
+    if (hours < 24) return t('relativeTime.hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    return `${days}d ago`;
+    return t('relativeTime.daysAgo', { count: days });
   } catch {
     return '';
   }
 }
 
-function getStatusColor(status: string) {
-  switch (status) {
-    case 'completed':
-    case 'done':
-      return 'bg-green-500/10 text-green-600 border-green-200 dark:text-green-400 dark:border-green-800';
-    case 'error':
-      return 'bg-red-500/10 text-red-600 border-red-200 dark:text-red-400 dark:border-red-800';
-    case 'processing':
-    case 'running':
-    case 'queued':
-      return 'bg-blue-500/10 text-blue-600 border-blue-200 dark:text-blue-400 dark:border-blue-800';
-    case 'cancelled':
-      return 'bg-gray-500/10 text-gray-600 border-gray-200 dark:text-gray-400 dark:border-gray-700';
-    default:
-      return 'bg-muted text-muted-foreground border-border';
-  }
-}
-
-function getWorkflowLabel(workflow: string): string {
+function getWorkflowLabel(workflow: string, t: (key: string) => string): string {
   switch (workflow) {
     case 'moneyprinter':
-      return 'AI Video';
+      return t('workflowLabels.moneyprinter');
     case 'brainrot':
-      return 'Compilation';
+      return t('workflowLabels.brainrot');
     case 'podcastclips':
-      return 'Podcast Clips';
+      return t('workflowLabels.podcastclips');
     default:
       return workflow;
   }
@@ -175,16 +153,16 @@ function WorkflowChart({ jobs }: { jobs: JobRecord[] }) {
       map[wf] = (map[wf] || 0) + 1;
     }
     return Object.entries(map)
-      .map(([name, count]) => ({ name, count, label: getWorkflowLabel(name) }))
+      .map(([name, count]) => ({ name, count, label: getWorkflowLabel(name, t) }))
       .sort((a, b) => b.count - a.count);
-  }, [jobs]);
+  }, [jobs, t]);
 
   const maxCount = Math.max(...workflows.map((w) => w.count), 1);
 
   const barColors: Record<string, string> = {
-    moneyprinter: 'bg-violet-500',
-    brainrot: 'bg-amber-500',
-    podcastclips: 'bg-emerald-500',
+    moneyprinter: 'bg-info',
+    brainrot: 'bg-warning',
+    podcastclips: 'bg-success',
   };
 
   return (
@@ -230,13 +208,13 @@ function StatusDistribution({ jobs }: { jobs: JobRecord[] }) {
       counts[s] = (counts[s] || 0) + 1;
     }
     const statusConfig: { key: string; label: string; color: string }[] = [
-      { key: 'done', label: t('statusDone'), color: 'bg-green-500' },
-      { key: 'completed', label: t('statusCompleted'), color: 'bg-green-500' },
-      { key: 'error', label: t('statusError'), color: 'bg-red-500' },
-      { key: 'cancelled', label: t('statusCancelled'), color: 'bg-gray-400' },
-      { key: 'processing', label: t('statusProcessing'), color: 'bg-blue-500' },
-      { key: 'running', label: t('statusRunning'), color: 'bg-blue-500' },
-      { key: 'queued', label: t('statusQueued'), color: 'bg-yellow-500' },
+      { key: 'done', label: t('statusDone'), color: 'bg-success' },
+      { key: 'completed', label: t('statusCompleted'), color: 'bg-success' },
+      { key: 'error', label: t('statusError'), color: 'bg-destructive' },
+      { key: 'cancelled', label: t('statusCancelled'), color: 'bg-muted-foreground' },
+      { key: 'processing', label: t('statusProcessing'), color: 'bg-info' },
+      { key: 'running', label: t('statusRunning'), color: 'bg-info' },
+      { key: 'queued', label: t('statusQueued'), color: 'bg-warning' },
     ];
     return statusConfig
       .filter((s) => (counts[s.key] ?? 0) > 0)
@@ -303,11 +281,11 @@ function RecentActivity({ jobs }: { jobs: JobRecord[] }) {
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="shrink-0">
                     {job.status === 'done' || job.status === 'completed' ? (
-                      <CheckCircle2 className="size-4 text-green-500" />
+                      <CheckCircle2 className={`size-4 ${getStatusIconColor('done')}`} />
                     ) : job.status === 'error' ? (
-                      <XCircle className="size-4 text-red-500" />
+                      <XCircle className={`size-4 ${getStatusIconColor('error')}`} />
                     ) : ['processing', 'running', 'queued'].includes(job.status) ? (
-                      <Loader2 className="size-4 text-blue-500 animate-spin" />
+                      <Loader2 className={`size-4 ${getStatusIconColor('running')} animate-spin`} />
                     ) : (
                       <Clock className="size-4 text-muted-foreground" />
                     )}
@@ -315,7 +293,7 @@ function RecentActivity({ jobs }: { jobs: JobRecord[] }) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">
-                        {getWorkflowLabel(job.workflow || '')}
+                        {getWorkflowLabel(job.workflow || '', t)}
                       </span>
                       <span className="font-mono text-[10px] text-muted-foreground">
                         {job.id.substring(0, 8)}
@@ -328,12 +306,12 @@ function RecentActivity({ jobs }: { jobs: JobRecord[] }) {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusColor(job.status)}`}
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${getStatusClasses(job.status)}`}
                   >
                     {job.status}
                   </span>
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                    {relativeTime(job.created_at)}
+                    {relativeTime(job.created_at, t)}
                   </span>
                 </div>
               </Link>
@@ -413,28 +391,28 @@ export default function DashboardPage() {
               value={stats.total}
               subtitle={t('allTime')}
               icon={BarChart3}
-              iconColor="bg-blue-500/10 text-blue-600 dark:text-blue-400"
+              iconColor="bg-info/10 text-info"
             />
             <SummaryCard
               title={t('successRate')}
               value={`${stats.successRate}%`}
               subtitle={`${stats.completed} ${t('completed')} / ${stats.failed} ${t('failed')}`}
               icon={TrendingUp}
-              iconColor="bg-green-500/10 text-green-600 dark:text-green-400"
+              iconColor="bg-success/10 text-success"
             />
             <SummaryCard
               title={t('videosGenerated')}
               value={stats.completed}
               subtitle={t('totalCompleted')}
               icon={Film}
-              iconColor="bg-violet-500/10 text-violet-600 dark:text-violet-400"
+              iconColor="bg-accent/10 text-accent"
             />
             <SummaryCard
               title={t('avgGenerationTime')}
               value={stats.avgDuration > 0 ? formatDuration(stats.avgDuration) : '--'}
               subtitle={t('perJob')}
               icon={Clock}
-              iconColor="bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              iconColor="bg-warning/10 text-warning"
             />
           </div>
 

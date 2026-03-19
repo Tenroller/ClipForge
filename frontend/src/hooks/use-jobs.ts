@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type Query } from '@tanstack/react-query';
 import {
   listJobs,
   getJob,
@@ -24,7 +24,7 @@ const JOBS_FETCH_LIMIT = 50;
  */
 export function useJobs(options?: {
   limit?: number;
-  refetchInterval?: number | false;
+  refetchInterval?: number | false | ((query: Query<JobRecord[]>) => number | false);
 }) {
   const limit = options?.limit;
   return useQuery<JobRecord[]>({

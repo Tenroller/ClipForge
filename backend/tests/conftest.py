@@ -41,7 +41,6 @@ def mock_job_store():
     store.update_job = MagicMock(return_value=None)
     store.delete_job = MagicMock(return_value=True)
     store.get_stats = MagicMock(return_value={"total": 0})
-    store.expire_stale_jobs = MagicMock(return_value={"expired_count": 0})
     store.is_purged = MagicMock(return_value=None)
     store.search_videos = MagicMock(return_value={"videos": [], "total": 0, "offset": 0, "limit": 20})
     return store

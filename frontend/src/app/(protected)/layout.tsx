@@ -22,9 +22,11 @@ export default async function ProtectedLayout({
       <AppSidebar username={user.username} />
       <SidebarInset>
         <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger />
+          <SidebarTrigger aria-label="Toggle sidebar" />
         </header>
-        {children}
+        <main className="flex-1">
+          {children}
+        </main>
       </SidebarInset>
       <JobNotificationWatcher />
     </SidebarProvider>

@@ -25,9 +25,6 @@ const protectedRoutes = [
   '/projects',
 ];
 
-// Public routes that don't require authentication
-const publicRoutes = ['/', '/login'];
-
 const COOKIE_DOMAIN = process.env.NODE_ENV === 'production' ? '.tenroller.dev' : undefined;
 
 export async function proxy(request: NextRequest) {
@@ -45,7 +42,6 @@ export async function proxy(request: NextRequest) {
 
   // Check if route is protected
   const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
-  const isPublicRoute = publicRoutes.includes(pathname);
 
   // Get auth token from cookies
   const token = request.cookies.get('auth_token')?.value;

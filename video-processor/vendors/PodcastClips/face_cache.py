@@ -41,7 +41,7 @@ class FaceDetectionCache:
 
     def __init__(
         self,
-        cache_dir: str = ".face_detection_cache",
+        cache_dir: str = "/tmp/face_detection_cache",
         enable_cache: bool = True,
         hash_method: str = "quick"  # "quick" or "full"
     ):

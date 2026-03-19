@@ -1,13 +1,13 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import {
   Clock,
   Edit2,
-  Expand,
   Maximize2,
   Pause,
   Play,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import type { PodcastClip } from '@/lib/api';
 import { API_BASE } from '@/lib/api';
+import { getScoreColor } from '@/lib/status';
 
 interface ClipCardProps {
   clip: PodcastClip;
@@ -32,20 +33,18 @@ interface ClipCardProps {
 
 export default function ClipCard({
   clip,
-  projectId,
-  onRender,
   onDelete,
   onLike,
   onDislike,
   onEdit,
 }: ClipCardProps) {
+  const t = useTranslations('clipCard');
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Get the video URL
   const videoUrl = clip.download_url.startsWith('http')
@@ -88,10 +87,8 @@ export default function ClipCard({
     if (videoRef.current) {
       if (!document.fullscreenElement) {
         videoRef.current.requestFullscreen();
-        setIsFullscreen(true);
       } else {
         document.exitFullscreen();
-        setIsFullscreen(false);
       }
     }
   };
@@ -117,15 +114,6 @@ export default function ClipCard({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Get score color based on value
-  const getScoreColor = (score: number) => {
-    if (score >= 9) return 'bg-green-500';
-    if (score >= 8) return 'bg-lime-500';
-    if (score >= 7) return 'bg-yellow-500';
-    if (score >= 6) return 'bg-orange-500';
-    return 'bg-red-500';
-  };
-
   return (
     <Card className="group overflow-hidden rounded-xl bg-card border border-border">
       {/* Video Player Container */}
@@ -139,7 +127,7 @@ export default function ClipCard({
         </div>
 
         {/* Time Badge (for sorting indicator) */}
-        <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           <Badge variant="secondary" className="bg-black/60 text-white border-0 text-xs">
             <Clock className="h-3 w-3 mr-1" />
             {clip.duration_formatted}
@@ -147,11 +135,12 @@ export default function ClipCard({
         </div>
 
         {/* Action Buttons Overlay */}
-        <div className="absolute top-12 right-3 z-10 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-12 right-3 z-10 flex flex-col gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           <Button
             variant="secondary"
             size="icon"
-            className="h-8 w-8 bg-red-500/80 hover:bg-red-600 border-0 rounded-full"
+            className="h-8 w-8 bg-destructive/80 hover:bg-destructive border-0 rounded-full"
+            aria-label={t('deleteClip')}
             onClick={(e) => {
               e.stopPropagation();
               onDelete();
@@ -163,8 +152,9 @@ export default function ClipCard({
             variant="secondary"
             size="icon"
             className={`h-8 w-8 border-0 rounded-full ${
-              clip.likes > 0 ? 'bg-green-500 hover:bg-green-600' : 'bg-black/60 hover:bg-green-500/80'
+              clip.likes > 0 ? 'bg-success hover:bg-success/80' : 'bg-black/60 hover:bg-success/80'
             }`}
+            aria-label={t('likeClip')}
             onClick={(e) => {
               e.stopPropagation();
               onLike();
@@ -176,8 +166,9 @@ export default function ClipCard({
             variant="secondary"
             size="icon"
             className={`h-8 w-8 border-0 rounded-full ${
-              clip.dislikes > 0 ? 'bg-red-500 hover:bg-red-600' : 'bg-black/60 hover:bg-red-500/80'
+              clip.dislikes > 0 ? 'bg-destructive hover:bg-destructive/80' : 'bg-black/60 hover:bg-destructive/80'
             }`}
+            aria-label={t('dislikeClip')}
             onClick={(e) => {
               e.stopPropagation();
               onDislike();
@@ -203,14 +194,16 @@ export default function ClipCard({
 
         {/* Play/Pause Overlay */}
         {!isPlaying && (
-          <div
+          <button
+            type="button"
             className="absolute inset-0 flex items-center justify-center bg-black/20 cursor-pointer"
             onClick={togglePlay}
+            aria-label={t('playVideo')}
           >
             <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
               <Play className="h-8 w-8 text-black ml-1" fill="currentColor" />
             </div>
-          </div>
+          </button>
         )}
 
         {/* Video Controls */}
@@ -231,6 +224,7 @@ export default function ClipCard({
                 size="icon"
                 className="h-8 w-8 text-white hover:bg-white/20"
                 onClick={togglePlay}
+                aria-label={isPlaying ? t('pause') : t('play')}
               >
                 {isPlaying ? (
                   <Pause className="h-4 w-4" fill="currentColor" />
@@ -243,6 +237,7 @@ export default function ClipCard({
                 size="icon"
                 className="h-8 w-8 text-white hover:bg-white/20"
                 onClick={toggleMute}
+                aria-label={isMuted ? t('unmute') : t('mute')}
               >
                 {isMuted ? (
                   <VolumeX className="h-4 w-4" />
@@ -269,6 +264,7 @@ export default function ClipCard({
                 size="icon"
                 className="h-8 w-8 text-white hover:bg-white/20"
                 onClick={toggleFullscreen}
+                aria-label={t('fullscreen')}
               >
                 <Maximize2 className="h-4 w-4" />
               </Button>
@@ -281,9 +277,9 @@ export default function ClipCard({
       <div className="p-3 space-y-2">
         {/* Time Interval */}
         <div className="flex items-center gap-2">
-          <Badge variant="outline" className="text-xs font-normal border-purple-500/50 text-purple-400">
+          <Badge variant="outline" className="text-xs font-normal border-accent/50 text-accent">
             <Clock className="h-3 w-3 mr-1" />
-            INTERVALO
+            {t('interval')}
           </Badge>
           <span className="text-sm font-medium text-foreground">
             {clip.time_interval.start_formatted} - {clip.time_interval.end_formatted}
@@ -292,7 +288,7 @@ export default function ClipCard({
 
         {/* Title/Hook */}
         <p className="text-sm line-clamp-2 text-foreground/90">
-          {clip.title || clip.hook || 'Clip sem titulo'}
+          {clip.title || clip.hook || t('noTitle')}
         </p>
 
         {/* ID */}
@@ -302,8 +298,9 @@ export default function ClipCard({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-7 w-7"
               onClick={onEdit}
+              aria-label={t('editClip')}
             >
               <Edit2 className="h-3 w-3" />
             </Button>

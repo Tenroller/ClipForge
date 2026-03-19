@@ -10,7 +10,6 @@ import { useToast } from '@/hooks/use-toast';
 import {
   Network,
   Loader2,
-  RotateCw,
   RefreshCw,
   CheckCircle,
   XCircle,
@@ -21,7 +20,6 @@ import {
 } from "lucide-react";
 import { useJobLineage } from '@/hooks/use-jobs';
 import { EmptyState } from '@/components/ui/empty-state';
-import type { LineageRecord } from '@/lib/api';
 
 interface JobLineagePanelProps {
   jobId: string;
@@ -33,7 +31,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
   const { toast } = useToast();
   const router = useRouter();
   const { data, isLoading, error, refetch } = useJobLineage(jobId);
-  const [lastFetched, setLastFetched] = useState<number>(Date.now());
+  const [lastFetched, setLastFetched] = useState<number>(() => Date.now());
 
   const handleRefresh = () => {
     refetch();
@@ -125,7 +123,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
       </CardHeader>
       <CardContent className="space-y-6">
         {error && (
-          <div className="p-3 border border-red-200 bg-red-50 rounded text-sm text-red-700 dark:bg-red-950/30 dark:border-red-800/50">
+          <div className="p-3 border border-destructive/20 bg-destructive/5 rounded text-sm text-destructive">
             {error instanceof Error ? error.message : 'Failed to load lineage'}
           </div>
         )}
@@ -150,7 +148,7 @@ export default function JobLineagePanel({ jobId, className }: JobLineagePanelPro
                   <div key={rec.id} className="flex items-center gap-2">
                     <div
                       className={`group flex items-center gap-2 px-2 py-1 rounded border text-xs font-mono cursor-pointer transition ${isCurrent
-                          ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700'
+                          ? 'bg-info/5 border-info/30'
                           : 'bg-muted/40 border-border/50 hover:bg-muted'
                         } `}
                       onClick={() => {

@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useLanguage } from '@/components/providers/LanguageProvider';
-import { locales, localeNames, localeFlags, Locale } from '@/i18n/config';
+import { locales, localeNames, localeFlags } from '@/i18n/config';
 import { Languages } from 'lucide-react';
 
 export function LanguageSwitcher() {
@@ -21,7 +21,7 @@ export function LanguageSwitcher() {
 
   // Prevent hydration mismatch by only rendering after mount
   useEffect(() => {
-    setMounted(true);
+    setMounted(true); // eslint-disable-line react-hooks/set-state-in-effect -- hydration guard pattern
   }, []);
 
   if (!mounted) {

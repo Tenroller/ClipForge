@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useJobs } from '@/hooks/use-jobs';
-import JobStartedNotification from '@/components/job/JobStartedNotification';
-import ResultPanel from '@/components/job/ResultPanel';
+import dynamic from 'next/dynamic';
+
+const JobStartedNotification = dynamic(() => import('@/components/job/JobStartedNotification'));
+const ResultPanel = dynamic(() => import('@/components/job/ResultPanel'));
 import { useToast } from '@/hooks/use-toast';
 import type { JobRecord, YouTubeMetadata } from '@/lib/api';
-import { generatePodcastClips, getYouTubeMetadata, getThumbnailUrl, API_BASE } from '@/lib/api';
+import { generatePodcastClips, getYouTubeMetadata, getThumbnailUrl } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,6 +40,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from '@/lib/utils';
+import { useChunkedUpload } from '@/hooks/useChunkedUpload';
 
 export default function PodcastClipsPage() {
   const { toast } = useToast();
@@ -52,30 +55,28 @@ export default function PodcastClipsPage() {
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [minDuration, setMinDuration] = useState(30);
   const [maxDuration, setMaxDuration] = useState(60);
-  const [subtitleFontSize, setSubtitleFontSize] = useState(40);
+  const [subtitleFontSize] = useState(40);
 
   // Video input method selection
   const [inputMethod, setInputMethod] = useState<'youtube' | 'upload'>('youtube');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const { upload, uploading: isUploading, progress: uploadProgress } = useChunkedUpload();
 
   // Advanced subtitle settings
-  const [subtitleVerticalOffset, setSubtitleVerticalOffset] = useState(500);
-  const [subtitleHighlightColor, setSubtitleHighlightColor] = useState('#FFD700');
-  const [subtitleMaxWordsVisible, setSubtitleMaxWordsVisible] = useState(5);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [subtitleVerticalOffset] = useState(500);
+  const [subtitleHighlightColor] = useState('#FFD700');
+  const [subtitleMaxWordsVisible] = useState(5);
 
   // Subtitle style options
   const [subtitleStyle, setSubtitleStyle] = useState('yellow_highlight');
   const [subtitleDisplayMode, setSubtitleDisplayMode] = useState('word');
   const [subtitlePosition, setSubtitlePosition] = useState('bottom');
-  const [subtitleTextColor, setSubtitleTextColor] = useState('#FFFFFF');
+  const [subtitleTextColor] = useState('#FFFFFF');
 
   // YouTube metadata preview
   const [videoMetadata, setVideoMetadata] = useState<YouTubeMetadata | null>(null);
-  const [isLoadingMetadata, setIsLoadingMetadata] = useState(false);
+  const [, setIsLoadingMetadata] = useState(false);
 
   // Constants moved inside component to support i18n
   const SUBTITLE_STYLES = [
@@ -144,7 +145,7 @@ export default function PodcastClipsPage() {
     const fetchMetadata = async () => {
       const urlTrimmed = youtubeUrl.trim();
 
-      if (!urlTrimmed || !urlTrimmed.includes('youtube.com') && !urlTrimmed.includes('youtu.be')) {
+      if (!urlTrimmed || (!urlTrimmed.includes('youtube.com') && !urlTrimmed.includes('youtu.be'))) {
         setVideoMetadata(null);
         return;
       }
@@ -165,120 +166,15 @@ export default function PodcastClipsPage() {
     return () => clearTimeout(timeoutId);
   }, [youtubeUrl]);
 
-  // Helper: get CSRF token
-  const getCsrfToken = async (): Promise<string | undefined> => {
-    let csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
-    if (csrfToken) return decodeURIComponent(csrfToken);
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
-      if (res.ok) return (await res.json()).csrf_token;
-    } catch { /* best-effort */ }
-    return undefined;
-  };
-
-  const CHUNK_SIZE = 80 * 1024 * 1024; // 80MB
-
   // File upload function
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
     setUploadedFile(file);
-    setUploadProgress(0);
 
     try {
-      const csrfToken = await getCsrfToken();
-      const headers: Record<string, string> = {};
-      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-
-      let data: { file_id: string; file_path: string; [key: string]: unknown };
-
-      if (file.size <= CHUNK_SIZE) {
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(`${API_BASE}/api/upload-video`, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-          headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
-        });
-
-        if (!response.ok) {
-          const errBody = await response.json().catch(() => null);
-          throw new Error(errBody?.detail || `Upload failed: ${response.statusText}`);
-        }
-
-        setUploadProgress(100);
-        data = await response.json();
-      } else {
-        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-        const initRes = await fetch(`${API_BASE}/api/upload-video/init`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name, total_size: file.size }),
-        });
-        if (!initRes.ok) {
-          const errBody = await initRes.json().catch(() => null);
-          throw new Error(errBody?.detail || `Init failed: ${initRes.statusText}`);
-        }
-        const { upload_id } = await initRes.json();
-
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const blob = file.slice(start, end);
-
-          let success = false;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              const chunkForm = new FormData();
-              chunkForm.append('upload_id', upload_id);
-              chunkForm.append('chunk_index', String(i));
-              chunkForm.append('chunk', blob, file.name);
-
-              const chunkRes = await fetch(`${API_BASE}/api/upload-video/chunk`, {
-                method: 'POST',
-                body: chunkForm,
-                credentials: 'include',
-                headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
-              });
-
-              if (!chunkRes.ok) {
-                const errBody = await chunkRes.json().catch(() => null);
-                throw new Error(errBody?.detail || `Chunk ${i} failed: ${chunkRes.statusText}`);
-              }
-
-              success = true;
-              break;
-            } catch (err) {
-              if (attempt === 2) throw err;
-              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-            }
-          }
-
-          if (!success) throw new Error(`Failed to upload chunk ${i} after 3 attempts`);
-          setUploadProgress(Math.round(((i + 1) / totalChunks) * 95));
-        }
-
-        const finalRes = await fetch(`${API_BASE}/api/upload-video/finalize`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ upload_id }),
-        });
-        if (!finalRes.ok) {
-          const errBody = await finalRes.json().catch(() => null);
-          throw new Error(errBody?.detail || `Finalize failed: ${finalRes.statusText}`);
-        }
-
-        setUploadProgress(100);
-        data = await finalRes.json();
-      }
-
+      const data = await upload(file);
       setUploadedFilePath(data.file_path);
       toast({ title: t('videoUploaded') });
     } catch (error: unknown) {
@@ -289,9 +185,6 @@ export default function PodcastClipsPage() {
       });
       setUploadedFile(null);
       setUploadedFilePath(null);
-      setUploadProgress(0);
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -481,7 +374,7 @@ export default function PodcastClipsPage() {
                           accept="video/*"
                           onChange={handleFileUpload}
                           disabled={isUploading}
-                          className="hidden"
+                          className="sr-only"
                         />
                         <Label htmlFor="videoFile" className="cursor-pointer block space-y-4">
                           <div className="mx-auto bg-muted rounded-full w-12 h-12 flex items-center justify-center">
@@ -489,8 +382,8 @@ export default function PodcastClipsPage() {
                           </div>
                           <div>
                             {uploadedFile ? (
-                              <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
-                                <span className="bg-green-100 dark:bg-green-900/30 p-1 rounded-full"><VideoIcon className="w-3 h-3" /></span>
+                              <div className="flex items-center justify-center gap-2 text-success font-medium">
+                                <span className="bg-success/10 p-1 rounded-full"><VideoIcon className="w-3 h-3" /></span>
                                 {uploadedFile.name}
                               </div>
                             ) : (
@@ -533,7 +426,7 @@ export default function PodcastClipsPage() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                       <Clock className="w-4 h-4" />
-                      Duration
+                      {t('clipDuration')}
                     </div>
                     <div className="space-y-6">
                       <div className="space-y-3">
@@ -571,15 +464,18 @@ export default function PodcastClipsPage() {
                       <Wand2 className="w-4 h-4" />
                       {t('subtitleStyle')}
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-3" role="radiogroup" aria-label={t('subtitleStyle')}>
                       {SUBTITLE_STYLES.map((style) => (
-                        <div
+                        <button
+                          type="button"
                           key={style.id}
                           className={cn(
-                            "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all hover:border-primary/50",
+                            "flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all hover:border-primary/50 w-full text-left",
                             subtitleStyle === style.id ? "bg-primary/5 border-primary shadow-sm" : "bg-muted/30 border-transparent"
                           )}
                           onClick={() => setSubtitleStyle(style.id)}
+                          role="radio"
+                          aria-checked={subtitleStyle === style.id}
                         >
                           <span className="text-sm font-medium pl-2">{style.name}</span>
                           <div className="w-20 h-6 bg-black/80 rounded flex items-center justify-center overflow-hidden">
@@ -587,12 +483,12 @@ export default function PodcastClipsPage() {
                               "text-[8px] font-bold whitespace-nowrap px-1",
                               style.id === 'yellow_highlight' || style.id === 'multicolor_pop' ? "text-white" : "text-white italic"
                             )}>
-                              {style.id === 'yellow_highlight' && <span className="bg-yellow-400 text-black px-0.5 rounded-[1px]">ABC</span>}
+                              {style.id === 'yellow_highlight' && <span className="bg-warning text-warning-foreground px-0.5 rounded-[1px]">ABC</span>}
                               {style.id === 'multicolor_pop' && <span className="text-pink-400">ABC</span>}
                               {style.id === 'clean_outline' && "ABC"}
                             </div>
                           </div>
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -605,40 +501,46 @@ export default function PodcastClipsPage() {
                       <Palette className="w-4 h-4" />
                       {t('appearance')}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">{t('displayMode')}</Label>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1" role="radiogroup" aria-label={t('displayMode')}>
                           {DISPLAY_MODES.map((mode) => (
-                            <div
+                            <button
+                              type="button"
                               key={mode.id}
                               className={cn(
-                                "flex-1 h-9 flex items-center justify-center rounded border cursor-pointer transition-colors",
+                                "flex-1 h-11 flex items-center justify-center rounded border cursor-pointer transition-colors",
                                 subtitleDisplayMode === mode.id ? "bg-primary/10 border-primary text-primary" : "bg-muted/30 border-transparent hover:bg-muted"
                               )}
                               onClick={() => setSubtitleDisplayMode(mode.id)}
-                              title={mode.name}
+                              aria-label={mode.name}
+                              role="radio"
+                              aria-checked={subtitleDisplayMode === mode.id}
                             >
                               <mode.icon className="w-4 h-4" />
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs text-muted-foreground">{t('positionLabel')}</Label>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1" role="radiogroup" aria-label={t('positionLabel')}>
                           {SUBTITLE_POSITIONS.map((pos) => (
-                            <div
+                            <button
+                              type="button"
                               key={pos.id}
                               className={cn(
-                                "flex-1 h-9 flex items-center justify-center rounded border cursor-pointer transition-colors",
+                                "flex-1 h-11 flex items-center justify-center rounded border cursor-pointer transition-colors",
                                 subtitlePosition === pos.id ? "bg-primary/10 border-primary text-primary" : "bg-muted/30 border-transparent hover:bg-muted"
                               )}
                               onClick={() => setSubtitlePosition(pos.id)}
-                              title={pos.name}
+                              aria-label={pos.name}
+                              role="radio"
+                              aria-checked={subtitlePosition === pos.id}
                             >
                               <pos.icon className="w-4 h-4" />
-                            </div>
+                            </button>
                           ))}
                         </div>
                       </div>

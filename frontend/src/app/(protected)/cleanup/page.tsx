@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,7 @@ export default function CleanupPage() {
   const [cleaning, setCleaning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<CleanupResult | null>(null);
 
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setLoading(true);
       const data = await getTempFilesStats();
@@ -36,7 +36,7 @@ export default function CleanupPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast, t]);
 
   const handleCleanup = async () => {
     if (!stats || stats.total_files === 0) return;
@@ -70,7 +70,7 @@ export default function CleanupPage() {
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [loadStats]);
 
   const formatFileSize = (sizeMb: number): string => {
     if (sizeMb < 1) {
@@ -92,13 +92,16 @@ export default function CleanupPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
-            <p className="text-sm text-muted-foreground mt-1">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+              <Trash2 className="h-8 w-8 text-muted-foreground" />
+              {t('title')}
+            </h1>
+            <p className="text-muted-foreground text-lg">
               {t('description')}
             </p>
           </div>
@@ -115,18 +118,18 @@ export default function CleanupPage() {
 
         {/* Cleanup Status Card */}
         {cleanupResult && (
-          <Card className="border border-green-200 dark:border-green-800/30">
+          <Card className="border border-success/20">
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
                 <div className="flex-shrink-0">
-                  <Check className="size-5 text-green-600" />
+                  <Check className="size-5 text-success" />
                 </div>
                 <div>
-                  <div className="font-semibold text-green-800 dark:text-green-200">{t('cleanupSuccess')}</div>
-                  <div className="text-sm text-green-700 dark:text-green-300 mt-1">
+                  <div className="font-semibold text-success">{t('cleanupSuccess')}</div>
+                  <div className="text-sm text-success mt-1">
                     {t('deletedFiles', { count: cleanupResult.deleted_files, size: cleanupResult.freed_space_mb.toFixed(2) })}
                     {cleanupResult.errors.length > 0 && (
-                      <div className="mt-2 text-yellow-700 dark:text-yellow-400">
+                      <div className="mt-2 text-warning">
                         {t('errorsOccurred', { count: cleanupResult.errors.length })}
                       </div>
                     )}
@@ -195,7 +198,7 @@ export default function CleanupPage() {
 
                 {stats.total_files === 0 && (
                   <div className="text-center py-4 text-muted-foreground">
-                    <Check className="size-8 mx-auto mb-2 text-green-500" />
+                    <Check className="size-8 mx-auto mb-2 text-success" />
                     {t('overview.noFiles')}
                   </div>
                 )}
@@ -276,9 +279,9 @@ export default function CleanupPage() {
 
         {/* Cleanup Errors */}
         {cleanupResult && cleanupResult.errors.length > 0 && (
-          <Card className="border border-yellow-200 dark:border-yellow-800/30">
+          <Card className="border border-warning/20">
             <CardHeader className="pb-4">
-              <CardTitle className="text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
+              <CardTitle className="text-warning flex items-center gap-2">
                 <AlertTriangle className="size-4" />
                 {t('warnings.title')}
               </CardTitle>
@@ -286,7 +289,7 @@ export default function CleanupPage() {
             <CardContent className="pt-0">
               <div className="space-y-2">
                 {cleanupResult.errors.map((error, index) => (
-                  <div key={index} className="text-sm text-yellow-700 dark:text-yellow-300 bg-yellow-100 dark:bg-yellow-900/30 p-2 rounded">
+                  <div key={index} className="text-sm text-warning bg-warning/10 p-2 rounded">
                     {error}
                   </div>
                 ))}

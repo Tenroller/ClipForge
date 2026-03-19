@@ -121,25 +121,6 @@ def _cleanup_resources():
         logger.info("Cleanup completed successfully")
 
 
-async def _job_expiration_loop():
-    """Periodic loop to expire stale jobs in the database."""
-    try:
-        from ..database import get_job_store
-    except ImportError:
-        from database import get_job_store
-    job_store = get_job_store()
-    interval_seconds = 300  # 5 minutes
-    while True:
-        try:
-            result = job_store.expire_stale_jobs()
-            if result and result.get('expired_count', 0) > 0:
-                logger.info(f"Expired {result['expired_count']} stale jobs")
-        except Exception as e:
-            logger.error(f"Error during job expiration: {e}")
-        
-        await asyncio.sleep(interval_seconds)
-
-
 def _cleanup_stale_chunk_dirs():
     """Remove chunked-upload directories older than 24 hours."""
     try:
@@ -247,25 +228,9 @@ async def lifespan(app: FastAPI):
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
 
-    # Start background tasks
-    expiration_task = asyncio.create_task(_job_expiration_loop())
-    
     try:
         yield
     finally:
-        # Cancel background tasks
-        expiration_task.cancel()
-        
-        # Wait for tasks to complete with timeout
-        tasks_to_wait = [expiration_task]
-        try:
-            await asyncio.wait_for(asyncio.gather(*tasks_to_wait, return_exceptions=True), timeout=5.0)
-        except asyncio.TimeoutError:
-            logger.warning("Background tasks timeout during shutdown")
-        except Exception:
-            # Expected when cancelling
-            pass
-        
         # Cleanup multiprocessing resources to prevent semaphore leaks
         if not _is_interpreter_shutting_down():
             try:

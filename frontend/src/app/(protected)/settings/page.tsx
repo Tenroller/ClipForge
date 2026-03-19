@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useTheme } from '@/components/theme-provider';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,11 +25,7 @@ export default function SettingsPage() {
   const [apiStatus, setApiStatus] = useState<'checking' | 'connected' | 'disconnected'>('checking');
   const [apiLatency, setApiLatency] = useState<number | null>(null);
 
-  useEffect(() => {
-    checkApiStatus();
-  }, []);
-
-  const checkApiStatus = async () => {
+  const checkApiStatus = useCallback(async () => {
     setApiStatus('checking');
     const start = performance.now();
     try {
@@ -45,31 +41,38 @@ export default function SettingsPage() {
       setApiStatus('disconnected');
       setApiLatency(null);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkApiStatus(); // eslint-disable-line react-hooks/set-state-in-effect -- initial data fetch
+  }, [checkApiStatus]);
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('title')}</h1>
-        <p className="text-sm text-muted-foreground">{t('description')}</p>
+    <div className="container mx-auto px-4 py-8 max-w-7xl animate-in fade-in duration-500">
+      <div className="space-y-1 mb-8">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
+          <SlidersHorizontal className="h-8 w-8 text-muted-foreground" />
+          {t('title')}
+        </h1>
+        <p className="text-muted-foreground text-lg">{t('description')}</p>
       </div>
 
       <Tabs defaultValue="appearance" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 max-w-lg">
-          <TabsTrigger value="account" className="gap-1.5">
-            <User className="h-3.5 w-3.5" />
+        <TabsList className="grid w-full grid-cols-4 max-w-lg h-auto">
+          <TabsTrigger value="account" className="gap-1.5 min-h-[44px]" aria-label={t('account.title')}>
+            <User className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="hidden sm:inline">{t('account.title')}</span>
           </TabsTrigger>
-          <TabsTrigger value="appearance" className="gap-1.5">
-            <Palette className="h-3.5 w-3.5" />
+          <TabsTrigger value="appearance" className="gap-1.5 min-h-[44px]" aria-label={t('appearance.title')}>
+            <Palette className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="hidden sm:inline">{t('appearance.title')}</span>
           </TabsTrigger>
-          <TabsTrigger value="defaults" className="gap-1.5">
-            <SlidersHorizontal className="h-3.5 w-3.5" />
+          <TabsTrigger value="defaults" className="gap-1.5 min-h-[44px]" aria-label={t('defaults.title')}>
+            <SlidersHorizontal className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="hidden sm:inline">{t('defaults.title')}</span>
           </TabsTrigger>
-          <TabsTrigger value="api" className="gap-1.5">
-            <Wifi className="h-3.5 w-3.5" />
+          <TabsTrigger value="api" className="gap-1.5 min-h-[44px]" aria-label={t('api.title')}>
+            <Wifi className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             <span className="hidden sm:inline">{t('api.title')}</span>
           </TabsTrigger>
         </TabsList>
@@ -109,13 +112,13 @@ export default function SettingsPage() {
               <CardDescription>{t('appearance.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <Label>{t('appearance.theme')}</Label>
                   <p className="text-xs text-muted-foreground">{t('appearance.themeDescription')}</p>
                 </div>
                 <Select value={theme} onValueChange={setTheme}>
-                  <SelectTrigger className="w-36">
+                  <SelectTrigger className="w-full sm:w-36">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -126,13 +129,13 @@ export default function SettingsPage() {
                 </Select>
               </div>
               <Separator />
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <Label>{t('appearance.language')}</Label>
                   <p className="text-xs text-muted-foreground">{t('appearance.languageDescription')}</p>
                 </div>
                 <Select value={locale} onValueChange={changeLanguage}>
-                  <SelectTrigger className="w-36">
+                  <SelectTrigger className="w-full sm:w-36">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -156,13 +159,13 @@ export default function SettingsPage() {
               <CardDescription>{t('defaults.description')}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <Label>{t('defaults.aiModel')}</Label>
                   <p className="text-xs text-muted-foreground">{t('defaults.aiModelDescription')}</p>
                 </div>
                 <Select defaultValue="gemini-2.0-flash">
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-full sm:w-48">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -173,13 +176,13 @@ export default function SettingsPage() {
                 </Select>
               </div>
               <Separator />
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <Label>{t('defaults.subtitlePosition')}</Label>
                   <p className="text-xs text-muted-foreground">{t('defaults.subtitlePositionDescription')}</p>
                 </div>
                 <Select defaultValue="center">
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-full sm:w-48">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -214,7 +217,7 @@ export default function SettingsPage() {
                   </Badge>
                 )}
                 {apiStatus === 'connected' && (
-                  <Badge variant="default" className="gap-1 bg-green-600">
+                  <Badge variant="default" className="gap-1 bg-success">
                     <CheckCircle2 className="h-3 w-3" />
                     {t('api.connected')}
                   </Badge>

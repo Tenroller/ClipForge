@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronDown, Film, Loader2, Plus, RefreshCw, FolderOpen, ArrowUpDown, Filter } from 'lucide-react';
+import { ChevronDown, Film, Loader2, Plus, RefreshCw, FolderOpen, Filter } from 'lucide-react';
 import SourceVideoCard from '@/components/podcast/SourceVideoCard';
 import ProjectClipsView from '@/components/podcast/ProjectClipsView';
 import type { PodcastProject } from '@/lib/api';

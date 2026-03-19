@@ -15,12 +15,37 @@ const BACKEND_BASE =
  * - Eliminates CORS preflight and CSRF cookie problems
  * - All browser API calls go through same-origin Next.js server
  */
+// Allowed API path prefixes that the proxy can forward to the backend
+const ALLOWED_PATH_PREFIXES = [
+  '/api/',
+];
+
 async function handler(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
+
+  // Validate path segments: reject traversal attempts and encoded tricks
+  for (const segment of path) {
+    if (segment === '..' || segment === '.' || segment.includes('/') || segment.includes('\\')) {
+      return NextResponse.json(
+        { detail: 'Invalid path' },
+        { status: 400 }
+      );
+    }
+  }
+
   const backendPath = '/' + path.join('/');
+
+  // Ensure the resolved path starts with an allowed prefix
+  if (!ALLOWED_PATH_PREFIXES.some((prefix) => backendPath.startsWith(prefix))) {
+    return NextResponse.json(
+      { detail: 'Forbidden path' },
+      { status: 403 }
+    );
+  }
+
   const search = request.nextUrl.search;
   const backendUrl = `${BACKEND_BASE}${backendPath}${search}`;
 
@@ -45,24 +70,36 @@ async function handler(
   }
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+
     const response = await fetch(backendUrl, {
       method: request.method,
       headers,
       body,
+      signal: controller.signal,
     });
 
-    // Stream the response back
-    const responseBody = await response.arrayBuffer();
-    const responseHeaders = new Headers();
+    clearTimeout(timeout);
 
-    // Forward relevant response headers
+    // Build response headers
+    const responseHeaders = new Headers();
     const forwardHeaders = ['content-type', 'x-request-id', 'x-job-id'];
     for (const name of forwardHeaders) {
       const value = response.headers.get(name);
       if (value) responseHeaders.set(name, value);
     }
 
-    return new NextResponse(responseBody, {
+    // Stream the response body to avoid buffering large payloads in memory
+    if (response.body) {
+      return new NextResponse(response.body, {
+        status: response.status,
+        headers: responseHeaders,
+      });
+    }
+
+    // Fallback for responses without a body (204 No Content, etc.)
+    return new NextResponse(null, {
       status: response.status,
       headers: responseHeaders,
     });

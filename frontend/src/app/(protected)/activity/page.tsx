@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/table";
 import { useToast } from '@/hooks/use-toast';
 import ResultPanel from '@/components/job/ResultPanel';
-import { Download, Eye, Loader2, RefreshCw, TrendingUp, MoreHorizontal, Activity, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { Download, Eye, Loader2, RefreshCw, TrendingUp, MoreHorizontal, Activity } from "lucide-react";
 import { EmptyState } from '@/components/ui/empty-state';
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { JobRecord } from '@/lib/api';
+import { getStatusClasses } from '@/lib/status';
 
 export default function ActivityPage() {
   const router = useRouter();
@@ -79,40 +80,6 @@ export default function ActivityPage() {
   const canRemakeJob = (job: JobRecord) => {
     return ['completed', 'done', 'error', 'cancelled'].includes(job.status) && !!job.request_data;
   };
-
-  const getStatusVariant = (status: string): 'default' | 'destructive' | 'secondary' | 'outline' => {
-    switch (status) {
-      case 'completed':
-      case 'done':
-        return 'default'; // Using default (black/white) for success now typically, or custom green
-      case 'error':
-        return 'destructive';
-      case 'processing':
-      case 'running':
-      case 'queued':
-        return 'secondary';
-      default:
-        return 'outline';
-    }
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'completed':
-      case 'done':
-        return 'bg-green-500/10 text-green-600 border-green-200';
-      case 'error':
-        return 'bg-red-500/10 text-red-600 border-red-200';
-      case 'processing':
-      case 'running':
-      case 'queued':
-        return 'bg-blue-500/10 text-blue-600 border-blue-200';
-      case 'cancelled':
-        return 'bg-gray-500/10 text-gray-600 border-gray-200';
-      default:
-        return '';
-    }
-  }
 
   const getWorkflowLabel = (workflow: string) => {
     switch (workflow) {
@@ -204,7 +171,7 @@ export default function ActivityPage() {
         <CardHeader className="border-b">
           <CardTitle className="text-lg">{t('recentJobs')}</CardTitle>
           <CardDescription>
-            A list of your recent video generation jobs.
+            {t('recentJobsDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -218,7 +185,7 @@ export default function ActivityPage() {
             <EmptyState
               icon={Activity}
               title={t('noJobs')}
-              description="You haven't generated any videos yet. Start your first creation now."
+              description={t('noJobsDescription')}
               action={
                 <Button asChild variant="default">
                   <a href="/creator">{t('createFirstVideo')}</a>
@@ -230,12 +197,12 @@ export default function ActivityPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[100px]">ID</TableHead>
-                  <TableHead>Workflow</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Step</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="w-[100px]">{t('tableHeaders.id')}</TableHead>
+                  <TableHead>{t('tableHeaders.workflow')}</TableHead>
+                  <TableHead>{t('tableHeaders.status')}</TableHead>
+                  <TableHead>{t('tableHeaders.step')}</TableHead>
+                  <TableHead>{t('tableHeaders.created')}</TableHead>
+                  <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -250,7 +217,7 @@ export default function ActivityPage() {
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusColor(job.status)}`}>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${getStatusClasses(job.status)}`}>
                         {job.status === 'processing' && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
                         {job.status}
                       </span>
@@ -270,7 +237,7 @@ export default function ActivityPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-48">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel>{t('tableHeaders.actions')}</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => router.push(`/job/${job.id}`)}>
                             <TrendingUp className="mr-2 h-4 w-4" />
                             {t('monitor')}

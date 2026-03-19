@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Download, Play, Film, Brain, Video, Check, Clock, Trash2, TrendingUp, Tag, Star } from "lucide-react";
 import Image from 'next/image';
 import { getThumbnailUrl } from '@/lib/api';
-import { formatDuration } from '@/utils/formatDuration';
+import { formatDuration } from '@/lib/formatDuration';
 
 export interface VideoMetadata {
   title?: string;
@@ -26,7 +26,7 @@ export interface VideoMetadata {
   notes?: string;
   viral_score?: number;
   confidence?: number;
-  engagement_factors?: Record<string, any>;
+  engagement_factors?: Record<string, unknown>;
   tags?: string[];
   thumbnail_text?: string;
   recommended_crop?: string;
@@ -100,7 +100,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
           <div className="relative w-32 h-20 bg-muted rounded-lg overflow-hidden shrink-0 group">
             {/* Selection Checkbox */}
             {onSelect && (
-              <div className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute top-1 left-1 z-10 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                 <Checkbox
                   checked={selected}
                   onCheckedChange={(checked) => onSelect(video, checked as boolean)}
@@ -193,7 +193,7 @@ export default function VideoCard({ video, onDownload, onPlay, onMarkPosted, onD
               </div>
               {video.metadata?.hook ? (
                 <div className="col-span-2 truncate italic text-xs">
-                  "{video.metadata.hook}"
+                  &ldquo;{video.metadata.hook}&rdquo;
                 </div>
               ) : (
                 <div className="col-span-2 truncate">

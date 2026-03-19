@@ -7,9 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { RotateCw, RefreshCw, Play, AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { RefreshCw, Play, AlertTriangle, CheckCircle, Clock } from "lucide-react";
 import { useResumableJobs, useResumeJob } from '@/hooks/use-jobs';
-import type { JobRecord } from '@/lib/api';
 
 interface ResumableJobsPanelProps {
   onJobResumed?: (jobId: string) => void;
@@ -41,10 +40,10 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
 
       // Refresh the resumable jobs list
       refetch();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Failed to Resume Job',
-        description: error.message || 'Please try again or create a new job',
+        description: error instanceof Error ? error.message : 'Please try again or create a new job',
         variant: 'destructive',
       });
     } finally {
@@ -59,11 +58,11 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'error':
-        return <AlertTriangle className="size-4 text-red-500" />;
+        return <AlertTriangle className="size-4 text-destructive" />;
       case 'cancelled':
-        return <Clock className="size-4 text-orange-500" />;
+        return <Clock className="size-4 text-warning" />;
       default:
-        return <CheckCircle className="size-4 text-gray-500" />;
+        return <CheckCircle className="size-4 text-muted-foreground" />;
     }
   };
 
@@ -124,9 +123,9 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
       </div>
 
       {resumableJobs.length === 0 ? (
-        <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-950/20 dark:border-green-800/30">
-          <CheckCircle className="size-4 text-green-600" />
-          <span className="text-green-800 dark:text-green-200">
+        <div className="flex items-center gap-2 p-4 bg-success/5 border border-success/20 rounded-lg">
+          <CheckCircle className="size-4 text-success" />
+          <span className="text-success">
             No resumable jobs found. Jobs that fail or are cancelled will appear here if they can be resumed.
           </span>
         </div>
@@ -185,9 +184,9 @@ export default function ResumableJobsPanel({ onJobResumed }: ResumableJobsPanelP
                   )}
 
                   {job.error_message && (
-                    <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg dark:bg-red-950/20 dark:border-red-800/30">
-                      <AlertTriangle className="size-4 text-red-600" />
-                      <div className="text-red-800 dark:text-red-200 text-sm">
+                    <div className="flex items-center gap-2 p-3 bg-destructive/5 border border-destructive/20 rounded-lg">
+                      <AlertTriangle className="size-4 text-destructive" />
+                      <div className="text-destructive text-sm">
                         <strong>Error:</strong> {job.error_message}
                       </div>
                     </div>

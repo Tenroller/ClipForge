@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import type { JobRecord } from '@/lib/api';
 import { formatDuration } from '@/lib/formatDuration';
+import { getStatusDotColor, getFeedbackClasses } from '@/lib/status';
 
 interface MultiJobPanelProps {
   jobs: JobRecord[];
@@ -64,20 +66,23 @@ function getStatusColor(status: string): 'default' | 'secondary' | 'destructive'
   }
 }
 
-function getWorkflowLabel(workflow: string): string {
-  switch (workflow) {
-    case 'moneyprinter':
-      return 'AI Video';
-    case 'brainrot':
-      return 'Compilation';
-    default:
-      return workflow;
-  }
-}
-
 export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearCompleted }: MultiJobPanelProps) {
   const [showCompleted, setShowCompleted] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
+  const t = useTranslations('multiJobPanel');
+
+  const getWorkflowLabel = (workflow: string): string => {
+    switch (workflow) {
+      case 'moneyprinter':
+        return t('workflowAiVideo');
+      case 'brainrot':
+        return t('workflowCompilation');
+      case 'podcastclips':
+        return t('workflowPodcastClips');
+      default:
+        return workflow;
+    }
+  };
 
   const activeJobs = jobs.filter((job) => !['done', 'completed', 'error', 'cancelled'].includes(job.status));
   const completedJobs = jobs.filter((job) => ['done', 'completed', 'error', 'cancelled'].includes(job.status));
@@ -90,22 +95,22 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
   }
 
   return (
-    <Card className="enhanced-card border-l-4 border-l-blue-500">
+    <Card className="enhanced-card border-l-4 border-l-info">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-3">
-            <div className="size-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+            <div className="size-8 rounded-lg bg-gradient-to-br from-info to-accent flex items-center justify-center">
               <Loader2 className={`size-4 text-white ${activeJobs.length > 0 ? 'animate-spin' : ''}`} />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span>Job Queue</span>
+                <span>{t('jobQueue')}</span>
                 <Badge variant="outline" className="text-xs">
-                  {activeJobs.length} active
+                  {t('active', { count: activeJobs.length })}
                 </Badge>
                 {hasCompleted && (
                   <Badge variant="secondary" className="text-xs">
-                    {completedJobs.length} completed
+                    {t('completed', { count: completedJobs.length })}
                   </Badge>
                 )}
               </div>
@@ -121,7 +126,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                   onClick={() => setShowCompleted(!showCompleted)}
                   className="text-xs h-7"
                 >
-                  {showCompleted ? 'Hide' : 'Show'} Completed
+                  {showCompleted ? t('hideCompleted') : t('showCompleted')}
                 </Button>
                 <Button
                   variant="ghost"
@@ -130,7 +135,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                   className="text-xs h-7 text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="size-3 mr-1" />
-                  Clear
+                  {t('clear')}
                 </Button>
               </>
             )}
@@ -151,7 +156,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
           <div className="space-y-3">
             {visibleJobs.length === 0 ? (
               <div className="text-center py-4 text-sm text-muted-foreground">
-                {showCompleted ? 'No completed jobs' : 'No active jobs'}
+                {showCompleted ? t('noCompletedJobs') : t('noActiveJobs')}
               </div>
             ) : (
               visibleJobs.map((job) => (
@@ -159,12 +164,12 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                   key={job.id}
                   className={`relative p-4 rounded-lg border transition-all duration-200 ${
                     job.status === 'done' || job.status === 'completed'
-                      ? 'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-800/30'
+                      ? getFeedbackClasses('success').card
                       : job.status === 'error'
-                      ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-800/30'
+                      ? getFeedbackClasses('error').card
                       : job.status === 'cancelled'
-                      ? 'bg-gray-50 border-gray-200 dark:bg-gray-950/20 dark:border-gray-800/30'
-                      : 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800/30'
+                      ? 'bg-muted border-border'
+                      : getFeedbackClasses('info').card
                   }`}
                 >
                   {/* Remove button */}
@@ -182,14 +187,14 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div
-                          className={`size-6 rounded-full border-2 flex items-center justify-center ${
+                          className={`size-6 rounded-full border-2 flex items-center justify-center text-white ${
                             job.status === 'done' || job.status === 'completed'
-                              ? 'bg-green-500 border-green-500 text-white'
+                              ? `${getStatusDotColor('done')} border-success`
                               : job.status === 'error'
-                              ? 'bg-red-500 border-red-500 text-white'
+                              ? `${getStatusDotColor('error')} border-destructive`
                               : job.status === 'cancelled'
-                              ? 'bg-gray-500 border-gray-500 text-white'
-                              : 'bg-blue-500 border-blue-500 text-white'
+                              ? `${getStatusDotColor('cancelled')} border-muted-foreground`
+                              : `${getStatusDotColor('running')} border-info`
                           }`}
                         >
                           {getStatusIcon(job.status)}
@@ -205,9 +210,9 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                             </Badge>
                           </div>
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            Job {job.id.substring(0, 8)}...
+                            {t('jobId', { id: job.id.substring(0, 8) })}
                             {job.duration_seconds && (
-                              <span className="ml-2 text-blue-600 dark:text-blue-400">
+                              <span className="ml-2 text-info">
                                 • {formatDuration(job.duration_seconds)}
                               </span>
                             )}
@@ -225,7 +230,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                             className="h-8 px-3 text-xs"
                           >
                             <Eye className="size-3 mr-1" />
-                            See Result
+                            {t('seeResult')}
                           </Button>
                         )}
                       </div>
@@ -236,7 +241,7 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
                       <div className="space-y-2">
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-muted-foreground">
-                            {job.current_step ? `Step: ${job.current_step.replace(/_/g, ' ')}` : 'Initializing...'}
+                            {job.current_step ? t('step', { step: job.current_step.replace(/_/g, ' ') }) : t('initializing')}
                           </span>
                           <span className="font-medium">{job.progress}%</span>
                         </div>
@@ -246,15 +251,15 @@ export function MultiJobPanel({ jobs, onViewResult, onRemoveJob, onClearComplete
 
                     {/* Error Message */}
                     {job.status === 'error' && job.error_message && (
-                      <div className="text-xs text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20 p-2 rounded">
-                        Error: {job.error_message}
+                      <div className="text-xs text-destructive bg-destructive/10 p-2 rounded">
+                        {t('errorPrefix', { message: job.error_message })}
                       </div>
                     )}
 
                     {/* Current Step for Active Jobs */}
                     {(job.status === 'running' || job.status === 'processing') && job.current_step && (
                       <div className="text-xs text-muted-foreground">
-                        Processing: {job.current_step.replace(/_/g, ' ')}
+                        {t('processing', { step: job.current_step.replace(/_/g, ' ') })}
                       </div>
                     )}
                   </div>

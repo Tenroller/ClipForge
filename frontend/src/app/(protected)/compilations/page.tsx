@@ -3,17 +3,19 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useGenerateBrainrotVideo, useJobs } from '@/hooks/use-jobs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import JobStartedNotification from '@/components/job/JobStartedNotification';
-import ResultPanel from '@/components/job/ResultPanel';
-import { Brain, Cpu, HelpCircle, Loader2, Video as VideoIcon, Youtube, Upload, Layers, Settings2, Clock, Smartphone } from "lucide-react";
+import { useChunkedUpload } from '@/hooks/useChunkedUpload';
+import dynamic from 'next/dynamic';
+
+const JobStartedNotification = dynamic(() => import('@/components/job/JobStartedNotification'));
+const ResultPanel = dynamic(() => import('@/components/job/ResultPanel'));
+import { Brain, HelpCircle, Loader2, Video as VideoIcon, Youtube, Upload, Layers, Settings2, Clock, Smartphone } from "lucide-react";
 import type { JobRecord } from '@/lib/api';
-import { API_BASE } from '@/lib/api';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Badge } from "@/components/ui/badge";
@@ -33,10 +35,8 @@ export default function CompilationsPage() {
   // Video input method selection
   const [inputMethod, setInputMethod] = useState<'youtube' | 'upload'>('youtube');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [uploadedFileId, setUploadedFileId] = useState<string | null>(null);
   const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const { upload, uploading: isUploading, progress: uploadProgress } = useChunkedUpload();
 
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [completedJob, setCompletedJob] = useState<JobRecord | null>(null);
@@ -63,131 +63,17 @@ export default function CompilationsPage() {
     }
   }, [currentJob, toast, t]);
 
-  // Helper: get CSRF token
-  const getCsrfToken = async (): Promise<string | undefined> => {
-    let csrfToken = document.cookie.match(/(?:^|; )csrf_token=([^;]*)/)?.[1];
-    if (csrfToken) return decodeURIComponent(csrfToken);
-    try {
-      const res = await fetch(`${API_BASE}/api/auth/csrf-token`, { credentials: 'include' });
-      if (res.ok) return (await res.json()).csrf_token;
-    } catch { /* best-effort */ }
-    return undefined;
-  };
-
-  const CHUNK_SIZE = 80 * 1024 * 1024; // 80MB
-
   // File upload function
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setIsUploading(true);
     setUploadedFile(file);
-    setUploadProgress(0);
 
     try {
-      const csrfToken = await getCsrfToken();
-      const headers: Record<string, string> = {};
-      if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
-
-      let data: { file_id: string; file_path: string; [key: string]: unknown };
-
-      if (file.size <= CHUNK_SIZE) {
-        // --- Small file: single upload (unchanged) ---
-        const formData = new FormData();
-        formData.append('file', file);
-
-        const response = await fetch(`${API_BASE}/api/upload-video`, {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-          headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
-        });
-
-        if (!response.ok) {
-          const errBody = await response.json().catch(() => null);
-          throw new Error(errBody?.detail || `Upload failed: ${response.statusText}`);
-        }
-
-        setUploadProgress(100);
-        data = await response.json();
-      } else {
-        // --- Large file: chunked upload ---
-        const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
-
-        // 1. Init
-        const initRes = await fetch(`${API_BASE}/api/upload-video/init`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ filename: file.name, total_size: file.size }),
-        });
-        if (!initRes.ok) {
-          const errBody = await initRes.json().catch(() => null);
-          throw new Error(errBody?.detail || `Init failed: ${initRes.statusText}`);
-        }
-        const { upload_id } = await initRes.json();
-
-        // 2. Upload chunks with retry
-        for (let i = 0; i < totalChunks; i++) {
-          const start = i * CHUNK_SIZE;
-          const end = Math.min(start + CHUNK_SIZE, file.size);
-          const blob = file.slice(start, end);
-
-          let success = false;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              const chunkForm = new FormData();
-              chunkForm.append('upload_id', upload_id);
-              chunkForm.append('chunk_index', String(i));
-              chunkForm.append('chunk', blob, file.name);
-
-              const chunkRes = await fetch(`${API_BASE}/api/upload-video/chunk`, {
-                method: 'POST',
-                body: chunkForm,
-                credentials: 'include',
-                headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : undefined,
-              });
-
-              if (!chunkRes.ok) {
-                const errBody = await chunkRes.json().catch(() => null);
-                throw new Error(errBody?.detail || `Chunk ${i} failed: ${chunkRes.statusText}`);
-              }
-
-              success = true;
-              break;
-            } catch (err) {
-              if (attempt === 2) throw err;
-              // Exponential backoff: 1s, 2s
-              await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-            }
-          }
-
-          if (!success) throw new Error(`Failed to upload chunk ${i} after 3 attempts`);
-          setUploadProgress(Math.round(((i + 1) / totalChunks) * 95)); // reserve 5% for finalize
-        }
-
-        // 3. Finalize
-        const finalRes = await fetch(`${API_BASE}/api/upload-video/finalize`, {
-          method: 'POST',
-          credentials: 'include',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ upload_id }),
-        });
-        if (!finalRes.ok) {
-          const errBody = await finalRes.json().catch(() => null);
-          throw new Error(errBody?.detail || `Finalize failed: ${finalRes.statusText}`);
-        }
-
-        setUploadProgress(100);
-        data = await finalRes.json();
-      }
-
-      setUploadedFileId(data.file_id);
+      const data = await upload(file);
       setUploadedFilePath(data.file_path);
-      toast({
-        title: t('videoUploaded'),
-      });
+      toast({ title: t('videoUploaded') });
     } catch (error: unknown) {
       toast({
         title: t('uploadFailed'),
@@ -195,11 +81,7 @@ export default function CompilationsPage() {
         variant: 'destructive',
       });
       setUploadedFile(null);
-      setUploadedFileId(null);
       setUploadedFilePath(null);
-      setUploadProgress(0);
-    } finally {
-      setIsUploading(false);
     }
   };
 
@@ -343,7 +225,7 @@ export default function CompilationsPage() {
                           accept="video/*"
                           onChange={handleFileUpload}
                           disabled={isUploading}
-                          className="hidden"
+                          className="sr-only"
                         />
                         <Label htmlFor="videoFile" className="cursor-pointer block space-y-4">
                           <div className="mx-auto bg-muted rounded-full w-12 h-12 flex items-center justify-center">
@@ -351,8 +233,8 @@ export default function CompilationsPage() {
                           </div>
                           <div>
                             {uploadedFile ? (
-                              <div className="flex items-center justify-center gap-2 text-green-600 font-medium">
-                                <span className="bg-green-100 dark:bg-green-900/30 p-1 rounded-full"><VideoIcon className="w-3 h-3" /></span>
+                              <div className="flex items-center justify-center gap-2 text-success font-medium">
+                                <span className="bg-success/10 p-1 rounded-full"><VideoIcon className="w-3 h-3" /></span>
                                 {uploadedFile.name}
                               </div>
                             ) : (
@@ -465,8 +347,6 @@ export default function CompilationsPage() {
                     <Switch id="unlimited" checked={isUnlimited} onCheckedChange={setIsUnlimited} />
                     <Label htmlFor="unlimited">{t('generateUnlimited')}</Label>
                   </div>
-
-
 
                   <Button type="submit" size="lg" disabled={busy} className="w-full">
                     <span className="flex items-center justify-center gap-2">

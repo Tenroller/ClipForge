@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Save, FolderOpen, Trash2, Pencil, BookmarkPlus, Bookmark } from 'lucide-react';
+import { Save, Trash2, Pencil, BookmarkPlus, Bookmark } from 'lucide-react';
 import type { Preset, PresetConfig } from '@/hooks/usePresets';
 
 export type PresetManagerProps = {
