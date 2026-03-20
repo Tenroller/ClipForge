@@ -75,162 +75,43 @@
   },
   "landing": {
     "hero": {
-      "badge": "⚡ Powered by AI",
-      "title": "Create Videos with",
-      "titleHighlight": "Artificial Intelligence",
-      "subtitle": "Transform ideas into engaging videos in minutes. Enterprise-grade AI video generation platform with three powerful workflows: AI Video Creator, Compilations, and Podcast Viral Clips.",
-      "ctaStart": "Start Creating Free",
-      "ctaSignIn": "Sign In",
-      "stats": {
-        "aiModels": "AI Models",
-        "ttsVoices": "TTS Voices",
-        "gpuPowered": "CPU Optimized",
-        "processingSpeed": "Processing Speed"
-      }
+      "title": "AI Video Generation, Self-Hosted",
+      "subtitle": "Open-source platform for generating AI-narrated videos, YouTube compilations, and viral podcast clips. Three workflows, one interface.",
+      "ctaStart": "Get Started"
     },
     "workflows": {
-      "title": "Three Powerful Workflows",
-      "subtitle": "Choose the perfect workflow for your content creation needs",
+      "title": "Three Workflows",
       "creator": {
         "title": "AI Video Creator",
-        "description": "Generate complete videos from a simple topic. AI writes the script, sources stock footage from Pexels, creates professional voiceovers, and adds animated subtitles.",
+        "description": "Generate videos from a topic. AI writes the script, pulls stock footage from Pexels, narrates with 50+ TTS voices, and adds animated subtitles.",
         "features": {
-          "scriptGeneration": "AI Script Generation with Gemini",
-          "stockFootage": "Automated Stock Footage Selection",
-          "tts": "Professional Text-to-Speech (50+ voices)",
-          "subtitles": "Word-Level Animated Subtitles",
-          "music": "Background Music Integration"
-        },
-        "cta": "Try AI Video Creator"
+          "scriptGeneration": "Script generation via Gemini",
+          "stockFootage": "Automatic stock footage from Pexels",
+          "tts": "50+ text-to-speech voices",
+          "subtitles": "Word-level animated subtitles"
+        }
       },
       "compilations": {
         "title": "Video Compilations",
-        "description": "Create engaging compilation videos from YouTube content or podcasts. Smart scene detection, automated editing, and optional background overlays.",
+        "description": "Build compilation videos from YouTube content. Scene detection, AI clip scoring, and automated editing.",
         "features": {
-          "youtube": "YouTube Video Download & Processing",
-          "sceneDetection": "AI-Powered Scene Detection",
-          "clipExtraction": "Smart Clip Extraction",
-          "backgroundVideo": "Background Video Overlay",
-          "assembly": "Automated Compilation Assembly"
-        },
-        "cta": "Try Compilations"
+          "youtube": "YouTube download & processing",
+          "sceneDetection": "AI-powered scene detection",
+          "clipExtraction": "Smart clip scoring & extraction"
+        }
       },
       "podcastClips": {
         "title": "Podcast Viral Clips",
-        "description": "Transform long-form podcasts into viral short clips. AI-powered moment detection, smart face tracking, and karaoke-style subtitles optimized for social media.",
+        "description": "Extract viral moments from long-form podcasts. Face tracking, 9:16 cropping, and karaoke-style subtitles for social media.",
         "features": {
-          "viralDetection": "AI Viral Moment Detection with Gemini",
-          "faceTracking": "Smart Face Tracking & 9:16 Cropping",
-          "mixedMode": "Mixed-Mode Content Detection (Face/Screen)",
-          "karaoke": "Karaoke-Style Word Highlighting",
-          "parallel": "Parallel Clip Generation (3x Faster)"
-        },
-        "cta": "Try Podcast Clips"
-      }
-    },
-    "features": {
-      "title": "Enterprise-Grade Features",
-      "subtitle": "Built for creators, optimized for scale",
-      "items": {
-        "cloudGpu": {
-          "title": "Cloud GPU Acceleration",
-          "description": "Leverage powerful L40S, A100, and H100 GPUs for lightning-fast video processing"
-        },
-        "aiViral": {
-          "title": "AI Viral Detection",
-          "description": "Gemini-powered analysis identifies the most engaging moments in your podcasts"
-        },
-        "faceTracking": {
-          "title": "Smart Face Tracking",
-          "description": "MediaPipe face detection with intelligent 9:16 cropping for social media"
-        },
-        "monitoring": {
-          "title": "Real-Time Monitoring",
-          "description": "Track job progress with detailed metrics and step-by-step updates"
-        },
-        "resume": {
-          "title": "Job Resume & Retry",
-          "description": "Automatically resume failed jobs from the last successful step, never lose progress"
-        },
-        "subtitles": {
-          "title": "Karaoke Subtitles",
-          "description": "Word-by-word highlighting with customizable colors, positions, and animations"
-        },
-        "database": {
-          "title": "PostgreSQL Backend",
-          "description": "Enterprise-grade persistence with full job history and artifact management"
-        },
-        "voices": {
-          "title": "50+ TTS Voices",
-          "description": "Professional text-to-speech powered by Kokoro with diverse voice options"
-        },
-        "models": {
-          "title": "Multiple AI Models",
-          "description": "Choose from Gemini Flash, Pro, and other cutting-edge AI models"
-        },
-        "parallel": {
-          "title": "Parallel Processing",
-          "description": "Generate multiple clips simultaneously with GPU acceleration (3x faster)"
-        },
-        "mixedMode": {
-          "title": "Mixed-Mode Detection",
-          "description": "Automatically switches between face-focused and screen recording modes"
-        },
-        "api": {
-          "title": "REST API",
-          "description": "Full-featured API with JWT authentication for integration with your tools"
+          "viralDetection": "AI viral moment detection",
+          "faceTracking": "Face tracking & 9:16 cropping",
+          "karaoke": "Karaoke-style word highlighting"
         }
       }
-    },
-    "howItWorks": {
-      "title": "How It Works",
-      "subtitle": "From idea to video in four simple steps",
-      "steps": {
-        "choose": {
-          "title": "Choose Workflow",
-          "description": "Select AI Creator, Compilations, or Podcast Clips based on your needs"
-        },
-        "processing": {
-          "title": "AI Processing",
-          "description": "Our AI generates scripts, finds footage, detects viral moments, and creates voiceovers"
-        },
-        "monitoring": {
-          "title": "Real-Time Monitoring",
-          "description": "Track progress with live updates, detailed metrics, and step-by-step tracking"
-        },
-        "download": {
-          "title": "Download & Share",
-          "description": "Get your finished videos ready to upload to any platform"
-        }
-      }
-    },
-    "cta": {
-      "title": "Ready to Create Amazing Videos?",
-      "subtitle": "Join creators using ClipForge to automate their video production workflow",
-      "start": "Get Started Now",
-      "demo": "View Demo"
     },
     "footer": {
-      "tagline": "Enterprise-grade AI video generation platform",
-      "product": "Product",
-      "productLinks": {
-        "features": "Features",
-        "workflows": "Workflows",
-        "pricing": "Pricing"
-      },
-      "resources": "Resources",
-      "resourcesLinks": {
-        "documentation": "Documentation",
-        "apiReference": "API Reference",
-        "support": "Support"
-      },
-      "company": "Company",
-      "companyLinks": {
-        "about": "About",
-        "blog": "Blog",
-        "contact": "Contact"
-      },
-      "copyright": "© {year} ClipForge. All rights reserved."
+      "copyright": "© {year} ClipForge"
     }
   },
   "login": {

@@ -5,6 +5,7 @@ Jobs are persisted to PostgreSQL or Redis to ensure recovery after crashes or re
 """
 
 import asyncio
+import gc
 import time
 import uuid
 import requests
@@ -630,7 +631,48 @@ class ProcessorJobQueue:
             # Remove from active jobs
             if job_id in self.active_jobs:
                 del self.active_jobs[job_id]
-    
+
+            # If no other jobs are running, unload ML models to free memory
+            if not self.active_jobs:
+                await self._release_idle_models()
+
+    async def _release_idle_models(self):
+        """Unload ML models from memory when no jobs are running."""
+        try:
+            import psutil
+            mem_before = psutil.Process().memory_info().rss / (1024 * 1024)
+            logger.info(f"Releasing idle ML models (memory before: {mem_before:.0f} MB)")
+        except Exception:
+            mem_before = None
+            logger.info("Releasing idle ML models")
+
+        # Unload cached Whisper/stable-ts models (~1.5 GB)
+        try:
+            from AIvideos.stable_ts_enhanced_subtitles import unload_models
+            unload_models()
+        except Exception as e:
+            logger.debug(f"Whisper cache cleanup skipped: {e}")
+
+        # Force garbage collection
+        gc.collect()
+
+        # Release PyTorch CUDA cache if applicable
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                logger.debug("CUDA memory cache cleared")
+        except Exception:
+            pass
+
+        try:
+            import psutil
+            mem_after = psutil.Process().memory_info().rss / (1024 * 1024)
+            freed = (mem_before - mem_after) if mem_before else 0
+            logger.info(f"Model cleanup complete (memory after: {mem_after:.0f} MB, freed: {freed:.0f} MB)")
+        except Exception:
+            logger.info("Model cleanup complete")
+
     def cleanup_old_jobs(self, max_age_hours: int = 24) -> int:
         """Clean up old completed jobs."""
         try:

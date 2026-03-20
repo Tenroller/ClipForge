@@ -2717,8 +2717,18 @@ class TikYouGenerator:
                 self.tts_phrase_manager.cleanup_cache()
             except Exception as e:
                 logger.warning(f"TTS cache cleanup failed: {e}")
-        
+
         return performance_stats
+
+    def cleanup(self):
+        """Release ML models and caches to free memory."""
+        if self.clip_scorer is not None:
+            try:
+                self.clip_scorer.cleanup()
+            except Exception as e:
+                logger.warning(f"ClipScorer cleanup failed: {e}")
+            self.clip_scorer = None
+            self.smart_selection_enabled = False
 
     def download_and_split_video(self, source: str, sensitivity: float = 17.5):
         """

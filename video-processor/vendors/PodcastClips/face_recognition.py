@@ -288,5 +288,8 @@ class FaceRecognitionEngine:
         return summary
 
     def cleanup(self):
-        """Clean up resources."""
+        """Clean up resources and release model memory."""
+        if self.model is not None:
+            del self.model
+            self.model = None
         self.face_embeddings.clear()

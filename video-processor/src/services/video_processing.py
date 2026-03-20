@@ -515,6 +515,9 @@ class VideoProcessingService:
 
             logger.info(f"Job {job_id}: Brainrot compilation completed, generated {len(generated_videos)} videos")
 
+            # Release clip scorer and other ML models held by the generator
+            generator.cleanup()
+
             await self._update_step(job_id, "done")
             return {
                 "status": "completed",

@@ -40,6 +40,17 @@ _model_lock = threading.Lock()
 _transcription_lock = threading.Lock()
 
 
+def unload_models():
+    """Release all cached Whisper/stable-ts models to free memory."""
+    with _model_lock:
+        if _model_cache:
+            model_keys = list(_model_cache.keys())
+            _model_cache.clear()
+            logger.info(f"Unloaded {len(model_keys)} cached model(s): {model_keys}")
+        else:
+            logger.debug("No cached models to unload")
+
+
 def _get_or_load_model(model_size: str, device: str) -> Any:
     """
     Thread-safe model loader with singleton pattern.
