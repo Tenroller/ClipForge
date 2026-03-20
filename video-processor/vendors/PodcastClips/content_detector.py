@@ -14,8 +14,6 @@ from loguru import logger as loguru_logger
 
 try:
     import pytesseract
-    # Configure tesseract executable path for Windows
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
     HAS_OCR = True
 except ImportError:
     HAS_OCR = False

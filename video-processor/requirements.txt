@@ -16,6 +16,7 @@ moviepy
 imageio
 imageio-ffmpeg
 opencv-python
+pytesseract
 numpy
 scipy
 matplotlib
