@@ -88,9 +88,16 @@ def burn_subtitles(
         True if successful, False otherwise
     """
     # Escape special characters in subtitle path for FFmpeg filter
-    # FFmpeg filter syntax requires escaping colons, backslashes, etc.
-    escaped_subtitle_path = subtitle_path.replace("\\", "/").replace(":", "\\:")
-    
+    # FFmpeg filter syntax requires escaping colons, backslashes, single quotes, and brackets
+    escaped_subtitle_path = (
+        subtitle_path
+        .replace("\\", "/")
+        .replace(":", "\\:")
+        .replace("'", "\\'")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+    )
+
     # Build FFmpeg command
     if use_gpu:
         # Try NVENC GPU encoding
@@ -99,7 +106,7 @@ def burn_subtitles(
             "-y",  # Overwrite output
             "-hwaccel", "cuda",
             "-i", video_path,
-            "-vf", f"ass='{escaped_subtitle_path}'",
+            "-vf", f"ass={escaped_subtitle_path}",
             "-c:a", "copy",  # Copy audio without re-encoding
             "-c:v", "h264_nvenc",  # NVIDIA GPU encoder
             "-preset", preset,
@@ -112,7 +119,7 @@ def burn_subtitles(
             "ffmpeg",
             "-y",  # Overwrite output
             "-i", video_path,
-            "-vf", f"ass='{escaped_subtitle_path}'",
+            "-vf", f"ass={escaped_subtitle_path}",
             "-c:a", "copy",  # Copy audio without re-encoding
             "-c:v", "libx264",  # Re-encode video with x264
             "-preset", preset,  # Balance between speed and quality
