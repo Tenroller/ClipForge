@@ -1028,6 +1028,11 @@ class ClipGenerator:
 
             logger.debug(f"Exporting clip at {clip_fps} FPS with keyframe interval {keyframe_interval}")
 
+            # Temp audio file path — must be alongside the export path so
+            # MoviePy/FFmpeg doesn't try to write to the CWD (which may lack
+            # permissions or cause collisions in parallel generation).
+            temp_audiofile = str(export_path.parent / f"{export_path.stem}_TEMP_AUD.mp4")
+
             try:
                 # Attempt export with optimal codec settings and matching FPS
                 clip.write_videofile(
@@ -1037,6 +1042,7 @@ class ClipGenerator:
                     fps=clip_fps,  # Use clip's actual FPS instead of hardcoded 30
                     ffmpeg_params=ffmpeg_params,
                     threads=4,
+                    temp_audiofile=temp_audiofile,
                     logger=None  # Disable MoviePy's verbose logging
                 )
             except Exception as e:
@@ -1053,6 +1059,7 @@ class ClipGenerator:
                         fps=clip_fps,  # Use clip's actual FPS, not hardcoded 30
                         ffmpeg_params=fallback_ffmpeg_params,
                         threads=4,
+                        temp_audiofile=temp_audiofile,
                         logger=None
                     )
                 else:
