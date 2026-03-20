@@ -988,6 +988,7 @@ class ClipGenerator:
 
             # Generate output filename
             safe_title = "".join(c for c in viral_moment.title if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_title = safe_title.replace(' ', '_')
             safe_title = safe_title[:50]  # Limit filename length
             output_filename = f"{job_id}_clip_{viral_moment.clip_index}_{safe_title}.mp4"
             output_path = self.output_dir / output_filename

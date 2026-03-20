@@ -29,14 +29,19 @@ class ThumbnailService:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_cache_key(self, video_path: str) -> str:
-        """Generate a cache key for a video file."""
+        """Generate a cache key for a video file.
+
+        Uses the absolute path and inode number to guarantee uniqueness
+        even when multiple files share the same size/mtime (e.g. videos
+        generated in rapid succession by the same job).
+        """
         try:
-            file_path = Path(video_path)
+            file_path = Path(video_path).resolve()
             if not file_path.exists():
                 return hashlib.md5(video_path.encode()).hexdigest()
 
             stat = file_path.stat()
-            cache_data = f"{video_path}_{stat.st_size}_{stat.st_mtime}"
+            cache_data = f"{file_path}_{stat.st_ino}_{stat.st_size}_{stat.st_mtime}"
             return hashlib.md5(cache_data.encode()).hexdigest()
         except Exception as e:
             logger.warning(f"Failed to generate cache key for {video_path}: {e}")

@@ -70,6 +70,20 @@ class VideoProcessingService:
         self.config = config
         self.job_queue = job_queue
         self.setup_environment()
+
+    async def _update_step(self, job_id: str, step: str):
+        """Send a step update to the backend via the job queue callback."""
+        if not self.job_queue:
+            return
+        try:
+            from ..core.simple_queue import JobStatus
+            await self.job_queue.update_job_status(
+                job_id=job_id,
+                status=JobStatus.RUNNING,
+                current_step=step,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send step update '{step}' for job {job_id}: {e}")
     
     def setup_environment(self):
         """Setup environment variables for video processing."""
@@ -166,6 +180,7 @@ class VideoProcessingService:
         logger.info(f"Starting MoneyPrinter job {job_id}")
 
         try:
+            await self._update_step(job_id, "script")
             # Access fields from raw request_data dict (validated by backend's Pydantic models)
             video_subject = request_data.get("videoSubject", "")
             paragraph_number = request_data.get("paragraphNumber", 3)
@@ -206,6 +221,7 @@ class VideoProcessingService:
 
             # Music handling - run in thread pool to avoid blocking
             if use_music and zip_url:
+                await self._update_step(job_id, "music")
                 logger.info(f"Job {job_id}: Fetching background music")
                 await asyncio.to_thread(fetch_songs, zip_url)
 
@@ -226,11 +242,13 @@ class VideoProcessingService:
             logger.info(f"Job {job_id}: Generated script ({len(script)} characters)")
 
             # Generate TTS - run in thread pool to avoid blocking
+            await self._update_step(job_id, "voice")
             logger.info(f"Job {job_id}: Generating text-to-speech")
             audio_file = str(job_output_dir / f"{job_id}_audio.wav")
             await asyncio.to_thread(tts, script, voice, audio_file)
             
             # Generate video with background footage or simple background
+            await self._update_step(job_id, "video")
             logger.info(f"Job {job_id}: Generating video")
             try:
                 # Create video output path
@@ -356,7 +374,8 @@ class VideoProcessingService:
                 # Get video file size for logging
                 video_size = os.path.getsize(output_video) / (1024 * 1024)  # MB
                 logger.info(f"Job {job_id}: Video generation completed. File size: {video_size:.1f}MB")
-                
+
+                await self._update_step(job_id, "done")
                 return {
                     "status": "completed",
                     "script": script,
@@ -394,6 +413,8 @@ class VideoProcessingService:
         logger.info(f"Starting Brainrot job {job_id}")
         
         try:
+            await self._update_step(job_id, "download_video")
+
             # Access fields from raw request_data dict (validated by backend's Pydantic models)
             youtube_url = request_data.get("youtubeUrl")
             uploaded_video_path = request_data.get("uploadedVideoPath")
@@ -438,9 +459,11 @@ class VideoProcessingService:
             if not video_clips:
                 raise RuntimeError("No clips generated from source video")
 
+            await self._update_step(job_id, "generate_clips")
             logger.info(f"Job {job_id}: Generated {len(video_clips)} clips")
 
             # Generate compilations - run in thread pool to avoid blocking
+            await self._update_step(job_id, "compile_videos")
             logger.info(f"Job {job_id}: Generating compilation videos")
 
             # Use appropriate video identifier for generate_tikyou_videos
@@ -492,6 +515,7 @@ class VideoProcessingService:
 
             logger.info(f"Job {job_id}: Brainrot compilation completed, generated {len(generated_videos)} videos")
 
+            await self._update_step(job_id, "done")
             return {
                 "status": "completed",
                 "generated_videos": generated_videos,
@@ -599,6 +623,9 @@ class VideoProcessingService:
                         })
 
             logger.info(f"Job {job_id}: PodcastClips job completed, generated {len(generated_videos)} clips")
+
+            if not generated_videos:
+                raise RuntimeError(f"PodcastClips processing completed but generated 0 clips")
 
             return {
                 "status": "completed",
